@@ -34,7 +34,8 @@ Project: `main`
 | T-037 literature-backfill-operations-workbench | done | dev-docs/active/literature-backfill-operations-workbench |
 | T-038 literature-content-processing-cutover-verification | done | dev-docs/active/literature-content-processing-cutover-verification |
 | T-039 literature-citation-abstract-readiness | done | dev-docs/active/literature-citation-abstract-readiness |
-| T-040 literature-content-processing-closure-fixes | in-progress | dev-docs/active/literature-content-processing-closure-fixes |
+| T-040 literature-content-processing-closure-fixes | done | dev-docs/active/literature-content-processing-closure-fixes |
+| T-041 literature-end-to-end-quality-upgrade | in-progress | dev-docs/active/literature-end-to-end-quality-upgrade |
 
 ### F-001 Research Lifecycle Governance Core
 

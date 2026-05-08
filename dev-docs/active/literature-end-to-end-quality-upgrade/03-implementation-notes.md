@@ -1,0 +1,41 @@
+# 03 Implementation Notes
+
+- 2026-05-08: Task package created after manual E2E testing showed the core chain works but needs reliability and quality hardening before production-grade use.
+- 2026-05-08: Baseline evidence before this task:
+  - Crossref auto-pull real metadata fetch/import succeeded.
+  - arXiv auto-pull returned 429 and was mapped to `SOURCE_RATE_LIMIT`.
+  - Real arXiv PDF URL download, local raw asset registration, and GROBID `FULLTEXT_PREPROCESSED` succeeded.
+  - Previous full chain from registered asset through `INDEXED` and `retrieve` succeeded with OpenAI configured.
+- 2026-05-08: This package is intentionally planning-first. Product changes should start only after roadmap alignment and task split decisions.
+- 2026-05-08: Foundation implementation pass completed after roadmap alignment:
+  - Added shared contracts and OpenAPI coverage for `/literature/fulltext-acquisition/*` and `/settings/literature-acquisition`.
+  - Added durable fulltext acquisition service/controller/routes with dry-run, create, list, get, pause, resume, cancel, retry-failed, and delete operations.
+  - Added additive Prisma tables for fulltext acquisition jobs/items and per-source runtime state.
+  - Preserved the existing single-paper synchronous `content-assets/download` route and hardened it for SSRF, unsafe redirects, protocol, persisted timeout/redirect/size settings, MIME, and PDF-signature checks.
+  - Added acquisition settings with Unpaywall email/env fallback, source throttle settings, downloader limits, and an OpenAI quality-scorer profile.
+  - Added direct backend OpenAI quality scoring as the default auto-pull scorer path, while keeping the external scorer URL as an advanced override.
+  - Kept collection separate from content-processing; fulltext acquisition only registers raw assets/provenance and does not enqueue the seven-stage content-processing pipeline.
+  - Updated retrieval to exclude stale indexes by default with an explicit `include_stale` diagnostic option.
+  - Added mock integration coverage for acquisition settings, persisted downloader limits, download safety, and arXiv PDF acquisition job flow.
+- 2026-05-08: Code-quality follow-up after implementation review:
+  - Replaced positional optional `LiteratureService` dependencies with a named dependency object to avoid future dual-track constructor ambiguity.
+  - Added redirect-chain provenance to content asset download metadata and covered redirect-to-localhost blocking.
+  - Tightened downloader size semantics so persisted `downloader.max_byte_size` is a hard upper bound; per-request `max_byte_size` can only lower that limit.
+  - Wired fulltext acquisition worker pacing to persisted `source_throttle` and `LiteratureSourceRuntimeState` cooldown data, including in-process concurrency slots and serialized request-start pacing.
+  - Split Unpaywall resolver health from downstream PDF download health so a resolved OA PDF followed by a download failure is not misattributed to Unpaywall.
+  - Added a nullable Prisma FK from fulltext acquisition items to registered content assets.
+  - Confirmed no repo-local `.tmp`, `.log`, `.bak`, `.orig`, or editor backup files needed cleanup; existing `.ai/.tmp` files are historical evidence artifacts and were left intact.
+- 2026-05-08: Local real-dependency E2E rerun:
+  - Used a temporary Postgres schema, Docker GROBID `0.9.0`, the locally persisted OpenAI key, real Crossref, and real arXiv PDF download.
+  - The core processing chain passed from metadata registration through fulltext acquisition, GROBID parsing, key-content extraction, chunking, embedding, indexing, fresh retrieval, stale isolation, backfill rerun, and retrieval after backfill.
+  - arXiv search import returned HTTP 429 and is recorded as an external source-rate-limit warning; the run used a known arXiv metadata fallback for the downstream fulltext chain.
+  - Crossref real source smoke succeeded separately: fetched 5 candidates, scored 1 eligible candidate through the OpenAI quality scorer, and imported 1 literature record.
+  - Real backfill exposed a production-significant timeout gap: the worker waited only 60 seconds for content-processing runs, which was too short for real `KEY_CONTENT_READY` + embedding/index work.
+  - Backfill now has a configurable content-run timeout with a 15 minute default, per-item worker failure convergence, running-item closure when the job worker fails, and a deterministic unit test for run-timeout failure semantics.
+- 2026-05-08: Pre-commit quality review fixes:
+  - Fulltext acquisition dry-run now reports `max_byte_size` with the persisted downloader limit as a hard upper bound, matching the actual download path.
+  - Remote download reads response bodies with an enforced streaming byte limit instead of buffering an unbounded response before checking size.
+  - Download SSRF checks now normalize bracketed IPv6 hosts and block IPv4-mapped localhost/private addresses; tests cover IPv4-mapped localhost.
+  - Fulltext acquisition jobs now requeue interrupted `RUNNING` items on resume and close running items if the worker fails, avoiding job/item status drift.
+  - Desktop OpenAI-key IPC now requires an explicit string or `null`; omitted payloads no longer clear the local key accidentally.
+  - Local desktop secret writes now chmod the encrypted secrets file to `0600` after write.

@@ -1,7 +1,7 @@
 # 00 Overview
 
 ## Status
-- State: completed
+- State: done
 - Parent: `T-030 literature-content-processing-landing-roadmap`
 - Next step: deploy with the Prisma migration and run with a local GROBID service when PDF ingestion is needed.
 

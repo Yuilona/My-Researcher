@@ -49,5 +49,6 @@ Project: `main`
 | T-037 literature-backfill-operations-workbench | done | F-000 | dev-docs/active/literature-backfill-operations-workbench |
 | T-038 literature-content-processing-cutover-verification | done | F-000 | dev-docs/active/literature-content-processing-cutover-verification |
 | T-039 literature-citation-abstract-readiness | done | F-000 | dev-docs/active/literature-citation-abstract-readiness |
-| T-040 literature-content-processing-closure-fixes | in-progress | F-000 | dev-docs/active/literature-content-processing-closure-fixes |
+| T-040 literature-content-processing-closure-fixes | done | F-000 | dev-docs/active/literature-content-processing-closure-fixes |
+| T-041 literature-end-to-end-quality-upgrade | in-progress | F-000 | dev-docs/active/literature-end-to-end-quality-upgrade |
 <!-- AUTO-GENERATED:END task-index -->

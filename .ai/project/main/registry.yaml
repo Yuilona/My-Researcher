@@ -401,8 +401,15 @@ tasks:
     updated: 2026-05-05
   - id: T-040
     slug: literature-content-processing-closure-fixes
-    status: in-progress
+    status: done
     milestone_id: M-000
     feature_id: F-000
     dev_docs_path: dev-docs/active/literature-content-processing-closure-fixes
-    updated: 2026-05-05
+    updated: 2026-05-08
+  - id: T-041
+    slug: literature-end-to-end-quality-upgrade
+    status: in-progress
+    milestone_id: M-000
+    feature_id: F-000
+    dev_docs_path: dev-docs/active/literature-end-to-end-quality-upgrade
+    updated: 2026-05-08
