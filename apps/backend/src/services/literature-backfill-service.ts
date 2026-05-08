@@ -73,6 +73,7 @@ export class LiteratureBackfillService {
     private readonly flowService: LiteratureFlowService,
     private readonly options: {
       pollIntervalMs?: number;
+      contentRunTimeoutMs?: number;
     } = {},
   ) {}
 
@@ -608,7 +609,11 @@ export class LiteratureBackfillService {
         if (currentJob.status === 'PAUSED' || currentJob.status === 'CANCELING' || currentJob.status === 'CANCELED') {
           break;
         }
-        await this.processItem(currentJob, item, runWithStageLimiter);
+        try {
+          await this.processItem(currentJob, item, runWithStageLimiter);
+        } catch (error) {
+          await this.failItem(item.id, error);
+        }
         await this.refreshJobTotals(jobId);
       }
     }));
@@ -733,15 +738,18 @@ export class LiteratureBackfillService {
       };
     }
 
-    for (let attempt = 0; attempt < 2400; attempt += 1) {
+    const timeoutMs = this.options.contentRunTimeoutMs ?? 15 * 60_000;
+    const pollIntervalMs = this.options.pollIntervalMs ?? 25;
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
       const current = await this.repository.findPipelineRunById(run.run_id);
       if (current && TERMINAL_RUN_STATUSES.has(current.status)) {
         return current;
       }
-      await this.sleep(this.options.pollIntervalMs ?? 25);
+      await this.sleep(pollIntervalMs);
     }
 
-    throw new Error(`Timed out waiting for content-processing run ${run.run_id}.`);
+    throw new Error(`Timed out after ${timeoutMs}ms waiting for content-processing run ${run.run_id}.`);
   }
 
   private async resolveRunFailure(run: LiteraturePipelineRunRecord): Promise<{
@@ -847,13 +855,42 @@ export class LiteratureBackfillService {
 
   private async failJob(jobId: string, error: unknown): Promise<void> {
     const now = new Date().toISOString();
-    await this.repository.updateContentProcessingBatchJob(jobId, {
+    const runningItems = await this.repository.listContentProcessingBatchItemsByJobIdAndStatuses(jobId, ['RUNNING'])
+      .catch(() => []);
+    for (const item of runningItems) {
+      await this.repository.updateContentProcessingBatchItem(item.id, {
+        status: 'FAILED',
+        errorCode: 'BACKFILL_JOB_WORKER_FAILED',
+        errorMessage: error instanceof Error ? error.message : 'Backfill worker failed.',
+        retryable: true,
+        finishedAt: now,
+        updatedAt: now,
+      }).catch(() => undefined);
+    }
+    const items = await this.repository.listContentProcessingBatchItemsByJobId(jobId).catch(() => []);
+    const patch: Partial<Omit<LiteratureContentProcessingBatchJobRecord, 'id' | 'createdAt'>> = {
       status: 'FAILED',
       errorCode: 'BACKFILL_JOB_WORKER_FAILED',
       errorMessage: error instanceof Error ? error.message : 'Backfill worker failed.',
       finishedAt: now,
       updatedAt: now,
-    }).catch(() => undefined);
+    };
+    if (items.length > 0) {
+      patch.totals = this.computeTotals(items);
+    }
+    await this.repository.updateContentProcessingBatchJob(jobId, patch).catch(() => undefined);
+  }
+
+  private async failItem(itemId: string, error: unknown): Promise<void> {
+    const now = new Date().toISOString();
+    await this.repository.updateContentProcessingBatchItem(itemId, {
+      status: 'FAILED',
+      errorCode: 'BACKFILL_ITEM_WORKER_FAILED',
+      errorMessage: error instanceof Error ? error.message : 'Backfill item worker failed.',
+      retryable: true,
+      finishedAt: now,
+      updatedAt: now,
+    });
   }
 
   private async requeueInterruptedRunningItems(jobId: string): Promise<void> {

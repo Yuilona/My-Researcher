@@ -1,4 +1,6 @@
 import { AppError } from '../../errors/app-error.js';
+import type { LiteratureAcquisitionSettingsService } from '../literature-acquisition-settings-service.js';
+import type { LiteratureContentProcessingSettingsService } from '../literature-content-processing-settings-service.js';
 import { AUTOPULL_ALERT_CODES } from './auto-pull-alert-codes.js';
 import type {
   AutoPullRankingMode,
@@ -8,19 +10,25 @@ import type {
 } from './auto-pull-types.js';
 
 type QualityScorerConfig = {
-  endpoint: string;
+  endpoint: string | null;
   apiKey: string | null;
   model: string;
+  promptVersion: string;
+  enabled: boolean;
 };
 
 export async function scoreAutoPullRankedCandidates(
   candidates: FetchedCandidate[],
   rankingMode: AutoPullRankingMode,
+  dependencies: {
+    contentProcessingSettingsService?: LiteratureContentProcessingSettingsService;
+    acquisitionSettingsService?: LiteratureAcquisitionSettingsService;
+  } = {},
 ): Promise<RankedCandidate[]> {
   if (candidates.length === 0) {
     return [];
   }
-  const scorerConfig = resolveQualityScorerConfig();
+  const scorerConfig = await resolveQualityScorerConfig(dependencies);
   const scored: RankedCandidate[] = [];
   for (const candidate of candidates) {
     const qualityScore = await scoreQualityCandidate(candidate, scorerConfig);
@@ -84,24 +92,63 @@ function computeCitationScore(citationCount: number | null): number {
   return Math.round(Math.max(0, Math.min(1, normalized)) * 100);
 }
 
-function resolveQualityScorerConfig(): QualityScorerConfig {
+async function resolveQualityScorerConfig(dependencies: {
+  contentProcessingSettingsService?: LiteratureContentProcessingSettingsService;
+  acquisitionSettingsService?: LiteratureAcquisitionSettingsService;
+}): Promise<QualityScorerConfig> {
   const endpoint = (process.env.AUTO_PULL_LLM_SCORER_URL ?? '').trim();
-  if (!endpoint) {
+  if (endpoint) {
+    const apiKey = (process.env.AUTO_PULL_LLM_SCORER_API_KEY ?? '').trim() || null;
+    const model = (process.env.AUTO_PULL_LLM_SCORER_MODEL ?? 'quality-score-v1').trim() || 'quality-score-v1';
+    return {
+      endpoint,
+      apiKey,
+      model,
+      promptVersion: 'external_endpoint',
+      enabled: true,
+    };
+  }
+
+  const profile = await dependencies.acquisitionSettingsService?.resolveQualityScorerProfile();
+  if (profile && !profile.enabled) {
+    return {
+      endpoint: null,
+      apiKey: null,
+      model: profile.model,
+      promptVersion: profile.prompt_version,
+      enabled: false,
+    };
+  }
+
+  const apiKey = await dependencies.contentProcessingSettingsService?.resolveOpenAIProviderApiKey()
+    ?? process.env.OPENAI_API_KEY?.trim()
+    ?? null;
+  if (!apiKey) {
     throw new AppError(
       500,
       'INTERNAL_ERROR',
-      `${AUTOPULL_ALERT_CODES.QUALITY_SCORE_UNAVAILABLE}: scorer endpoint is not configured.`,
+      `${AUTOPULL_ALERT_CODES.QUALITY_SCORE_UNAVAILABLE}: OpenAI API key is not configured for auto-pull quality scoring.`,
     );
   }
-  const apiKey = (process.env.AUTO_PULL_LLM_SCORER_API_KEY ?? '').trim() || null;
-  const model = (process.env.AUTO_PULL_LLM_SCORER_MODEL ?? 'quality-score-v1').trim() || 'quality-score-v1';
-  return { endpoint, apiKey, model };
+  return {
+    endpoint: null,
+    apiKey,
+    model: profile?.model ?? 'gpt-5.4-mini',
+    promptVersion: profile?.prompt_version ?? 'auto_pull_quality.v1',
+    enabled: true,
+  };
 }
 
 async function scoreQualityCandidate(
   candidate: FetchedCandidate,
   config: QualityScorerConfig,
 ): Promise<number> {
+  if (!config.enabled) {
+    return computeRuleOnlyQualityScore(candidate);
+  }
+  if (!config.endpoint) {
+    return scoreQualityCandidateViaOpenAI(candidate, config);
+  }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -143,6 +190,130 @@ async function scoreQualityCandidate(
     );
   }
   return score;
+}
+
+async function scoreQualityCandidateViaOpenAI(
+  candidate: FetchedCandidate,
+  config: QualityScorerConfig,
+): Promise<number> {
+  if (!config.apiKey) {
+    throw new AppError(
+      500,
+      'INTERNAL_ERROR',
+      `${AUTOPULL_ALERT_CODES.QUALITY_SCORE_UNAVAILABLE}: OpenAI API key is not configured.`,
+    );
+  }
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: config.model,
+      input: [
+        {
+          role: 'system',
+          content: [
+            'Score whether a CS paper candidate is relevant and useful for literature intake.',
+            'Return JSON only with quality_score from 0 to 100.',
+            'Do not reward missing abstracts, invalid identifiers, or irrelevant source metadata.',
+          ].join(' '),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            prompt_version: config.promptVersion,
+            title: candidate.item.title,
+            abstract: candidate.item.abstract ?? null,
+            authors: candidate.item.authors ?? [],
+            year: candidate.item.year ?? null,
+            doi: candidate.item.doi ?? null,
+            arxiv_id: candidate.item.arxiv_id ?? null,
+            source_url: candidate.item.source_url,
+            provider: candidate.item.provider,
+            ranking_signals: candidate.rankingSignals,
+          }),
+        },
+      ],
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'auto_pull_quality_score',
+          strict: true,
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['quality_score'],
+            properties: {
+              quality_score: { type: 'number', minimum: 0, maximum: 100 },
+            },
+          },
+        },
+      },
+    }),
+  });
+  if (!response.ok) {
+    throw new AppError(
+      500,
+      'INTERNAL_ERROR',
+      `${AUTOPULL_ALERT_CODES.QUALITY_SCORE_UNAVAILABLE}: OpenAI scorer request failed with status ${response.status}.`,
+    );
+  }
+  const payload = (await response.json()) as Record<string, unknown>;
+  const parsed = readQualityScore(payload) ?? readQualityScore(tryReadOutputObject(payload));
+  if (parsed === null) {
+    throw new AppError(
+      500,
+      'INTERNAL_ERROR',
+      `${AUTOPULL_ALERT_CODES.QUALITY_SCORE_UNAVAILABLE}: OpenAI scorer response missing score.`,
+    );
+  }
+  return parsed;
+}
+
+function computeRuleOnlyQualityScore(candidate: FetchedCandidate): number {
+  const hasAbstract = candidate.item.abstract?.trim() ? 20 : 0;
+  const hasIdentifier = candidate.item.doi || candidate.item.arxiv_id ? 20 : 0;
+  const freshness = computeFreshnessScore(candidate.rankingSignals.publicationYear) * 0.25;
+  const status = computePublicationStatusScore(candidate.rankingSignals.publicationStatus) * 0.2;
+  const citations = computeCitationScore(candidate.rankingSignals.citationCount) * 0.15;
+  return Math.round(Math.max(0, Math.min(100, hasAbstract + hasIdentifier + freshness + status + citations)));
+}
+
+function tryReadOutputObject(payload: Record<string, unknown>): Record<string, unknown> {
+  const outputText = typeof payload.output_text === 'string' ? payload.output_text : null;
+  if (outputText) {
+    try {
+      const parsed = JSON.parse(outputText) as unknown;
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+    } catch {
+      return {};
+    }
+  }
+  const output = Array.isArray(payload.output) ? payload.output : [];
+  for (const item of output) {
+    const row = item && typeof item === 'object' && !Array.isArray(item) ? item as Record<string, unknown> : {};
+    const content = Array.isArray(row.content) ? row.content : [];
+    for (const contentItem of content) {
+      const contentRow = contentItem && typeof contentItem === 'object' && !Array.isArray(contentItem)
+        ? contentItem as Record<string, unknown>
+        : {};
+      if (contentRow.parsed && typeof contentRow.parsed === 'object' && !Array.isArray(contentRow.parsed)) {
+        return contentRow.parsed as Record<string, unknown>;
+      }
+      if (typeof contentRow.text === 'string') {
+        try {
+          const parsed = JSON.parse(contentRow.text) as unknown;
+          return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+        } catch {
+          continue;
+        }
+      }
+    }
+  }
+  return {};
 }
 
 function readQualityScore(payload: Record<string, unknown>): number | null {

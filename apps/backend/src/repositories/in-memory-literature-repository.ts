@@ -8,6 +8,9 @@ import type {
   LiteratureEmbeddingChunkRecord,
   LiteratureEmbeddingTokenIndexRecord,
   LiteratureEmbeddingVersionRecord,
+  LiteratureFulltextAcquisitionItemRecord,
+  LiteratureFulltextAcquisitionItemStatus,
+  LiteratureFulltextAcquisitionJobRecord,
   LiteratureFulltextDocumentRecord,
   LiteratureFulltextExtractionBundle,
   LiteratureFulltextParagraphRecord,
@@ -19,6 +22,7 @@ import type {
   LiteraturePipelineStageStateRecord,
   LiteraturePipelineStateRecord,
   LiteratureRecord,
+  LiteratureSourceRuntimeStateRecord,
   LiteratureSourceRecord,
   LiteratureFulltextAnchorRecord,
   PaperLiteratureLinkRecord,
@@ -71,6 +75,10 @@ export class InMemoryLiteratureRepository implements LiteratureRepository {
   private readonly contentProcessingBatchJobs = new Map<string, LiteratureContentProcessingBatchJobRecord>();
   private readonly contentProcessingBatchItems = new Map<string, LiteratureContentProcessingBatchItemRecord>();
   private readonly contentProcessingBatchItemIdsByJob = new Map<string, string[]>();
+  private readonly fulltextAcquisitionJobs = new Map<string, LiteratureFulltextAcquisitionJobRecord>();
+  private readonly fulltextAcquisitionItems = new Map<string, LiteratureFulltextAcquisitionItemRecord>();
+  private readonly fulltextAcquisitionItemIdsByJob = new Map<string, string[]>();
+  private readonly sourceRuntimeStates = new Map<string, LiteratureSourceRuntimeStateRecord>();
 
   async countLiteratures(): Promise<number> {
     return this.literatures.size;
@@ -722,6 +730,105 @@ export class InMemoryLiteratureRepository implements LiteratureRepository {
     };
     this.contentProcessingBatchItems.set(itemId, next);
     return next;
+  }
+
+  async createFulltextAcquisitionJob(
+    record: LiteratureFulltextAcquisitionJobRecord,
+    items: LiteratureFulltextAcquisitionItemRecord[],
+  ): Promise<LiteratureFulltextAcquisitionJobRecord> {
+    this.fulltextAcquisitionJobs.set(record.id, record);
+    this.fulltextAcquisitionItemIdsByJob.set(record.id, []);
+    for (const item of items) {
+      this.fulltextAcquisitionItems.set(item.id, item);
+      const ids = this.fulltextAcquisitionItemIdsByJob.get(item.jobId) ?? [];
+      this.fulltextAcquisitionItemIdsByJob.set(item.jobId, [...ids, item.id]);
+    }
+    return record;
+  }
+
+  async findFulltextAcquisitionJobById(jobId: string): Promise<LiteratureFulltextAcquisitionJobRecord | null> {
+    return this.fulltextAcquisitionJobs.get(jobId) ?? null;
+  }
+
+  async listFulltextAcquisitionJobs(limit?: number): Promise<LiteratureFulltextAcquisitionJobRecord[]> {
+    const sorted = [...this.fulltextAcquisitionJobs.values()]
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    return typeof limit === 'number' && limit > 0 ? sorted.slice(0, limit) : sorted;
+  }
+
+  async updateFulltextAcquisitionJob(
+    jobId: string,
+    patch: Partial<Omit<LiteratureFulltextAcquisitionJobRecord, 'id' | 'createdAt'>>,
+  ): Promise<LiteratureFulltextAcquisitionJobRecord> {
+    const existing = this.fulltextAcquisitionJobs.get(jobId);
+    if (!existing) {
+      throw new Error(`Fulltext acquisition job ${jobId} not found.`);
+    }
+    const next = { ...existing, ...patch };
+    this.fulltextAcquisitionJobs.set(jobId, next);
+    return next;
+  }
+
+  async deleteFulltextAcquisitionJob(jobId: string): Promise<void> {
+    const itemIds = this.fulltextAcquisitionItemIdsByJob.get(jobId) ?? [];
+    for (const itemId of itemIds) {
+      this.fulltextAcquisitionItems.delete(itemId);
+    }
+    this.fulltextAcquisitionItemIdsByJob.delete(jobId);
+    this.fulltextAcquisitionJobs.delete(jobId);
+  }
+
+  async listFulltextAcquisitionItemsByJobId(jobId: string): Promise<LiteratureFulltextAcquisitionItemRecord[]> {
+    const ids = this.fulltextAcquisitionItemIdsByJob.get(jobId) ?? [];
+    return ids
+      .map((id) => this.fulltextAcquisitionItems.get(id))
+      .filter((record): record is LiteratureFulltextAcquisitionItemRecord => record !== undefined)
+      .sort((left, right) => {
+        if (left.createdAt !== right.createdAt) {
+          return left.createdAt.localeCompare(right.createdAt);
+        }
+        return left.id.localeCompare(right.id);
+      });
+  }
+
+  async listFulltextAcquisitionItemsByJobIdAndStatuses(
+    jobId: string,
+    statuses: LiteratureFulltextAcquisitionItemStatus[],
+    limit?: number,
+  ): Promise<LiteratureFulltextAcquisitionItemRecord[]> {
+    const statusSet = new Set(statuses);
+    const sorted = (await this.listFulltextAcquisitionItemsByJobId(jobId))
+      .filter((item) => statusSet.has(item.status));
+    return typeof limit === 'number' && limit > 0 ? sorted.slice(0, limit) : sorted;
+  }
+
+  async updateFulltextAcquisitionItem(
+    itemId: string,
+    patch: Partial<Omit<LiteratureFulltextAcquisitionItemRecord, 'id' | 'jobId' | 'literatureId' | 'createdAt'>>,
+  ): Promise<LiteratureFulltextAcquisitionItemRecord> {
+    const existing = this.fulltextAcquisitionItems.get(itemId);
+    if (!existing) {
+      throw new Error(`Fulltext acquisition item ${itemId} not found.`);
+    }
+    const next = { ...existing, ...patch };
+    this.fulltextAcquisitionItems.set(itemId, next);
+    return next;
+  }
+
+  async upsertSourceRuntimeState(
+    record: LiteratureSourceRuntimeStateRecord,
+  ): Promise<{ record: LiteratureSourceRuntimeStateRecord; created: boolean }> {
+    const created = !this.sourceRuntimeStates.has(record.source);
+    this.sourceRuntimeStates.set(record.source, record);
+    return { record, created };
+  }
+
+  async findSourceRuntimeState(source: string): Promise<LiteratureSourceRuntimeStateRecord | null> {
+    return this.sourceRuntimeStates.get(source) ?? null;
+  }
+
+  async listSourceRuntimeStates(): Promise<LiteratureSourceRuntimeStateRecord[]> {
+    return [...this.sourceRuntimeStates.values()].sort((left, right) => left.source.localeCompare(right.source));
   }
 
   async createPipelineRun(record: LiteraturePipelineRunRecord): Promise<LiteraturePipelineRunRecord> {

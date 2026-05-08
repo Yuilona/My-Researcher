@@ -1,7 +1,9 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { AutoPullController } from './controllers/auto-pull-controller.js';
+import { LiteratureAcquisitionSettingsController } from './controllers/literature-acquisition-settings-controller.js';
 import { LiteratureBackfillController } from './controllers/literature-backfill-controller.js';
 import { LiteratureContentProcessingSettingsController } from './controllers/literature-content-processing-settings-controller.js';
+import { LiteratureFulltextAcquisitionController } from './controllers/literature-fulltext-acquisition-controller.js';
 import { LiteratureController } from './controllers/literature-controller.js';
 import { TopicSettingsController } from './controllers/topic-settings-controller.js';
 import { InMemoryApplicationSettingsRepository } from './repositories/in-memory-application-settings-repository.js';
@@ -17,8 +19,10 @@ import { PrismaResearchLifecycleRepository } from './repositories/prisma/prisma-
 import { InMemoryTitleCardManagementRepository } from './repositories/title-card-management.repository.js';
 import { PrismaTitleCardManagementRepository } from './repositories/prisma/prisma-title-card-management-repository.js';
 import { registerAutoPullRoutes } from './routes/auto-pull-routes.js';
+import { registerLiteratureAcquisitionSettingsRoutes } from './routes/literature-acquisition-settings-routes.js';
 import { registerLiteratureBackfillRoutes } from './routes/literature-backfill-routes.js';
 import { registerLiteratureContentProcessingSettingsRoutes } from './routes/literature-content-processing-settings-routes.js';
+import { registerLiteratureFulltextAcquisitionRoutes } from './routes/literature-fulltext-acquisition-routes.js';
 import { registerLiteratureRoutes } from './routes/literature-routes.js';
 import { registerResearchLifecycleRoutes } from './routes/research-lifecycle-routes.js';
 import { registerTitleCardManagementRoutes } from './routes/title-card-management.js';
@@ -31,7 +35,9 @@ import type { TitleCardManagementRepository } from './repositories/title-card-ma
 import { AutoPullScheduler } from './services/auto-pull-scheduler.js';
 import { AutoPullService } from './services/auto-pull-service.js';
 import { LiteratureBackfillService } from './services/literature-backfill-service.js';
+import { LiteratureAcquisitionSettingsService } from './services/literature-acquisition-settings-service.js';
 import { LiteratureFlowService } from './services/literature-flow-service.js';
+import { LiteratureFulltextAcquisitionService } from './services/literature-fulltext-acquisition-service.js';
 import { LiteratureService } from './services/literature-service.js';
 import { LiteratureContentProcessingSettingsService } from './services/literature-content-processing-settings-service.js';
 import { ResearchLifecycleService } from './services/research-lifecycle-service.js';
@@ -120,6 +126,10 @@ export function buildApp(): FastifyInstance {
   });
   const titleCardManagementController = new TitleCardManagementController(titleCardManagementService);
   const literatureContentProcessingSettingsService = new LiteratureContentProcessingSettingsService(applicationSettingsRepository);
+  const literatureAcquisitionSettingsService = new LiteratureAcquisitionSettingsService(applicationSettingsRepository);
+  const literatureAcquisitionSettingsController = new LiteratureAcquisitionSettingsController(
+    literatureAcquisitionSettingsService,
+  );
   const literatureContentProcessingSettingsController = new LiteratureContentProcessingSettingsController(
     literatureContentProcessingSettingsService,
   );
@@ -131,7 +141,10 @@ export function buildApp(): FastifyInstance {
     literatureRepository,
     repository,
     literatureContentProcessingSettingsService,
-    literatureFlowService,
+    {
+      literatureFlowService,
+      literatureAcquisitionSettingsService,
+    },
   );
   const literatureController = new LiteratureController(literatureService);
   const literatureBackfillService = new LiteratureBackfillService(literatureRepository, literatureFlowService);
@@ -139,7 +152,23 @@ export function buildApp(): FastifyInstance {
     app.log.error({ err: error }, 'Failed to resume literature content-processing backfill jobs.');
   });
   const literatureBackfillController = new LiteratureBackfillController(literatureBackfillService);
-  const autoPullService = new AutoPullService(autoPullRepository, literatureService);
+  const literatureFulltextAcquisitionService = new LiteratureFulltextAcquisitionService(
+    literatureRepository,
+    literatureService,
+    literatureAcquisitionSettingsService,
+  );
+  void literatureFulltextAcquisitionService.resumeRunnableJobs().catch((error) => {
+    app.log.error({ err: error }, 'Failed to resume literature fulltext acquisition jobs.');
+  });
+  const literatureFulltextAcquisitionController = new LiteratureFulltextAcquisitionController(
+    literatureFulltextAcquisitionService,
+  );
+  const autoPullService = new AutoPullService(
+    autoPullRepository,
+    literatureService,
+    literatureContentProcessingSettingsService,
+    literatureAcquisitionSettingsService,
+  );
   const autoPullController = new AutoPullController(autoPullService);
   const topicSettingsController = new TopicSettingsController(autoPullService);
   const autoPullScheduler = createAutoPullScheduler(autoPullService);
@@ -175,8 +204,10 @@ export function buildApp(): FastifyInstance {
   app.register(async (instance) => {
     await registerResearchLifecycleRoutes(instance, researchLifecycleController);
     await registerTitleCardManagementRoutes(instance, titleCardManagementController);
+    await registerLiteratureAcquisitionSettingsRoutes(instance, literatureAcquisitionSettingsController);
     await registerLiteratureContentProcessingSettingsRoutes(instance, literatureContentProcessingSettingsController);
     await registerLiteratureBackfillRoutes(instance, literatureBackfillController);
+    await registerLiteratureFulltextAcquisitionRoutes(instance, literatureFulltextAcquisitionController);
     await registerLiteratureRoutes(instance, literatureController);
     await registerTopicSettingsRoutes(instance, topicSettingsController);
     await registerAutoPullRoutes(instance, autoPullController);

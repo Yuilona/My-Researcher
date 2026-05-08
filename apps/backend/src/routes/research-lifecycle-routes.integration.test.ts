@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import dns from 'node:dns/promises';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -80,6 +81,16 @@ function buildMockDossierPayload() {
   };
 }
 
+function mockPublicDnsLookup(): () => void {
+  const previousLookup = dns.lookup;
+  (dns as unknown as { lookup: typeof dns.lookup }).lookup = (async () => [
+    { address: '93.184.216.34', family: 4 },
+  ]) as unknown as typeof dns.lookup;
+  return () => {
+    (dns as unknown as { lookup: typeof dns.lookup }).lookup = previousLookup;
+  };
+}
+
 async function waitForBackfillJob(app: ReturnType<typeof buildApp>, jobId: string) {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const res = await app.inject({
@@ -94,6 +105,22 @@ async function waitForBackfillJob(app: ReturnType<typeof buildApp>, jobId: strin
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(`Timed out waiting for backfill job ${jobId}.`);
+}
+
+async function waitForFulltextAcquisitionJob(app: ReturnType<typeof buildApp>, jobId: string) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/literature/fulltext-acquisition/jobs/${encodeURIComponent(jobId)}`,
+    });
+    assert.equal(res.statusCode, 200);
+    const job = res.json().job;
+    if (job.status === 'SUCCEEDED' || job.status === 'PARTIAL' || job.status === 'FAILED' || job.status === 'CANCELED') {
+      return job;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for fulltext acquisition job ${jobId}.`);
 }
 
 test('GET /health returns ok', async () => {
@@ -196,6 +223,462 @@ test('literature content-processing settings routes redact provider API keys', a
   }
 
   await app.close();
+});
+
+test('literature acquisition settings routes persist OA and downloader settings', async () => {
+  const app = buildApp();
+
+  const initialRes = await app.inject({
+    method: 'GET',
+    url: '/settings/literature-acquisition',
+  });
+  assert.equal(initialRes.statusCode, 200);
+  const initialBody = initialRes.json();
+  assert.equal(initialBody.unpaywall.enabled, false);
+  assert.equal(initialBody.downloader.require_pdf_signature, true);
+  assert.equal(initialBody.source_throttle.arxiv.min_interval_ms, 3000);
+  assert.equal(initialBody.quality_scorer.provider, 'openai');
+
+  const patchRes = await app.inject({
+    method: 'PATCH',
+    url: '/settings/literature-acquisition',
+    payload: {
+      unpaywall: {
+        enabled: true,
+        email: 'oa@example.com',
+      },
+      downloader: {
+        max_byte_size: 2048,
+        timeout_ms: 5000,
+        max_redirects: 2,
+      },
+      quality_scorer: {
+        model: 'gpt-5.4-mini',
+        prompt_version: 'auto_pull_quality.v1',
+      },
+    },
+  });
+  assert.equal(patchRes.statusCode, 200);
+  const patchBody = patchRes.json();
+  assert.equal(patchBody.unpaywall.enabled, true);
+  assert.equal(patchBody.unpaywall.email, 'oa@example.com');
+  assert.equal(patchBody.downloader.max_byte_size, 2048);
+  assert.equal(patchBody.downloader.max_redirects, 2);
+
+  await app.close();
+});
+
+test('literature content asset download route fetches URL and registers raw fulltext', async () => {
+  const app = buildApp();
+  const rawFilesRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'pea-route-download-'));
+  tempDirs.add(rawFilesRoot);
+
+  const settingsRes = await app.inject({
+    method: 'PATCH',
+    url: '/settings/literature-content-processing',
+    payload: {
+      storage_roots: {
+        raw_files: rawFilesRoot,
+      },
+    },
+  });
+  assert.equal(settingsRes.statusCode, 200);
+
+  const importedRes = await app.inject({
+    method: 'POST',
+    url: '/literature/collections/import',
+    payload: {
+      items: [
+        {
+          provider: 'arxiv',
+          external_id: '2502.00001',
+          title: 'Route Download Asset',
+          abstract: 'Route abstract.',
+          authors: ['Ada Lovelace'],
+          year: 2025,
+          arxiv_id: '2502.00001',
+          source_url: 'https://arxiv.org/abs/2502.00001',
+          rights_class: 'OA',
+        },
+      ],
+    },
+  });
+  assert.equal(importedRes.statusCode, 200);
+  const literatureId = importedRes.json().results[0]?.literature_id;
+  assert.ok(literatureId);
+
+  const previousFetch = globalThis.fetch;
+  const restoreDnsLookup = mockPublicDnsLookup();
+  const payload = Buffer.from('%PDF-1.4 route download body');
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.endsWith('/pdf/2502.00001')) {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: 'https://arxiv.org/final/2502.00001.pdf',
+        },
+      });
+    }
+    return new Response(payload, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Length': String(payload.length),
+      },
+    });
+  }) as typeof fetch;
+
+  try {
+    const downloadRes = await app.inject({
+      method: 'POST',
+      url: `/literature/${encodeURIComponent(literatureId)}/content-assets/download`,
+      payload: {
+        source_url: 'https://arxiv.org/pdf/2502.00001',
+        max_byte_size: 1024,
+      },
+    });
+    assert.equal(downloadRes.statusCode, 200);
+    const body = downloadRes.json();
+    assert.equal(body.item.literature_id, literatureId);
+    assert.equal(body.item.status, 'registered');
+    assert.equal(body.item.mime_type, 'application/pdf');
+    assert.equal(body.item.byte_size, payload.length);
+    assert.equal(body.item.local_path.startsWith(path.join(rawFilesRoot, literatureId)), true);
+    assert.equal(body.item.metadata.downloaded_from, 'https://arxiv.org/pdf/2502.00001');
+    assert.equal(body.item.metadata.final_url, 'https://arxiv.org/final/2502.00001.pdf');
+    assert.deepEqual(body.item.metadata.redirect_chain, ['https://arxiv.org/final/2502.00001.pdf']);
+
+    const stored = await fs.readFile(body.item.local_path);
+    assert.deepEqual(stored, payload);
+  } finally {
+    globalThis.fetch = previousFetch;
+    restoreDnsLookup();
+    await app.close();
+  }
+});
+
+test('literature content asset download route enforces persisted acquisition downloader limits', async () => {
+  const app = buildApp();
+
+  const settingsRes = await app.inject({
+    method: 'PATCH',
+    url: '/settings/literature-acquisition',
+    payload: {
+      downloader: {
+        max_byte_size: 8,
+      },
+    },
+  });
+  assert.equal(settingsRes.statusCode, 200);
+
+  const importedRes = await app.inject({
+    method: 'POST',
+    url: '/literature/collections/import',
+    payload: {
+      items: [{
+        provider: 'manual',
+        external_id: 'download-configured-size',
+        title: 'Download Configured Size',
+        abstract: 'Downloader config test.',
+        authors: ['Config Author'],
+        year: 2026,
+        source_url: 'https://example.com/download-configured-size',
+        rights_class: 'OA',
+      }],
+    },
+  });
+  assert.equal(importedRes.statusCode, 200);
+  const literatureId = importedRes.json().results[0]?.literature_id;
+  assert.equal(typeof literatureId, 'string');
+
+  const previousFetch = globalThis.fetch;
+  const restoreDnsLookup = mockPublicDnsLookup();
+  const payload = Buffer.from('%PDF-1.4 configured route download body');
+  globalThis.fetch = (async () => new Response(payload, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Length': String(payload.length),
+    },
+  })) as typeof fetch;
+
+  try {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/literature/${encodeURIComponent(literatureId)}/content-assets/download`,
+      payload: {
+        source_url: 'https://example.com/download-configured-size.pdf',
+        max_byte_size: 1024,
+      },
+    });
+    assert.equal(res.statusCode, 413);
+  } finally {
+    globalThis.fetch = previousFetch;
+    restoreDnsLookup();
+    await app.close();
+  }
+});
+
+test('literature fulltext acquisition dry-run caps request size by persisted downloader limit', async () => {
+  const app = buildApp();
+
+  const settingsRes = await app.inject({
+    method: 'PATCH',
+    url: '/settings/literature-acquisition',
+    payload: {
+      downloader: {
+        max_byte_size: 8,
+      },
+    },
+  });
+  assert.equal(settingsRes.statusCode, 200);
+
+  const importedRes = await app.inject({
+    method: 'POST',
+    url: '/literature/collections/import',
+    payload: {
+      items: [{
+        provider: 'arxiv',
+        external_id: 'download-acquisition-size-cap',
+        title: 'Download Acquisition Size Cap',
+        abstract: 'Acquisition downloader config test.',
+        authors: ['Config Author'],
+        year: 2026,
+        arxiv_id: '2601.00002',
+        source_url: 'https://arxiv.org/abs/2601.00002',
+        rights_class: 'OA',
+      }],
+    },
+  });
+  assert.equal(importedRes.statusCode, 200);
+  const literatureId = importedRes.json().results[0]?.literature_id;
+  assert.equal(typeof literatureId, 'string');
+
+  const dryRunRes = await app.inject({
+    method: 'POST',
+    url: '/literature/fulltext-acquisition/dry-runs',
+    payload: {
+      workset: {
+        literature_ids: [literatureId],
+      },
+      options: {
+        max_byte_size: 1024,
+      },
+    },
+  });
+  assert.equal(dryRunRes.statusCode, 200);
+  assert.equal(dryRunRes.json().estimate.options.max_byte_size, 8);
+
+  await app.close();
+});
+
+test('literature content asset download route blocks redirects to localhost before following them', async () => {
+  const app = buildApp();
+  const importedRes = await app.inject({
+    method: 'POST',
+    url: '/literature/collections/import',
+    payload: {
+      items: [{
+        provider: 'manual',
+        external_id: 'download-redirect-localhost',
+        title: 'Download Redirect Localhost Rejected',
+        abstract: 'Redirect security test.',
+        authors: ['Security Author'],
+        year: 2026,
+        source_url: 'https://example.com/download-redirect-localhost',
+        rights_class: 'OA',
+      }],
+    },
+  });
+  assert.equal(importedRes.statusCode, 200);
+  const literatureId = importedRes.json().results[0]?.literature_id;
+  assert.equal(typeof literatureId, 'string');
+
+  const previousFetch = globalThis.fetch;
+  const restoreDnsLookup = mockPublicDnsLookup();
+  let fetchCount = 0;
+  globalThis.fetch = (async () => {
+    fetchCount += 1;
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: 'http://localhost:8070/private.pdf',
+      },
+    });
+  }) as typeof fetch;
+  try {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/literature/${encodeURIComponent(literatureId)}/content-assets/download`,
+      payload: {
+        source_url: 'https://example.com/redirect-to-localhost.pdf',
+      },
+    });
+    assert.equal(res.statusCode, 400);
+    assert.equal(fetchCount, 1);
+  } finally {
+    globalThis.fetch = previousFetch;
+    restoreDnsLookup();
+    await app.close();
+  }
+});
+
+test('literature content asset download route rejects localhost targets before fetch', async () => {
+  const app = buildApp();
+  const importedRes = await app.inject({
+    method: 'POST',
+    url: '/literature/collections/import',
+    payload: {
+      items: [{
+        provider: 'manual',
+        external_id: 'download-localhost',
+        title: 'Download Localhost Rejected',
+        abstract: 'Security test.',
+        authors: ['Security Author'],
+        year: 2026,
+        source_url: 'https://example.com/download-localhost',
+        rights_class: 'OA',
+      }],
+    },
+  });
+  assert.equal(importedRes.statusCode, 200);
+  const literatureId = importedRes.json().results[0]?.literature_id;
+  assert.equal(typeof literatureId, 'string');
+
+  const previousFetch = globalThis.fetch;
+  let fetched = false;
+  globalThis.fetch = (async () => {
+    fetched = true;
+    return new Response('should not fetch', { status: 200 });
+  }) as typeof fetch;
+  try {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/literature/${encodeURIComponent(literatureId)}/content-assets/download`,
+      payload: {
+        source_url: 'http://localhost:8070/paper.pdf',
+      },
+    });
+    assert.equal(res.statusCode, 400);
+    assert.equal(fetched, false);
+
+    const mappedIpv6Res = await app.inject({
+      method: 'POST',
+      url: `/literature/${encodeURIComponent(literatureId)}/content-assets/download`,
+      payload: {
+        source_url: 'http://[::ffff:127.0.0.1]/paper.pdf',
+      },
+    });
+    assert.equal(mappedIpv6Res.statusCode, 400);
+    assert.equal(fetched, false);
+  } finally {
+    globalThis.fetch = previousFetch;
+    await app.close();
+  }
+});
+
+test('literature fulltext acquisition job downloads arxiv PDF as a separate job', async () => {
+  const app = buildApp();
+  const rawFilesRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'pea-acquisition-download-'));
+  tempDirs.add(rawFilesRoot);
+
+  const settingsRes = await app.inject({
+    method: 'PATCH',
+    url: '/settings/literature-content-processing',
+    payload: {
+      storage_roots: {
+        raw_files: rawFilesRoot,
+      },
+    },
+  });
+  assert.equal(settingsRes.statusCode, 200);
+
+  const importRes = await app.inject({
+    method: 'POST',
+    url: '/literature/collections/import',
+    payload: {
+      items: [{
+        provider: 'arxiv',
+        external_id: '2601.00001',
+        title: 'Acquisition Route Paper',
+        abstract: 'Acquisition abstract.',
+        authors: ['Route Author'],
+        year: 2026,
+        arxiv_id: '2601.00001',
+        source_url: 'https://arxiv.org/abs/2601.00001',
+        rights_class: 'OA',
+      }],
+    },
+  });
+  assert.equal(importRes.statusCode, 200);
+  const literatureId = importRes.json().results[0]?.literature_id;
+  assert.equal(typeof literatureId, 'string');
+
+  const dryRunRes = await app.inject({
+    method: 'POST',
+    url: '/literature/fulltext-acquisition/dry-runs',
+    payload: {
+      workset: {
+        literature_ids: [literatureId],
+      },
+      options: {
+        max_byte_size: 1024,
+      },
+    },
+  });
+  assert.equal(dryRunRes.statusCode, 200);
+  const dryRunBody = dryRunRes.json();
+  assert.equal(dryRunBody.estimate.planned_item_count, 1);
+  assert.equal(dryRunBody.estimate.plan_items[0]?.selected_source_kind, 'arxiv');
+
+  const previousFetch = globalThis.fetch;
+  const restoreDnsLookup = mockPublicDnsLookup();
+  const payload = Buffer.from('%PDF-1.4 acquisition route body');
+  globalThis.fetch = (async () => new Response(payload, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Length': String(payload.length),
+    },
+  })) as typeof fetch;
+
+  try {
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/literature/fulltext-acquisition/jobs',
+      payload: {
+        workset: {
+          literature_ids: [literatureId],
+        },
+        options: {
+          max_byte_size: 1024,
+        },
+      },
+    });
+    assert.equal(createRes.statusCode, 201);
+    const jobId = createRes.json().job.job_id;
+    assert.equal(typeof jobId, 'string');
+
+    const job = await waitForFulltextAcquisitionJob(app, jobId);
+    assert.equal(job.status, 'SUCCEEDED');
+    assert.equal(job.items[0]?.status, 'SUCCEEDED');
+    assert.equal(job.items[0]?.selected_source_kind, 'arxiv');
+    assert.equal(typeof job.items[0]?.content_asset_id, 'string');
+    assert.equal(job.totals.succeeded, 1);
+
+    const assetsRes = await app.inject({
+      method: 'GET',
+      url: `/literature/${encodeURIComponent(literatureId)}/content-assets`,
+    });
+    assert.equal(assetsRes.statusCode, 200);
+    assert.equal(assetsRes.json().items.length, 1);
+    assert.equal(assetsRes.json().items[0]?.metadata.acquisition_job_id, jobId);
+  } finally {
+    globalThis.fetch = previousFetch;
+    restoreDnsLookup();
+    await app.close();
+  }
 });
 
 test('literature backfill operations routes dry-run create job and cleanup without old fan-out path', async () => {

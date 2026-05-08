@@ -221,7 +221,7 @@ export class LiteratureContentProcessingSettingsService {
       this.repository.findSetting(SETTINGS_NAMESPACE, PROVIDER_OPENAI_KEY),
       this.getSettings(),
     ]);
-    const apiKey = providerOpenAI?.secretValue?.trim();
+    const apiKey = providerOpenAI?.secretValue?.trim() || process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
       return null;
     }
@@ -238,6 +238,12 @@ export class LiteratureContentProcessingSettingsService {
       model: profile.model,
       dimensions: profile.dimensions,
     };
+  }
+
+  async resolveOpenAIProviderApiKey(): Promise<string | null> {
+    const providerOpenAI = await this.repository.findSetting(SETTINGS_NAMESPACE, PROVIDER_OPENAI_KEY);
+    const apiKey = providerOpenAI?.secretValue?.trim() || process.env.OPENAI_API_KEY?.trim();
+    return apiKey || null;
   }
 
   async resolveActiveEmbeddingProfile(): Promise<ActiveEmbeddingProfileConfig> {
@@ -261,7 +267,7 @@ export class LiteratureContentProcessingSettingsService {
       this.repository.findSetting(SETTINGS_NAMESPACE, PROVIDER_OPENAI_KEY),
       this.getSettings(),
     ]);
-    const apiKey = providerOpenAI?.secretValue?.trim();
+    const apiKey = providerOpenAI?.secretValue?.trim() || process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
       return null;
     }

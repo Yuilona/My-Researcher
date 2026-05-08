@@ -127,6 +127,7 @@ export class LiteratureRetrievalService {
     const literatureTitleById = new Map(literatures.map((item) => [item.id, item.title]));
     const staleWarnings = await this.resolveFreshnessWarnings(literatureIds, candidateVersions);
     const staleByVersionId = new Map(staleWarnings.map((warning) => [warning.embedding_version_id, warning]));
+    const includeStale = request.include_stale === true;
 
     const profilesUsed: LiteratureRetrieveResponse['meta']['profiles_used'] = [];
     const scoredChunks: ScoredChunk[] = [];
@@ -173,6 +174,10 @@ export class LiteratureRetrievalService {
       if (!version) {
         continue;
       }
+      const staleWarning = staleByVersionId.get(version.id);
+      if (staleWarning && !includeStale) {
+        continue;
+      }
       const vectorScore = queryVector ? this.normalizedCosine(queryVector, chunk.vector) : 0;
       const lexicalScore = this.lexicalScore(queryTokens, chunk.text);
       const profileBoost = profileConfig.chunkBoosts[chunk.chunkType] ?? 0;
@@ -182,7 +187,6 @@ export class LiteratureRetrievalService {
         + (lexicalScore * profileConfig.lexicalWeight)
         + (metadataScore * profileConfig.metadataWeight),
       );
-      const staleWarning = staleByVersionId.get(version.id);
       scoredChunks.push({
         literatureId: version.literatureId,
         embeddingVersionId: version.id,

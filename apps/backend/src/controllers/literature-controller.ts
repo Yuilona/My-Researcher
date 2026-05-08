@@ -1,6 +1,8 @@
 import type {
   CreateLiteratureContentProcessingRunRequest,
   CreateLiteratureContentProcessingRunResponse,
+  DownloadLiteratureContentAssetRequest,
+  DownloadLiteratureContentAssetResponse,
   GetLiteratureContentProcessingResponse,
   GetLiteratureMetadataResponse,
   GetPaperLiteratureResponse,
@@ -198,6 +200,18 @@ export class LiteratureController {
     try {
       const result = await this.service.registerContentAsset(request.params.literatureId, request.body);
       reply.status(200).send(result satisfies RegisterLiteratureContentAssetResponse);
+    } catch (error) {
+      this.handleError(reply, error);
+    }
+  }
+
+  async downloadContentAsset(
+    request: FastifyRequest<{ Params: LiteratureParams; Body: DownloadLiteratureContentAssetRequest }>,
+    reply: FastifyReply,
+  ): Promise<void> {
+    try {
+      const result = await this.service.downloadContentAsset(request.params.literatureId, request.body);
+      reply.status(200).send(result satisfies DownloadLiteratureContentAssetResponse);
     } catch (error) {
       this.handleError(reply, error);
     }

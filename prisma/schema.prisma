@@ -94,6 +94,7 @@ model LiteratureRecord {
   embeddingChunks             LiteratureEmbeddingChunk[]
   embeddingTokenIndexes       LiteratureEmbeddingTokenIndex[]
   contentProcessingBatchItems LiteratureContentProcessingBatchItem[]
+  fulltextAcquisitionItems    LiteratureFulltextAcquisitionItem[]
   autoPullSuggestions         AutoPullSuggestion[]
   titleCardSelections         TitleCardEvidenceSelection[]
 
@@ -160,7 +161,7 @@ model LiteratureAbstractProfile {
 }
 
 model LiteratureContentAsset {
-  id               String                      @id
+  id               String                              @id
   literatureId     String
   assetKind        String
   sourceKind       String
@@ -170,10 +171,11 @@ model LiteratureContentAsset {
   byteSize         Int
   rightsClass      String
   status           String
-  metadata         Json                        @default("{}")
-  createdAt        DateTime                    @db.Timestamptz(6)
-  updatedAt        DateTime                    @db.Timestamptz(6)
-  literature       LiteratureRecord            @relation(fields: [literatureId], references: [id], onDelete: Cascade)
+  metadata         Json                                @default("{}")
+  createdAt        DateTime                            @db.Timestamptz(6)
+  updatedAt        DateTime                            @db.Timestamptz(6)
+  acquisitionItems LiteratureFulltextAcquisitionItem[]
+  literature       LiteratureRecord                    @relation(fields: [literatureId], references: [id], onDelete: Cascade)
   fulltextDocument LiteratureFulltextDocument?
 
   @@unique([literatureId, localPath])
@@ -497,6 +499,77 @@ model LiteratureContentProcessingBatchItem {
   @@index([jobId, status])
   @@index([literatureId, status])
   @@index([pipelineRunId])
+  @@index([updatedAt])
+}
+
+model LiteratureFulltextAcquisitionJob {
+  id             String                              @id
+  status         String
+  workset        Json                                @default("{}")
+  options        Json                                @default("{}")
+  dryRunEstimate Json                                @default("{}")
+  totals         Json                                @default("{}")
+  errorCode      String?
+  errorMessage   String?
+  createdAt      DateTime                            @db.Timestamptz(6)
+  startedAt      DateTime?                           @db.Timestamptz(6)
+  pausedAt       DateTime?                           @db.Timestamptz(6)
+  canceledAt     DateTime?                           @db.Timestamptz(6)
+  finishedAt     DateTime?                           @db.Timestamptz(6)
+  updatedAt      DateTime                            @db.Timestamptz(6)
+  items          LiteratureFulltextAcquisitionItem[]
+
+  @@index([status, createdAt])
+  @@index([updatedAt])
+}
+
+model LiteratureFulltextAcquisitionItem {
+  id                   String                           @id
+  jobId                String
+  literatureId         String
+  status               String
+  selectedSourceKind   String?
+  sourceUrl            String?
+  finalUrl             String?
+  contentAssetId       String?
+  attemptCount         Int                              @default(0)
+  errorCode            String?
+  errorMessage         String?
+  blockerCode          String?
+  retryable            Boolean                          @default(true)
+  resolutionCandidates Json                             @default("[]")
+  checkpoint           Json                             @default("{}")
+  createdAt            DateTime                         @db.Timestamptz(6)
+  startedAt            DateTime?                        @db.Timestamptz(6)
+  finishedAt           DateTime?                        @db.Timestamptz(6)
+  updatedAt            DateTime                         @db.Timestamptz(6)
+  contentAsset         LiteratureContentAsset?          @relation(fields: [contentAssetId], references: [id], onDelete: SetNull)
+  job                  LiteratureFulltextAcquisitionJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  literature           LiteratureRecord                 @relation(fields: [literatureId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, status])
+  @@index([literatureId, status])
+  @@index([contentAssetId])
+  @@index([updatedAt])
+}
+
+model LiteratureSourceRuntimeState {
+  id               String    @id
+  source           String
+  status           String
+  cooldownUntil    DateTime? @db.Timestamptz(6)
+  failureCount     Int       @default(0)
+  lastErrorCode    String?
+  lastErrorMessage String?
+  lastRequestAt    DateTime? @db.Timestamptz(6)
+  lastSuccessAt    DateTime? @db.Timestamptz(6)
+  lastFailureAt    DateTime? @db.Timestamptz(6)
+  metadata         Json      @default("{}")
+  createdAt        DateTime  @db.Timestamptz(6)
+  updatedAt        DateTime  @db.Timestamptz(6)
+
+  @@unique([source])
+  @@index([status, cooldownUntil])
   @@index([updatedAt])
 }
 

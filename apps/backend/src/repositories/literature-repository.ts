@@ -3,6 +3,9 @@ import type {
   LiteratureContentAssetKind,
   LiteratureContentAssetSourceKind,
   LiteratureContentAssetStatus,
+  LiteratureFulltextAcquisitionItemStatus as SharedLiteratureFulltextAcquisitionItemStatus,
+  LiteratureFulltextAcquisitionJobStatus as SharedLiteratureFulltextAcquisitionJobStatus,
+  LiteratureFulltextAcquisitionSourceKind,
   PaperCitationStatus,
   RightsClass,
   TopicScopeStatus,
@@ -75,6 +78,9 @@ export type LiteratureContentProcessingBatchItemStatus =
   | 'FAILED'
   | 'SKIPPED'
   | 'CANCELED';
+
+export type LiteratureFulltextAcquisitionJobStatus = SharedLiteratureFulltextAcquisitionJobStatus;
+export type LiteratureFulltextAcquisitionItemStatus = SharedLiteratureFulltextAcquisitionItemStatus;
 
 export type LiteraturePipelineStateRecord = {
   id: string;
@@ -227,6 +233,61 @@ export type LiteratureContentProcessingBatchItemRecord = {
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+  updatedAt: string;
+};
+
+export type LiteratureFulltextAcquisitionJobRecord = {
+  id: string;
+  status: LiteratureFulltextAcquisitionJobStatus;
+  workset: Record<string, unknown>;
+  options: Record<string, unknown>;
+  dryRunEstimate: Record<string, unknown>;
+  totals: Record<string, unknown>;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  pausedAt: string | null;
+  canceledAt: string | null;
+  finishedAt: string | null;
+  updatedAt: string;
+};
+
+export type LiteratureFulltextAcquisitionItemRecord = {
+  id: string;
+  jobId: string;
+  literatureId: string;
+  status: LiteratureFulltextAcquisitionItemStatus;
+  selectedSourceKind: LiteratureFulltextAcquisitionSourceKind | null;
+  sourceUrl: string | null;
+  finalUrl: string | null;
+  contentAssetId: string | null;
+  attemptCount: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+  blockerCode: string | null;
+  retryable: boolean;
+  resolutionCandidates: Record<string, unknown>[];
+  checkpoint: Record<string, unknown>;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  updatedAt: string;
+};
+
+export type LiteratureSourceRuntimeStateRecord = {
+  id: string;
+  source: string;
+  status: string;
+  cooldownUntil: string | null;
+  failureCount: number;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+  lastRequestAt: string | null;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
   updatedAt: string;
 };
 
@@ -505,6 +566,34 @@ export interface LiteratureRepository {
     itemId: string,
     patch: Partial<Omit<LiteratureContentProcessingBatchItemRecord, 'id' | 'jobId' | 'literatureId' | 'createdAt'>>,
   ): Promise<LiteratureContentProcessingBatchItemRecord>;
+
+  createFulltextAcquisitionJob(
+    record: LiteratureFulltextAcquisitionJobRecord,
+    items: LiteratureFulltextAcquisitionItemRecord[],
+  ): Promise<LiteratureFulltextAcquisitionJobRecord>;
+  findFulltextAcquisitionJobById(jobId: string): Promise<LiteratureFulltextAcquisitionJobRecord | null>;
+  listFulltextAcquisitionJobs(limit?: number): Promise<LiteratureFulltextAcquisitionJobRecord[]>;
+  updateFulltextAcquisitionJob(
+    jobId: string,
+    patch: Partial<Omit<LiteratureFulltextAcquisitionJobRecord, 'id' | 'createdAt'>>,
+  ): Promise<LiteratureFulltextAcquisitionJobRecord>;
+  deleteFulltextAcquisitionJob(jobId: string): Promise<void>;
+  listFulltextAcquisitionItemsByJobId(jobId: string): Promise<LiteratureFulltextAcquisitionItemRecord[]>;
+  listFulltextAcquisitionItemsByJobIdAndStatuses(
+    jobId: string,
+    statuses: LiteratureFulltextAcquisitionItemStatus[],
+    limit?: number,
+  ): Promise<LiteratureFulltextAcquisitionItemRecord[]>;
+  updateFulltextAcquisitionItem(
+    itemId: string,
+    patch: Partial<Omit<LiteratureFulltextAcquisitionItemRecord, 'id' | 'jobId' | 'literatureId' | 'createdAt'>>,
+  ): Promise<LiteratureFulltextAcquisitionItemRecord>;
+
+  upsertSourceRuntimeState(
+    record: LiteratureSourceRuntimeStateRecord,
+  ): Promise<{ record: LiteratureSourceRuntimeStateRecord; created: boolean }>;
+  findSourceRuntimeState(source: string): Promise<LiteratureSourceRuntimeStateRecord | null>;
+  listSourceRuntimeStates(): Promise<LiteratureSourceRuntimeStateRecord[]>;
 
   createPipelineRun(record: LiteraturePipelineRunRecord): Promise<LiteraturePipelineRunRecord>;
   findPipelineRunById(runId: string): Promise<LiteraturePipelineRunRecord | null>;

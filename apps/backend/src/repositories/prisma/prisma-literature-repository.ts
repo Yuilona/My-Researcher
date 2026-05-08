@@ -9,6 +9,9 @@ import type {
   LiteratureEmbeddingChunkRecord,
   LiteratureEmbeddingTokenIndexRecord,
   LiteratureEmbeddingVersionRecord,
+  LiteratureFulltextAcquisitionItemRecord,
+  LiteratureFulltextAcquisitionItemStatus,
+  LiteratureFulltextAcquisitionJobRecord,
   LiteratureFulltextDocumentRecord,
   LiteratureFulltextExtractionBundle,
   LiteratureFulltextAnchorRecord,
@@ -21,6 +24,7 @@ import type {
   LiteraturePipelineStateRecord,
   LiteratureRecord,
   LiteratureRepository,
+  LiteratureSourceRuntimeStateRecord,
   LiteratureSourceRecord,
   PaperLiteratureLinkRecord,
   TopicLiteratureScopeRecord,
@@ -346,6 +350,65 @@ export class PrismaLiteratureRepository implements LiteratureRepository {
     patch: Partial<Omit<LiteratureContentProcessingBatchItemRecord, 'id' | 'jobId' | 'literatureId' | 'createdAt'>>,
   ): Promise<LiteratureContentProcessingBatchItemRecord> {
     return this.batchStore.updateContentProcessingBatchItem(itemId, patch);
+  }
+
+  async createFulltextAcquisitionJob(
+    record: LiteratureFulltextAcquisitionJobRecord,
+    items: LiteratureFulltextAcquisitionItemRecord[],
+  ): Promise<LiteratureFulltextAcquisitionJobRecord> {
+    return this.batchStore.createFulltextAcquisitionJob(record, items);
+  }
+
+  async findFulltextAcquisitionJobById(jobId: string): Promise<LiteratureFulltextAcquisitionJobRecord | null> {
+    return this.batchStore.findFulltextAcquisitionJobById(jobId);
+  }
+
+  async listFulltextAcquisitionJobs(limit?: number): Promise<LiteratureFulltextAcquisitionJobRecord[]> {
+    return this.batchStore.listFulltextAcquisitionJobs(limit);
+  }
+
+  async updateFulltextAcquisitionJob(
+    jobId: string,
+    patch: Partial<Omit<LiteratureFulltextAcquisitionJobRecord, 'id' | 'createdAt'>>,
+  ): Promise<LiteratureFulltextAcquisitionJobRecord> {
+    return this.batchStore.updateFulltextAcquisitionJob(jobId, patch);
+  }
+
+  async deleteFulltextAcquisitionJob(jobId: string): Promise<void> {
+    return this.batchStore.deleteFulltextAcquisitionJob(jobId);
+  }
+
+  async listFulltextAcquisitionItemsByJobId(jobId: string): Promise<LiteratureFulltextAcquisitionItemRecord[]> {
+    return this.batchStore.listFulltextAcquisitionItemsByJobId(jobId);
+  }
+
+  async listFulltextAcquisitionItemsByJobIdAndStatuses(
+    jobId: string,
+    statuses: LiteratureFulltextAcquisitionItemStatus[],
+    limit?: number,
+  ): Promise<LiteratureFulltextAcquisitionItemRecord[]> {
+    return this.batchStore.listFulltextAcquisitionItemsByJobIdAndStatuses(jobId, statuses, limit);
+  }
+
+  async updateFulltextAcquisitionItem(
+    itemId: string,
+    patch: Partial<Omit<LiteratureFulltextAcquisitionItemRecord, 'id' | 'jobId' | 'literatureId' | 'createdAt'>>,
+  ): Promise<LiteratureFulltextAcquisitionItemRecord> {
+    return this.batchStore.updateFulltextAcquisitionItem(itemId, patch);
+  }
+
+  async upsertSourceRuntimeState(
+    record: LiteratureSourceRuntimeStateRecord,
+  ): Promise<{ record: LiteratureSourceRuntimeStateRecord; created: boolean }> {
+    return this.batchStore.upsertSourceRuntimeState(record);
+  }
+
+  async findSourceRuntimeState(source: string): Promise<LiteratureSourceRuntimeStateRecord | null> {
+    return this.batchStore.findSourceRuntimeState(source);
+  }
+
+  async listSourceRuntimeStates(): Promise<LiteratureSourceRuntimeStateRecord[]> {
+    return this.batchStore.listSourceRuntimeStates();
   }
 
   async createPipelineRun(record: LiteraturePipelineRunRecord): Promise<LiteraturePipelineRunRecord> {

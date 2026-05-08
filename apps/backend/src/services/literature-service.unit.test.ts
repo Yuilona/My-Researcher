@@ -5,6 +5,7 @@ import path from 'node:path';
 import test, { after } from 'node:test';
 import { InMemoryLiteratureRepository } from '../repositories/in-memory-literature-repository.js';
 import { InMemoryResearchLifecycleRepository } from '../repositories/in-memory-research-lifecycle-repository.js';
+import type { LiteratureContentProcessingSettingsService } from './literature-content-processing-settings-service.js';
 import { LiteratureService } from './literature-service.js';
 import { ResearchLifecycleService } from './research-lifecycle-service.js';
 
@@ -499,6 +500,96 @@ test('content asset registration rejects mismatched checksum for readable local 
       byte_size: 1,
     }),
     /checksum does not match/,
+  );
+});
+
+test('content asset download stores remote content under raw files and registers it', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const rawFilesRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'pea-lit-service-download-'));
+  tempDirs.add(rawFilesRoot);
+  const settingsService = {
+    resolveStorageRoot: async () => rawFilesRoot,
+  };
+  const literatureService = new LiteratureService(
+    repository,
+    new InMemoryResearchLifecycleRepository(),
+    settingsService as unknown as LiteratureContentProcessingSettingsService,
+  );
+  const imported = await literatureService.collectionImport({
+    items: [
+      {
+        provider: 'arxiv',
+        external_id: '2501.00001',
+        title: 'Remote Download Asset',
+        abstract: 'Remote abstract.',
+        authors: ['Ada Lovelace'],
+        year: 2025,
+        arxiv_id: '2501.00001',
+        source_url: 'https://arxiv.org/abs/2501.00001',
+        rights_class: 'OA',
+      },
+    ],
+  });
+  const literatureId = imported.results[0]?.literature_id;
+  assert.ok(literatureId);
+  const previousFetch = globalThis.fetch;
+  const payload = Buffer.from('%PDF-1.4 test pdf body');
+  globalThis.fetch = (async () => new Response(payload, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Length': String(payload.length),
+    },
+  })) as typeof fetch;
+
+  try {
+    const downloaded = await literatureService.downloadContentAsset(literatureId, {
+      source_url: 'https://arxiv.org/pdf/2501.00001',
+      max_byte_size: 1024,
+      metadata: { source: 'unit-test' },
+    });
+
+    assert.equal(downloaded.item.status, 'registered');
+    assert.equal(downloaded.item.mime_type, 'application/pdf');
+    assert.equal(downloaded.item.byte_size, payload.length);
+    assert.equal(downloaded.item.metadata.downloaded_from, 'https://arxiv.org/pdf/2501.00001');
+    assert.equal(downloaded.item.metadata.source, 'unit-test');
+    assert.equal(downloaded.item.local_path.startsWith(path.join(rawFilesRoot, literatureId)), true);
+    const stored = await fs.readFile(downloaded.item.local_path);
+    assert.deepEqual(stored, payload);
+
+    const assets = await repository.listContentAssetsByLiteratureId(literatureId);
+    assert.equal(assets.length, 1);
+    const runs = await repository.listPipelineRunsByLiteratureId(literatureId);
+    assert.equal(runs.length, 0);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test('content asset download rejects non-http source URLs', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const literatureService = new LiteratureService(repository, new InMemoryResearchLifecycleRepository());
+  const imported = await literatureService.collectionImport({
+    items: [
+      {
+        provider: 'manual',
+        external_id: 'download-invalid-url',
+        title: 'Invalid Download URL',
+        authors: ['Ada Lovelace'],
+        year: 2025,
+        source_url: 'https://example.com/download-invalid-url',
+      },
+    ],
+  });
+  const literatureId = imported.results[0]?.literature_id;
+  assert.ok(literatureId);
+
+  await assert.rejects(
+    literatureService.downloadContentAsset(literatureId, {
+      source_url: 'file:///tmp/paper.pdf',
+    }),
+    /source_url must use http or https/,
   );
 });
 

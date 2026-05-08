@@ -7,6 +7,8 @@ import type {
   LiteratureEmbeddingChunkRecord,
   LiteratureEmbeddingTokenIndexRecord,
   LiteratureEmbeddingVersionRecord,
+  LiteratureFulltextAcquisitionItemRecord,
+  LiteratureFulltextAcquisitionJobRecord,
   LiteratureFulltextAnchorRecord,
   LiteratureFulltextDocumentRecord,
   LiteratureFulltextParagraphRecord,
@@ -17,6 +19,7 @@ import type {
   LiteraturePipelineStageStateRecord,
   LiteraturePipelineStateRecord,
   LiteratureRecord,
+  LiteratureSourceRuntimeStateRecord,
   LiteratureSourceRecord,
   PaperLiteratureLinkRecord,
   TopicLiteratureScopeRecord,
@@ -666,6 +669,116 @@ export function toContentProcessingBatchItemRecord(row: {
     createdAt: row.createdAt.toISOString(),
     startedAt: row.startedAt?.toISOString() ?? null,
     finishedAt: row.finishedAt?.toISOString() ?? null,
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export function toFulltextAcquisitionJobRecord(row: {
+  id: string;
+  status: string;
+  workset: unknown;
+  options: unknown;
+  dryRunEstimate: unknown;
+  totals: unknown;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: Date;
+  startedAt: Date | null;
+  pausedAt: Date | null;
+  canceledAt: Date | null;
+  finishedAt: Date | null;
+  updatedAt: Date;
+}): LiteratureFulltextAcquisitionJobRecord {
+  return {
+    id: row.id,
+    status: row.status as LiteratureFulltextAcquisitionJobRecord['status'],
+    workset: asRecord(row.workset),
+    options: asRecord(row.options),
+    dryRunEstimate: asRecord(row.dryRunEstimate),
+    totals: asRecord(row.totals),
+    errorCode: row.errorCode,
+    errorMessage: row.errorMessage,
+    createdAt: row.createdAt.toISOString(),
+    startedAt: row.startedAt?.toISOString() ?? null,
+    pausedAt: row.pausedAt?.toISOString() ?? null,
+    canceledAt: row.canceledAt?.toISOString() ?? null,
+    finishedAt: row.finishedAt?.toISOString() ?? null,
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export function toFulltextAcquisitionItemRecord(row: {
+  id: string;
+  jobId: string;
+  literatureId: string;
+  status: string;
+  selectedSourceKind: string | null;
+  sourceUrl: string | null;
+  finalUrl: string | null;
+  contentAssetId: string | null;
+  attemptCount: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+  blockerCode: string | null;
+  retryable: boolean;
+  resolutionCandidates: unknown;
+  checkpoint: unknown;
+  createdAt: Date;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  updatedAt: Date;
+}): LiteratureFulltextAcquisitionItemRecord {
+  return {
+    id: row.id,
+    jobId: row.jobId,
+    literatureId: row.literatureId,
+    status: row.status as LiteratureFulltextAcquisitionItemRecord['status'],
+    selectedSourceKind: row.selectedSourceKind as LiteratureFulltextAcquisitionItemRecord['selectedSourceKind'],
+    sourceUrl: row.sourceUrl,
+    finalUrl: row.finalUrl,
+    contentAssetId: row.contentAssetId,
+    attemptCount: row.attemptCount,
+    errorCode: row.errorCode,
+    errorMessage: row.errorMessage,
+    blockerCode: row.blockerCode,
+    retryable: row.retryable,
+    resolutionCandidates: asRecordArray(row.resolutionCandidates),
+    checkpoint: asRecord(row.checkpoint),
+    createdAt: row.createdAt.toISOString(),
+    startedAt: row.startedAt?.toISOString() ?? null,
+    finishedAt: row.finishedAt?.toISOString() ?? null,
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export function toSourceRuntimeStateRecord(row: {
+  id: string;
+  source: string;
+  status: string;
+  cooldownUntil: Date | null;
+  failureCount: number;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+  lastRequestAt: Date | null;
+  lastSuccessAt: Date | null;
+  lastFailureAt: Date | null;
+  metadata: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+}): LiteratureSourceRuntimeStateRecord {
+  return {
+    id: row.id,
+    source: row.source,
+    status: row.status,
+    cooldownUntil: row.cooldownUntil?.toISOString() ?? null,
+    failureCount: row.failureCount,
+    lastErrorCode: row.lastErrorCode,
+    lastErrorMessage: row.lastErrorMessage,
+    lastRequestAt: row.lastRequestAt?.toISOString() ?? null,
+    lastSuccessAt: row.lastSuccessAt?.toISOString() ?? null,
+    lastFailureAt: row.lastFailureAt?.toISOString() ?? null,
+    metadata: asRecord(row.metadata),
+    createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
 }

@@ -1,15 +1,15 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-05T15:36:47.503Z",
+  "generatedAt": "2026-05-08T12:17:23.875Z",
   "sourceOpenapi": "docs/context/api/openapi.yaml",
-  "sourceChecksumSha256": "0d7ff106dae90740bbc845e89bda2fc4fb939b1410b7aa8c09d5d170ce1c61b4",
+  "sourceChecksumSha256": "b5e7be7b9227d02a7df4bc77de5aefdc3526f531da1dff70c36e3fa1df5458a1",
   "stats": {
-    "totalEndpoints": 80,
+    "totalEndpoints": 92,
     "byTag": {
       "health": 1,
       "research-lifecycle": 8,
-      "literature": 27,
-      "settings": 3,
+      "literature": 37,
+      "settings": 5,
       "topic-settings": 3,
       "auto-pull": 10,
       "title-card-management": 28
@@ -505,7 +505,8 @@
             "topic_id",
             "paper_id",
             "top_k",
-            "evidence_per_literature"
+            "evidence_per_literature",
+            "include_stale"
           ]
         }
       },
@@ -845,6 +846,311 @@
       ],
       "example": {
         "curl": "curl -X POST '/literature/{literatureId}/content-assets' -H 'Content-Type: application/json' -d '{\"local_path\":\"<local_path>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/literature/{literatureId}/content-assets/download",
+      "operationId": "downloadLiteratureContentAsset",
+      "summary": "Download a remote fulltext asset and register it for one literature.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [
+          "literatureId"
+        ],
+        "query": [],
+        "body": {
+          "required": [
+            "source_url"
+          ],
+          "optional": [
+            "asset_kind",
+            "file_name",
+            "mime_type",
+            "max_byte_size",
+            "rights_class",
+            "metadata"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "item"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        413,
+        500,
+        502
+      ],
+      "example": {
+        "curl": "curl -X POST '/literature/{literatureId}/content-assets/download' -H 'Content-Type: application/json' -d '{\"source_url\":\"<source_url>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/literature/fulltext-acquisition/dry-runs",
+      "operationId": "createLiteratureFulltextAcquisitionDryRun",
+      "summary": "Plan a durable fulltext acquisition job without resolver calls, downloads, or writes.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [],
+          "optional": [
+            "workset",
+            "options"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "estimate"
+        ]
+      },
+      "errors": [
+        400,
+        500
+      ],
+      "example": {
+        "curl": "curl -X POST '/literature/fulltext-acquisition/dry-runs'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/literature/fulltext-acquisition/jobs",
+      "operationId": "listLiteratureFulltextAcquisitionJobs",
+      "summary": "List recent durable fulltext acquisition jobs.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [
+          "limit"
+        ],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [
+        500
+      ],
+      "example": {
+        "curl": "curl -X GET '/literature/fulltext-acquisition/jobs'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/literature/fulltext-acquisition/jobs",
+      "operationId": "createLiteratureFulltextAcquisitionJob",
+      "summary": "Create a durable fulltext acquisition job that resolves and downloads raw fulltext assets.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [],
+          "optional": [
+            "workset",
+            "options"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "job"
+        ]
+      },
+      "errors": [
+        400,
+        500
+      ],
+      "example": {
+        "curl": "curl -X POST '/literature/fulltext-acquisition/jobs'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/literature/fulltext-acquisition/jobs/{jobId}",
+      "operationId": "getLiteratureFulltextAcquisitionJob",
+      "summary": "Get a durable fulltext acquisition job with item checkpoints.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [
+          "jobId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "job"
+        ]
+      },
+      "errors": [
+        404,
+        500
+      ],
+      "example": {
+        "curl": "curl -X GET '/literature/fulltext-acquisition/jobs/{jobId}'"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/literature/fulltext-acquisition/jobs/{jobId}",
+      "operationId": "deleteLiteratureFulltextAcquisitionJob",
+      "summary": "Delete a paused or terminal durable fulltext acquisition job and its item checkpoints.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [
+          "jobId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 204,
+        "coreFields": []
+      },
+      "errors": [
+        404,
+        409,
+        500
+      ],
+      "example": {
+        "curl": "curl -X DELETE '/literature/fulltext-acquisition/jobs/{jobId}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/literature/fulltext-acquisition/jobs/{jobId}/pause",
+      "operationId": "pauseLiteratureFulltextAcquisitionJob",
+      "summary": "Pause a durable fulltext acquisition job after in-flight downloads settle.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [
+          "jobId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "job"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        500
+      ],
+      "example": {
+        "curl": "curl -X POST '/literature/fulltext-acquisition/jobs/{jobId}/pause'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/literature/fulltext-acquisition/jobs/{jobId}/resume",
+      "operationId": "resumeLiteratureFulltextAcquisitionJob",
+      "summary": "Resume a paused durable fulltext acquisition job.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [
+          "jobId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "job"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        500
+      ],
+      "example": {
+        "curl": "curl -X POST '/literature/fulltext-acquisition/jobs/{jobId}/resume'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/literature/fulltext-acquisition/jobs/{jobId}/cancel",
+      "operationId": "cancelLiteratureFulltextAcquisitionJob",
+      "summary": "Cancel a durable fulltext acquisition job and stop scheduling new downloads.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [
+          "jobId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "job"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        500
+      ],
+      "example": {
+        "curl": "curl -X POST '/literature/fulltext-acquisition/jobs/{jobId}/cancel'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/literature/fulltext-acquisition/jobs/{jobId}/retry-failed",
+      "operationId": "retryFailedLiteratureFulltextAcquisitionJob",
+      "summary": "Requeue retryable failed fulltext acquisition items.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [
+          "jobId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "job"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        500
+      ],
+      "example": {
+        "curl": "curl -X POST '/literature/fulltext-acquisition/jobs/{jobId}/retry-failed'"
       }
     },
     {
@@ -1243,6 +1549,73 @@
       ],
       "example": {
         "curl": "curl -X POST '/literature/content-processing/cleanup/dry-runs'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/settings/literature-acquisition",
+      "operationId": "getLiteratureAcquisitionSettings",
+      "summary": "Get OA resolver, downloader, source throttle, and quality scorer settings for literature acquisition.",
+      "tag": "settings",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "unpaywall",
+          "downloader",
+          "source_throttle",
+          "quality_scorer",
+          "updated_at"
+        ]
+      },
+      "errors": [
+        500
+      ],
+      "example": {
+        "curl": "curl -X GET '/settings/literature-acquisition'"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/settings/literature-acquisition",
+      "operationId": "updateLiteratureAcquisitionSettings",
+      "summary": "Update OA resolver, downloader, source throttle, and quality scorer settings for literature acquisition.",
+      "tag": "settings",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [],
+          "optional": [
+            "unpaywall",
+            "downloader",
+            "source_throttle",
+            "quality_scorer"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "unpaywall",
+          "downloader",
+          "source_throttle",
+          "quality_scorer",
+          "updated_at"
+        ]
+      },
+      "errors": [
+        400,
+        500
+      ],
+      "example": {
+        "curl": "curl -X PATCH '/settings/literature-acquisition'"
       }
     },
     {

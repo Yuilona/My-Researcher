@@ -1,9 +1,9 @@
 # API Index
 
-> Auto-generated at 2026-05-05T15:36:47.503Z — do NOT hand-edit.
-> Source: `docs/context/api/openapi.yaml` (SHA-256: `0d7ff106dae9...`)
+> Auto-generated at 2026-05-08T12:17:23.875Z — do NOT hand-edit.
+> Source: `docs/context/api/openapi.yaml` (SHA-256: `b5e7be7b9227...`)
 
-Total endpoints: **80**
+Total endpoints: **92**
 
 | Method | Path | Summary | Auth | Input (required) | Output (core) | Errors |
 |--------|------|---------|------|------------------|---------------|--------|
@@ -30,6 +30,16 @@ Total endpoints: **80**
 | PATCH | /literature/{literatureId}/metadata | Update literature metadata fields. | none | literatureId | literature_id, title, abstract, key_content_digest, authors, year, doi, arxiv_id, rights_class, tags, updated_at | 400, 404, 409, 500 |
 | GET | /literature/{literatureId}/content-assets | List local content assets registered for one literature. | none | literatureId | literature_id, items | 404, 500 |
 | POST | /literature/{literatureId}/content-assets | Register a local literature content asset reference. | none | local_path | item | 400, 404, 500 |
+| POST | /literature/{literatureId}/content-assets/download | Download a remote fulltext asset and register it for one literature. | none | source_url | item | 400, 404, 413, 500, 502 |
+| POST | /literature/fulltext-acquisition/dry-runs | Plan a durable fulltext acquisition job without resolver calls, downloads, or writes. | none | — | estimate | 400, 500 |
+| GET | /literature/fulltext-acquisition/jobs | List recent durable fulltext acquisition jobs. | none | — | items | 500 |
+| POST | /literature/fulltext-acquisition/jobs | Create a durable fulltext acquisition job that resolves and downloads raw fulltext assets. | none | — | job | 400, 500 |
+| GET | /literature/fulltext-acquisition/jobs/{jobId} | Get a durable fulltext acquisition job with item checkpoints. | none | jobId | job | 404, 500 |
+| DELETE | /literature/fulltext-acquisition/jobs/{jobId} | Delete a paused or terminal durable fulltext acquisition job and its item checkpoints. | none | jobId | — | 404, 409, 500 |
+| POST | /literature/fulltext-acquisition/jobs/{jobId}/pause | Pause a durable fulltext acquisition job after in-flight downloads settle. | none | jobId | job | 400, 404, 500 |
+| POST | /literature/fulltext-acquisition/jobs/{jobId}/resume | Resume a paused durable fulltext acquisition job. | none | jobId | job | 400, 404, 500 |
+| POST | /literature/fulltext-acquisition/jobs/{jobId}/cancel | Cancel a durable fulltext acquisition job and stop scheduling new downloads. | none | jobId | job | 400, 404, 500 |
+| POST | /literature/fulltext-acquisition/jobs/{jobId}/retry-failed | Requeue retryable failed fulltext acquisition items. | none | jobId | job | 400, 404, 500 |
 | GET | /literature/{literatureId}/content-processing | Get content-processing aggregate state and stage states for a literature. | none | literatureId | literature_id, state, stage_states | 404, 500 |
 | GET | /literature/{literatureId}/content-processing/runs | List content-processing runs for one literature. | none | literatureId | literature_id, items | 404, 500 |
 | POST | /literature/{literatureId}/content-processing/runs | Trigger a content-processing run for one literature. | none | literatureId | run | 400, 404, 500 |
@@ -43,6 +53,8 @@ Total endpoints: **80**
 | POST | /literature/content-processing/backfill/jobs/{jobId}/cancel | Cancel a durable content-processing backfill job and stop scheduling new stages. | none | jobId | job | 400, 404, 500 |
 | POST | /literature/content-processing/backfill/jobs/{jobId}/retry-failed | Requeue retryable failed items in a durable content-processing backfill job. | none | jobId | job | 400, 404, 500 |
 | POST | /literature/content-processing/cleanup/dry-runs | Plan cleanup candidates for non-active content-processing indexes without deleting data. | none | — | generated_at, retention_days, candidate_count, protected_active_version_count, protected_raw_asset_count, estimated_chunks_to_remove, estimated_token_indexes_to_remove, candidates | 400, 500 |
+| GET | /settings/literature-acquisition | Get OA resolver, downloader, source throttle, and quality scorer settings for literature acquisition. | none | — | unpaywall, downloader, source_throttle, quality_scorer, updated_at | 500 |
+| PATCH | /settings/literature-acquisition | Update OA resolver, downloader, source throttle, and quality scorer settings for literature acquisition. | none | — | unpaywall, downloader, source_throttle, quality_scorer, updated_at | 400, 500 |
 | GET | /settings/literature-content-processing | Get redacted provider, extraction profile, embedding profile, and storage root settings for literature content processing. | none | — | providers, embedding, extraction, storage_roots, effective_storage_roots, fulltext_parser, updated_at | 500 |
 | PATCH | /settings/literature-content-processing | Update provider API key, extraction profile, embedding profile, and storage root settings for literature content processing. | none | — | providers, embedding, extraction, storage_roots, effective_storage_roots, fulltext_parser, updated_at | 400, 500 |
 | GET | /settings/literature-content-processing/fulltext-parser/health | Check the configured GROBID fulltext parser health for literature content processing. | none | — | provider, endpoint_url, status, checked_at, version, details | 500 |

@@ -454,7 +454,9 @@ export class LiteratureFlowArtifactRuntime {
       artifactType: 'CHUNKS',
       payload: {
         chunks,
-        chunking_profile: 'flat-classified-v1',
+        chunking_profile: 'section-aware-key-content-v2',
+        previous_chunking_profile: 'flat-classified-v1',
+        available_chunking_profiles: ['flat-classified-v1', 'section-aware-key-content-v2'],
         chunk_count: chunks.length,
         source_artifacts: {
           fulltext_artifact_id: preprocessed.id,
@@ -1213,7 +1215,10 @@ export class LiteratureFlowArtifactRuntime {
       start_offset: input.startOffset,
       end_offset: input.endOffset,
       source_refs: input.sourceRefs,
-      metadata: input.metadata,
+      metadata: {
+        ...input.metadata,
+        chunking_profile: 'section-aware-key-content-v2',
+      },
       content_checksum: contentChecksum,
     };
   }

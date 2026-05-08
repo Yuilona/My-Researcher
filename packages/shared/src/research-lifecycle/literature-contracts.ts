@@ -76,6 +76,19 @@ export const LITERATURE_CONTENT_PROCESSING_BATCH_ITEM_STATUSES = [
 ] as const;
 export type LiteratureContentProcessingBatchItemStatus = (typeof LITERATURE_CONTENT_PROCESSING_BATCH_ITEM_STATUSES)[number];
 
+export const LITERATURE_FULLTEXT_ACQUISITION_JOB_STATUSES = LITERATURE_CONTENT_PROCESSING_BATCH_JOB_STATUSES;
+export type LiteratureFulltextAcquisitionJobStatus = LiteratureContentProcessingBatchJobStatus;
+
+export const LITERATURE_FULLTEXT_ACQUISITION_ITEM_STATUSES = LITERATURE_CONTENT_PROCESSING_BATCH_ITEM_STATUSES;
+export type LiteratureFulltextAcquisitionItemStatus = LiteratureContentProcessingBatchItemStatus;
+
+export const LITERATURE_FULLTEXT_ACQUISITION_SOURCE_KINDS = [
+  'explicit_url',
+  'arxiv',
+  'unpaywall',
+] as const;
+export type LiteratureFulltextAcquisitionSourceKind = (typeof LITERATURE_FULLTEXT_ACQUISITION_SOURCE_KINDS)[number];
+
 export const LITERATURE_CONTENT_PROCESSING_DEDUP_STATUSES = ['unique', 'duplicate', 'unknown'] as const;
 export type LiteratureContentProcessingDedupStatus = (typeof LITERATURE_CONTENT_PROCESSING_DEDUP_STATUSES)[number];
 
@@ -256,6 +269,45 @@ export interface LiteratureContentProcessingSettingsDTO {
   updated_at: string;
 }
 
+export interface LiteratureAcquisitionSettingsDTO {
+  unpaywall: {
+    enabled: boolean;
+    email: string | null;
+  };
+  downloader: {
+    max_byte_size: number;
+    timeout_ms: number;
+    max_redirects: number;
+    require_pdf_signature: boolean;
+  };
+  source_throttle: {
+    arxiv: {
+      min_interval_ms: number;
+      concurrency: number;
+    };
+    crossref: {
+      min_interval_ms: number;
+      concurrency: number;
+    };
+    unpaywall: {
+      min_interval_ms: number;
+      concurrency: number;
+    };
+    download: {
+      min_interval_ms: number;
+      concurrency: number;
+    };
+  };
+  quality_scorer: {
+    enabled: boolean;
+    provider: LiteratureContentProcessingProviderId;
+    model: string;
+    prompt_version: string;
+    external_endpoint_configured: boolean;
+  };
+  updated_at: string;
+}
+
 export interface LiteratureFulltextParserHealthDTO {
   provider: 'grobid';
   endpoint_url: string;
@@ -289,6 +341,42 @@ export interface UpdateLiteratureContentProcessingSettingsRequest {
   };
   storage_roots?: Partial<LiteratureContentProcessingStorageRootsDTO>;
   fulltext_parser?: Partial<LiteratureFulltextParserSettingsDTO>;
+}
+
+export interface UpdateLiteratureAcquisitionSettingsRequest {
+  unpaywall?: {
+    enabled?: boolean;
+    email?: string | null;
+  };
+  downloader?: {
+    max_byte_size?: number;
+    timeout_ms?: number;
+    max_redirects?: number;
+    require_pdf_signature?: boolean;
+  };
+  source_throttle?: {
+    arxiv?: {
+      min_interval_ms?: number;
+      concurrency?: number;
+    };
+    crossref?: {
+      min_interval_ms?: number;
+      concurrency?: number;
+    };
+    unpaywall?: {
+      min_interval_ms?: number;
+      concurrency?: number;
+    };
+    download?: {
+      min_interval_ms?: number;
+      concurrency?: number;
+    };
+  };
+  quality_scorer?: {
+    enabled?: boolean;
+    model?: string;
+    prompt_version?: string;
+  };
 }
 
 export interface LiteratureCollectionImportItem {
@@ -685,6 +773,158 @@ export interface LiteratureContentProcessingCleanupDryRunResponse {
   candidates: LiteratureContentProcessingCleanupCandidateDTO[];
 }
 
+export interface LiteratureFulltextAcquisitionExplicitUrl {
+  literature_id: string;
+  source_url: string;
+}
+
+export interface LiteratureFulltextAcquisitionWorkset {
+  topic_id?: string;
+  paper_id?: string;
+  literature_ids?: string[];
+  rights_classes?: RightsClass[];
+  only_missing_assets?: boolean;
+  explicit_urls?: LiteratureFulltextAcquisitionExplicitUrl[];
+  updated_at_from?: string;
+  updated_at_to?: string;
+}
+
+export interface LiteratureFulltextAcquisitionOptions {
+  max_parallel_downloads?: number;
+  provider_call_budget?: number;
+  max_byte_size?: number;
+  force_refresh?: boolean;
+}
+
+export interface LiteratureFulltextAcquisitionDryRunRequest {
+  workset?: LiteratureFulltextAcquisitionWorkset;
+  options?: LiteratureFulltextAcquisitionOptions;
+}
+
+export type LiteratureFulltextAcquisitionCreateJobRequest = LiteratureFulltextAcquisitionDryRunRequest;
+
+export interface LiteratureFulltextAcquisitionCandidateDTO {
+  source_kind: LiteratureFulltextAcquisitionSourceKind;
+  source_url: string | null;
+  requires_resolution: boolean;
+  provenance: Record<string, unknown>;
+}
+
+export interface LiteratureFulltextAcquisitionPlanItemDTO {
+  literature_id: string;
+  title: string;
+  rights_class: RightsClass;
+  selected_source_kind: LiteratureFulltextAcquisitionSourceKind | null;
+  source_url: string | null;
+  candidates: LiteratureFulltextAcquisitionCandidateDTO[];
+  blocked: boolean;
+  blocker_code: string | null;
+  blocker_message: string | null;
+  retryable: boolean;
+}
+
+export interface LiteratureFulltextAcquisitionDryRunEstimateDTO {
+  dry_run_id: string;
+  generated_at: string;
+  workset: LiteratureFulltextAcquisitionWorkset;
+  options: Required<Pick<LiteratureFulltextAcquisitionOptions, 'max_parallel_downloads' | 'force_refresh'>> & {
+    provider_call_budget: number | null;
+    max_byte_size: number;
+  };
+  total_literatures: number;
+  selected_count: number;
+  planned_item_count: number;
+  skipped_existing_asset_count: number;
+  blocked_count: number;
+  source_counts: Array<{ source_kind: LiteratureFulltextAcquisitionSourceKind; count: number }>;
+  estimated_provider_calls: {
+    unpaywall_calls: number;
+    download_calls: number;
+  };
+  blockers: Array<{
+    literature_id: string;
+    title: string;
+    reason_code: string;
+    reason_message: string;
+    retryable: boolean;
+  }>;
+  plan_items: LiteratureFulltextAcquisitionPlanItemDTO[];
+}
+
+export interface LiteratureFulltextAcquisitionDryRunResponse {
+  estimate: LiteratureFulltextAcquisitionDryRunEstimateDTO;
+}
+
+export interface LiteratureFulltextAcquisitionItemDTO {
+  item_id: string;
+  job_id: string;
+  literature_id: string;
+  title: string | null;
+  status: LiteratureFulltextAcquisitionItemStatus;
+  selected_source_kind: LiteratureFulltextAcquisitionSourceKind | null;
+  source_url: string | null;
+  final_url: string | null;
+  content_asset_id: string | null;
+  attempt_count: number;
+  error_code: string | null;
+  error_message: string | null;
+  blocker_code: string | null;
+  retryable: boolean;
+  resolution_candidates: LiteratureFulltextAcquisitionCandidateDTO[];
+  checkpoint: Record<string, unknown>;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  updated_at: string;
+}
+
+export interface LiteratureFulltextAcquisitionJobDTO {
+  job_id: string;
+  status: LiteratureFulltextAcquisitionJobStatus;
+  workset: LiteratureFulltextAcquisitionWorkset;
+  options: Required<Pick<LiteratureFulltextAcquisitionOptions, 'max_parallel_downloads' | 'force_refresh'>> & {
+    provider_call_budget: number | null;
+    max_byte_size: number;
+  };
+  dry_run_estimate: LiteratureFulltextAcquisitionDryRunEstimateDTO;
+  totals: {
+    total: number;
+    queued: number;
+    running: number;
+    succeeded: number;
+    partial: number;
+    blocked: number;
+    failed: number;
+    skipped: number;
+    canceled: number;
+  };
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  paused_at: string | null;
+  canceled_at: string | null;
+  finished_at: string | null;
+  updated_at: string;
+  items?: LiteratureFulltextAcquisitionItemDTO[];
+}
+
+export interface CreateLiteratureFulltextAcquisitionJobResponse {
+  job: LiteratureFulltextAcquisitionJobDTO;
+}
+
+export interface LiteratureFulltextAcquisitionJobResponse {
+  job: LiteratureFulltextAcquisitionJobDTO;
+}
+
+export interface ListLiteratureFulltextAcquisitionJobsQuery {
+  limit?: number;
+}
+
+export interface ListLiteratureFulltextAcquisitionJobsResponse {
+  items: LiteratureFulltextAcquisitionJobDTO[];
+}
+
 export interface LiteratureOverviewItem {
   literature_id: string;
   title: string;
@@ -773,6 +1013,16 @@ export interface RegisterLiteratureContentAssetRequest {
   metadata?: Record<string, unknown>;
 }
 
+export interface DownloadLiteratureContentAssetRequest {
+  source_url: string;
+  asset_kind?: LiteratureContentAssetKind;
+  file_name?: string;
+  mime_type?: string;
+  max_byte_size?: number;
+  rights_class?: RightsClass;
+  metadata?: Record<string, unknown>;
+}
+
 export interface LiteratureContentAssetDTO {
   asset_id: string;
   literature_id: string;
@@ -792,6 +1042,8 @@ export interface LiteratureContentAssetDTO {
 export interface RegisterLiteratureContentAssetResponse {
   item: LiteratureContentAssetDTO;
 }
+
+export type DownloadLiteratureContentAssetResponse = RegisterLiteratureContentAssetResponse;
 
 export interface ListLiteratureContentAssetsResponse {
   literature_id: string;
@@ -813,6 +1065,7 @@ export interface LiteratureRetrieveRequest {
   paper_id?: string;
   top_k?: number;
   evidence_per_literature?: number;
+  include_stale?: boolean;
 }
 
 export interface LiteratureRetrieveEvidenceChunk {
@@ -954,6 +1207,7 @@ export const literatureRetrieveRequestSchema = {
     paper_id: { type: 'string', minLength: 1 },
     top_k: { type: 'integer', minimum: 1, maximum: 30, default: 10 },
     evidence_per_literature: { type: 'integer', minimum: 1, maximum: 5, default: 3 },
+    include_stale: { type: 'boolean', default: false },
   },
   additionalProperties: false,
 } as const;
@@ -991,6 +1245,15 @@ const literatureFulltextParserSettingsSchema = {
       },
       additionalProperties: false,
     },
+  },
+  additionalProperties: false,
+} as const;
+
+const literatureAcquisitionThrottleSchema = {
+  type: 'object',
+  properties: {
+    min_interval_ms: { type: 'integer', minimum: 0, maximum: 3_600_000 },
+    concurrency: { type: 'integer', minimum: 1, maximum: 10 },
   },
   additionalProperties: false,
 } as const;
@@ -1054,6 +1317,56 @@ export const updateLiteratureContentProcessingSettingsRequestSchema = {
     { required: ['extraction'] },
     { required: ['storage_roots'] },
     { required: ['fulltext_parser'] },
+  ],
+} as const;
+
+export const updateLiteratureAcquisitionSettingsRequestSchema = {
+  type: 'object',
+  properties: {
+    unpaywall: {
+      type: 'object',
+      properties: {
+        enabled: { type: 'boolean' },
+        email: { anyOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] },
+      },
+      additionalProperties: false,
+    },
+    downloader: {
+      type: 'object',
+      properties: {
+        max_byte_size: { type: 'integer', minimum: 1, maximum: 500 * 1024 * 1024 },
+        timeout_ms: { type: 'integer', minimum: 1_000, maximum: 300_000 },
+        max_redirects: { type: 'integer', minimum: 0, maximum: 10 },
+        require_pdf_signature: { type: 'boolean' },
+      },
+      additionalProperties: false,
+    },
+    source_throttle: {
+      type: 'object',
+      properties: {
+        arxiv: literatureAcquisitionThrottleSchema,
+        crossref: literatureAcquisitionThrottleSchema,
+        unpaywall: literatureAcquisitionThrottleSchema,
+        download: literatureAcquisitionThrottleSchema,
+      },
+      additionalProperties: false,
+    },
+    quality_scorer: {
+      type: 'object',
+      properties: {
+        enabled: { type: 'boolean' },
+        model: { type: 'string', minLength: 1 },
+        prompt_version: { type: 'string', minLength: 1 },
+      },
+      additionalProperties: false,
+    },
+  },
+  additionalProperties: false,
+  anyOf: [
+    { required: ['unpaywall'] },
+    { required: ['downloader'] },
+    { required: ['source_throttle'] },
+    { required: ['quality_scorer'] },
   ],
 } as const;
 
@@ -1158,6 +1471,76 @@ export const literatureContentProcessingCleanupDryRunRequestSchema = {
   additionalProperties: false,
 } as const;
 
+const literatureFulltextAcquisitionExplicitUrlSchema = {
+  type: 'object',
+  required: ['literature_id', 'source_url'],
+  properties: {
+    literature_id: { type: 'string', minLength: 1 },
+    source_url: { type: 'string', minLength: 1 },
+  },
+  additionalProperties: false,
+} as const;
+
+const literatureFulltextAcquisitionWorksetSchema = {
+  type: 'object',
+  properties: {
+    topic_id: { type: 'string', minLength: 1 },
+    paper_id: { type: 'string', minLength: 1 },
+    literature_ids: {
+      type: 'array',
+      minItems: 1,
+      uniqueItems: true,
+      items: { type: 'string', minLength: 1 },
+    },
+    rights_classes: {
+      type: 'array',
+      minItems: 1,
+      uniqueItems: true,
+      items: { type: 'string', enum: RIGHTS_CLASSES },
+    },
+    only_missing_assets: { type: 'boolean', default: true },
+    explicit_urls: {
+      type: 'array',
+      minItems: 1,
+      items: literatureFulltextAcquisitionExplicitUrlSchema,
+    },
+    updated_at_from: { type: 'string', minLength: 1, format: 'date-time' },
+    updated_at_to: { type: 'string', minLength: 1, format: 'date-time' },
+  },
+  additionalProperties: false,
+} as const;
+
+const literatureFulltextAcquisitionOptionsSchema = {
+  type: 'object',
+  properties: {
+    max_parallel_downloads: { type: 'integer', minimum: 1, maximum: 4, default: 1 },
+    provider_call_budget: { type: 'integer', minimum: 1 },
+    max_byte_size: { type: 'integer', minimum: 1, maximum: 500 * 1024 * 1024 },
+    force_refresh: { type: 'boolean', default: false },
+  },
+  additionalProperties: false,
+} as const;
+
+export const literatureFulltextAcquisitionDryRunRequestSchema = {
+  type: 'object',
+  properties: {
+    workset: literatureFulltextAcquisitionWorksetSchema,
+    options: literatureFulltextAcquisitionOptionsSchema,
+  },
+  additionalProperties: false,
+} as const;
+
+export const literatureFulltextAcquisitionCreateJobRequestSchema =
+  literatureFulltextAcquisitionDryRunRequestSchema;
+
+export const listLiteratureFulltextAcquisitionJobsQuerySchema = {
+  type: 'object',
+  properties: {
+    limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+  },
+  additionalProperties: false,
+} as const;
+
 export const upsertTopicLiteratureScopeRequestSchema = {
   type: 'object',
   required: ['actions'],
@@ -1241,6 +1624,24 @@ export const registerLiteratureContentAssetRequestSchema = {
     checksum: { type: 'string', minLength: 1 },
     mime_type: { type: 'string', minLength: 1 },
     byte_size: { type: 'integer', minimum: 0 },
+    rights_class: { type: 'string', enum: RIGHTS_CLASSES },
+    metadata: {
+      type: 'object',
+      additionalProperties: true,
+    },
+  },
+  additionalProperties: false,
+} as const;
+
+export const downloadLiteratureContentAssetRequestSchema = {
+  type: 'object',
+  required: ['source_url'],
+  properties: {
+    source_url: { type: 'string', minLength: 1 },
+    asset_kind: { type: 'string', enum: LITERATURE_CONTENT_ASSET_KINDS, default: 'raw_fulltext' },
+    file_name: { type: 'string', minLength: 1 },
+    mime_type: { type: 'string', minLength: 1 },
+    max_byte_size: { type: 'integer', minimum: 1 },
     rights_class: { type: 'string', enum: RIGHTS_CLASSES },
     metadata: {
       type: 'object',

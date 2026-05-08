@@ -257,7 +257,7 @@ test('retrieve uses only the configured active embedding profile when active ver
   }
 });
 
-test('retrieve applies explicit profile and returns stale provenance warnings', async () => {
+test('retrieve excludes stale indexes by default and can include them for diagnostics', async () => {
   const repository = new InMemoryLiteratureRepository();
   const service = new LiteratureRetrievalService(repository);
   const now = new Date().toISOString();
@@ -282,10 +282,21 @@ test('retrieve applies explicit profile and returns stale provenance warnings', 
     updatedAt: now,
   });
 
+  const defaultResponse = await service.retrieve({
+    query: 'writing evidence claim',
+    profile: 'writing_evidence',
+    top_k: 1,
+  });
+
+  assert.equal(defaultResponse.meta.profile, 'writing_evidence');
+  assert.equal(defaultResponse.meta.freshness_warnings.length, 1);
+  assert.equal(defaultResponse.items.length, 0);
+
   const response = await service.retrieve({
     query: 'writing evidence claim',
     profile: 'writing_evidence',
     top_k: 1,
+    include_stale: true,
   });
 
   assert.equal(response.meta.profile, 'writing_evidence');

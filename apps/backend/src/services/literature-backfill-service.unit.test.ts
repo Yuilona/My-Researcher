@@ -19,7 +19,13 @@ class FakeFlowRunner {
   readonly activeByStage = new Map<LiteratureContentProcessingStageCode, number>();
   readonly maxActiveByStage = new Map<LiteratureContentProcessingStageCode, number>();
 
-  constructor(readonly options: { delayMs?: number; failStage?: LiteratureContentProcessingStageCode } = {}) {}
+  constructor(
+    readonly options: {
+      delayMs?: number;
+      failStage?: LiteratureContentProcessingStageCode;
+      pendingStage?: LiteratureContentProcessingStageCode;
+    } = {},
+  ) {}
 
   async triggerContentProcessingRun(
     literatureId: string,
@@ -39,17 +45,18 @@ class FakeFlowRunner {
       }
       const now = new Date().toISOString();
       const failed = this.options.failStage && stages.includes(this.options.failStage);
+      const pending = this.options.pendingStage && stages.includes(this.options.pendingStage);
       return {
         run_id: crypto.randomUUID(),
         literature_id: literatureId,
         trigger_source: triggerSource as LiteratureContentProcessingRunDTO['trigger_source'],
-        status: failed ? 'FAILED' : 'SUCCESS',
+        status: pending ? 'RUNNING' : failed ? 'FAILED' : 'SUCCESS',
         requested_stages: stages,
         error_code: failed ? 'OPENAI_RATE_LIMIT' : null,
         error_message: failed ? 'Provider rate limit.' : null,
         created_at: now,
         started_at: now,
-        finished_at: now,
+        finished_at: pending ? null : now,
         updated_at: now,
       };
     } finally {
@@ -165,6 +172,31 @@ test('backfill job supports pause resume and retrying retryable failures', async
   assert.equal(retried.job.status, 'QUEUED');
   const succeeded = await waitForJobTerminal(service, created.job.job_id);
   assert.equal(succeeded.status, 'SUCCEEDED');
+});
+
+test('backfill job fails item when a content-processing run never reaches terminal state', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const fakeFlow = new FakeFlowRunner({ pendingStage: 'ABSTRACT_READY' });
+  const service = new LiteratureBackfillService(repository, fakeFlow as unknown as LiteratureFlowService, {
+    pollIntervalMs: 1,
+    contentRunTimeoutMs: 5,
+  });
+  await seedLiterature(repository, 'LIT-BACKFILL-TIMEOUT');
+
+  const created = await service.createJob({
+    target_stage: 'ABSTRACT_READY',
+    workset: {
+      literature_ids: ['LIT-BACKFILL-TIMEOUT'],
+    },
+  });
+  const failed = await waitForJobTerminal(service, created.job.job_id);
+
+  assert.equal(failed.status, 'FAILED');
+  assert.equal(failed.totals.failed, 1);
+  assert.equal(failed.items?.[0]?.status, 'FAILED');
+  assert.equal(failed.items?.[0]?.error_code, 'BACKFILL_ITEM_WORKER_FAILED');
+  assert.match(failed.items?.[0]?.error_message ?? '', /Timed out after 5ms/);
+  assert.equal(failed.items?.[0]?.retryable, true);
 });
 
 test('backfill retry preserves original workset filters while allowing failed-stage retry', async () => {

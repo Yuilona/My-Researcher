@@ -1,10 +1,14 @@
 import crypto from 'node:crypto';
+import dns from 'node:dns/promises';
 import fs from 'node:fs/promises';
+import net from 'node:net';
 import path from 'node:path';
 import type {
   CreateLiteratureContentProcessingRunRequest,
   CreateLiteratureContentProcessingRunResponse,
   DedupMatchType,
+  DownloadLiteratureContentAssetRequest,
+  DownloadLiteratureContentAssetResponse,
   GetLiteratureContentProcessingResponse,
   GetLiteratureMetadataResponse,
   GetPaperLiteratureResponse,
@@ -48,6 +52,7 @@ import type {
 } from '../repositories/literature-repository.js';
 import type { ResearchLifecycleRepository } from '../repositories/research-lifecycle-repository.js';
 import { LiteratureFlowService } from './literature-flow-service.js';
+import type { LiteratureAcquisitionSettingsService } from './literature-acquisition-settings-service.js';
 import type { LiteratureContentProcessingSettingsService } from './literature-content-processing-settings-service.js';
 import { LiteratureRetrievalService } from './literature-retrieval-service.js';
 
@@ -62,22 +67,46 @@ type MatchedDedup = {
   literature: LiteratureRecord | null;
 };
 
+type DownloadPolicy = {
+  maxByteSize: number;
+  timeoutMs: number;
+  maxRedirects: number;
+  requirePdfSignature: boolean;
+};
+
+type DownloadFetchResult = {
+  response: Response;
+  finalUrl: string;
+  redirectChain: string[];
+};
+
+type LiteratureServiceDependencies = {
+  literatureFlowService?: LiteratureFlowService;
+  literatureRetrievalService?: LiteratureRetrievalService;
+  literatureAcquisitionSettingsService?: Pick<LiteratureAcquisitionSettingsService, 'resolveDownloaderOptions'>;
+};
+
+const DEFAULT_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024;
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 60_000;
+const DEFAULT_DOWNLOAD_MAX_REDIRECTS = 5;
+
 export class LiteratureService {
   constructor(
     private readonly literatureRepository: LiteratureRepository,
     private readonly researchRepository: ResearchLifecycleRepository,
-    contentProcessingSettingsService?: LiteratureContentProcessingSettingsService,
-    literatureFlowService?: LiteratureFlowService,
-    literatureRetrievalService?: LiteratureRetrievalService,
+    private readonly contentProcessingSettingsService?: LiteratureContentProcessingSettingsService,
+    dependencies: LiteratureServiceDependencies = {},
   ) {
-    this.literatureFlowService = literatureFlowService
+    this.literatureFlowService = dependencies.literatureFlowService
       ?? new LiteratureFlowService(literatureRepository, contentProcessingSettingsService);
-    this.literatureRetrievalService = literatureRetrievalService
+    this.literatureRetrievalService = dependencies.literatureRetrievalService
       ?? new LiteratureRetrievalService(literatureRepository, contentProcessingSettingsService);
+    this.literatureAcquisitionSettingsService = dependencies.literatureAcquisitionSettingsService;
   }
 
   private readonly literatureFlowService: LiteratureFlowService;
   private readonly literatureRetrievalService: LiteratureRetrievalService;
+  private readonly literatureAcquisitionSettingsService?: Pick<LiteratureAcquisitionSettingsService, 'resolveDownloaderOptions'>;
 
   async collectionImport(request: LiteratureCollectionImportRequest): Promise<LiteratureCollectionImportResponse> {
     if (request.items.length === 0) {
@@ -790,6 +819,100 @@ export class LiteratureService {
     return { item: this.toContentAssetDTO(asset.record) };
   }
 
+  async downloadContentAsset(
+    literatureId: string,
+    request: DownloadLiteratureContentAssetRequest,
+  ): Promise<DownloadLiteratureContentAssetResponse> {
+    const literature = await this.literatureRepository.findLiteratureById(literatureId);
+    if (!literature) {
+      throw new AppError(404, 'NOT_FOUND', `Literature ${literatureId} not found.`);
+    }
+
+    const sourceUrl = this.normalizeDownloadUrl(request.source_url);
+    const downloadPolicy = await this.resolveDownloadPolicy(request.max_byte_size);
+    let response: Response;
+    let finalUrl = sourceUrl.toString();
+    let redirectChain: string[] = [];
+    try {
+      const fetched = await this.fetchDownloadResponse(sourceUrl, downloadPolicy);
+      response = fetched.response;
+      finalUrl = fetched.finalUrl;
+      redirectChain = fetched.redirectChain;
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      throw new AppError(
+        502,
+        'INTERNAL_ERROR',
+        `Content asset download failed: ${error instanceof Error ? error.message : 'unknown network error'}.`,
+      );
+    }
+
+    if (!response.ok) {
+      throw new AppError(
+        502,
+        'INTERNAL_ERROR',
+        `Content asset download failed with status ${response.status}.`,
+      );
+    }
+
+    const contentLengthHeader = response.headers.get('content-length');
+    const contentLength = contentLengthHeader ? Number.parseInt(contentLengthHeader, 10) : null;
+    if (contentLength !== null && Number.isFinite(contentLength) && contentLength > downloadPolicy.maxByteSize) {
+      throw new AppError(
+        413,
+        'INVALID_PAYLOAD',
+        `Downloaded content exceeds max_byte_size ${downloadPolicy.maxByteSize}.`,
+      );
+    }
+
+    const buffer = await this.readResponseBuffer(response, downloadPolicy.maxByteSize);
+    if (buffer.length === 0) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'Downloaded content is empty.');
+    }
+
+    const responseMimeType = this.normalizeMimeType(response.headers.get('content-type'));
+    const mimeType = request.mime_type?.trim() || responseMimeType || this.inferMimeType(sourceUrl.pathname);
+    if (
+      (request.asset_kind ?? 'raw_fulltext') === 'raw_fulltext'
+      && !this.isPdfLikeDownload(mimeType, buffer, downloadPolicy.requirePdfSignature)
+    ) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'Downloaded raw_fulltext must be a PDF response or start with a PDF signature.',
+      );
+    }
+    const directory = path.join(await this.resolveRawFilesRoot(), this.safePathSegment(literatureId));
+    await fs.mkdir(directory, { recursive: true });
+    const fileName = this.buildDownloadedFileName({
+      requestedFileName: request.file_name,
+      contentDisposition: response.headers.get('content-disposition'),
+      sourceUrl,
+      mimeType,
+    });
+    const localPath = path.join(directory, `${Date.now()}-${crypto.randomUUID()}-${fileName}`);
+    await fs.writeFile(localPath, buffer);
+
+    const checksum = crypto.createHash('sha256').update(buffer).digest('hex');
+    return this.registerContentAsset(literatureId, {
+      asset_kind: request.asset_kind ?? 'raw_fulltext',
+      local_path: localPath,
+      checksum,
+      byte_size: buffer.length,
+      mime_type: mimeType,
+      rights_class: request.rights_class ?? literature.rightsClass,
+      metadata: {
+        ...(request.metadata ?? {}),
+        downloaded_from: sourceUrl.toString(),
+        final_url: finalUrl,
+        redirect_chain: redirectChain,
+        content_length: buffer.length,
+      },
+    });
+  }
+
   async listContentAssets(literatureId: string): Promise<ListLiteratureContentAssetsResponse> {
     const literature = await this.literatureRepository.findLiteratureById(literatureId);
     if (!literature) {
@@ -1119,6 +1242,290 @@ export class LiteratureService {
       return incoming;
     }
     return current;
+  }
+
+  private normalizeDownloadUrl(value: string): URL {
+    const normalized = value.trim();
+    if (!normalized) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'source_url must not be empty.');
+    }
+    let url: URL;
+    try {
+      url = new URL(normalized);
+    } catch {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'source_url must be a valid URL.');
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'source_url must use http or https.');
+    }
+    return url;
+  }
+
+  private async fetchDownloadResponse(sourceUrl: URL, downloadPolicy: DownloadPolicy): Promise<DownloadFetchResult> {
+    let currentUrl = sourceUrl;
+    const redirectChain: string[] = [];
+    for (let redirectCount = 0; redirectCount <= downloadPolicy.maxRedirects; redirectCount += 1) {
+      await this.assertPublicDownloadUrl(currentUrl);
+      const response = await fetch(currentUrl.toString(), {
+        headers: {
+          Accept: 'application/pdf,*/*',
+          'User-Agent': 'paper-engineering-assistant/0.1 literature-content-download',
+        },
+        redirect: 'manual',
+        signal: AbortSignal.timeout(downloadPolicy.timeoutMs),
+      });
+      if (!this.isRedirectStatus(response.status)) {
+        return {
+          response,
+          finalUrl: currentUrl.toString(),
+          redirectChain,
+        };
+      }
+      const location = response.headers.get('location');
+      if (!location) {
+        throw new AppError(502, 'INTERNAL_ERROR', `Content asset download redirect ${response.status} is missing Location.`);
+      }
+      const nextUrl = new URL(location, currentUrl);
+      redirectChain.push(nextUrl.toString());
+      currentUrl = nextUrl;
+      if (redirectCount === downloadPolicy.maxRedirects) {
+        throw new AppError(502, 'INTERNAL_ERROR', 'Content asset download exceeded max redirects.');
+      }
+    }
+    throw new AppError(502, 'INTERNAL_ERROR', 'Content asset download exceeded max redirects.');
+  }
+
+  private async readResponseBuffer(response: Response, maxByteSize: number): Promise<Buffer> {
+    if (!response.body) {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length > maxByteSize) {
+        throw new AppError(413, 'INVALID_PAYLOAD', `Downloaded content exceeds max_byte_size ${maxByteSize}.`);
+      }
+      return buffer;
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Buffer[] = [];
+    let byteLength = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        const chunk = Buffer.from(value);
+        byteLength += chunk.length;
+        if (byteLength > maxByteSize) {
+          await reader.cancel().catch(() => undefined);
+          throw new AppError(413, 'INVALID_PAYLOAD', `Downloaded content exceeds max_byte_size ${maxByteSize}.`);
+        }
+        chunks.push(chunk);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return Buffer.concat(chunks, byteLength);
+  }
+
+  private async assertPublicDownloadUrl(url: URL): Promise<void> {
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'source_url must use http or https.');
+    }
+    const hostname = this.normalizeUrlHostname(url.hostname);
+    if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'source_url must not target localhost.');
+    }
+    const directIpVersion = net.isIP(hostname);
+    if (directIpVersion && this.isBlockedAddress(hostname)) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'source_url must not target private or reserved IP ranges.');
+    }
+    if (directIpVersion) {
+      return;
+    }
+    const addresses = await dns.lookup(hostname, { all: true, verbatim: true });
+    if (addresses.length === 0 || addresses.some((address) => this.isBlockedAddress(address.address))) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'source_url must resolve only to public IP addresses.');
+    }
+  }
+
+  private isRedirectStatus(status: number): boolean {
+    return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+  }
+
+  private normalizeUrlHostname(hostname: string): string {
+    const normalized = hostname.toLowerCase();
+    return normalized.startsWith('[') && normalized.endsWith(']')
+      ? normalized.slice(1, -1)
+      : normalized;
+  }
+
+  private isBlockedAddress(address: string): boolean {
+    if (net.isIPv4(address)) {
+      const octets = address.split('.').map((part) => Number.parseInt(part, 10));
+      const [a, b, c] = octets;
+      if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c)) {
+        return true;
+      }
+      return a === 0
+        || a === 10
+        || a === 127
+        || (a === 100 && b >= 64 && b <= 127)
+        || (a === 169 && b === 254)
+        || (a === 172 && b >= 16 && b <= 31)
+        || (a === 192 && b === 0 && c === 0)
+        || (a === 192 && b === 0 && c === 2)
+        || (a === 192 && b === 168)
+        || (a === 198 && b === 51 && c === 100)
+        || (a === 203 && b === 0 && c === 113)
+        || a >= 224;
+    }
+    const normalized = address.toLowerCase();
+    const mappedIpv4 = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (mappedIpv4?.[1]) {
+      return this.isBlockedAddress(mappedIpv4[1]);
+    }
+    const hexMappedIpv4 = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (hexMappedIpv4?.[1] && hexMappedIpv4[2]) {
+      const high = Number.parseInt(hexMappedIpv4[1], 16);
+      const low = Number.parseInt(hexMappedIpv4[2], 16);
+      const ipv4 = [
+        (high >> 8) & 255,
+        high & 255,
+        (low >> 8) & 255,
+        low & 255,
+      ].join('.');
+      return this.isBlockedAddress(ipv4);
+    }
+    return normalized === '::1'
+      || normalized === '::'
+      || normalized.startsWith('fc')
+      || normalized.startsWith('fd')
+      || normalized.startsWith('fe80')
+      || normalized.startsWith('2001:db8');
+  }
+
+  private isPdfLikeDownload(mimeType: string, buffer: Buffer, requirePdfSignature: boolean): boolean {
+    const hasPdfSignature = buffer.subarray(0, 5).toString('ascii') === '%PDF-';
+    if (requirePdfSignature) {
+      return hasPdfSignature;
+    }
+    const normalizedMimeType = mimeType.toLowerCase();
+    return normalizedMimeType.includes('application/pdf')
+      || normalizedMimeType.includes('application/x-pdf')
+      || hasPdfSignature;
+  }
+
+  private async resolveDownloadPolicy(requestMaxByteSize: number | undefined): Promise<DownloadPolicy> {
+    const settings = this.literatureAcquisitionSettingsService
+      ? await this.literatureAcquisitionSettingsService.resolveDownloaderOptions()
+      : null;
+    const configuredMaxByteSize = this.clampDownloadInteger(
+      settings?.max_byte_size,
+      DEFAULT_DOWNLOAD_MAX_BYTES,
+      1,
+      500 * 1024 * 1024,
+    );
+    return {
+      maxByteSize: this.clampDownloadInteger(
+        requestMaxByteSize,
+        configuredMaxByteSize,
+        1,
+        configuredMaxByteSize,
+      ),
+      timeoutMs: this.clampDownloadInteger(
+        settings?.timeout_ms,
+        DEFAULT_DOWNLOAD_TIMEOUT_MS,
+        1_000,
+        300_000,
+      ),
+      maxRedirects: this.clampDownloadInteger(
+        settings?.max_redirects,
+        DEFAULT_DOWNLOAD_MAX_REDIRECTS,
+        0,
+        10,
+      ),
+      requirePdfSignature: settings?.require_pdf_signature ?? true,
+    };
+  }
+
+  private clampDownloadInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return fallback;
+    }
+    const normalized = Math.max(minimum, Math.trunc(value));
+    return Math.min(normalized, maximum);
+  }
+
+  private async resolveRawFilesRoot(): Promise<string> {
+    if (this.contentProcessingSettingsService) {
+      return this.contentProcessingSettingsService.resolveStorageRoot('raw_files');
+    }
+    const os = await import('node:os');
+    return path.join(os.homedir(), '.paper-engineering-assistant', 'literature-content-processing', 'raw');
+  }
+
+  private buildDownloadedFileName(input: {
+    requestedFileName?: string;
+    contentDisposition: string | null;
+    sourceUrl: URL;
+    mimeType: string;
+  }): string {
+    const rawFileName =
+      input.requestedFileName?.trim()
+      || this.parseContentDispositionFileName(input.contentDisposition)
+      || path.basename(input.sourceUrl.pathname)
+      || 'downloaded-fulltext';
+    const extension = this.extensionForMimeType(input.mimeType);
+    const withExtension = path.extname(rawFileName) || !extension
+      ? rawFileName
+      : `${rawFileName}${extension}`;
+    return this.safePathSegment(withExtension);
+  }
+
+  private parseContentDispositionFileName(value: string | null): string | null {
+    if (!value) {
+      return null;
+    }
+    const starMatch = /filename\*=UTF-8''([^;]+)/i.exec(value);
+    if (starMatch?.[1]) {
+      try {
+        return decodeURIComponent(starMatch[1].trim().replace(/^"|"$/g, ''));
+      } catch {
+        return starMatch[1].trim().replace(/^"|"$/g, '');
+      }
+    }
+    const match = /filename=([^;]+)/i.exec(value);
+    return match?.[1]?.trim().replace(/^"|"$/g, '') || null;
+  }
+
+  private normalizeMimeType(value: string | null): string | null {
+    if (!value) {
+      return null;
+    }
+    return value.split(';')[0]?.trim().toLowerCase() || null;
+  }
+
+  private extensionForMimeType(value: string): string {
+    const mimeType = value.toLowerCase();
+    if (mimeType === 'application/pdf') {
+      return '.pdf';
+    }
+    if (mimeType === 'text/markdown') {
+      return '.md';
+    }
+    if (mimeType === 'text/plain') {
+      return '.txt';
+    }
+    if (mimeType === 'text/html') {
+      return '.html';
+    }
+    return '';
+  }
+
+  private safePathSegment(value: string): string {
+    const cleaned = value.trim().replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+    return cleaned || 'downloaded-fulltext';
   }
 
   private async inspectLocalAsset(

@@ -1,5 +1,6 @@
 import {
   createLiteratureContentProcessingRunRequestSchema,
+  downloadLiteratureContentAssetRequestSchema,
   listLiteratureContentProcessingRunsQuerySchema,
   literatureOverviewQuerySchema,
   literatureRetrieveRequestSchema,
@@ -15,6 +16,7 @@ import {
   type LiteratureRetrieveRequest,
   type ListLiteratureContentProcessingRunsQuery,
   type CreateLiteratureContentProcessingRunRequest,
+  type DownloadLiteratureContentAssetRequest,
   type RegisterLiteratureContentAssetRequest,
   type SyncPaperLiteratureFromTopicRequest,
   type UpdateLiteratureMetadataRequest,
@@ -200,6 +202,17 @@ export async function registerLiteratureRoutes(
       },
     },
     async (request, reply) => controller.registerContentAsset(request, reply),
+  );
+
+  app.post<{ Params: { literatureId: string }; Body: DownloadLiteratureContentAssetRequest }>(
+    '/literature/:literatureId/content-assets/download',
+    {
+      schema: {
+        params: literatureParamsSchema,
+        body: downloadLiteratureContentAssetRequestSchema,
+      },
+    },
+    async (request, reply) => controller.downloadContentAsset(request, reply),
   );
 
   app.get<{ Params: { literatureId: string } }>(

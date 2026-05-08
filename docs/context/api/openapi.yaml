@@ -15,6 +15,8 @@ tags:
     description: Paper project lifecycle and governance endpoints.
   - name: literature
     description: Literature import, scope, overview, and metadata endpoints.
+  - name: settings
+    description: Local application settings and provider configuration endpoints.
   - name: topic-settings
     description: Topic profile settings for auto-pull.
   - name: auto-pull
@@ -731,6 +733,266 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /literature/{literatureId}/content-assets/download:
+    post:
+      operationId: downloadLiteratureContentAsset
+      summary: Download a remote fulltext asset and register it for one literature.
+      tags: [literature]
+      parameters:
+        - name: literatureId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DownloadLiteratureContentAssetRequest'
+      responses:
+        '200':
+          description: Downloaded and registered literature content asset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterLiteratureContentAssetResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          description: Downloaded content exceeds the configured byte-size limit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          description: Remote content download failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /literature/fulltext-acquisition/dry-runs:
+    post:
+      operationId: createLiteratureFulltextAcquisitionDryRun
+      summary: Plan a durable fulltext acquisition job without resolver calls, downloads, or writes.
+      tags: [literature]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LiteratureFulltextAcquisitionDryRunRequest'
+      responses:
+        '200':
+          description: Fulltext acquisition dry-run estimate.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiteratureFulltextAcquisitionDryRunResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /literature/fulltext-acquisition/jobs:
+    post:
+      operationId: createLiteratureFulltextAcquisitionJob
+      summary: Create a durable fulltext acquisition job that resolves and downloads raw fulltext assets.
+      tags: [literature]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LiteratureFulltextAcquisitionCreateJobRequest'
+      responses:
+        '201':
+          description: Fulltext acquisition job created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateLiteratureFulltextAcquisitionJobResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listLiteratureFulltextAcquisitionJobs
+      summary: List recent durable fulltext acquisition jobs.
+      tags: [literature]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Fulltext acquisition job list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListLiteratureFulltextAcquisitionJobsResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /literature/fulltext-acquisition/jobs/{jobId}:
+    get:
+      operationId: getLiteratureFulltextAcquisitionJob
+      summary: Get a durable fulltext acquisition job with item checkpoints.
+      tags: [literature]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Fulltext acquisition job detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiteratureFulltextAcquisitionJobResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteLiteratureFulltextAcquisitionJob
+      summary: Delete a paused or terminal durable fulltext acquisition job and its item checkpoints.
+      tags: [literature]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '204':
+          description: Fulltext acquisition job deleted.
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /literature/fulltext-acquisition/jobs/{jobId}/pause:
+    post:
+      operationId: pauseLiteratureFulltextAcquisitionJob
+      summary: Pause a durable fulltext acquisition job after in-flight downloads settle.
+      tags: [literature]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Fulltext acquisition job paused.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiteratureFulltextAcquisitionJobResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /literature/fulltext-acquisition/jobs/{jobId}/resume:
+    post:
+      operationId: resumeLiteratureFulltextAcquisitionJob
+      summary: Resume a paused durable fulltext acquisition job.
+      tags: [literature]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Fulltext acquisition job resumed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiteratureFulltextAcquisitionJobResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /literature/fulltext-acquisition/jobs/{jobId}/cancel:
+    post:
+      operationId: cancelLiteratureFulltextAcquisitionJob
+      summary: Cancel a durable fulltext acquisition job and stop scheduling new downloads.
+      tags: [literature]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Fulltext acquisition job cancellation accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiteratureFulltextAcquisitionJobResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /literature/fulltext-acquisition/jobs/{jobId}/retry-failed:
+    post:
+      operationId: retryFailedLiteratureFulltextAcquisitionJob
+      summary: Requeue retryable failed fulltext acquisition items.
+      tags: [literature]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Retryable fulltext acquisition items requeued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiteratureFulltextAcquisitionJobResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /literature/{literatureId}/content-processing:
     get:
       operationId: getLiteratureContentProcessing
@@ -1051,6 +1313,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LiteratureContentProcessingCleanupDryRunResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /settings/literature-acquisition:
+    get:
+      operationId: getLiteratureAcquisitionSettings
+      summary: Get OA resolver, downloader, source throttle, and quality scorer settings for literature acquisition.
+      tags: [settings]
+      responses:
+        '200':
+          description: Literature acquisition settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiteratureAcquisitionSettings'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      operationId: updateLiteratureAcquisitionSettings
+      summary: Update OA resolver, downloader, source throttle, and quality scorer settings for literature acquisition.
+      tags: [settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLiteratureAcquisitionSettingsRequest'
+      responses:
+        '200':
+          description: Updated literature acquisition settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiteratureAcquisitionSettings'
         '400':
           $ref: '#/components/responses/BadRequest'
         '500':
@@ -2350,6 +2648,18 @@ components:
       type: string
       enum: [QUEUED, RUNNING, SUCCEEDED, PARTIAL, BLOCKED, FAILED, SKIPPED, CANCELED]
 
+    LiteratureFulltextAcquisitionJobStatus:
+      type: string
+      enum: [PLANNED, QUEUED, RUNNING, PAUSED, CANCELING, CANCELED, SUCCEEDED, PARTIAL, FAILED]
+
+    LiteratureFulltextAcquisitionItemStatus:
+      type: string
+      enum: [QUEUED, RUNNING, SUCCEEDED, PARTIAL, BLOCKED, FAILED, SKIPPED, CANCELED]
+
+    LiteratureFulltextAcquisitionSourceKind:
+      type: string
+      enum: [explicit_url, arxiv, unpaywall]
+
     LiteratureContentProcessingActionCode:
       type: string
       enum: [process_content, process_to_retrievable, rebuild_index, reextract, retry_failed, view_reason]
@@ -3375,6 +3685,158 @@ components:
           type: string
       additionalProperties: false
 
+    LiteratureAcquisitionThrottleSettings:
+      type: object
+      required: [min_interval_ms, concurrency]
+      properties:
+        min_interval_ms:
+          type: integer
+          minimum: 0
+        concurrency:
+          type: integer
+          minimum: 1
+          maximum: 10
+      additionalProperties: false
+
+    UpdateLiteratureAcquisitionThrottleSettings:
+      type: object
+      properties:
+        min_interval_ms:
+          type: integer
+          minimum: 0
+        concurrency:
+          type: integer
+          minimum: 1
+          maximum: 10
+      additionalProperties: false
+
+    LiteratureAcquisitionUnpaywallSettings:
+      type: object
+      required: [enabled, email]
+      properties:
+        enabled:
+          type: boolean
+        email:
+          type: [string, 'null']
+      additionalProperties: false
+
+    LiteratureAcquisitionDownloaderSettings:
+      type: object
+      required: [max_byte_size, timeout_ms, max_redirects, require_pdf_signature]
+      properties:
+        max_byte_size:
+          type: integer
+          minimum: 1
+        timeout_ms:
+          type: integer
+          minimum: 1000
+        max_redirects:
+          type: integer
+          minimum: 0
+          maximum: 10
+        require_pdf_signature:
+          type: boolean
+      additionalProperties: false
+
+    LiteratureAcquisitionSourceThrottleSettings:
+      type: object
+      required: [arxiv, crossref, unpaywall, download]
+      properties:
+        arxiv:
+          $ref: '#/components/schemas/LiteratureAcquisitionThrottleSettings'
+        crossref:
+          $ref: '#/components/schemas/LiteratureAcquisitionThrottleSettings'
+        unpaywall:
+          $ref: '#/components/schemas/LiteratureAcquisitionThrottleSettings'
+        download:
+          $ref: '#/components/schemas/LiteratureAcquisitionThrottleSettings'
+      additionalProperties: false
+
+    LiteratureAcquisitionQualityScorerSettings:
+      type: object
+      required: [enabled, provider, model, prompt_version, external_endpoint_configured]
+      properties:
+        enabled:
+          type: boolean
+        provider:
+          $ref: '#/components/schemas/LiteratureContentProcessingProviderId'
+        model:
+          type: string
+        prompt_version:
+          type: string
+        external_endpoint_configured:
+          type: boolean
+      additionalProperties: false
+
+    LiteratureAcquisitionSettings:
+      type: object
+      required: [unpaywall, downloader, source_throttle, quality_scorer, updated_at]
+      properties:
+        unpaywall:
+          $ref: '#/components/schemas/LiteratureAcquisitionUnpaywallSettings'
+        downloader:
+          $ref: '#/components/schemas/LiteratureAcquisitionDownloaderSettings'
+        source_throttle:
+          $ref: '#/components/schemas/LiteratureAcquisitionSourceThrottleSettings'
+        quality_scorer:
+          $ref: '#/components/schemas/LiteratureAcquisitionQualityScorerSettings'
+        updated_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+
+    UpdateLiteratureAcquisitionSettingsRequest:
+      type: object
+      properties:
+        unpaywall:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            email:
+              type: [string, 'null']
+          additionalProperties: false
+        downloader:
+          type: object
+          properties:
+            max_byte_size:
+              type: integer
+              minimum: 1
+            timeout_ms:
+              type: integer
+              minimum: 1000
+            max_redirects:
+              type: integer
+              minimum: 0
+              maximum: 10
+            require_pdf_signature:
+              type: boolean
+          additionalProperties: false
+        source_throttle:
+          type: object
+          properties:
+            arxiv:
+              $ref: '#/components/schemas/UpdateLiteratureAcquisitionThrottleSettings'
+            crossref:
+              $ref: '#/components/schemas/UpdateLiteratureAcquisitionThrottleSettings'
+            unpaywall:
+              $ref: '#/components/schemas/UpdateLiteratureAcquisitionThrottleSettings'
+            download:
+              $ref: '#/components/schemas/UpdateLiteratureAcquisitionThrottleSettings'
+          additionalProperties: false
+        quality_scorer:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            model:
+              type: string
+            prompt_version:
+              type: string
+          additionalProperties: false
+      additionalProperties: false
+      minProperties: 1
+
     UpdateLiteratureContentProcessingSettingsRequest:
       type: object
       properties:
@@ -4074,6 +4536,457 @@ components:
             $ref: '#/components/schemas/LiteratureContentProcessingBatchJob'
       additionalProperties: false
 
+    LiteratureFulltextAcquisitionExplicitUrl:
+      type: object
+      required: [literature_id, source_url]
+      properties:
+        literature_id:
+          type: string
+          minLength: 1
+        source_url:
+          type: string
+          minLength: 1
+      additionalProperties: false
+
+    LiteratureFulltextAcquisitionWorkset:
+      type: object
+      properties:
+        topic_id:
+          type: string
+          minLength: 1
+        paper_id:
+          type: string
+          minLength: 1
+        literature_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+        rights_classes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RightsClass'
+        only_missing_assets:
+          type: boolean
+          default: true
+        explicit_urls:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureFulltextAcquisitionExplicitUrl'
+        updated_at_from:
+          type: string
+          format: date-time
+        updated_at_to:
+          type: string
+          format: date-time
+      additionalProperties: false
+
+    LiteratureFulltextAcquisitionRequestOptions:
+      type: object
+      properties:
+        max_parallel_downloads:
+          type: integer
+          minimum: 1
+          maximum: 4
+          default: 1
+        provider_call_budget:
+          type: integer
+          minimum: 1
+        max_byte_size:
+          type: integer
+          minimum: 1
+        force_refresh:
+          type: boolean
+          default: false
+      additionalProperties: false
+
+    LiteratureFulltextAcquisitionEffectiveOptions:
+      type: object
+      required: [max_parallel_downloads, provider_call_budget, max_byte_size, force_refresh]
+      properties:
+        max_parallel_downloads:
+          type: integer
+          minimum: 1
+          maximum: 4
+        provider_call_budget:
+          type: [integer, 'null']
+          minimum: 1
+        max_byte_size:
+          type: integer
+          minimum: 1
+        force_refresh:
+          type: boolean
+      additionalProperties: false
+
+    LiteratureFulltextAcquisitionDryRunRequest:
+      type: object
+      properties:
+        workset:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionWorkset'
+        options:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionRequestOptions'
+      additionalProperties: false
+
+    LiteratureFulltextAcquisitionCreateJobRequest:
+      allOf:
+        - $ref: '#/components/schemas/LiteratureFulltextAcquisitionDryRunRequest'
+
+    LiteratureFulltextAcquisitionCandidate:
+      type: object
+      required: [source_kind, source_url, requires_resolution, provenance]
+      properties:
+        source_kind:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionSourceKind'
+        source_url:
+          type: [string, 'null']
+        requires_resolution:
+          type: boolean
+        provenance:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+
+    LiteratureFulltextAcquisitionPlanItem:
+      type: object
+      required:
+        - literature_id
+        - title
+        - rights_class
+        - selected_source_kind
+        - source_url
+        - candidates
+        - blocked
+        - blocker_code
+        - blocker_message
+        - retryable
+      properties:
+        literature_id:
+          type: string
+        title:
+          type: string
+        rights_class:
+          $ref: '#/components/schemas/RightsClass'
+        selected_source_kind:
+          anyOf:
+            - $ref: '#/components/schemas/LiteratureFulltextAcquisitionSourceKind'
+            - type: 'null'
+        source_url:
+          type: [string, 'null']
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureFulltextAcquisitionCandidate'
+        blocked:
+          type: boolean
+        blocker_code:
+          type: [string, 'null']
+        blocker_message:
+          type: [string, 'null']
+        retryable:
+          type: boolean
+      additionalProperties: false
+
+    LiteratureFulltextAcquisitionSourceCount:
+      type: object
+      required: [source_kind, count]
+      properties:
+        source_kind:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionSourceKind'
+        count:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+
+    LiteratureFulltextAcquisitionProviderCallEstimate:
+      type: object
+      required: [unpaywall_calls, download_calls]
+      properties:
+        unpaywall_calls:
+          type: integer
+          minimum: 0
+        download_calls:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+
+    LiteratureFulltextAcquisitionBlocker:
+      type: object
+      required: [literature_id, title, reason_code, reason_message, retryable]
+      properties:
+        literature_id:
+          type: string
+        title:
+          type: string
+        reason_code:
+          type: string
+        reason_message:
+          type: string
+        retryable:
+          type: boolean
+      additionalProperties: false
+
+    LiteratureFulltextAcquisitionDryRunEstimate:
+      type: object
+      required:
+        - dry_run_id
+        - generated_at
+        - workset
+        - options
+        - total_literatures
+        - selected_count
+        - planned_item_count
+        - skipped_existing_asset_count
+        - blocked_count
+        - source_counts
+        - estimated_provider_calls
+        - blockers
+        - plan_items
+      properties:
+        dry_run_id:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+        workset:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionWorkset'
+        options:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionEffectiveOptions'
+        total_literatures:
+          type: integer
+          minimum: 0
+        selected_count:
+          type: integer
+          minimum: 0
+        planned_item_count:
+          type: integer
+          minimum: 0
+        skipped_existing_asset_count:
+          type: integer
+          minimum: 0
+        blocked_count:
+          type: integer
+          minimum: 0
+        source_counts:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureFulltextAcquisitionSourceCount'
+        estimated_provider_calls:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionProviderCallEstimate'
+        blockers:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureFulltextAcquisitionBlocker'
+        plan_items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureFulltextAcquisitionPlanItem'
+      additionalProperties: false
+
+    LiteratureFulltextAcquisitionDryRunResponse:
+      type: object
+      required: [estimate]
+      properties:
+        estimate:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionDryRunEstimate'
+      additionalProperties: false
+
+    LiteratureFulltextAcquisitionItem:
+      type: object
+      required:
+        - item_id
+        - job_id
+        - literature_id
+        - title
+        - status
+        - selected_source_kind
+        - source_url
+        - final_url
+        - content_asset_id
+        - attempt_count
+        - error_code
+        - error_message
+        - blocker_code
+        - retryable
+        - resolution_candidates
+        - checkpoint
+        - created_at
+        - started_at
+        - finished_at
+        - updated_at
+      properties:
+        item_id:
+          type: string
+        job_id:
+          type: string
+        literature_id:
+          type: string
+        title:
+          type: [string, 'null']
+        status:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionItemStatus'
+        selected_source_kind:
+          anyOf:
+            - $ref: '#/components/schemas/LiteratureFulltextAcquisitionSourceKind'
+            - type: 'null'
+        source_url:
+          type: [string, 'null']
+        final_url:
+          type: [string, 'null']
+        content_asset_id:
+          type: [string, 'null']
+        attempt_count:
+          type: integer
+          minimum: 0
+        error_code:
+          type: [string, 'null']
+        error_message:
+          type: [string, 'null']
+        blocker_code:
+          type: [string, 'null']
+        retryable:
+          type: boolean
+        resolution_candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureFulltextAcquisitionCandidate'
+        checkpoint:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: [string, 'null']
+          format: date-time
+        finished_at:
+          type: [string, 'null']
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+
+    LiteratureFulltextAcquisitionJobTotals:
+      type: object
+      required: [total, queued, running, succeeded, partial, blocked, failed, skipped, canceled]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        queued:
+          type: integer
+          minimum: 0
+        running:
+          type: integer
+          minimum: 0
+        succeeded:
+          type: integer
+          minimum: 0
+        partial:
+          type: integer
+          minimum: 0
+        blocked:
+          type: integer
+          minimum: 0
+        failed:
+          type: integer
+          minimum: 0
+        skipped:
+          type: integer
+          minimum: 0
+        canceled:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+
+    LiteratureFulltextAcquisitionJob:
+      type: object
+      required:
+        - job_id
+        - status
+        - workset
+        - options
+        - dry_run_estimate
+        - totals
+        - error_code
+        - error_message
+        - created_at
+        - started_at
+        - paused_at
+        - canceled_at
+        - finished_at
+        - updated_at
+      properties:
+        job_id:
+          type: string
+        status:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionJobStatus'
+        workset:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionWorkset'
+        options:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionEffectiveOptions'
+        dry_run_estimate:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionDryRunEstimate'
+        totals:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionJobTotals'
+        error_code:
+          type: [string, 'null']
+        error_message:
+          type: [string, 'null']
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: [string, 'null']
+          format: date-time
+        paused_at:
+          type: [string, 'null']
+          format: date-time
+        canceled_at:
+          type: [string, 'null']
+          format: date-time
+        finished_at:
+          type: [string, 'null']
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureFulltextAcquisitionItem'
+      additionalProperties: false
+
+    CreateLiteratureFulltextAcquisitionJobResponse:
+      type: object
+      required: [job]
+      properties:
+        job:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionJob'
+      additionalProperties: false
+
+    LiteratureFulltextAcquisitionJobResponse:
+      type: object
+      required: [job]
+      properties:
+        job:
+          $ref: '#/components/schemas/LiteratureFulltextAcquisitionJob'
+      additionalProperties: false
+
+    ListLiteratureFulltextAcquisitionJobsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureFulltextAcquisitionJob'
+      additionalProperties: false
+
     LiteratureContentProcessingCleanupDryRunRequest:
       type: object
       properties:
@@ -4387,6 +5300,32 @@ components:
           additionalProperties: true
       additionalProperties: false
 
+    DownloadLiteratureContentAssetRequest:
+      type: object
+      required:
+        - source_url
+      properties:
+        source_url:
+          type: string
+          minLength: 1
+        asset_kind:
+          $ref: '#/components/schemas/LiteratureContentAssetKind'
+        file_name:
+          type: string
+          minLength: 1
+        mime_type:
+          type: string
+          minLength: 1
+        max_byte_size:
+          type: integer
+          minimum: 1
+        rights_class:
+          $ref: '#/components/schemas/RightsClass'
+        metadata:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+
     LiteratureContentAsset:
       type: object
       required:
@@ -4486,6 +5425,10 @@ components:
           minimum: 1
           maximum: 5
           default: 3
+        include_stale:
+          type: boolean
+          default: false
+          description: Include stale embedding/index versions for diagnostics. Defaults to false for production retrieval.
       additionalProperties: false
 
     LiteratureRetrieveEvidenceChunk:

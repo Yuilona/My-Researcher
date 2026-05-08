@@ -70,6 +70,8 @@ import type {
   SourceTimeWindowMode,
   TopicExecutionContext,
 } from './auto-pull/auto-pull-types.js';
+import type { LiteratureAcquisitionSettingsService } from './literature-acquisition-settings-service.js';
+import type { LiteratureContentProcessingSettingsService } from './literature-content-processing-settings-service.js';
 import { LiteratureService } from './literature-service.js';
 
 export class AutoPullService {
@@ -78,6 +80,8 @@ export class AutoPullService {
   constructor(
     private readonly repository: AutoPullRepository,
     private readonly literatureService: LiteratureService,
+    private readonly contentProcessingSettingsService?: LiteratureContentProcessingSettingsService,
+    private readonly acquisitionSettingsService?: LiteratureAcquisitionSettingsService,
   ) {}
 
   async createTopicProfile(request: CreateTopicProfileRequest): Promise<TopicProfileDTO> {
@@ -1367,7 +1371,10 @@ export class AutoPullService {
     candidates: FetchedCandidate[],
     rankingMode: AutoPullRankingMode,
   ): Promise<RankedCandidate[]> {
-    return scoreAutoPullRankedCandidates(candidates, rankingMode);
+    return scoreAutoPullRankedCandidates(candidates, rankingMode, {
+      contentProcessingSettingsService: this.contentProcessingSettingsService,
+      acquisitionSettingsService: this.acquisitionSettingsService,
+    });
   }
 
   private readRankingMode(config: Record<string, unknown>): AutoPullRankingMode {
