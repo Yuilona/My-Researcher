@@ -6,6 +6,7 @@ import type {
   LiteratureEmbeddingProfileId,
   LiteratureExtractionProfileId,
   LiteratureFulltextParserHealth,
+  LiteratureLocalSecretsStatus,
   UiOperationStatus,
 } from '../shared/types';
 import './LiteratureContentProcessingSettingsPanel.css';
@@ -202,7 +203,22 @@ export function LiteratureContentProcessingSettingsPanel() {
   const [grobidEndpointUrl, setGrobidEndpointUrl] = useState<string>('http://localhost:8070');
   const [parserHealth, setParserHealth] = useState<LiteratureFulltextParserHealth | null>(null);
   const [parserHealthStatus, setParserHealthStatus] = useState<UiOperationStatus>('idle');
+  const [localSecretsStatus, setLocalSecretsStatus] = useState<LiteratureLocalSecretsStatus | null>(null);
   const [dirty, setDirty] = useState<boolean>(false);
+
+  const fetchSettingsPayload = () =>
+    requestGovernance<unknown>({
+      method: 'GET',
+      path: '/settings/literature-content-processing',
+    });
+
+  const refreshLocalSecretsStatus = async () => {
+    const statusPayload = await window.desktopApi?.getLiteratureContentProcessingLocalSecrets?.();
+    if (statusPayload) {
+      setLocalSecretsStatus(statusPayload);
+    }
+    return statusPayload ?? null;
+  };
 
   const loadSettings = async () => {
     setStatus('loading');
@@ -210,13 +226,25 @@ export function LiteratureContentProcessingSettingsPanel() {
     setParserHealth(null);
     setParserHealthStatus('idle');
     try {
-      const payload = await requestGovernance<unknown>({
-        method: 'GET',
-        path: '/settings/literature-content-processing',
-      });
-      const normalized = normalizeSettings(payload);
+      let payload = await fetchSettingsPayload();
+      let normalized = normalizeSettings(payload);
       if (!normalized) {
         throw new Error('Invalid settings payload.');
+      }
+      let restoredLocalSecret = false;
+      const localStatus = await refreshLocalSecretsStatus();
+      const backendApiKeySet = normalized.providers.some((provider) => provider.provider === 'openai' && provider.api_key_set);
+      if (!backendApiKeySet && localStatus?.openai_api_key_set && window.desktopApi?.syncLiteratureContentProcessingLocalSecrets) {
+        const syncResult = await window.desktopApi.syncLiteratureContentProcessingLocalSecrets();
+        setLocalSecretsStatus(syncResult.status);
+        if (syncResult.synced) {
+          restoredLocalSecret = true;
+          payload = await fetchSettingsPayload();
+          normalized = normalizeSettings(payload);
+          if (!normalized) {
+            throw new Error('Invalid settings payload after local secret sync.');
+          }
+        }
       }
       setSettings(normalized);
       setActiveProfileId(normalized.embedding.active_profile_id);
@@ -233,6 +261,10 @@ export function LiteratureContentProcessingSettingsPanel() {
       });
       setStatus('ready');
       setDirty(false);
+      if (restoredLocalSecret) {
+        setMessageTone('success');
+        setMessage('已从本机加密存储恢复 API key。');
+      }
     } catch (error) {
       setStatus('error');
       setMessageTone('danger');
@@ -301,6 +333,17 @@ export function LiteratureContentProcessingSettingsPanel() {
       if (!normalized) {
         throw new Error('Invalid settings payload.');
       }
+      if (options?.clearApiKey) {
+        const nextLocalStatus = await window.desktopApi?.setLiteratureContentProcessingLocalOpenAIKey?.({ apiKey: null });
+        if (nextLocalStatus) setLocalSecretsStatus(nextLocalStatus);
+      } else if (apiKeyInput.trim()) {
+        const nextLocalStatus = await window.desktopApi?.setLiteratureContentProcessingLocalOpenAIKey?.({
+          apiKey: apiKeyInput.trim(),
+        });
+        if (nextLocalStatus) setLocalSecretsStatus(nextLocalStatus);
+      } else {
+        await refreshLocalSecretsStatus();
+      }
       setSettings(normalized);
       setGrobidEndpointUrl(normalized.fulltext_parser.grobid.endpoint_url);
       setApiKeyInput('');
@@ -317,8 +360,11 @@ export function LiteratureContentProcessingSettingsPanel() {
   };
 
   const openAIProvider = settings?.providers.find((provider) => provider.provider === 'openai');
-  const apiKeyConfigured = openAIProvider?.api_key_set === true;
+  const backendApiKeyConfigured = openAIProvider?.api_key_set === true;
+  const localApiKeyConfigured = localSecretsStatus?.openai_api_key_set === true;
+  const apiKeyConfigured = backendApiKeyConfigured || localApiKeyConfigured;
   const apiKeyUpdatedAt = openAIProvider?.api_key_last_updated_at ?? null;
+  const localApiKeyUpdatedAt = localSecretsStatus?.updated_at ?? null;
 
   const embeddingOptions = useMemo(
     () =>
@@ -450,6 +496,8 @@ export function LiteratureContentProcessingSettingsPanel() {
             <StatusDot tone={apiKeyConfigured ? 'success' : 'muted'} />
             {apiKeyConfigured ? '已配置' : '未配置'}
             {apiKeyUpdatedAt ? ` · 上次更新 ${formatTimestamp(apiKeyUpdatedAt)}` : ''}
+            {localApiKeyUpdatedAt ? ` · 本机已保存 ${formatTimestamp(localApiKeyUpdatedAt)}` : ''}
+            {localSecretsStatus?.storage === 'unavailable' ? ' · 本机加密存储不可用' : ''}
           </span>
         </div>
         <div data-ui="toolbar" data-align="between" data-wrap="wrap">

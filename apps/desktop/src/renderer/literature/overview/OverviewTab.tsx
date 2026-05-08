@@ -125,6 +125,11 @@ type OverviewTabProps = {
     stages: PipelineStageCode[],
     actionLabel: string,
   ) => Promise<void>;
+  onDownloadContentAsset: (
+    literatureId: string,
+    sourceUrl: string | null,
+    rightsClass: string,
+  ) => Promise<void>;
   onOpenMetadataIntake: (literatureId: string, tab?: MetadataIntakeTabKey, context?: MetadataIntakeOpenContext) => void;
   overviewSummaryStats: OverviewSummaryStats;
   overviewPageIndex: number;
@@ -163,6 +168,7 @@ export function OverviewTab({
   overviewPageItems,
   onScopeStatusChange,
   onRunOverviewContentAction,
+  onDownloadContentAsset,
   onOpenMetadataIntake,
   overviewSummaryStats,
   overviewPageIndex,
@@ -435,6 +441,17 @@ export function OverviewTab({
                             })}
                           >
                             录入内容
+                          </button>
+                          <button
+                            type="button"
+                            className="literature-overview-action-link"
+                            onClick={() => void onDownloadContentAsset(
+                              item.literature_id,
+                              item.source_url,
+                              item.rights_class,
+                            )}
+                          >
+                            下载全文
                           </button>
                         </div>
                         <div className="literature-overview-action-row">

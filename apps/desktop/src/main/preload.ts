@@ -23,10 +23,34 @@ type SelectDirectoryRequest = {
   defaultPath?: string;
 };
 
+type LiteratureLocalSecretsStatus = {
+  openai_api_key_set: boolean;
+  updated_at: string | null;
+  storage: 'encrypted-file' | 'unavailable';
+  error?: string;
+};
+
+type SetLiteratureOpenAIKeyRequest = {
+  apiKey?: string | null;
+};
+
+type SyncLiteratureLocalSecretsResponse = {
+  synced: boolean;
+  status: LiteratureLocalSecretsStatus;
+};
+
 const desktopApi = {
   getAppMeta: (): Promise<DesktopMeta> => ipcRenderer.invoke('desktop:get-app-meta') as Promise<DesktopMeta>,
   selectDirectory: (request?: SelectDirectoryRequest): Promise<string | null> =>
     ipcRenderer.invoke('desktop:select-directory', request) as Promise<string | null>,
+  getLiteratureContentProcessingLocalSecrets: (): Promise<LiteratureLocalSecretsStatus> =>
+    ipcRenderer.invoke('desktop:get-literature-content-processing-local-secrets') as Promise<LiteratureLocalSecretsStatus>,
+  setLiteratureContentProcessingLocalOpenAIKey: (
+    request?: SetLiteratureOpenAIKeyRequest,
+  ): Promise<LiteratureLocalSecretsStatus> =>
+    ipcRenderer.invoke('desktop:set-literature-content-processing-local-openai-key', request) as Promise<LiteratureLocalSecretsStatus>,
+  syncLiteratureContentProcessingLocalSecrets: (): Promise<SyncLiteratureLocalSecretsResponse> =>
+    ipcRenderer.invoke('desktop:sync-literature-content-processing-local-secrets') as Promise<SyncLiteratureLocalSecretsResponse>,
   requestGovernance: (
     request: GovernanceBridgeRequest,
   ): Promise<GovernanceBridgeResponse> =>

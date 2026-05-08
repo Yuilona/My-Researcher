@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -95,6 +95,139 @@ function normalizeGovernancePath(input) {
     }
     return input;
 }
+function localSecretsFilePath() {
+    return path.join(app.getPath('userData'), 'literature-content-processing-secrets.json');
+}
+async function readLocalSecrets() {
+    try {
+        const raw = await fs.promises.readFile(localSecretsFilePath(), 'utf8');
+        const parsed = JSON.parse(raw);
+        return typeof parsed === 'object' && parsed !== null ? parsed : {};
+    }
+    catch (error) {
+        if (isNodeError(error) && error.code === 'ENOENT') {
+            return {};
+        }
+        throw error;
+    }
+}
+async function writeLocalSecrets(record) {
+    const filePath = localSecretsFilePath();
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.promises.writeFile(filePath, `${JSON.stringify(record, null, 2)}\n`, {
+        encoding: 'utf8',
+        mode: 0o600,
+    });
+    await fs.promises.chmod(filePath, 0o600);
+}
+async function getLiteratureLocalSecretsStatus() {
+    if (!safeStorage.isEncryptionAvailable()) {
+        return {
+            openai_api_key_set: false,
+            updated_at: null,
+            storage: 'unavailable',
+            error: 'Local encrypted storage is not available on this system.',
+        };
+    }
+    const record = await readLocalSecrets();
+    return {
+        openai_api_key_set: Boolean(record.openaiApiKey?.encryptedValue),
+        updated_at: record.openaiApiKey?.updatedAt ?? null,
+        storage: 'encrypted-file',
+    };
+}
+async function setLiteratureLocalOpenAIKey(apiKey) {
+    if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('Local encrypted storage is not available on this system.');
+    }
+    const record = await readLocalSecrets();
+    if (apiKey === null) {
+        delete record.openaiApiKey;
+    }
+    else {
+        const trimmed = apiKey.trim();
+        if (!trimmed) {
+            throw new Error('OpenAI API key cannot be blank.');
+        }
+        record.openaiApiKey = {
+            encryptedValue: safeStorage.encryptString(trimmed).toString('base64'),
+            updatedAt: new Date().toISOString(),
+        };
+    }
+    await writeLocalSecrets(record);
+    return getLiteratureLocalSecretsStatus();
+}
+async function readLiteratureLocalOpenAIKey() {
+    if (!safeStorage.isEncryptionAvailable()) {
+        return null;
+    }
+    const record = await readLocalSecrets();
+    const encryptedValue = record.openaiApiKey?.encryptedValue;
+    if (!encryptedValue) {
+        return null;
+    }
+    return safeStorage.decryptString(Buffer.from(encryptedValue, 'base64'));
+}
+function normalizeSetLiteratureOpenAIKeyRequest(request) {
+    if (!request || !Object.prototype.hasOwnProperty.call(request, 'apiKey')) {
+        throw new Error('apiKey must be provided as a string or null.');
+    }
+    if (request.apiKey === null) {
+        return null;
+    }
+    if (typeof request.apiKey === 'string') {
+        return request.apiKey;
+    }
+    throw new Error('apiKey must be provided as a string or null.');
+}
+async function syncLiteratureLocalSecretsToBackend() {
+    const apiKey = await readLiteratureLocalOpenAIKey();
+    const status = await getLiteratureLocalSecretsStatus();
+    if (!apiKey) {
+        return { synced: false, status };
+    }
+    const response = await fetch(new URL('/settings/literature-content-processing', backendBaseUrl), {
+        method: 'PATCH',
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            providers: [{ provider: 'openai', api_key: apiKey }],
+        }),
+    });
+    if (!response.ok) {
+        const contentType = response.headers.get('content-type') ?? '';
+        const payload = contentType.includes('application/json')
+            ? await response.json()
+            : { message: await response.text() };
+        throw new Error(readBackendErrorMessage(payload, response.status));
+    }
+    return { synced: true, status };
+}
+function readBackendErrorMessage(payload, status) {
+    if (payload && typeof payload === 'object' && 'error' in payload) {
+        const error = payload.error;
+        const code = typeof error?.code === 'string' ? error.code : null;
+        const message = typeof error?.message === 'string' ? error.message : null;
+        if (code && message) {
+            return `${code}: ${message}`;
+        }
+        if (message) {
+            return message;
+        }
+    }
+    if (payload && typeof payload === 'object' && 'message' in payload) {
+        const message = payload.message;
+        if (typeof message === 'string') {
+            return message;
+        }
+    }
+    return `Request failed with status ${status}.`;
+}
+function isNodeError(error) {
+    return error instanceof Error && 'code' in error;
+}
 ipcMain.handle('desktop:get-app-meta', () => ({
     appName: 'Morethan Research Desktop',
     appVersion: app.getVersion(),
@@ -121,6 +254,9 @@ ipcMain.handle('desktop:select-directory', async (event, request) => {
     }
     return result.filePaths[0] ?? null;
 });
+ipcMain.handle('desktop:get-literature-content-processing-local-secrets', async () => getLiteratureLocalSecretsStatus());
+ipcMain.handle('desktop:set-literature-content-processing-local-openai-key', async (_event, request) => setLiteratureLocalOpenAIKey(normalizeSetLiteratureOpenAIKeyRequest(request)));
+ipcMain.handle('desktop:sync-literature-content-processing-local-secrets', async () => syncLiteratureLocalSecretsToBackend());
 ipcMain.handle('desktop:governance-request', async (_event, request) => {
     const method = String(request.method ?? '').toUpperCase();
     const targetPath = normalizeGovernancePath(request.path);

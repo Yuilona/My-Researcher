@@ -3,6 +3,7 @@ import type {
   CitationStatus,
   LiteratureOverviewData,
   LiteratureOverviewItem,
+  LiteratureRightsClass,
   LiteratureOverviewStatus,
   LiteratureOverviewSummary,
   OverviewContentStatus,
@@ -22,6 +23,12 @@ import {
 
 function normalizeCitationStatus(value: unknown): CitationStatus | undefined {
   return citationStatusOptions.find((status) => status === value);
+}
+
+function normalizeLiteratureRightsClass(value: unknown): LiteratureRightsClass {
+  return value === 'OA' || value === 'USER_AUTH' || value === 'RESTRICTED' || value === 'UNKNOWN'
+    ? value
+    : 'UNKNOWN';
 }
 
 function normalizePipelineStageStatusMap(
@@ -263,6 +270,7 @@ export function normalizeLiteratureOverviewPayload(payload: unknown): Literature
         year: typeof row.year === 'number' ? row.year : null,
         doi: toText(row.doi) ?? null,
         arxiv_id: toText(row.arxiv_id) ?? null,
+        rights_class: normalizeLiteratureRightsClass(row.rights_class),
         tags: Array.isArray(row.tags) ? row.tags.filter((tag): tag is string => typeof tag === 'string') : [],
         providers: Array.isArray(row.providers)
           ? row.providers

@@ -26,6 +26,11 @@ export type OverviewActionsControllerOutput = {
     requestedStages: PipelineStageCode[],
     actionLabel: string,
   ) => Promise<void>;
+  handleDownloadContentAsset: (
+    literatureId: string,
+    sourceUrl: string | null,
+    rightsClass: string,
+  ) => Promise<void>;
   handleOpenMetadataIntake: (
     literatureId: string,
     tab?: MetadataIntakeTabKey,
@@ -280,6 +285,47 @@ export function useOverviewActionsController(
     }
   };
 
+  const handleDownloadContentAsset = async (
+    literatureId: string,
+    sourceUrl: string | null,
+    rightsClass: string,
+  ) => {
+    const defaultUrl = resolveDefaultFulltextDownloadUrl(sourceUrl);
+    const nextUrl = window.prompt('全文 PDF URL', defaultUrl);
+    const normalizedUrl = nextUrl?.trim() ?? '';
+    if (!normalizedUrl) {
+      return;
+    }
+
+    try {
+      await requestGovernance({
+        method: 'POST',
+        path: `/literature/${encodeURIComponent(literatureId)}/content-assets/download`,
+        body: {
+          source_url: normalizedUrl,
+          asset_kind: 'raw_fulltext',
+          rights_class: rightsClass,
+          metadata: {
+            ui_action: 'overview_download_fulltext',
+          },
+        },
+      });
+      pushLiteratureFeedback({
+        slot: 'overview',
+        level: 'success',
+        message: '全文已下载并登记为内容资产。',
+      });
+      await loadLiteratureOverview(topicId, paperId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '全文下载失败。';
+      pushLiteratureFeedback({
+        slot: 'overview',
+        level: 'error',
+        message: `全文下载失败：${message}`,
+      });
+    }
+  };
+
   const handleOpenMetadataIntake = (
     literatureId: string,
     tab: MetadataIntakeTabKey = 'abstract',
@@ -299,6 +345,26 @@ export function useOverviewActionsController(
     handleSelectAllOverviewTags,
     handleClearOverviewTagSelection,
     handleRunOverviewContentAction,
+    handleDownloadContentAsset,
     handleOpenMetadataIntake,
   };
+}
+
+function resolveDefaultFulltextDownloadUrl(sourceUrl: string | null): string {
+  const normalized = sourceUrl?.trim() ?? '';
+  if (!normalized) {
+    return '';
+  }
+  try {
+    const url = new URL(normalized);
+    if (url.hostname === 'arxiv.org' && url.pathname.startsWith('/abs/')) {
+      url.pathname = url.pathname.replace(/^\/abs\//, '/pdf/');
+      url.search = '';
+      url.hash = '';
+      return url.toString();
+    }
+  } catch {
+    return normalized;
+  }
+  return normalized;
 }

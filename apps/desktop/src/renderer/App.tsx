@@ -812,6 +812,7 @@ export function App({ initialThemeMode }: AppProps) {
     handleSelectAllOverviewTags,
     handleClearOverviewTagSelection,
     handleRunOverviewContentAction,
+    handleDownloadContentAsset,
     handleOpenMetadataIntake,
   } = useOverviewActionsController({
     topicId,
@@ -1037,6 +1038,7 @@ export function App({ initialThemeMode }: AppProps) {
     overviewPageItems,
     onScopeStatusChange: handleScopeStatusChange,
     onRunOverviewContentAction: handleRunOverviewContentAction,
+    onDownloadContentAsset: handleDownloadContentAsset,
     onOpenMetadataIntake: handleOpenMetadataIntake,
     overviewSummaryStats,
     overviewPageIndex,

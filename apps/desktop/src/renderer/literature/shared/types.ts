@@ -303,6 +303,13 @@ export type LiteratureFulltextParserHealth = {
   version: string | null;
   details: Record<string, unknown>;
 };
+
+export type LiteratureLocalSecretsStatus = {
+  openai_api_key_set: boolean;
+  updated_at: string | null;
+  storage: 'encrypted-file' | 'unavailable';
+  error?: string;
+};
 export type LiteratureContentProcessingSettings = {
   providers: LiteratureContentProcessingProviderSettings[];
   embedding: {
@@ -498,6 +505,7 @@ export type LiteratureOverviewItem = {
   year: number | null;
   doi: string | null;
   arxiv_id: string | null;
+  rights_class: LiteratureRightsClass;
   tags: string[];
   providers: LiteratureProvider[];
   source_url: string | null;
