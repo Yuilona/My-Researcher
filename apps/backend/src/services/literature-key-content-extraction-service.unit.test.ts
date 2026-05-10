@@ -3,7 +3,10 @@ import crypto from 'node:crypto';
 import test from 'node:test';
 import { InMemoryLiteratureRepository } from '../repositories/in-memory-literature-repository.js';
 import type { LiteratureRepository } from '../repositories/literature-repository.js';
-import type { LiteratureContentProcessingSettingsService } from './literature-content-processing-settings-service.js';
+import type {
+  LiteratureContentProcessingSettingsService,
+  OpenAIExtractionConfig,
+} from './literature-content-processing-settings-service.js';
 import { LiteratureKeyContentExtractionService } from './literature-key-content-extraction-service.js';
 
 const CATEGORY_KEYS = [
@@ -44,10 +47,51 @@ async function seedLiterature(repository: LiteratureRepository, literatureId: st
   });
 }
 
-async function seedSourceBundle(repository: LiteratureRepository, literatureId: string): Promise<void> {
+async function seedSourceBundle(
+  repository: LiteratureRepository,
+  literatureId: string,
+  options: { sectionCount?: number } = {},
+): Promise<void> {
   const now = new Date().toISOString();
   const abstractText = 'The paper studies source-grounded literature processing.';
   const paragraphText = 'The method extracts claims with stable paragraph provenance and checks retrieval readiness.';
+  const sectionCount = options.sectionCount ?? 1;
+  const sections = Array.from({ length: sectionCount }, (_, index) => {
+    const position = index + 1;
+    return {
+      id: `${literatureId}-section-row-${position}`,
+      documentId: `${literatureId}-doc`,
+      sectionId: `section-${String(position).padStart(4, '0')}`,
+      title: position === 1 ? 'Method' : `Evaluation ${position}`,
+      level: 1,
+      orderIndex: index,
+      startOffset: 0,
+      endOffset: paragraphText.length,
+      pageStart: null,
+      pageEnd: null,
+      checksum: sha256(`${paragraphText}:${position}`),
+      createdAt: now,
+      updatedAt: now,
+    };
+  });
+  const paragraphs = sections.map((section, index) => {
+    const position = index + 1;
+    return {
+      id: `${literatureId}-paragraph-row-${position}`,
+      documentId: `${literatureId}-doc`,
+      paragraphId: `para-${String(position).padStart(4, '0')}`,
+      sectionId: section.sectionId,
+      orderIndex: 0,
+      text: `${paragraphText} Section ${position}.`,
+      startOffset: 0,
+      endOffset: paragraphText.length,
+      pageNumber: null,
+      checksum: sha256(`${paragraphText}:${position}`),
+      confidence: 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+  });
   await repository.upsertAbstractProfile({
     id: `${literatureId}-abstract`,
     literatureId,
@@ -79,40 +123,8 @@ async function seedSourceBundle(repository: LiteratureRepository, literatureId: 
       createdAt: now,
       updatedAt: now,
     },
-    sections: [
-      {
-        id: `${literatureId}-section-row`,
-        documentId: `${literatureId}-doc`,
-        sectionId: 'section-0001',
-        title: 'Method',
-        level: 1,
-        orderIndex: 0,
-        startOffset: 0,
-        endOffset: paragraphText.length,
-        pageStart: null,
-        pageEnd: null,
-        checksum: sha256(paragraphText),
-        createdAt: now,
-        updatedAt: now,
-      },
-    ],
-    paragraphs: [
-      {
-        id: `${literatureId}-paragraph-row`,
-        documentId: `${literatureId}-doc`,
-        paragraphId: 'para-0001',
-        sectionId: 'section-0001',
-        orderIndex: 0,
-        text: paragraphText,
-        startOffset: 0,
-        endOffset: paragraphText.length,
-        pageNumber: null,
-        checksum: sha256(paragraphText),
-        confidence: 1,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ],
+    sections,
+    paragraphs,
     anchors: [
       {
         id: `${literatureId}-anchor-row`,
@@ -133,12 +145,24 @@ async function seedSourceBundle(repository: LiteratureRepository, literatureId: 
   });
 }
 
-function createSettingsService(): LiteratureContentProcessingSettingsService {
+function createSettingsService(
+  runtime: Partial<OpenAIExtractionConfig['runtime']> = {},
+): LiteratureContentProcessingSettingsService {
   return {
-    resolveOpenAIExtractionConfig: async () => ({
+    resolveOpenAIProviderApiKey: async () => 'sk-test',
+    resolveExtractionConfig: async () => ({
       apiKey: 'sk-test',
+      provider: 'openai',
       model: 'gpt-5.4-mini',
       profileId: 'default',
+      runtime: {
+        section_concurrency: 3,
+        request_timeout_ms: 120_000,
+        max_retries: 1,
+        prompt_profile_id: 'literature_key_content_v2',
+        diagnostic_policy: 'actionable_v1',
+        ...runtime,
+      },
     }),
   } as LiteratureContentProcessingSettingsService;
 }
@@ -195,7 +219,7 @@ function buildOutputPayload(options: { sourceRefId?: string; sourceRefs?: unknow
       evidence_candidates: [item('evidence-1', 'evidence', 'The paragraph supports retrieval readiness.')],
     },
     quality_report: {
-      extraction_diagnostics: [],
+      extraction_diagnostics: [] as Array<Record<string, unknown>>,
     },
     display_digest: 'Generated digest.',
   };
@@ -350,7 +374,7 @@ test('key-content extraction reports invalid structured output as extraction fai
 
     assert.equal(result.ready, false);
     assert.equal(result.reasonCode, 'KEY_CONTENT_EXTRACTION_FAILED');
-    assert.match(result.reasonMessage, /parseable structured output/);
+    assert.match(result.reasonMessage, /parseable JSON/);
   } finally {
     restoreFetch();
   }
@@ -376,5 +400,187 @@ test('key-content extraction uses deterministic fallback ids when model ids are 
     assert.match(first.payload.categories.research_problem[0]?.id ?? '', /^research_problem-/);
   } finally {
     restoreFetch();
+  }
+});
+
+test('key-content extraction repairs prefixed ids, colon anchor forms, and exact anchor labels', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const literatureId = 'KEY-REPAIRED-REF-1';
+  await seedLiterature(repository, literatureId);
+  await seedSourceBundle(repository, literatureId);
+  const literature = await repository.findLiteratureById(literatureId);
+  assert.ok(literature);
+  const restoreFetch = mockResponses({
+    output_text: JSON.stringify(buildOutputPayload({
+      sourceRefs: [
+        { ref_type: 'paragraph', ref_id: 'paragraph:para-0001' },
+        { ref_type: 'anchor', ref_id: 'figure:figure-0001:Pipeline overview' },
+        { ref_type: 'anchor', ref_id: 'Figure 1' },
+      ],
+    })),
+  });
+
+  try {
+    const result = await new LiteratureKeyContentExtractionService(repository, createSettingsService()).extract(literature);
+
+    assert.equal(result.ready, true);
+    const refs = result.payload.categories.research_problem[0]?.source_refs ?? [];
+    assert.deepEqual(refs.map((item) => item.ref_type), ['paragraph', 'anchor', 'anchor']);
+    assert.deepEqual(refs.map((item) => item.ref_id), ['para-0001', 'figure-0001', 'figure-0001']);
+    assert.equal(result.diagnostics.some((item) => item.code === 'SOURCE_REF_UNRESOLVED'), false);
+  } finally {
+    restoreFetch();
+  }
+});
+
+test('key-content extraction downgrades generic limited-source diagnostics but keeps actionable warnings', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const literatureId = 'KEY-DIAGNOSTIC-POLICY-1';
+  await seedLiterature(repository, literatureId);
+  await seedSourceBundle(repository, literatureId);
+  const literature = await repository.findLiteratureById(literatureId);
+  assert.ok(literature);
+  const payload = buildOutputPayload();
+  payload.quality_report.extraction_diagnostics = [
+    { code: 'limited_source_scope', severity: 'warning', message: 'Only local section context was available.' },
+    { code: 'ACTIONABLE_SOURCE_GAP', severity: 'warning', message: 'The method claim cites no paragraph.' },
+  ];
+  const restoreFetch = mockResponses({ output_text: JSON.stringify(payload) });
+
+  try {
+    const result = await new LiteratureKeyContentExtractionService(repository, createSettingsService()).extract(literature);
+
+    assert.equal(result.ready, true);
+    const limited = result.diagnostics.find((item) => item.code === 'limited_source_scope');
+    const actionable = result.diagnostics.find((item) => item.code === 'ACTIONABLE_SOURCE_GAP');
+    assert.equal(limited?.severity, 'info');
+    assert.equal(actionable?.severity, 'warning');
+  } finally {
+    restoreFetch();
+  }
+});
+
+test('key-content extraction runs section calls with bounded concurrency and deterministic result ordering', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const literatureId = 'KEY-CONCURRENCY-1';
+  await seedLiterature(repository, literatureId);
+  await seedSourceBundle(repository, literatureId, { sectionCount: 6 });
+  const literature = await repository.findLiteratureById(literatureId);
+  assert.ok(literature);
+
+  const previousFetch = globalThis.fetch;
+  let activeCalls = 0;
+  let maxActiveCalls = 0;
+  const statements: string[] = [];
+  globalThis.fetch = (async () => {
+    activeCalls += 1;
+    maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+    const sectionIndex = statements.length + 1;
+    statements.push(`section-${sectionIndex}`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    activeCalls -= 1;
+    return new Response(JSON.stringify({
+      output_text: JSON.stringify(buildOutputPayload({
+        sourceRefId: `para-${String(Math.min(sectionIndex, 6)).padStart(4, '0')}`,
+      })),
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  try {
+    const result = await new LiteratureKeyContentExtractionService(
+      repository,
+      createSettingsService({ section_concurrency: 3 }),
+    ).extract(literature);
+
+    assert.equal(result.ready, true);
+    assert.equal(maxActiveCalls, 3);
+    assert.equal(statements.length, 7);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test('key-content extraction continues when one section extraction has a transient provider failure', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const literatureId = 'KEY-SECTION-PARTIAL-1';
+  await seedLiterature(repository, literatureId);
+  await seedSourceBundle(repository, literatureId, { sectionCount: 2 });
+  const literature = await repository.findLiteratureById(literatureId);
+  assert.ok(literature);
+
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as { input?: Array<{ content: string }> };
+    const prompt = body.input?.map((message) => message.content).join('\n') ?? '';
+    if (prompt.includes('Section id: section-0001')) {
+      return new Response('', { status: 404 });
+    }
+    return new Response(JSON.stringify({
+      output_text: JSON.stringify(buildOutputPayload({ sourceRefId: 'para-0002' })),
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  try {
+    const result = await new LiteratureKeyContentExtractionService(
+      repository,
+      createSettingsService({ max_retries: 0 }),
+    ).extract(literature);
+
+    assert.equal(result.ready, true);
+    assert.equal(
+      result.diagnostics.some((item) => item.code === 'KEY_CONTENT_SECTION_EXTRACTION_FAILED' && item.severity === 'warning'),
+      true,
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test('key-content extraction falls back to deterministic consolidation when paper-level LLM consolidation fails', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const literatureId = 'KEY-CONSOLIDATION-FALLBACK-1';
+  await seedLiterature(repository, literatureId);
+  await seedSourceBundle(repository, literatureId);
+  const literature = await repository.findLiteratureById(literatureId);
+  assert.ok(literature);
+
+  const fetchMock = mockResponseSequence([
+    { output_text: JSON.stringify(buildOutputPayload()) },
+    { error: { message: 'temporary provider outage' } },
+  ]);
+  const previousFetch = globalThis.fetch;
+  let callCount = 0;
+  globalThis.fetch = (async (input, init) => {
+    callCount += 1;
+    if (callCount === 2) {
+      return new Response(JSON.stringify({ error: { message: 'temporary provider outage' } }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return previousFetch(input, init);
+  }) as typeof fetch;
+
+  try {
+    const result = await new LiteratureKeyContentExtractionService(
+      repository,
+      createSettingsService({ max_retries: 0 }),
+    ).extract(literature);
+
+    assert.equal(result.ready, true);
+    assert.equal(
+      result.diagnostics.some((item) => item.code === 'KEY_CONTENT_PAPER_LEVEL_CONSOLIDATION_FALLBACK'),
+      true,
+    );
+    assert.equal(result.payload.categories.research_problem.length, 1);
+  } finally {
+    globalThis.fetch = previousFetch;
+    fetchMock.restore();
   }
 });

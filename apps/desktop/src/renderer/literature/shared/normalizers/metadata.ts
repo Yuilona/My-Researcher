@@ -19,6 +19,7 @@ export function normalizeLiteratureMetadataPayload(payload: unknown): Literature
 
   return {
     literature_id: literatureId,
+    canonical_work_key: toText(root.canonical_work_key) ?? `literature:${literatureId}`,
     title,
     abstract: toText(root.abstract) ?? null,
     key_content_digest: toText(root.key_content_digest) ?? null,

@@ -55,6 +55,7 @@ export const manualImportSubTabs: Array<{ key: ManualImportSubTabKey; label: str
 ];
 export const contentProcessingSubTabs: Array<{ key: ContentProcessingSubTabKey; label: string }> = [
   { key: 'operations', label: '操作' },
+  { key: 'clusters', label: '聚类' },
   { key: 'settings', label: '设置' },
 ];
 export const autoPullWeekdayOptions: Array<{ value: AutoPullWeekday; label: string }> = [

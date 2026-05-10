@@ -36,10 +36,12 @@ import { AutoPullScheduler } from './services/auto-pull-scheduler.js';
 import { AutoPullService } from './services/auto-pull-service.js';
 import { LiteratureBackfillService } from './services/literature-backfill-service.js';
 import { LiteratureAcquisitionSettingsService } from './services/literature-acquisition-settings-service.js';
+import { LiteratureClusterService } from './services/literature-cluster-service.js';
 import { LiteratureFlowService } from './services/literature-flow-service.js';
 import { LiteratureFulltextAcquisitionService } from './services/literature-fulltext-acquisition-service.js';
 import { LiteratureService } from './services/literature-service.js';
 import { LiteratureContentProcessingSettingsService } from './services/literature-content-processing-settings-service.js';
+import { BackendLlmGateway } from './services/llm-gateway.js';
 import { ResearchLifecycleService } from './services/research-lifecycle-service.js';
 import {
   TitleCardManagementService,
@@ -126,6 +128,9 @@ export function buildApp(): FastifyInstance {
   });
   const titleCardManagementController = new TitleCardManagementController(titleCardManagementService);
   const literatureContentProcessingSettingsService = new LiteratureContentProcessingSettingsService(applicationSettingsRepository);
+  const llmGateway = new BackendLlmGateway({
+    settingsService: literatureContentProcessingSettingsService,
+  });
   const literatureAcquisitionSettingsService = new LiteratureAcquisitionSettingsService(applicationSettingsRepository);
   const literatureAcquisitionSettingsController = new LiteratureAcquisitionSettingsController(
     literatureAcquisitionSettingsService,
@@ -136,6 +141,7 @@ export function buildApp(): FastifyInstance {
   const literatureFlowService = new LiteratureFlowService(
     literatureRepository,
     literatureContentProcessingSettingsService,
+    llmGateway,
   );
   const literatureService = new LiteratureService(
     literatureRepository,
@@ -144,10 +150,14 @@ export function buildApp(): FastifyInstance {
     {
       literatureFlowService,
       literatureAcquisitionSettingsService,
+      llmGateway,
     },
   );
-  const literatureController = new LiteratureController(literatureService);
-  const literatureBackfillService = new LiteratureBackfillService(literatureRepository, literatureFlowService);
+  const literatureClusterService = new LiteratureClusterService(literatureRepository);
+  const literatureController = new LiteratureController(literatureService, literatureClusterService);
+  const literatureBackfillService = new LiteratureBackfillService(literatureRepository, literatureFlowService, {
+    resolvePreferredKeyContentMethod: () => literatureContentProcessingSettingsService.resolvePreferredKeyContentMethod(),
+  });
   void literatureBackfillService.resumeRunnableJobs().catch((error) => {
     app.log.error({ err: error }, 'Failed to resume literature content-processing backfill jobs.');
   });
@@ -168,6 +178,7 @@ export function buildApp(): FastifyInstance {
     literatureService,
     literatureContentProcessingSettingsService,
     literatureAcquisitionSettingsService,
+    llmGateway,
   );
   const autoPullController = new AutoPullController(autoPullService);
   const topicSettingsController = new TopicSettingsController(autoPullService);
@@ -175,10 +186,14 @@ export function buildApp(): FastifyInstance {
 
   app.setErrorHandler((error, _request, reply) => {
     if ('validation' in error) {
+      const validationMessage = formatSchemaValidationMessage(error);
       reply.status(400).send({
         error: {
           code: 'INVALID_PAYLOAD',
-          message: error.message,
+          message: validationMessage,
+          details: {
+            validation: sanitizeSchemaValidation(error),
+          },
         },
       });
       return;
@@ -223,6 +238,47 @@ function createRepository(strategy: RepositoryStrategy): ResearchLifecycleReposi
   }
 
   return new InMemoryResearchLifecycleRepository();
+}
+
+function formatSchemaValidationMessage(error: unknown): string {
+  const baseMessage = error instanceof Error ? error.message : 'Request payload failed schema validation.';
+  const validation = readValidationEntries(error);
+  const hasKeyContentProvenanceError = validation.some((entry) =>
+    readString(entry.instancePath).endsWith('/provenance')
+    && readString(entry.schemaPath).includes('/provenance'));
+  if (hasKeyContentProvenanceError) {
+    return [
+      'Invalid key-content item provenance.',
+      'Use item-level provenance "model_generated" or "user_edited";',
+      'use request.curation_source "codex_curated" or "manual_curated" to identify who curated the dossier.',
+    ].join(' ');
+  }
+  return baseMessage;
+}
+
+function sanitizeSchemaValidation(error: unknown): Array<Record<string, unknown>> {
+  return readValidationEntries(error).slice(0, 20).map((entry) => ({
+    instance_path: readString(entry.instancePath),
+    schema_path: readString(entry.schemaPath),
+    keyword: readString(entry.keyword),
+    message: readString(entry.message),
+    params: isRecord(entry.params) ? entry.params : {},
+  }));
+}
+
+function readValidationEntries(error: unknown): Array<Record<string, unknown>> {
+  if (!isRecord(error) || !Array.isArray(error.validation)) {
+    return [];
+  }
+  return error.validation.filter(isRecord);
+}
+
+function readString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function createLiteratureRepository(strategy: RepositoryStrategy): LiteratureRepository {

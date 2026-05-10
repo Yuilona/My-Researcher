@@ -1,14 +1,14 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-08T12:17:23.875Z",
+  "generatedAt": "2026-05-10T23:31:29.454Z",
   "sourceOpenapi": "docs/context/api/openapi.yaml",
-  "sourceChecksumSha256": "b5e7be7b9227d02a7df4bc77de5aefdc3526f531da1dff70c36e3fa1df5458a1",
+  "sourceChecksumSha256": "d48e72073a0a289b7ddcb369fa3a383f627e5110b644d9ac5a36821c93929144",
   "stats": {
-    "totalEndpoints": 92,
+    "totalEndpoints": 98,
     "byTag": {
       "health": 1,
       "research-lifecycle": 8,
-      "literature": 37,
+      "literature": 43,
       "settings": 5,
       "topic-settings": 3,
       "auto-pull": 10,
@@ -526,6 +526,109 @@
       }
     },
     {
+      "method": "POST",
+      "path": "/literature/clusters/candidates",
+      "operationId": "generateLiteratureClusterCandidates",
+      "summary": "Generate structured literature duplicate/cluster candidates.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [],
+          "optional": [
+            "cluster_types",
+            "min_confidence",
+            "include_existing"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "generated_count",
+          "clusters",
+          "summary"
+        ]
+      },
+      "errors": [
+        400,
+        500
+      ],
+      "example": {
+        "curl": "curl -X POST '/literature/clusters/candidates'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/literature/clusters",
+      "operationId": "listLiteratureClusters",
+      "summary": "List structured literature clusters and candidate relations.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [
+          "status",
+          "cluster_type",
+          "literature_id",
+          "limit"
+        ],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [
+        400,
+        500
+      ],
+      "example": {
+        "curl": "curl -X GET '/literature/clusters'"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/literature/clusters/{clusterId}",
+      "operationId": "updateLiteratureCluster",
+      "summary": "Confirm, reject, split, or edit a literature cluster decision.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [
+          "clusterId"
+        ],
+        "query": [],
+        "body": {
+          "required": [],
+          "optional": [
+            "status",
+            "review_outcome",
+            "representative_literature_id",
+            "member_decisions"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "item"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        500
+      ],
+      "example": {
+        "curl": "curl -X PATCH '/literature/clusters/{clusterId}'"
+      }
+    },
+    {
       "method": "GET",
       "path": "/topics/{topicId}/literature-scope",
       "operationId": "getTopicLiteratureScope",
@@ -710,6 +813,7 @@
         "successStatus": 200,
         "coreFields": [
           "literature_id",
+          "canonical_work_key",
           "title",
           "abstract",
           "key_content_digest",
@@ -755,6 +859,7 @@
         "successStatus": 200,
         "coreFields": [
           "literature_id",
+          "canonical_work_key",
           "title",
           "abstract",
           "key_content_digest",
@@ -1181,6 +1286,137 @@
       ],
       "example": {
         "curl": "curl -X GET '/literature/{literatureId}/content-processing'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/literature/{literatureId}/content-processing/key-content-curation-bundle",
+      "operationId": "getLiteratureKeyContentCurationBundle",
+      "summary": "Export source-grounded inputs for Codex/manual key-content curation.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [
+          "literatureId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "literature_id",
+          "title",
+          "authors",
+          "year",
+          "abstract",
+          "abstract_profile",
+          "document",
+          "sections",
+          "paragraphs",
+          "anchors",
+          "source_refs",
+          "export_policy"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        500
+      ],
+      "example": {
+        "curl": "curl -X GET '/literature/{literatureId}/content-processing/key-content-curation-bundle'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/literature/{literatureId}/content-processing/key-content-dossier",
+      "operationId": "importLiteratureKeyContentDossier",
+      "summary": "Import a Codex/manual curated key-content dossier as KEY_CONTENT_READY.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [
+          "literatureId"
+        ],
+        "query": [],
+        "body": {
+          "required": [
+            "curation_source",
+            "dossier"
+          ],
+          "optional": [
+            "curator"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "literature_id",
+          "artifact_id",
+          "readiness_status",
+          "checksum",
+          "display_digest",
+          "source",
+          "diagnostics",
+          "state"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        500
+      ],
+      "example": {
+        "curl": "curl -X POST '/literature/{literatureId}/content-processing/key-content-dossier' -H 'Content-Type: application/json' -d '{\"curation_source\":\"<curation_source>\",\"dossier\":\"<dossier>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/literature/{literatureId}/content-processing/key-content-dossier/dry-run",
+      "operationId": "dryRunImportLiteratureKeyContentDossier",
+      "summary": "Validate a Codex/manual curated key-content dossier without mutating KEY_CONTENT_READY.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [
+          "literatureId"
+        ],
+        "query": [],
+        "body": {
+          "required": [
+            "curation_source",
+            "dossier"
+          ],
+          "optional": [
+            "curator"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "literature_id",
+          "valid",
+          "readiness_status",
+          "checksum",
+          "display_digest",
+          "source",
+          "issues",
+          "diagnostics",
+          "repaired_source_ref_count",
+          "would_mark_downstream_stale"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409,
+        500
+      ],
+      "example": {
+        "curl": "curl -X POST '/literature/{literatureId}/content-processing/key-content-dossier/dry-run' -H 'Content-Type: application/json' -d '{\"curation_source\":\"<curation_source>\",\"dossier\":\"<dossier>\"}'"
       }
     },
     {

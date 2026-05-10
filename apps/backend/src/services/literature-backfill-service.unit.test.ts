@@ -23,6 +23,8 @@ class FakeFlowRunner {
     readonly options: {
       delayMs?: number;
       failStage?: LiteratureContentProcessingStageCode;
+      failCode?: string;
+      failMessage?: string;
       pendingStage?: LiteratureContentProcessingStageCode;
     } = {},
   ) {}
@@ -52,8 +54,8 @@ class FakeFlowRunner {
         trigger_source: triggerSource as LiteratureContentProcessingRunDTO['trigger_source'],
         status: pending ? 'RUNNING' : failed ? 'FAILED' : 'SUCCESS',
         requested_stages: stages,
-        error_code: failed ? 'OPENAI_RATE_LIMIT' : null,
-        error_message: failed ? 'Provider rate limit.' : null,
+        error_code: failed ? this.options.failCode ?? 'OPENAI_RATE_LIMIT' : null,
+        error_message: failed ? this.options.failMessage ?? 'Provider rate limit.' : null,
         created_at: now,
         started_at: now,
         finished_at: pending ? null : now,
@@ -92,6 +94,63 @@ test('backfill dry-run scales to 10000 literature records without triggering pro
   assert.equal(response.estimate.stage_counts.CITATION_NORMALIZED, 10000);
   assert.equal(response.estimate.stage_counts.ABSTRACT_READY, 10000);
   assert.equal(fakeFlow.calls.length, 0);
+});
+
+test('backfill dry-run estimates zero key-content provider calls for curated method', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const fakeFlow = new FakeFlowRunner();
+  const service = new LiteratureBackfillService(repository, fakeFlow as unknown as LiteratureFlowService, {
+    resolvePreferredKeyContentMethod: async () => 'codex_curated',
+  });
+  await seedLiterature(repository, 'LIT-BACKFILL-CODEX-METHOD');
+
+  const response = await service.dryRun({
+    target_stage: 'INDEXED',
+    workset: {
+      literature_ids: ['LIT-BACKFILL-CODEX-METHOD'],
+      stage_filters: {
+        missing: true,
+        stale: true,
+        failed: true,
+      },
+    },
+  });
+
+  assert.equal(response.estimate.planned_item_count, 1);
+  assert.equal(response.estimate.stage_counts.KEY_CONTENT_READY, 1);
+  assert.equal(response.estimate.estimated_provider_calls.extraction_calls, 0);
+  assert.equal(response.estimate.estimated_provider_calls.embedding_calls, 1);
+  assert.equal(response.estimate.curation_required_count, 1);
+  assert.equal(response.estimate.plan_items[0]?.key_content_curation_status, 'CURATION_REQUIRED');
+});
+
+test('backfill job marks curated KEY_CONTENT_READY blockers as waiting for dossier', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const fakeFlow = new FakeFlowRunner({
+    failStage: 'KEY_CONTENT_READY',
+    failCode: 'KEY_CONTENT_CURATION_REQUIRED',
+    failMessage: 'Import a curated key-content dossier before continuing.',
+  });
+  const service = new LiteratureBackfillService(repository, fakeFlow as unknown as LiteratureFlowService, {
+    pollIntervalMs: 1,
+    resolvePreferredKeyContentMethod: async () => 'codex_curated',
+  });
+  await seedLiterature(repository, 'LIT-BACKFILL-CURATION-REQUIRED');
+
+  const created = await service.createJob({
+    target_stage: 'KEY_CONTENT_READY',
+    workset: {
+      literature_ids: ['LIT-BACKFILL-CURATION-REQUIRED'],
+    },
+  });
+  const blocked = await waitForJobTerminal(service, created.job.job_id);
+
+  assert.equal(blocked.status, 'PARTIAL');
+  assert.equal(blocked.items?.[0]?.status, 'BLOCKED');
+  assert.equal(blocked.items?.[0]?.error_code, 'KEY_CONTENT_CURATION_REQUIRED');
+  assert.equal(blocked.items?.[0]?.retryable, true);
+  assert.equal(blocked.items?.[0]?.key_content_curation_status, 'WAITING_FOR_DOSSIER');
+  assert.equal(typeof blocked.items?.[0]?.checkpoint.curation_bundle_route, 'string');
 });
 
 test('backfill job fans out through BACKFILL single-stage runs and checkpoints items', async () => {

@@ -51,6 +51,23 @@ export const LITERATURE_CONTENT_PROCESSING_TRIGGER_SOURCES = [
 ] as const;
 export type LiteratureContentProcessingTriggerSource = (typeof LITERATURE_CONTENT_PROCESSING_TRIGGER_SOURCES)[number];
 
+export const LITERATURE_KEY_CONTENT_READY_METHODS = [
+  'llm_gateway',
+  'codex_curated',
+  'manual_curated',
+] as const;
+export type LiteratureKeyContentReadyMethod = (typeof LITERATURE_KEY_CONTENT_READY_METHODS)[number];
+
+export const LITERATURE_KEY_CONTENT_BACKFILL_CURATION_STATUSES = [
+  'NOT_APPLICABLE',
+  'CURATION_REQUIRED',
+  'WAITING_FOR_DOSSIER',
+  'READY_TO_IMPORT',
+  'IMPORT_FAILED',
+] as const;
+export type LiteratureKeyContentBackfillCurationStatus =
+  (typeof LITERATURE_KEY_CONTENT_BACKFILL_CURATION_STATUSES)[number];
+
 export const LITERATURE_CONTENT_PROCESSING_BATCH_JOB_STATUSES = [
   'PLANNED',
   'QUEUED',
@@ -88,6 +105,7 @@ export const LITERATURE_FULLTEXT_ACQUISITION_SOURCE_KINDS = [
   'unpaywall',
 ] as const;
 export type LiteratureFulltextAcquisitionSourceKind = (typeof LITERATURE_FULLTEXT_ACQUISITION_SOURCE_KINDS)[number];
+export type LiteratureFulltextAcquisitionHealthSourceKind = LiteratureFulltextAcquisitionSourceKind | 'download';
 
 export const LITERATURE_CONTENT_PROCESSING_DEDUP_STATUSES = ['unique', 'duplicate', 'unknown'] as const;
 export type LiteratureContentProcessingDedupStatus = (typeof LITERATURE_CONTENT_PROCESSING_DEDUP_STATUSES)[number];
@@ -133,7 +151,7 @@ export const LITERATURE_CONTENT_ASSET_STATUSES = [
 ] as const;
 export type LiteratureContentAssetStatus = (typeof LITERATURE_CONTENT_ASSET_STATUSES)[number];
 
-export const LITERATURE_CONTENT_PROCESSING_PROVIDER_IDS = ['openai'] as const;
+export const LITERATURE_CONTENT_PROCESSING_PROVIDER_IDS = ['openai', 'dashscope'] as const;
 export type LiteratureContentProcessingProviderId = (typeof LITERATURE_CONTENT_PROCESSING_PROVIDER_IDS)[number];
 
 export const LITERATURE_EMBEDDING_PROFILE_IDS = ['default', 'economy'] as const;
@@ -150,6 +168,59 @@ export const LITERATURE_RETRIEVE_PROFILE_IDS = [
 ] as const;
 export type LiteratureRetrieveProfileId = (typeof LITERATURE_RETRIEVE_PROFILE_IDS)[number];
 
+export const LITERATURE_CLUSTER_TYPES = ['same_work', 'version_family', 'related_topic'] as const;
+export type LiteratureClusterType = (typeof LITERATURE_CLUSTER_TYPES)[number];
+
+export const LITERATURE_CLUSTER_STATUSES = ['candidate', 'confirmed', 'rejected', 'split'] as const;
+export type LiteratureClusterStatus = (typeof LITERATURE_CLUSTER_STATUSES)[number];
+
+export const LITERATURE_CLUSTER_REVIEW_OUTCOMES = [
+  'pending_review',
+  'same_work_confirmed',
+  'version_family_confirmed',
+  'related_topic_confirmed',
+  'rejected',
+  'split',
+] as const;
+export type LiteratureClusterReviewOutcome = (typeof LITERATURE_CLUSTER_REVIEW_OUTCOMES)[number];
+
+export const LITERATURE_CLUSTER_CONSUMPTION_SCOPES = [
+  'none',
+  'retrieval_dedup',
+  'related_topic_reference',
+] as const;
+export type LiteratureClusterConsumptionScope = (typeof LITERATURE_CLUSTER_CONSUMPTION_SCOPES)[number];
+
+export const LITERATURE_CLUSTER_MEMBER_ROLES = ['representative', 'variant', 'related'] as const;
+export type LiteratureClusterMemberRole = (typeof LITERATURE_CLUSTER_MEMBER_ROLES)[number];
+
+export const LITERATURE_CLUSTER_MEMBER_DECISION_STATUSES = ['pending', 'accepted', 'rejected'] as const;
+export type LiteratureClusterMemberDecisionStatus = (typeof LITERATURE_CLUSTER_MEMBER_DECISION_STATUSES)[number];
+
+export const LITERATURE_CLUSTER_RELATION_TYPES = [
+  'same_pdf',
+  'same_normalized_text',
+  'same_work',
+  'preprint_of',
+  'published_version_of',
+  'near_duplicate',
+  'related_method',
+] as const;
+export type LiteratureClusterRelationType = (typeof LITERATURE_CLUSTER_RELATION_TYPES)[number];
+
+export const LITERATURE_CLUSTER_EVIDENCE_SIGNAL_TYPES = [
+  'doi',
+  'arxiv_id',
+  'title_author_year',
+  'pdf_sha256',
+  'text_fingerprint',
+  'title_similarity',
+  'author_overlap',
+  'abstract_similarity',
+  'embedding_similarity',
+] as const;
+export type LiteratureClusterEvidenceSignalType = (typeof LITERATURE_CLUSTER_EVIDENCE_SIGNAL_TYPES)[number];
+
 export const LITERATURE_KEY_CONTENT_READINESS_STATUSES = ['READY', 'PARTIAL_READY', 'FAILED'] as const;
 export type LiteratureKeyContentReadinessStatus = (typeof LITERATURE_KEY_CONTENT_READINESS_STATUSES)[number];
 
@@ -158,6 +229,30 @@ export type LiteratureKeyContentEvidenceStrength = (typeof LITERATURE_KEY_CONTEN
 
 export const LITERATURE_KEY_CONTENT_SOURCE_REF_TYPES = ['abstract', 'section', 'paragraph', 'anchor', 'manual'] as const;
 export type LiteratureKeyContentSourceRefType = (typeof LITERATURE_KEY_CONTENT_SOURCE_REF_TYPES)[number];
+
+export const LITERATURE_KEY_CONTENT_CATEGORY_KEYS = [
+  'research_problem',
+  'contributions',
+  'method',
+  'datasets_and_benchmarks',
+  'experiments',
+  'key_findings',
+  'limitations',
+  'reproducibility',
+  'related_work_positioning',
+  'evidence_candidates',
+  'figure_insights',
+  'table_insights',
+  'claim_evidence_map',
+  'automation_signals',
+] as const;
+export type LiteratureKeyContentCategoryKey = (typeof LITERATURE_KEY_CONTENT_CATEGORY_KEYS)[number];
+
+export const LITERATURE_KEY_CONTENT_CURATION_SOURCES = ['codex_curated', 'manual_curated'] as const;
+export type LiteratureKeyContentCurationSource = (typeof LITERATURE_KEY_CONTENT_CURATION_SOURCES)[number];
+
+export const LITERATURE_KEY_CONTENT_ITEM_PROVENANCES = ['model_generated', 'user_edited'] as const;
+export type LiteratureKeyContentItemProvenance = (typeof LITERATURE_KEY_CONTENT_ITEM_PROVENANCES)[number];
 
 export interface LiteratureKeyContentSourceRef {
   ref_type: LiteratureKeyContentSourceRefType;
@@ -180,7 +275,7 @@ export interface LiteratureKeyContentItem {
   confidence: number;
   evidence_strength: LiteratureKeyContentEvidenceStrength;
   notes: string | null;
-  provenance: 'model_generated' | 'user_edited';
+  provenance: LiteratureKeyContentItemProvenance;
 }
 
 export interface LiteratureKeyContentDossierPayload {
@@ -216,6 +311,98 @@ export interface LiteratureKeyContentDossierPayload {
   generated_at: string;
 }
 
+export interface LiteratureKeyContentCurationBundleResponse {
+  literature_id: string;
+  title: string;
+  authors: string[];
+  year: number | null;
+  abstract: string | null;
+  abstract_profile: {
+    id: string;
+    checksum: string | null;
+    confidence: number;
+    generated: boolean;
+  } | null;
+  document: {
+    id: string;
+    source_asset_id: string;
+    normalized_text_checksum: string;
+    parser_name: string;
+    parser_version: string;
+    status: string;
+    diagnostics: Array<Record<string, unknown>>;
+  };
+  sections: Array<{
+    section_id: string;
+    title: string;
+    level: number;
+    order_index: number;
+    start_offset: number;
+    end_offset: number;
+    page_start: number | null;
+    page_end: number | null;
+    checksum: string;
+  }>;
+  paragraphs: Array<{
+    paragraph_id: string;
+    section_id: string;
+    order_index: number;
+    text: string;
+    start_offset: number;
+    end_offset: number;
+    page_number: number | null;
+    checksum: string;
+    confidence: number;
+  }>;
+  anchors: Array<{
+    anchor_id: string;
+    anchor_type: string;
+    label: string | null;
+    text: string | null;
+    page_number: number | null;
+    bbox: Record<string, unknown> | null;
+    target_refs: Record<string, unknown>[];
+    checksum: string | null;
+  }>;
+  source_refs: Array<Record<string, unknown>>;
+  export_policy: {
+    accepted_curation_sources: LiteratureKeyContentCurationSource[];
+    required_schema_version: 'key_content.v1';
+    required_extraction_profile: 'paper_semantic_dossier.v1';
+    require_resolvable_source_refs: true;
+  };
+}
+
+export interface ImportLiteratureKeyContentDossierRequest {
+  curation_source: LiteratureKeyContentCurationSource;
+  curator?: string;
+  dossier: LiteratureKeyContentDossierPayload;
+}
+
+export interface ImportLiteratureKeyContentDossierResponse {
+  literature_id: string;
+  artifact_id: string;
+  readiness_status: Extract<LiteratureKeyContentReadinessStatus, 'READY' | 'PARTIAL_READY'>;
+  checksum: string;
+  display_digest: string;
+  source: LiteratureKeyContentCurationSource;
+  diagnostics: Array<Record<string, unknown>>;
+  state: LiteratureContentProcessingStateDTO;
+}
+
+export interface DryRunImportLiteratureKeyContentDossierResponse {
+  literature_id: string;
+  valid: boolean;
+  readiness_status: LiteratureKeyContentReadinessStatus;
+  checksum: string | null;
+  display_digest: string;
+  source: LiteratureKeyContentCurationSource;
+  issues: string[];
+  diagnostics: Array<Record<string, unknown>>;
+  repaired_source_ref_count: number;
+  would_mark_downstream_stale: boolean;
+}
+
 export interface LiteratureContentProcessingProviderSettingsDTO {
   provider: LiteratureContentProcessingProviderId;
   api_key_set: boolean;
@@ -243,6 +430,14 @@ export interface LiteratureExtractionProfileDTO {
 export interface LiteratureContentProcessingExtractionSettingsDTO {
   active_profile_id: LiteratureExtractionProfileId;
   profiles: LiteratureExtractionProfileDTO[];
+  runtime: {
+    preferred_key_content_method: LiteratureKeyContentReadyMethod;
+    section_concurrency: number;
+    request_timeout_ms: number;
+    max_retries: number;
+    prompt_profile_id: string;
+    diagnostic_policy: string;
+  };
 }
 
 export interface LiteratureContentProcessingStorageRootsDTO {
@@ -338,6 +533,14 @@ export interface UpdateLiteratureContentProcessingSettingsRequest {
       provider: LiteratureContentProcessingProviderId;
       model: string;
     }>;
+    runtime?: {
+      preferred_key_content_method?: LiteratureKeyContentReadyMethod;
+      section_concurrency?: number;
+      request_timeout_ms?: number;
+      max_retries?: number;
+      prompt_profile_id?: string;
+      diagnostic_policy?: string;
+    };
   };
   storage_roots?: Partial<LiteratureContentProcessingStorageRootsDTO>;
   fulltext_parser?: Partial<LiteratureFulltextParserSettingsDTO>;
@@ -399,6 +602,7 @@ export interface LiteratureCollectionImportRequest {
 
 export interface LiteratureCollectionImportResult {
   literature_id: string;
+  canonical_work_key: string;
   is_new: boolean;
   matched_by: DedupMatchType;
   title: string;
@@ -648,6 +852,7 @@ export interface LiteratureContentProcessingBackfillPlanItemDTO {
   blocked: boolean;
   blocker_code: string | null;
   retryable: boolean;
+  key_content_curation_status: LiteratureKeyContentBackfillCurationStatus | null;
 }
 
 export interface LiteratureContentProcessingBackfillDryRunEstimateDTO {
@@ -663,6 +868,7 @@ export interface LiteratureContentProcessingBackfillDryRunEstimateDTO {
   planned_item_count: number;
   skipped_ready_count: number;
   blocked_count: number;
+  curation_required_count: number;
   stage_counts: Record<LiteratureContentProcessingStageCode, number>;
   rights_class_counts: Array<{ rights_class: RightsClass; count: number }>;
   estimated_provider_calls: {
@@ -692,6 +898,7 @@ export interface LiteratureContentProcessingBatchItemDTO {
   error_message: string | null;
   blocker_code: string | null;
   retryable: boolean;
+  key_content_curation_status: LiteratureKeyContentBackfillCurationStatus | null;
   checkpoint: Record<string, unknown>;
   created_at: string;
   started_at: string | null;
@@ -878,6 +1085,26 @@ export interface LiteratureFulltextAcquisitionItemDTO {
   updated_at: string;
 }
 
+export interface LiteratureFulltextAcquisitionSourceHealthDTO {
+  source_kind: LiteratureFulltextAcquisitionHealthSourceKind;
+  runtime_source: string;
+  planned_count: number;
+  succeeded_count: number;
+  failed_count: number;
+  blocked_count: number;
+  retryable_failure_count: number;
+  non_retryable_failure_count: number;
+  error_counts_by_code: Record<string, number>;
+  runtime_status: string | null;
+  cooldown_until: string | null;
+  failure_count: number;
+  last_error_code: string | null;
+  last_error_message: string | null;
+  last_request_at: string | null;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+}
+
 export interface LiteratureFulltextAcquisitionJobDTO {
   job_id: string;
   status: LiteratureFulltextAcquisitionJobStatus;
@@ -906,6 +1133,7 @@ export interface LiteratureFulltextAcquisitionJobDTO {
   canceled_at: string | null;
   finished_at: string | null;
   updated_at: string;
+  source_health: LiteratureFulltextAcquisitionSourceHealthDTO[];
   items?: LiteratureFulltextAcquisitionItemDTO[];
 }
 
@@ -927,6 +1155,7 @@ export interface ListLiteratureFulltextAcquisitionJobsResponse {
 
 export interface LiteratureOverviewItem {
   literature_id: string;
+  canonical_work_key: string;
   title: string;
   authors: string[];
   year: number | null;
@@ -990,6 +1219,7 @@ export interface UpdateLiteratureMetadataRequest {
 
 export interface UpdateLiteratureMetadataResponse {
   literature_id: string;
+  canonical_work_key: string;
   title: string;
   abstract: string | null;
   key_content_digest: string | null;
@@ -1052,6 +1282,7 @@ export interface ListLiteratureContentAssetsResponse {
 
 export interface GetLiteratureMetadataResponse {
   literature_id: string;
+  canonical_work_key: string;
   title: string;
   abstract: string | null;
   key_content_digest: string | null;
@@ -1084,11 +1315,19 @@ export interface LiteratureRetrieveEvidenceChunk {
     lexical: number;
     metadata: number;
     profile_boost: number;
+    weighted_vector?: number;
+    weighted_lexical?: number;
+    weighted_metadata?: number;
+    matched_tokens?: string[];
+    missing_tokens?: string[];
+    exact_phrases?: string[];
+    metadata_matched_tokens?: string[];
   };
 }
 
 export interface LiteratureRetrieveHit {
   literature_id: string;
+  canonical_work_key: string;
   title: string;
   embedding_version_id: string;
   retrieval_profile: LiteratureRetrieveProfileId;
@@ -1098,6 +1337,24 @@ export interface LiteratureRetrieveHit {
   vector_score: number;
   lexical_score: number;
   evidence_chunks: LiteratureRetrieveEvidenceChunk[];
+}
+
+export interface LiteratureLlmCallTelemetryDTO {
+  provider_id: string;
+  model_id: string;
+  profile_id: string | null;
+  prompt_template_id: string | null;
+  prompt_template_version: string | null;
+  elapsed_ms: number;
+  request_count: number;
+  retry_count: number;
+  timeout_count: number;
+  rate_limit_count: number;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  embedding_input_tokens: number | null;
+  total_tokens: number | null;
+  cost_usd: number | null;
 }
 
 export interface LiteratureRetrieveResponse {
@@ -1124,7 +1381,104 @@ export interface LiteratureRetrieveResponse {
       dimension: number;
       reason: string;
     }>;
+    query_embedding_telemetry: LiteratureLlmCallTelemetryDTO | null;
   };
+}
+
+export interface LiteratureClusterMemberDTO {
+  member_id: string;
+  cluster_id: string;
+  literature_id: string;
+  role: LiteratureClusterMemberRole;
+  relation_type: LiteratureClusterRelationType;
+  confidence: number;
+  decision_status: LiteratureClusterMemberDecisionStatus;
+  title: string | null;
+  canonical_work_key: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LiteratureClusterEvidenceDTO {
+  evidence_id: string;
+  cluster_id: string;
+  literature_id_a: string;
+  literature_id_b: string;
+  signal_type: LiteratureClusterEvidenceSignalType;
+  score: number;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface LiteratureClusterReviewDTO {
+  outcome: LiteratureClusterReviewOutcome;
+  consumption_scope: LiteratureClusterConsumptionScope;
+  retrieval_dedup_active: boolean;
+  review_required: boolean;
+  accepted_member_count: number;
+  rejected_member_count: number;
+  pending_member_count: number;
+  blocking_reasons: string[];
+}
+
+export interface LiteratureClusterDTO {
+  cluster_id: string;
+  cluster_type: LiteratureClusterType;
+  status: LiteratureClusterStatus;
+  representative_literature_id: string | null;
+  confidence: number;
+  method: string;
+  created_at: string;
+  updated_at: string;
+  review: LiteratureClusterReviewDTO;
+  members: LiteratureClusterMemberDTO[];
+  evidence: LiteratureClusterEvidenceDTO[];
+}
+
+export interface LiteratureClusterCandidateGenerationRequest {
+  cluster_types?: LiteratureClusterType[];
+  min_confidence?: number;
+  include_existing?: boolean;
+}
+
+export interface LiteratureClusterCandidateGenerationResponse {
+  generated_count: number;
+  clusters: LiteratureClusterDTO[];
+  summary: {
+    same_pdf_count: number;
+    same_normalized_text_count: number;
+    title_author_year_count: number;
+    fuzzy_near_duplicate_count: number;
+    embedding_similarity_count: number;
+  };
+}
+
+export interface ListLiteratureClustersQuery {
+  status?: LiteratureClusterStatus;
+  cluster_type?: LiteratureClusterType;
+  literature_id?: string;
+  limit?: number;
+}
+
+export interface ListLiteratureClustersResponse {
+  items: LiteratureClusterDTO[];
+}
+
+export interface LiteratureClusterMemberDecisionPatch {
+  literature_id: string;
+  decision_status?: LiteratureClusterMemberDecisionStatus;
+  role?: LiteratureClusterMemberRole;
+}
+
+export interface UpdateLiteratureClusterRequest {
+  status?: LiteratureClusterStatus;
+  review_outcome?: LiteratureClusterReviewOutcome;
+  representative_literature_id?: string | null;
+  member_decisions?: LiteratureClusterMemberDecisionPatch[];
+}
+
+export interface UpdateLiteratureClusterResponse {
+  item: LiteratureClusterDTO;
 }
 
 export const literatureCollectionImportRequestSchema = {
@@ -1212,6 +1566,155 @@ export const literatureRetrieveRequestSchema = {
   additionalProperties: false,
 } as const;
 
+export const literatureClusterCandidateGenerationRequestSchema = {
+  type: 'object',
+  properties: {
+    cluster_types: {
+      type: 'array',
+      items: { type: 'string', enum: LITERATURE_CLUSTER_TYPES },
+      minItems: 1,
+    },
+    min_confidence: { type: 'number', minimum: 0, maximum: 1 },
+    include_existing: { type: 'boolean', default: true },
+  },
+  additionalProperties: false,
+} as const;
+
+export const listLiteratureClustersQuerySchema = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: LITERATURE_CLUSTER_STATUSES },
+    cluster_type: { type: 'string', enum: LITERATURE_CLUSTER_TYPES },
+    literature_id: { type: 'string', minLength: 1 },
+    limit: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
+  },
+  additionalProperties: false,
+} as const;
+
+export const updateLiteratureClusterRequestSchema = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: LITERATURE_CLUSTER_STATUSES },
+    review_outcome: { type: 'string', enum: LITERATURE_CLUSTER_REVIEW_OUTCOMES },
+    representative_literature_id: {
+      anyOf: [{ type: 'string', minLength: 1 }, { type: 'null' }],
+    },
+    member_decisions: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'object',
+        required: ['literature_id'],
+        properties: {
+          literature_id: { type: 'string', minLength: 1 },
+          decision_status: { type: 'string', enum: LITERATURE_CLUSTER_MEMBER_DECISION_STATUSES },
+          role: { type: 'string', enum: LITERATURE_CLUSTER_MEMBER_ROLES },
+        },
+        additionalProperties: false,
+        anyOf: [{ required: ['decision_status'] }, { required: ['role'] }],
+      },
+    },
+  },
+  additionalProperties: false,
+  anyOf: [
+    { required: ['status'] },
+    { required: ['review_outcome'] },
+    { required: ['representative_literature_id'] },
+    { required: ['member_decisions'] },
+  ],
+} as const;
+
+const literatureKeyContentSourceRefSchema = {
+  type: 'object',
+  required: ['ref_type', 'ref_id'],
+  properties: {
+    ref_type: { type: 'string', enum: LITERATURE_KEY_CONTENT_SOURCE_REF_TYPES },
+    ref_id: { type: 'string', minLength: 1 },
+    document_id: { type: 'string' },
+    section_id: { type: 'string' },
+    paragraph_id: { type: 'string' },
+    anchor_id: { type: 'string' },
+    checksum: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+    start_offset: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }] },
+    end_offset: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }] },
+  },
+  additionalProperties: false,
+} as const;
+
+const literatureKeyContentItemSchema = {
+  type: 'object',
+  required: ['id', 'type', 'statement', 'details', 'source_refs', 'confidence', 'evidence_strength', 'notes', 'provenance'],
+  properties: {
+    id: { type: 'string', minLength: 1 },
+    type: { type: 'string', minLength: 1 },
+    statement: { type: 'string', minLength: 1 },
+    details: { type: 'string' },
+    source_refs: {
+      type: 'array',
+      minItems: 1,
+      items: literatureKeyContentSourceRefSchema,
+    },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    evidence_strength: { type: 'string', enum: LITERATURE_KEY_CONTENT_EVIDENCE_STRENGTHS },
+    notes: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+    provenance: { type: 'string', enum: LITERATURE_KEY_CONTENT_ITEM_PROVENANCES },
+  },
+  additionalProperties: false,
+} as const;
+
+export const literatureKeyContentDossierPayloadSchema = {
+  type: 'object',
+  required: ['schema_version', 'extraction_profile', 'readiness_status', 'input_refs', 'categories', 'quality_report', 'display_digest', 'generated_at'],
+  properties: {
+    schema_version: { type: 'string', enum: ['key_content.v1'] },
+    extraction_profile: { type: 'string', enum: ['paper_semantic_dossier.v1'] },
+    readiness_status: { type: 'string', enum: LITERATURE_KEY_CONTENT_READINESS_STATUSES },
+    input_refs: { type: 'object', additionalProperties: true },
+    categories: {
+      type: 'object',
+      required: [...LITERATURE_KEY_CONTENT_CATEGORY_KEYS],
+      properties: Object.fromEntries(LITERATURE_KEY_CONTENT_CATEGORY_KEYS.map((category) => [
+        category,
+        {
+          type: 'array',
+          items: literatureKeyContentItemSchema,
+        },
+      ])),
+      additionalProperties: false,
+    },
+    quality_report: {
+      type: 'object',
+      required: ['completeness_score', 'confidence', 'blockers', 'warnings', 'conflicts', 'extraction_diagnostics'],
+      properties: {
+        completeness_score: { type: 'number', minimum: 0, maximum: 1 },
+        confidence: { type: 'number', minimum: 0, maximum: 1 },
+        blockers: { type: 'array', items: { type: 'string' } },
+        warnings: { type: 'array', items: { type: 'string' } },
+        conflicts: { type: 'array', items: { type: 'string' } },
+        extraction_diagnostics: {
+          type: 'array',
+          items: { type: 'object', additionalProperties: true },
+        },
+      },
+      additionalProperties: false,
+    },
+    display_digest: { type: 'string' },
+    generated_at: { type: 'string', minLength: 1 },
+  },
+  additionalProperties: false,
+} as const;
+
+export const importLiteratureKeyContentDossierRequestSchema = {
+  type: 'object',
+  required: ['curation_source', 'dossier'],
+  properties: {
+    curation_source: { type: 'string', enum: LITERATURE_KEY_CONTENT_CURATION_SOURCES },
+    curator: { type: 'string', minLength: 1 },
+    dossier: literatureKeyContentDossierPayloadSchema,
+  },
+  additionalProperties: false,
+} as const;
+
 const literatureEmbeddingProfileSchema = {
   type: 'object',
   required: ['profile_id', 'provider', 'model'],
@@ -1231,6 +1734,19 @@ const literatureExtractionProfileSchema = {
     profile_id: { type: 'string', enum: LITERATURE_EXTRACTION_PROFILE_IDS },
     provider: { type: 'string', enum: LITERATURE_CONTENT_PROCESSING_PROVIDER_IDS },
     model: { type: 'string', minLength: 1 },
+  },
+  additionalProperties: false,
+} as const;
+
+const literatureExtractionRuntimeSettingsSchema = {
+  type: 'object',
+  properties: {
+    preferred_key_content_method: { type: 'string', enum: LITERATURE_KEY_CONTENT_READY_METHODS },
+    section_concurrency: { type: 'integer', minimum: 1, maximum: 8 },
+    request_timeout_ms: { type: 'integer', minimum: 1_000, maximum: 300_000 },
+    max_retries: { type: 'integer', minimum: 0, maximum: 3 },
+    prompt_profile_id: { type: 'string', minLength: 1 },
+    diagnostic_policy: { type: 'string', minLength: 1 },
   },
   additionalProperties: false,
 } as const;
@@ -1294,6 +1810,7 @@ export const updateLiteratureContentProcessingSettingsRequestSchema = {
           minItems: 1,
           items: literatureExtractionProfileSchema,
         },
+        runtime: literatureExtractionRuntimeSettingsSchema,
       },
       additionalProperties: false,
     },

@@ -17,6 +17,7 @@ import type {
 import type { LiteratureContentProcessingSettingsService } from '../literature-content-processing-settings-service.js';
 import { sha256Text } from '../literature-content-processing-utils.js';
 import { LiteratureKeyContentExtractionService } from '../literature-key-content-extraction-service.js';
+import { BackendLlmGateway, type LlmCallTelemetry } from '../llm-gateway.js';
 import { LiteratureContentProcessingFileStore } from './literature-content-processing-file-store.js';
 import { LiteratureGrobidFulltextParser, type GrobidFulltextParseResult } from './literature-grobid-fulltext-parser.js';
 
@@ -42,6 +43,7 @@ type EmbeddingArtifactResult =
   | {
       ready: true;
       artifact: LiteraturePipelineArtifactRecord;
+      reusedExisting: boolean;
     }
   | {
       ready: false;
@@ -85,9 +87,14 @@ export class LiteratureFlowArtifactRuntime {
     private readonly options: {
       refreshPipelineState: (literatureId: string) => Promise<LiteraturePipelineStateRecord>;
       settingsService?: LiteratureContentProcessingSettingsService;
+      llmGateway?: BackendLlmGateway;
     },
   ) {
-    this.keyContentExtractionService = new LiteratureKeyContentExtractionService(repository, options.settingsService);
+    this.keyContentExtractionService = new LiteratureKeyContentExtractionService(
+      repository,
+      options.settingsService,
+      options.llmGateway,
+    );
     this.fileStore = new LiteratureContentProcessingFileStore(options.settingsService);
     this.grobidParser = new LiteratureGrobidFulltextParser(options.settingsService);
   }
@@ -100,7 +107,7 @@ export class LiteratureFlowArtifactRuntime {
     displayDigest: string;
     diagnostics: Record<string, unknown>[];
     generated: true;
-    source: 'openai_structured_output';
+    source: 'llm_gateway_structured_output';
   } | {
     keyContentReady: false;
     reasonCode: string;
@@ -148,7 +155,7 @@ export class LiteratureFlowArtifactRuntime {
       displayDigest: extraction.displayDigest,
       diagnostics: extraction.diagnostics,
       generated: true,
-      source: 'openai_structured_output',
+      source: 'llm_gateway_structured_output',
     };
   }
 
@@ -482,6 +489,15 @@ export class LiteratureFlowArtifactRuntime {
       };
     }
 
+    const reusableArtifact = await this.findReusableEmbeddingArtifact(literatureId, chunkArtifact, chunks);
+    if (reusableArtifact) {
+      return {
+        ready: true,
+        artifact: reusableArtifact,
+        reusedExisting: true,
+      };
+    }
+
     const embedded = await this.embedChunks(chunks);
     if (!embedded.ready) {
       return embedded;
@@ -497,10 +513,18 @@ export class LiteratureFlowArtifactRuntime {
         model: embedded.model,
         dimension: embedded.dimension,
         vectors: embedded.vectors,
+        telemetry: this.toLlmTelemetryRecord(embedded.telemetry),
+        reused_existing: false,
+        source_artifacts: {
+          chunk_artifact_id: chunkArtifact.id,
+          chunk_artifact_checksum: chunkArtifact.checksum,
+          chunk_count: chunks.length,
+          chunk_content_checksums: chunks.map((chunk) => chunk.content_checksum),
+        },
       },
       checksum: this.sha256(JSON.stringify(embedded.vectors)),
     });
-    return { ready: true, artifact };
+    return { ready: true, artifact, reusedExisting: false };
   }
 
   async ensureIndexed(
@@ -547,6 +571,48 @@ export class LiteratureFlowArtifactRuntime {
     });
   }
 
+  private async findReusableEmbeddingArtifact(
+    literatureId: string,
+    chunkArtifact: LiteraturePipelineArtifactRecord,
+    chunks: ChunkRecord[],
+  ): Promise<LiteraturePipelineArtifactRecord | null> {
+    const existing = await this.repository.findPipelineArtifact(literatureId, 'EMBEDDED', 'EMBEDDINGS');
+    if (!existing || existing.checksum === null) {
+      return null;
+    }
+    const sourceArtifacts = this.readRecord(existing.payload.source_artifacts);
+    if (!sourceArtifacts || sourceArtifacts.chunk_artifact_checksum !== chunkArtifact.checksum) {
+      return null;
+    }
+
+    const profile = await this.options.settingsService?.resolveActiveEmbeddingProfile();
+    const expectedProfileId = profile?.profileId ?? 'default';
+    const expectedProvider = profile?.provider ?? 'openai';
+    const expectedModel = profile?.model ?? 'text-embedding-3-large';
+    const expectedDimension = profile?.dimensions ?? null;
+    if (
+      existing.payload.profile_id !== expectedProfileId
+      || existing.payload.provider !== expectedProvider
+      || existing.payload.model !== expectedModel
+    ) {
+      return null;
+    }
+
+    const vectors = this.readEmbeddings(existing);
+    if (vectors.length !== chunks.length) {
+      return null;
+    }
+    const chunkIdSet = new Set(chunks.map((chunk) => chunk.chunk_id));
+    if (!vectors.every((vector) => chunkIdSet.has(vector.chunk_id) && vector.vector.length > 0)) {
+      return null;
+    }
+    const dimension = vectors[0]?.vector.length ?? 0;
+    if (expectedDimension !== null && dimension !== expectedDimension) {
+      return null;
+    }
+    return existing;
+  }
+
   async persistEmbeddingVersionSnapshot(input: {
     literatureId: string;
     chunkArtifact: LiteraturePipelineArtifactRecord;
@@ -571,6 +637,18 @@ export class LiteratureFlowArtifactRuntime {
       ? input.embeddedArtifact.payload.profile_id
       : null;
     const dimension = vectors[0]?.vector.length ?? 0;
+    const existingMatchingVersion = await this.findExistingEmbeddingVersionForArtifacts({
+      literatureId: input.literatureId,
+      provider,
+      model,
+      profileId,
+      dimension,
+      chunkArtifactChecksum: input.chunkArtifact.checksum,
+      embeddingArtifactChecksum: input.embeddedArtifact.checksum,
+    });
+    if (existingMatchingVersion) {
+      return existingMatchingVersion;
+    }
 
     const version = await this.repository.createEmbeddingVersion({
       id: crypto.randomUUID(),
@@ -614,6 +692,29 @@ export class LiteratureFlowArtifactRuntime {
     await this.repository.createEmbeddingChunks(embeddingChunks);
 
     return version;
+  }
+
+  private async findExistingEmbeddingVersionForArtifacts(input: {
+    literatureId: string;
+    provider: string;
+    model: string;
+    profileId: string | null;
+    dimension: number;
+    chunkArtifactChecksum: string | null;
+    embeddingArtifactChecksum: string | null;
+  }): Promise<LiteratureEmbeddingVersionRecord | null> {
+    const versions = await this.repository.listEmbeddingVersionsByLiteratureIds([input.literatureId]);
+    return versions
+      .filter((version) =>
+        ['READY', 'INDEXED'].includes(version.status)
+        && version.provider === input.provider
+        && version.model === input.model
+        && version.profileId === input.profileId
+        && version.dimension === input.dimension
+        && version.chunkArtifactChecksum === input.chunkArtifactChecksum
+        && version.embeddingArtifactChecksum === input.embeddingArtifactChecksum,
+      )
+      .sort((left, right) => right.versionNo - left.versionNo)[0] ?? null;
   }
 
   async activateLatestReadyEmbeddingVersion(input: {
@@ -1314,6 +1415,7 @@ export class LiteratureFlowArtifactRuntime {
     model: string;
     dimension: number;
     vectors: EmbeddingRecord[];
+    telemetry: LlmCallTelemetry;
   } | {
     ready: false;
     reasonCode: string;
@@ -1330,78 +1432,69 @@ export class LiteratureFlowArtifactRuntime {
       };
     }
 
-    const openAIVectors = await this.embedChunksViaOpenAI(chunks, openAIConfig);
+    const openAIVectors = await this.embedChunksViaGateway(chunks, openAIConfig);
     return {
       ready: true,
       provider: 'openai',
       profileId: openAIConfig.profileId,
       model: openAIConfig.model,
-      dimension: openAIVectors[0]?.vector.length ?? 0,
-      vectors: openAIVectors,
+      dimension: openAIVectors.vectors[0]?.vector.length ?? 0,
+      vectors: openAIVectors.vectors,
+      telemetry: openAIVectors.telemetry,
     };
   }
 
-  private async embedChunksViaOpenAI(
+  private async embedChunksViaGateway(
     chunks: ChunkRecord[],
-    config: { apiKey: string; model: string; dimensions: number | null },
-  ): Promise<EmbeddingRecord[]> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      Authorization: `Bearer ${config.apiKey}`,
-    };
-
-    const body: Record<string, unknown> = {
-      model: config.model,
+    config: { profileId?: string; model: string; dimensions: number | null },
+  ): Promise<{ vectors: EmbeddingRecord[]; telemetry: LlmCallTelemetry }> {
+    const response = await (this.options.llmGateway ?? new BackendLlmGateway({
+      settingsService: this.options.settingsService,
+    })).createEmbeddings({
+      executionContext: {
+        feature: 'literature_content_processing',
+        operation: 'embed_chunks',
+        metadata: {
+          chunk_count: chunks.length,
+        },
+      },
+      model: {
+        providerId: 'openai',
+        modelId: config.model,
+        profileId: config.profileId,
+      },
       input: chunks.map((chunk) => chunk.text),
-      encoding_format: 'float',
-    };
-    if (config.dimensions !== null) {
-      body.dimensions = config.dimensions;
-    }
-
-    const response = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
+      dimensions: config.dimensions,
     });
+    const rawVectors = response.vectors;
+    return {
+      vectors: chunks.map((chunk, index) => ({
+        chunk_id: chunk.chunk_id,
+        index: chunk.index,
+        vector: rawVectors[index]!,
+      })),
+      telemetry: response.telemetry,
+    };
+  }
 
-    if (!response.ok) {
-      throw new Error(`OpenAI embedding request failed: ${response.status}`);
-    }
-
-    const payload = (await response.json()) as Record<string, unknown>;
-
-    let rawVectors: number[][] = [];
-    if (Array.isArray(payload.vectors)) {
-      rawVectors = payload.vectors
-        .map((item) => (Array.isArray(item) ? item.map((value) => Number(value)).filter((v) => Number.isFinite(v)) : null))
-        .filter((item): item is number[] => Array.isArray(item));
-    } else if (Array.isArray(payload.data)) {
-      rawVectors = payload.data
-        .map((row) => {
-          if (!row || typeof row !== 'object') {
-            return null;
-          }
-          const embedding = (row as Record<string, unknown>).embedding;
-          if (!Array.isArray(embedding)) {
-            return null;
-          }
-          const vector = embedding.map((value) => Number(value)).filter((v) => Number.isFinite(v));
-          return vector.length > 0 ? vector : null;
-        })
-        .filter((item): item is number[] => item !== null);
-    }
-
-    if (rawVectors.length !== chunks.length || rawVectors.some((vector) => vector.length === 0)) {
-      throw new Error('OpenAI embedding response shape mismatch.');
-    }
-
-    return chunks.map((chunk, index) => ({
-      chunk_id: chunk.chunk_id,
-      index: chunk.index,
-      vector: rawVectors[index]!,
-    }));
+  private toLlmTelemetryRecord(telemetry: LlmCallTelemetry): Record<string, unknown> {
+    return {
+      provider_id: telemetry.provider_id,
+      model_id: telemetry.model_id,
+      profile_id: telemetry.profile_id,
+      prompt_template_id: telemetry.prompt_template_id,
+      prompt_template_version: telemetry.prompt_template_version,
+      elapsed_ms: telemetry.elapsed_ms,
+      request_count: telemetry.request_count,
+      retry_count: telemetry.retry_count,
+      timeout_count: telemetry.timeout_count,
+      rate_limit_count: telemetry.rate_limit_count,
+      input_tokens: telemetry.input_tokens,
+      output_tokens: telemetry.output_tokens,
+      embedding_input_tokens: telemetry.embedding_input_tokens,
+      total_tokens: telemetry.total_tokens,
+      cost_usd: telemetry.cost_usd,
+    };
   }
 
   private tokenize(text: string): string[] {

@@ -64,6 +64,122 @@ test('import deduplicates by DOI across providers', async () => {
   assert.equal(runs.length, 0);
 });
 
+test('import merges source provenance and fills canonical identity keys conservatively', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const literatureService = new LiteratureService(
+    repository,
+    new InMemoryResearchLifecycleRepository(),
+  );
+
+  const first = await literatureService.collectionImport({
+    items: [
+      {
+        provider: 'crossref',
+        external_id: '10.1000/merge-source',
+        title: 'Canonical Merge Policy',
+        authors: ['Alice Example', 'Bob Example'],
+        year: 2025,
+        doi: '10.1000/merge-source',
+        source_url: 'https://doi.org/10.1000/merge-source',
+        tags: ['crossref'],
+      },
+    ],
+  });
+  const literatureId = first.results[0]?.literature_id;
+  assert.ok(literatureId);
+
+  const second = await literatureService.collectionImport({
+    items: [
+      {
+        provider: 'arxiv',
+        external_id: '2501.00001',
+        title: 'Canonical Merge Policy',
+        authors: ['Bob Example', 'Alice Example'],
+        year: 2025,
+        arxiv_id: 'https://arxiv.org/abs/2501.00001v2',
+        source_url: 'https://arxiv.org/abs/2501.00001',
+        rights_class: 'OA',
+        tags: ['arxiv'],
+      },
+    ],
+  });
+
+  assert.equal(second.results[0]?.is_new, false);
+  assert.equal(second.results[0]?.matched_by, 'title_authors_year');
+  assert.equal(second.results[0]?.literature_id, literatureId);
+  assert.equal(second.results[0]?.canonical_work_key, 'doi:10.1000/merge-source');
+
+  const merged = await repository.findLiteratureById(literatureId);
+  assert.ok(merged);
+  assert.equal(merged.doiNormalized, '10.1000/merge-source');
+  assert.equal(merged.arxivId, '2501.00001');
+  assert.equal(merged.rightsClass, 'OA');
+  assert.deepEqual(merged.tags.sort(), ['arxiv', 'crossref']);
+
+  const sources = await repository.listSourcesByLiteratureId(literatureId);
+  assert.deepEqual(sources.map((source) => source.provider).sort(), ['arxiv', 'crossref']);
+  assert.equal(sources.every((source) => source.rawPayload.canonical_work_key === 'doi:10.1000/merge-source'), true);
+});
+
+test('import refreshes title-author-year identity after DOI-only merge fills metadata', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const literatureService = new LiteratureService(
+    repository,
+    new InMemoryResearchLifecycleRepository(),
+  );
+
+  const first = await literatureService.collectionImport({
+    items: [
+      {
+        provider: 'manual',
+        external_id: 'doi-only-1',
+        title: 'Delayed Identity Metadata',
+        doi: '10.1000/delayed-identity',
+        source_url: 'https://example.com/delayed-identity',
+      },
+    ],
+  });
+  const literatureId = first.results[0]?.literature_id;
+  assert.ok(literatureId);
+
+  await literatureService.collectionImport({
+    items: [
+      {
+        provider: 'crossref',
+        external_id: '10.1000/delayed-identity',
+        title: 'Delayed Identity Metadata',
+        authors: ['Ada Lovelace'],
+        year: 2026,
+        doi: 'https://doi.org/10.1000/delayed-identity',
+        source_url: 'https://doi.org/10.1000/delayed-identity',
+      },
+    ],
+  });
+
+  const third = await literatureService.collectionImport({
+    items: [
+      {
+        provider: 'web',
+        external_id: 'delayed-identity-web',
+        title: 'Delayed Identity Metadata',
+        authors: ['Ada Lovelace'],
+        year: 2026,
+        source_url: 'https://example.com/delayed-identity-web',
+      },
+    ],
+  });
+
+  assert.equal(third.results[0]?.is_new, false);
+  assert.equal(third.results[0]?.matched_by, 'title_authors_year');
+  assert.equal(third.results[0]?.literature_id, literatureId);
+
+  const merged = await repository.findLiteratureById(literatureId);
+  assert.ok(merged);
+  assert.equal(merged.titleAuthorsYearHash !== null, true);
+  assert.deepEqual(merged.authors, ['Ada Lovelace']);
+  assert.equal(merged.year, 2026);
+});
+
 test('zotero collection import does not enqueue content-processing runs', async () => {
   const repository = new InMemoryLiteratureRepository();
   const literatureService = new LiteratureService(
@@ -501,6 +617,63 @@ test('content asset registration rejects mismatched checksum for readable local 
     }),
     /checksum does not match/,
   );
+});
+
+test('content asset registration records non-destructive checksum coalescing candidates', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const literatureService = new LiteratureService(repository, new InMemoryResearchLifecycleRepository());
+  const imported = await literatureService.collectionImport({
+    items: [
+      {
+        provider: 'manual',
+        external_id: 'asset-coalesce-1',
+        title: 'Asset Coalesce One',
+        authors: ['Ada Lovelace'],
+        year: 2025,
+        source_url: 'https://example.com/asset-coalesce-1',
+        rights_class: 'OA',
+      },
+      {
+        provider: 'manual',
+        external_id: 'asset-coalesce-2',
+        title: 'Asset Coalesce Two',
+        authors: ['Grace Hopper'],
+        year: 2025,
+        source_url: 'https://example.com/asset-coalesce-2',
+        rights_class: 'OA',
+      },
+    ],
+  });
+  const firstLiteratureId = imported.results[0]?.literature_id;
+  const secondLiteratureId = imported.results[1]?.literature_id;
+  assert.ok(firstLiteratureId);
+  assert.ok(secondLiteratureId);
+
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'pea-lit-service-coalesce-'));
+  tempDirs.add(dir);
+  const firstPath = path.join(dir, 'first.pdf');
+  const secondPath = path.join(dir, 'second.pdf');
+  const payload = '%PDF-1.4 identical coalescing payload';
+  await fs.writeFile(firstPath, payload, 'utf8');
+  await fs.writeFile(secondPath, payload, 'utf8');
+
+  const first = await literatureService.registerContentAsset(firstLiteratureId, {
+    local_path: firstPath,
+    mime_type: 'application/pdf',
+  });
+  const second = await literatureService.registerContentAsset(secondLiteratureId, {
+    local_path: secondPath,
+    mime_type: 'application/pdf',
+  });
+
+  assert.equal(first.item.metadata.storage_coalescing, undefined);
+  const coalescing = second.item.metadata.storage_coalescing as Record<string, unknown> | undefined;
+  assert.ok(coalescing);
+  assert.equal(coalescing.status, 'candidate');
+  assert.equal(coalescing.strategy, 'same_checksum_reuse_candidate_v1');
+  assert.equal(coalescing.canonical_asset_id, first.item.asset_id);
+  assert.equal(coalescing.canonical_literature_id, firstLiteratureId);
+  assert.equal(coalescing.destructive_cleanup_allowed, false);
 });
 
 test('content asset download stores remote content under raw files and registers it', async () => {

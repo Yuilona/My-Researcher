@@ -1,21 +1,55 @@
-# Prompt templates registry (template)
-#
-# A prompt template is addressed by (prompt_template_id, version).
-# Versions are immutable: edits require a new version.
-
 version: 1
 
 templates:
-  # Example template entry
-  - prompt_template_id: example-summary
-    version: 1
-    description: Summarize input text with bullet points.
+  - prompt_template_id: literature-key-content-section
+    version: 2
+    runtime_profile_id: literature_key_content_v2
+    description: Extract source-grounded key-content items from one fulltext section.
     variables_schema:
       type: object
+      required: [title, source_refs, section_text]
       properties:
-        tone:
+        title:
           type: string
-          enum: [neutral, formal]
-      required: [tone]
+        source_refs:
+          type: array
+        section_text:
+          type: string
     notes:
-      - Keep output under 10 bullets.
+      - Output only exact ref_type and bare ref_id values from provided source_refs.
+      - Do not cite bibliography prose, labels, or concatenated source-ref descriptions.
+
+  - prompt_template_id: literature-key-content-consolidation
+    version: 2
+    runtime_profile_id: literature_key_content_v2
+    description: Consolidate section-level key-content items into a paper-level dossier.
+    variables_schema:
+      type: object
+      required: [title, source_refs, categories]
+      properties:
+        title:
+          type: string
+        source_refs:
+          type: array
+        categories:
+          type: object
+    notes:
+      - Preserve source_refs already present on section-level items.
+      - Do not invent source refs during consolidation.
+
+  - prompt_template_id: literature-auto-pull-quality
+    version: 1
+    runtime_profile_id: auto_pull_quality.v1
+    description: Score a candidate paper for literature intake quality.
+    variables_schema:
+      type: object
+      required: [title, provider, ranking_signals]
+      properties:
+        title:
+          type: string
+        provider:
+          type: string
+        ranking_signals:
+          type: object
+    notes:
+      - Return a single quality_score number from 0 to 100.

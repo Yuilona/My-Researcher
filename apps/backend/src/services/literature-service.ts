@@ -7,11 +7,15 @@ import type {
   CreateLiteratureContentProcessingRunRequest,
   CreateLiteratureContentProcessingRunResponse,
   DedupMatchType,
+  DryRunImportLiteratureKeyContentDossierResponse,
   DownloadLiteratureContentAssetRequest,
   DownloadLiteratureContentAssetResponse,
   GetLiteratureContentProcessingResponse,
   GetLiteratureMetadataResponse,
   GetPaperLiteratureResponse,
+  ImportLiteratureKeyContentDossierRequest,
+  ImportLiteratureKeyContentDossierResponse,
+  LiteratureKeyContentCurationBundleResponse,
   LiteratureCollectionImportItem,
   LiteratureCollectionImportRequest,
   LiteratureCollectionImportResponse,
@@ -55,12 +59,16 @@ import { LiteratureFlowService } from './literature-flow-service.js';
 import type { LiteratureAcquisitionSettingsService } from './literature-acquisition-settings-service.js';
 import type { LiteratureContentProcessingSettingsService } from './literature-content-processing-settings-service.js';
 import { LiteratureRetrievalService } from './literature-retrieval-service.js';
-
-type DedupCandidate = {
-  doiNormalized: string | null;
-  arxivId: string | null;
-  titleAuthorsYearHash: string | null;
-};
+import {
+  buildLiteratureDedupCandidate,
+  buildLiteratureTitleAuthorsYearHash,
+  buildLiteratureWorkIdentity,
+  normalizeLiteratureArxivId,
+  normalizeLiteratureDoi,
+  normalizeLiteratureTitle,
+  type LiteratureDedupCandidate,
+} from './literature-work-identity.js';
+import type { BackendLlmGateway } from './llm-gateway.js';
 
 type MatchedDedup = {
   matchedBy: DedupMatchType;
@@ -84,6 +92,7 @@ type LiteratureServiceDependencies = {
   literatureFlowService?: LiteratureFlowService;
   literatureRetrievalService?: LiteratureRetrievalService;
   literatureAcquisitionSettingsService?: Pick<LiteratureAcquisitionSettingsService, 'resolveDownloaderOptions'>;
+  llmGateway?: BackendLlmGateway;
 };
 
 const DEFAULT_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024;
@@ -98,9 +107,9 @@ export class LiteratureService {
     dependencies: LiteratureServiceDependencies = {},
   ) {
     this.literatureFlowService = dependencies.literatureFlowService
-      ?? new LiteratureFlowService(literatureRepository, contentProcessingSettingsService);
+      ?? new LiteratureFlowService(literatureRepository, contentProcessingSettingsService, dependencies.llmGateway);
     this.literatureRetrievalService = dependencies.literatureRetrievalService
-      ?? new LiteratureRetrievalService(literatureRepository, contentProcessingSettingsService);
+      ?? new LiteratureRetrievalService(literatureRepository, contentProcessingSettingsService, dependencies.llmGateway);
     this.literatureAcquisitionSettingsService = dependencies.literatureAcquisitionSettingsService;
   }
 
@@ -125,28 +134,51 @@ export class LiteratureService {
 
       if (dedup.literature) {
         const previous = dedup.literature;
+        const nextTitle = previous.title || normalized.title;
         const nextAuthors = previous.authors.length > 0 ? previous.authors : normalized.authors ?? [];
         const nextYear = previous.year ?? normalized.year ?? null;
         const nextDoi = previous.doiNormalized ?? this.normalizeDoi(normalized.doi);
         const nextArxivId = previous.arxivId ?? this.normalizeArxivId(normalized.arxiv_id);
         const nextAbstract = previous.abstractText || normalized.abstract || null;
+        const nextRightsClass = this.resolveRightsClass(previous.rightsClass, normalized.rights_class);
+        const nextTags = this.mergeTags(previous.tags, normalized.tags ?? []);
+        const nextNormalizedTitle = this.normalizeTitle(nextTitle);
+        const nextTitleAuthorsYearHash = this.buildTitleAuthorsYearHashFromFields(
+          nextTitle,
+          nextAuthors,
+          nextYear,
+        );
+        const citationChanged = nextTitle !== previous.title
+          || !this.stringArraysEqual(nextAuthors, previous.authors)
+          || nextYear !== previous.year
+          || nextDoi !== previous.doiNormalized
+          || nextArxivId !== previous.arxivId
+          || nextNormalizedTitle !== previous.normalizedTitle
+          || nextTitleAuthorsYearHash !== previous.titleAuthorsYearHash;
         const abstractChanged = previous.abstractText !== nextAbstract;
+        await this.assertDedupUniqueness(previous.id, {
+          doiNormalized: nextDoi,
+          arxivId: nextArxivId,
+          titleAuthorsYearHash: nextTitleAuthorsYearHash,
+        });
         literatureRecord = {
           ...previous,
-          title: previous.title || normalized.title,
+          title: nextTitle,
           abstractText: nextAbstract,
           keyContentDigest: previous.keyContentDigest,
           authors: nextAuthors,
           year: nextYear,
           doiNormalized: nextDoi,
           arxivId: nextArxivId,
-          rightsClass: this.resolveRightsClass(previous.rightsClass, normalized.rights_class),
-          tags: this.mergeTags(previous.tags, normalized.tags ?? []),
+          normalizedTitle: nextNormalizedTitle,
+          titleAuthorsYearHash: nextTitleAuthorsYearHash,
+          rightsClass: nextRightsClass,
+          tags: nextTags,
           updatedAt: now,
         };
         literatureRecord = await this.literatureRepository.updateLiterature(literatureRecord);
         await this.markCollectionImportStale(literatureRecord.id, {
-          citationChanged: true,
+          citationChanged: citationChanged || dedup.matchedBy !== 'none',
           abstractChanged,
         });
       } else {
@@ -178,7 +210,11 @@ export class LiteratureService {
         provider: normalized.provider,
         sourceItemId: normalized.external_id,
         sourceUrl: normalized.source_url,
-        rawPayload: normalized as unknown as Record<string, unknown>,
+        rawPayload: {
+          ...(normalized as unknown as Record<string, unknown>),
+          canonical_work_key: this.toCanonicalWorkKey(literatureRecord),
+          matched_by: dedup.matchedBy,
+        },
         fetchedAt: now,
       });
 
@@ -189,6 +225,7 @@ export class LiteratureService {
 
       results.push({
         literature_id: literatureRecord.id,
+        canonical_work_key: this.toCanonicalWorkKey(literatureRecord),
         is_new: isNew,
         matched_by: dedup.matchedBy,
         title: literatureRecord.title,
@@ -391,6 +428,7 @@ export class LiteratureService {
 
       items.push({
         literature_id: literature.id,
+        canonical_work_key: this.toCanonicalWorkKey(literature),
         title: literature.title,
         authors: literature.authors,
         year: literature.year,
@@ -735,6 +773,7 @@ export class LiteratureService {
     }
     return {
       literature_id: updated.id,
+      canonical_work_key: this.toCanonicalWorkKey(updated),
       title: updated.title,
       abstract: updated.abstractText,
       key_content_digest: updated.keyContentDigest,
@@ -756,6 +795,7 @@ export class LiteratureService {
 
     return {
       literature_id: literature.id,
+      canonical_work_key: this.toCanonicalWorkKey(literature),
       title: literature.title,
       abstract: literature.abstractText,
       key_content_digest: literature.keyContentDigest,
@@ -791,18 +831,29 @@ export class LiteratureService {
       byteSize: request.byte_size,
     });
     const now = new Date().toISOString();
+    const assetKind = request.asset_kind ?? 'raw_fulltext';
+    const status = detected.readable ? 'registered' : 'missing';
+    const metadata = await this.withStorageCoalescingMetadata({
+      literatureId,
+      assetKind,
+      localPath,
+      checksum: detected.checksum,
+      status,
+      metadata: request.metadata ?? {},
+      detectedAt: now,
+    });
     const asset = await this.literatureRepository.upsertContentAsset({
       id: crypto.randomUUID(),
       literatureId,
-      assetKind: request.asset_kind ?? 'raw_fulltext',
+      assetKind,
       sourceKind,
       localPath,
       checksum: detected.checksum,
       mimeType: request.mime_type?.trim() || this.inferMimeType(localPath),
       byteSize: detected.byteSize,
       rightsClass: request.rights_class ?? literature.rightsClass,
-      status: detected.readable ? 'registered' : 'missing',
-      metadata: request.metadata ?? {},
+      status,
+      metadata,
       createdAt: now,
       updatedAt: now,
     });
@@ -817,6 +868,81 @@ export class LiteratureService {
     }
 
     return { item: this.toContentAssetDTO(asset.record) };
+  }
+
+  private async withStorageCoalescingMetadata(input: {
+    literatureId: string;
+    assetKind: LiteratureContentAssetRecord['assetKind'];
+    localPath: string;
+    checksum: string;
+    status: LiteratureContentAssetRecord['status'];
+    metadata: Record<string, unknown>;
+    detectedAt: string;
+  }): Promise<Record<string, unknown>> {
+    if (
+      input.assetKind !== 'raw_fulltext'
+      || !['registered', 'ready'].includes(input.status)
+      || !input.checksum.trim()
+    ) {
+      return input.metadata;
+    }
+
+    const checksumMatches = (await this.literatureRepository.listContentAssetsByChecksum(input.checksum))
+      .filter((asset) => asset.assetKind === 'raw_fulltext' && ['registered', 'ready'].includes(asset.status));
+    const existingSelf = checksumMatches.find((asset) =>
+      asset.literatureId === input.literatureId && asset.localPath === input.localPath,
+    );
+    const candidates = checksumMatches.filter((asset) =>
+      asset.literatureId !== input.literatureId || asset.localPath !== input.localPath,
+    );
+    if (candidates.length === 0) {
+      const metadata = { ...input.metadata };
+      delete metadata.storage_coalescing;
+      return metadata;
+    }
+    const currentComparable = {
+      id: existingSelf?.id ?? null,
+      literatureId: input.literatureId,
+      localPath: input.localPath,
+      createdAt: existingSelf?.createdAt ?? input.detectedAt,
+    };
+    const canonical = [
+      ...candidates.map((asset) => ({
+        id: asset.id,
+        literatureId: asset.literatureId,
+        localPath: asset.localPath,
+        createdAt: asset.createdAt,
+      })),
+      currentComparable,
+    ].sort((left, right) => {
+      if (left.createdAt !== right.createdAt) {
+        return left.createdAt.localeCompare(right.createdAt);
+      }
+      if (left.literatureId !== right.literatureId) {
+        return left.literatureId.localeCompare(right.literatureId);
+      }
+      return (left.id ?? '').localeCompare(right.id ?? '');
+    })[0];
+    if (!canonical || canonical === currentComparable || canonical.id === null) {
+      const metadata = { ...input.metadata };
+      delete metadata.storage_coalescing;
+      return metadata;
+    }
+
+    return {
+      ...input.metadata,
+      storage_coalescing: {
+        status: 'candidate',
+        strategy: 'same_checksum_reuse_candidate_v1',
+        checksum: input.checksum,
+        canonical_asset_id: canonical.id,
+        canonical_literature_id: canonical.literatureId,
+        canonical_local_path: canonical.localPath,
+        candidate_count: candidates.length,
+        destructive_cleanup_allowed: false,
+        detected_at: input.detectedAt,
+      },
+    };
   }
 
   async downloadContentAsset(
@@ -931,6 +1057,24 @@ export class LiteratureService {
 
   async getContentProcessing(literatureId: string): Promise<GetLiteratureContentProcessingResponse> {
     return this.literatureFlowService.getContentProcessing(literatureId);
+  }
+
+  async getKeyContentCurationBundle(literatureId: string): Promise<LiteratureKeyContentCurationBundleResponse> {
+    return this.literatureFlowService.getKeyContentCurationBundle(literatureId);
+  }
+
+  async importKeyContentDossier(
+    literatureId: string,
+    request: ImportLiteratureKeyContentDossierRequest,
+  ): Promise<ImportLiteratureKeyContentDossierResponse> {
+    return this.literatureFlowService.importKeyContentDossier(literatureId, request);
+  }
+
+  async dryRunImportKeyContentDossier(
+    literatureId: string,
+    request: ImportLiteratureKeyContentDossierRequest,
+  ): Promise<DryRunImportLiteratureKeyContentDossierResponse> {
+    return this.literatureFlowService.dryRunImportKeyContentDossier(literatureId, request);
   }
 
   async createContentProcessingRun(
@@ -1055,16 +1199,26 @@ export class LiteratureService {
     return { matchedBy: 'none', literature: null };
   }
 
-  private buildDedupCandidate(item: LiteratureCollectionImportItem): DedupCandidate {
-    return {
-      doiNormalized: this.normalizeDoi(item.doi),
-      arxivId: this.normalizeArxivId(item.arxiv_id),
-      titleAuthorsYearHash: this.buildTitleAuthorsYearHash(item),
-    };
+  private buildDedupCandidate(item: LiteratureCollectionImportItem): LiteratureDedupCandidate {
+    return buildLiteratureDedupCandidate({
+      title: item.title,
+      authors: item.authors ?? [],
+      year: item.year ?? null,
+      doi: item.doi,
+      arxiv_id: item.arxiv_id,
+    });
   }
 
-  private buildTitleAuthorsYearHash(item: LiteratureCollectionImportItem): string | null {
-    return this.buildTitleAuthorsYearHashFromFields(item.title, item.authors ?? [], item.year ?? null);
+  private toCanonicalWorkKey(literature: LiteratureRecord): string {
+    return buildLiteratureWorkIdentity({
+      id: literature.id,
+      title: literature.title,
+      authors: literature.authors,
+      year: literature.year,
+      doiNormalized: literature.doiNormalized,
+      arxivId: literature.arxivId,
+      titleAuthorsYearHash: literature.titleAuthorsYearHash,
+    }).canonicalWorkKey;
   }
 
   private buildTitleAuthorsYearHashFromFields(
@@ -1072,17 +1226,7 @@ export class LiteratureService {
     authors: string[],
     year: number | null,
   ): string | null {
-    if (!year) {
-      return null;
-    }
-    const normalizedTitle = this.normalizeTitle(title);
-    const normalizedAuthors = this.normalizeAuthors(authors);
-    if (!normalizedTitle || normalizedAuthors.length === 0) {
-      return null;
-    }
-
-    const raw = `${normalizedTitle}|${normalizedAuthors.join('|')}|${year}`;
-    return crypto.createHash('sha1').update(raw).digest('hex');
+    return buildLiteratureTitleAuthorsYearHash(title, authors, year);
   }
 
   private normalizeImportItem(item: LiteratureCollectionImportItem): LiteratureCollectionImportItem {
@@ -1102,53 +1246,15 @@ export class LiteratureService {
   }
 
   private normalizeDoi(value?: string): string | null {
-    if (!value) {
-      return null;
-    }
-
-    return value
-      .trim()
-      .toLowerCase()
-      .replace(/^https?:\/\/doi\.org\//, '')
-      .replace(/^doi:/, '')
-      .trim();
+    return normalizeLiteratureDoi(value);
   }
 
   private normalizeArxivId(value?: string): string | null {
-    if (!value) {
-      return null;
-    }
-
-    const normalized = value
-      .trim()
-      .toLowerCase()
-      .replace(/^https?:\/\/arxiv\.org\/abs\//, '')
-      .replace(/^arxiv:/, '')
-      .trim();
-    return normalized.replace(/v\d+$/, '');
+    return normalizeLiteratureArxivId(value);
   }
 
   private normalizeTitle(value: string): string {
-    return value
-      .trim()
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}]+/gu, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  private normalizeAuthors(authors: string[]): string[] {
-    return authors
-      .map((name) =>
-        name
-          .trim()
-          .toLowerCase()
-          .replace(/[^\p{L}\p{N}]+/gu, ' ')
-          .replace(/\s+/g, ' ')
-          .trim(),
-      )
-      .filter((name) => name.length > 0)
-      .sort();
+    return normalizeLiteratureTitle(value);
   }
 
   private normalizeTags(tags: string[]): string[] {
@@ -1204,7 +1310,7 @@ export class LiteratureService {
 
   private async assertDedupUniqueness(
     literatureId: string,
-    keys: DedupCandidate,
+    keys: LiteratureDedupCandidate,
   ): Promise<void> {
     if (keys.doiNormalized) {
       const existing = await this.literatureRepository.findLiteratureByDoi(keys.doiNormalized);

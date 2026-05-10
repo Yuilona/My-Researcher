@@ -1,6 +1,11 @@
 import type {
   LiteratureAbstractProfileRecord,
   LiteratureCitationProfileRecord,
+  LiteratureClusterEvidenceRecord,
+  LiteratureClusterGraphRecord,
+  LiteratureClusterMemberRecord,
+  LiteratureClusterRecord,
+  LiteratureClusterUpdatePatch,
   LiteratureContentAssetRecord,
   LiteratureContentProcessingBatchItemRecord,
   LiteratureContentProcessingBatchItemStatus,
@@ -25,6 +30,7 @@ import type {
   LiteratureSourceRuntimeStateRecord,
   LiteratureSourceRecord,
   LiteratureFulltextAnchorRecord,
+  ListLiteratureClustersFilter,
   PaperLiteratureLinkRecord,
   TopicLiteratureScopeRecord,
 } from './literature-repository.js';
@@ -43,6 +49,11 @@ export class InMemoryLiteratureRepository implements LiteratureRepository {
   private readonly contentAssets = new Map<string, LiteratureContentAssetRecord>();
   private readonly contentAssetByLiteraturePath = new Map<string, string>();
   private readonly contentAssetIdsByLiterature = new Map<string, string[]>();
+  private readonly literatureClusters = new Map<string, LiteratureClusterRecord>();
+  private readonly literatureClusterMembers = new Map<string, LiteratureClusterMemberRecord>();
+  private readonly literatureClusterEvidence = new Map<string, LiteratureClusterEvidenceRecord>();
+  private readonly literatureClusterMemberIdsByCluster = new Map<string, string[]>();
+  private readonly literatureClusterEvidenceIdsByCluster = new Map<string, string[]>();
   private readonly fulltextDocuments = new Map<string, LiteratureFulltextDocumentRecord>();
   private readonly fulltextDocumentBySourceAsset = new Map<string, string>();
   private readonly fulltextDocumentIdsByLiterature = new Map<string, string[]>();
@@ -150,10 +161,22 @@ export class InMemoryLiteratureRepository implements LiteratureRepository {
 
       const next: LiteratureSourceRecord = {
         ...current,
+        literatureId: record.literatureId,
         sourceUrl: record.sourceUrl,
         rawPayload: record.rawPayload,
         fetchedAt: record.fetchedAt,
       };
+      if (current.literatureId !== record.literatureId) {
+        const currentIds = this.sourceIdsByLiterature.get(current.literatureId) ?? [];
+        this.sourceIdsByLiterature.set(
+          current.literatureId,
+          currentIds.filter((id) => id !== existingId),
+        );
+        const nextIds = this.sourceIdsByLiterature.get(record.literatureId) ?? [];
+        if (!nextIds.includes(existingId)) {
+          this.sourceIdsByLiterature.set(record.literatureId, [...nextIds, existingId]);
+        }
+      }
       this.literatureSources.set(existingId, next);
       return { record: next, created: false };
     }
@@ -245,8 +268,171 @@ export class InMemoryLiteratureRepository implements LiteratureRepository {
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
+  async listContentAssetsByChecksum(checksum: string): Promise<LiteratureContentAssetRecord[]> {
+    const normalizedChecksum = checksum.trim();
+    if (!normalizedChecksum) {
+      return [];
+    }
+    return [...this.contentAssets.values()]
+      .filter((record) => record.checksum === normalizedChecksum)
+      .sort((left, right) => {
+        if (left.createdAt !== right.createdAt) {
+          return left.createdAt.localeCompare(right.createdAt);
+        }
+        if (left.literatureId !== right.literatureId) {
+          return left.literatureId.localeCompare(right.literatureId);
+        }
+        return left.id.localeCompare(right.id);
+      });
+  }
+
   async findContentAssetById(assetId: string): Promise<LiteratureContentAssetRecord | null> {
     return this.contentAssets.get(assetId) ?? null;
+  }
+
+  async upsertLiteratureCluster(
+    record: LiteratureClusterRecord,
+    members: LiteratureClusterMemberRecord[],
+    evidence: LiteratureClusterEvidenceRecord[],
+  ): Promise<LiteratureClusterGraphRecord> {
+    const existing = this.literatureClusters.get(record.id);
+    const next: LiteratureClusterRecord = existing
+      ? {
+          ...record,
+          status: existing.status,
+          representativeLiteratureId: existing.representativeLiteratureId ?? record.representativeLiteratureId,
+          confidence: Math.max(existing.confidence, record.confidence),
+          createdAt: existing.createdAt,
+        }
+      : record;
+    this.literatureClusters.set(record.id, next);
+
+    for (const member of members) {
+      const existingMember = [...this.literatureClusterMembers.values()].find((item) =>
+        item.clusterId === member.clusterId && item.literatureId === member.literatureId);
+      const nextMember: LiteratureClusterMemberRecord = existingMember
+        ? {
+            ...member,
+            id: existingMember.id,
+            decisionStatus: existingMember.decisionStatus,
+            createdAt: existingMember.createdAt,
+          }
+        : member;
+      this.literatureClusterMembers.set(nextMember.id, nextMember);
+      const ids = this.literatureClusterMemberIdsByCluster.get(member.clusterId) ?? [];
+      if (!ids.includes(nextMember.id)) {
+        this.literatureClusterMemberIdsByCluster.set(member.clusterId, [...ids, nextMember.id]);
+      }
+    }
+
+    for (const item of evidence) {
+      const existingEvidence = [...this.literatureClusterEvidence.values()].find((row) =>
+        row.clusterId === item.clusterId
+        && row.literatureIdA === item.literatureIdA
+        && row.literatureIdB === item.literatureIdB
+        && row.signalType === item.signalType);
+      const nextEvidence: LiteratureClusterEvidenceRecord = existingEvidence
+        ? { ...item, id: existingEvidence.id, createdAt: existingEvidence.createdAt }
+        : item;
+      this.literatureClusterEvidence.set(nextEvidence.id, nextEvidence);
+      const ids = this.literatureClusterEvidenceIdsByCluster.get(item.clusterId) ?? [];
+      if (!ids.includes(nextEvidence.id)) {
+        this.literatureClusterEvidenceIdsByCluster.set(item.clusterId, [...ids, nextEvidence.id]);
+      }
+    }
+
+    const graph = await this.findLiteratureClusterById(record.id);
+    if (!graph) {
+      throw new Error(`Literature cluster ${record.id} was not persisted.`);
+    }
+    return graph;
+  }
+
+  async findLiteratureClusterById(clusterId: string): Promise<LiteratureClusterGraphRecord | null> {
+    const cluster = this.literatureClusters.get(clusterId);
+    if (!cluster) {
+      return null;
+    }
+    return {
+      cluster,
+      members: (this.literatureClusterMemberIdsByCluster.get(clusterId) ?? [])
+        .map((id) => this.literatureClusterMembers.get(id))
+        .filter((item): item is LiteratureClusterMemberRecord => item !== undefined)
+        .sort((left, right) => left.role.localeCompare(right.role) || left.literatureId.localeCompare(right.literatureId)),
+      evidence: (this.literatureClusterEvidenceIdsByCluster.get(clusterId) ?? [])
+        .map((id) => this.literatureClusterEvidence.get(id))
+        .filter((item): item is LiteratureClusterEvidenceRecord => item !== undefined)
+        .sort((left, right) =>
+          left.signalType.localeCompare(right.signalType)
+          || left.literatureIdA.localeCompare(right.literatureIdA)
+          || left.literatureIdB.localeCompare(right.literatureIdB)),
+    };
+  }
+
+  async listLiteratureClusters(filter: ListLiteratureClustersFilter = {}): Promise<LiteratureClusterGraphRecord[]> {
+    const graphs = await Promise.all(
+      [...this.literatureClusters.values()]
+        .filter((cluster) => !filter.status || cluster.status === filter.status)
+        .filter((cluster) => !filter.clusterType || cluster.clusterType === filter.clusterType)
+        .map((cluster) => this.findLiteratureClusterById(cluster.id)),
+    );
+    return graphs
+      .filter((graph): graph is LiteratureClusterGraphRecord => graph !== null)
+      .filter((graph) => !filter.literatureId || graph.members.some((member) => member.literatureId === filter.literatureId))
+      .filter((graph) => {
+        const literatureIds = filter.literatureIds ?? [];
+        return literatureIds.length === 0
+          || graph.members.some((member) => literatureIds.includes(member.literatureId));
+      })
+      .sort((left, right) => right.cluster.updatedAt.localeCompare(left.cluster.updatedAt) || left.cluster.id.localeCompare(right.cluster.id))
+      .slice(0, filter.limit ?? graphs.length);
+  }
+
+  async updateLiteratureCluster(
+    clusterId: string,
+    patch: LiteratureClusterUpdatePatch,
+  ): Promise<LiteratureClusterGraphRecord> {
+    const existing = this.literatureClusters.get(clusterId);
+    if (!existing) {
+      throw new Error(`Literature cluster ${clusterId} not found.`);
+    }
+    this.literatureClusters.set(clusterId, {
+      ...existing,
+      status: patch.status ?? existing.status,
+      representativeLiteratureId: patch.representativeLiteratureId !== undefined
+        ? patch.representativeLiteratureId
+        : existing.representativeLiteratureId,
+      confidence: patch.confidence ?? existing.confidence,
+      method: patch.method ?? existing.method,
+      updatedAt: patch.updatedAt ?? new Date().toISOString(),
+    });
+    const graph = await this.findLiteratureClusterById(clusterId);
+    if (!graph) {
+      throw new Error(`Literature cluster ${clusterId} not found after update.`);
+    }
+    return graph;
+  }
+
+  async updateLiteratureClusterMember(
+    clusterId: string,
+    literatureId: string,
+    patch: Partial<Omit<LiteratureClusterMemberRecord, 'id' | 'clusterId' | 'literatureId' | 'createdAt'>>,
+  ): Promise<LiteratureClusterMemberRecord> {
+    const existing = [...this.literatureClusterMembers.values()].find((member) =>
+      member.clusterId === clusterId && member.literatureId === literatureId);
+    if (!existing) {
+      throw new Error(`Literature cluster member ${clusterId}/${literatureId} not found.`);
+    }
+    const next = {
+      ...existing,
+      role: patch.role ?? existing.role,
+      relationType: patch.relationType ?? existing.relationType,
+      confidence: patch.confidence ?? existing.confidence,
+      decisionStatus: patch.decisionStatus ?? existing.decisionStatus,
+      updatedAt: patch.updatedAt ?? new Date().toISOString(),
+    };
+    this.literatureClusterMembers.set(existing.id, next);
+    return next;
   }
 
   async upsertFulltextExtractionBundle(
@@ -930,6 +1116,21 @@ export class InMemoryLiteratureRepository implements LiteratureRepository {
   }
 
   private reindexLiterature(record: LiteratureRecord): void {
+    for (const [key, id] of this.doiIndex.entries()) {
+      if (id === record.id && key !== record.doiNormalized) {
+        this.doiIndex.delete(key);
+      }
+    }
+    for (const [key, id] of this.arxivIndex.entries()) {
+      if (id === record.id && key !== record.arxivId) {
+        this.arxivIndex.delete(key);
+      }
+    }
+    for (const [key, id] of this.titleAuthorsYearIndex.entries()) {
+      if (id === record.id && key !== record.titleAuthorsYearHash) {
+        this.titleAuthorsYearIndex.delete(key);
+      }
+    }
     if (record.doiNormalized) {
       this.doiIndex.set(record.doiNormalized, record.id);
     }

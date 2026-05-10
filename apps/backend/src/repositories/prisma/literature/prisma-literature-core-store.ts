@@ -136,6 +136,7 @@ export class PrismaLiteratureCoreStore {
       const updated = await this.prisma.literatureSource.update({
         where: { id: existing.id },
         data: {
+          literatureId: record.literatureId,
           sourceUrl: record.sourceUrl,
           rawPayload: record.rawPayload as Prisma.InputJsonValue,
           fetchedAt: new Date(record.fetchedAt),

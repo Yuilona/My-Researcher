@@ -1,0 +1,133 @@
+@layer feature {
+  .cluster-review-toolbar {
+    display: grid;
+    grid-template-columns: minmax(160px, 0.7fr) minmax(160px, 0.7fr) minmax(110px, 0.4fr) auto;
+    gap: var(--ui-space-2);
+    align-items: end;
+  }
+
+  .cluster-review-limit-field {
+    min-width: 0;
+  }
+
+  .cluster-review-toolbar-actions {
+    display: inline-flex;
+    gap: var(--ui-space-2);
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .cluster-review-feedback-alert {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-3);
+  }
+
+  .cluster-review-list {
+    display: grid;
+    gap: var(--ui-space-3);
+  }
+
+  .cluster-review-card {
+    display: grid;
+    gap: var(--ui-space-3);
+  }
+
+  .cluster-review-card-header {
+    display: flex;
+    gap: var(--ui-space-3);
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .cluster-review-title-block {
+    min-width: 0;
+  }
+
+  .cluster-review-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-2);
+    align-items: center;
+    min-width: 0;
+  }
+
+  .cluster-review-title-row h3 {
+    min-width: min(100%, 240px);
+    max-width: 100%;
+    margin-block: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .cluster-review-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-2);
+    justify-content: flex-end;
+    flex: 0 0 auto;
+  }
+
+  .cluster-review-badge {
+    border: var(--ui-border-width-sm) solid var(--ui-color-border);
+    font-variation-settings: "wght" 500;
+  }
+
+  .cluster-review-summary-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 0.8fr) minmax(140px, 0.5fr) minmax(220px, 1fr);
+    gap: var(--ui-space-3);
+    align-items: start;
+  }
+
+  .cluster-review-chip-row,
+  .cluster-review-evidence-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-2);
+    align-items: center;
+  }
+
+  .cluster-review-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .cluster-review-table {
+    width: 100%;
+    min-width: 680px;
+  }
+
+  .cluster-review-table th,
+  .cluster-review-table td {
+    text-align: start;
+    vertical-align: top;
+  }
+
+  .cluster-review-table td:first-child {
+    max-width: 420px;
+    overflow-wrap: anywhere;
+  }
+
+  .cluster-review-empty {
+    min-height: 120px;
+    display: grid;
+    place-items: center;
+  }
+
+  @media (max-width: 1024px) {
+    .cluster-review-toolbar,
+    .cluster-review-summary-row {
+      grid-template-columns: 1fr;
+    }
+
+    .cluster-review-card-header {
+      flex-direction: column;
+    }
+
+    .cluster-review-toolbar-actions,
+    .cluster-review-actions {
+      justify-content: flex-start;
+    }
+  }
+}

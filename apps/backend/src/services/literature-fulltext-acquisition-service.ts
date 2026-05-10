@@ -6,6 +6,7 @@ import type {
   LiteratureFulltextAcquisitionDryRunEstimateDTO,
   LiteratureFulltextAcquisitionDryRunRequest,
   LiteratureFulltextAcquisitionDryRunResponse,
+  LiteratureFulltextAcquisitionHealthSourceKind,
   LiteratureFulltextAcquisitionItemDTO,
   LiteratureFulltextAcquisitionJobDTO,
   LiteratureFulltextAcquisitionPlanItemDTO,
@@ -46,6 +47,17 @@ const NON_RETRYABLE_CODES = new Set([
   'UNPAYWALL_NOT_CONFIGURED',
   'UNPAYWALL_NO_OA_PDF',
   'DOWNLOAD_REJECTED',
+]);
+const ACQUISITION_HEALTH_SOURCES: LiteratureFulltextAcquisitionHealthSourceKind[] = [
+  'explicit_url',
+  'arxiv',
+  'unpaywall',
+  'download',
+];
+const FAILURE_LIKE_ITEM_STATUSES = new Set<LiteratureFulltextAcquisitionItemStatus>([
+  'FAILED',
+  'PARTIAL',
+  'BLOCKED',
 ]);
 
 export class LiteratureFulltextAcquisitionService {
@@ -92,7 +104,8 @@ export class LiteratureFulltextAcquisitionService {
 
     const now = new Date().toISOString();
     const jobId = crypto.randomUUID();
-    const items = estimate.plan_items.map((item) => ({
+    const baseTime = Date.parse(now);
+    const items = estimate.plan_items.map((item, index) => ({
       id: crypto.randomUUID(),
       jobId,
       literatureId: item.literature_id,
@@ -108,7 +121,7 @@ export class LiteratureFulltextAcquisitionService {
       retryable: item.retryable,
       resolutionCandidates: item.candidates as unknown as Record<string, unknown>[],
       checkpoint: {},
-      createdAt: now,
+      createdAt: new Date(baseTime + index).toISOString(),
       startedAt: null,
       finishedAt: item.blocked ? now : null,
       updatedAt: now,
@@ -544,10 +557,14 @@ export class LiteratureFulltextAcquisitionService {
         finishedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
-      if (item.selectedSourceKind && (item.selectedSourceKind !== 'unpaywall' || !unpaywallResolutionSucceeded)) {
+      if (
+        this.shouldRecordSourceFailure(errorCode)
+        && item.selectedSourceKind
+        && (item.selectedSourceKind !== 'unpaywall' || !unpaywallResolutionSucceeded)
+      ) {
         await this.recordSourceFailure(item.selectedSourceKind, errorCode, error instanceof Error ? error.message : null);
       }
-      if (downloadSlotClaimed) {
+      if (this.shouldRecordSourceFailure(errorCode) && downloadSlotClaimed) {
         await this.recordSourceFailure('download', errorCode, error instanceof Error ? error.message : null);
       }
     }
@@ -575,6 +592,9 @@ export class LiteratureFulltextAcquisitionService {
         },
         signal: AbortSignal.timeout(30_000),
       });
+      if (response.status === 429) {
+        throw new AppError(502, 'INTERNAL_ERROR', 'SOURCE_RATE_LIMIT: Unpaywall resolver rate limited with status 429.');
+      }
       if (!response.ok) {
         throw new AppError(502, 'INTERNAL_ERROR', `Unpaywall resolver failed with status ${response.status}.`);
       }
@@ -664,6 +684,10 @@ export class LiteratureFulltextAcquisitionService {
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     });
+  }
+
+  private shouldRecordSourceFailure(errorCode: string): boolean {
+    return !NON_RETRYABLE_CODES.has(errorCode);
   }
 
   private async runWithSourceSlot<T>(source: AcquisitionThrottleSource, operation: () => Promise<T>): Promise<T> {
@@ -943,7 +967,7 @@ export class LiteratureFulltextAcquisitionService {
     items?: LiteratureFulltextAcquisitionItemRecord[],
     includeItems = false,
   ): Promise<LiteratureFulltextAcquisitionJobDTO> {
-    const resolvedItems = includeItems ? (items ?? await this.repository.listFulltextAcquisitionItemsByJobId(job.id)) : undefined;
+    const resolvedItems = items ?? await this.repository.listFulltextAcquisitionItemsByJobId(job.id);
     return {
       job_id: job.id,
       status: job.status,
@@ -959,8 +983,79 @@ export class LiteratureFulltextAcquisitionService {
       canceled_at: job.canceledAt,
       finished_at: job.finishedAt,
       updated_at: job.updatedAt,
-      ...(resolvedItems ? { items: await Promise.all(resolvedItems.map((item) => this.toItemDTO(item))) } : {}),
+      source_health: await this.buildSourceHealth(resolvedItems),
+      ...(includeItems ? { items: await Promise.all(resolvedItems.map((item) => this.toItemDTO(item))) } : {}),
     };
+  }
+
+  private async buildSourceHealth(
+    items: LiteratureFulltextAcquisitionItemRecord[],
+  ): Promise<LiteratureFulltextAcquisitionJobDTO['source_health']> {
+    const runtimeStates = await this.repository.listSourceRuntimeStates();
+    const runtimeStateBySource = new Map(runtimeStates.map((state) => [state.source, state]));
+    return ACQUISITION_HEALTH_SOURCES.map((sourceKind) => {
+      const sourceItems = this.itemsForHealthSource(sourceKind, items);
+      const runtimeSource = this.healthSourceToRuntimeSource(sourceKind);
+      const runtimeState = runtimeStateBySource.get(runtimeSource) ?? null;
+      const errorCounts = new Map<string, number>();
+      for (const item of sourceItems) {
+        if (item.errorCode) {
+          errorCounts.set(item.errorCode, (errorCounts.get(item.errorCode) ?? 0) + 1);
+        }
+      }
+      const fallbackError = this.latestItemError(sourceItems);
+      return {
+        source_kind: sourceKind,
+        runtime_source: runtimeSource,
+        planned_count: sourceItems.length,
+        succeeded_count: sourceItems.filter((item) => item.status === 'SUCCEEDED').length,
+        failed_count: sourceItems.filter((item) => item.status === 'FAILED' || item.status === 'PARTIAL').length,
+        blocked_count: sourceItems.filter((item) => item.status === 'BLOCKED').length,
+        retryable_failure_count: sourceItems.filter((item) => FAILURE_LIKE_ITEM_STATUSES.has(item.status) && item.retryable).length,
+        non_retryable_failure_count: sourceItems.filter((item) => FAILURE_LIKE_ITEM_STATUSES.has(item.status) && !item.retryable).length,
+        error_counts_by_code: Object.fromEntries([...errorCounts.entries()].sort()),
+        runtime_status: runtimeState?.status ?? null,
+        cooldown_until: runtimeState?.cooldownUntil ?? null,
+        failure_count: runtimeState?.failureCount ?? 0,
+        last_error_code: runtimeState?.lastErrorCode ?? fallbackError?.errorCode ?? null,
+        last_error_message: runtimeState?.lastErrorMessage ?? fallbackError?.errorMessage ?? null,
+        last_request_at: runtimeState?.lastRequestAt ?? null,
+        last_success_at: runtimeState?.lastSuccessAt ?? null,
+        last_failure_at: runtimeState?.lastFailureAt ?? null,
+      };
+    });
+  }
+
+  private itemsForHealthSource(
+    sourceKind: LiteratureFulltextAcquisitionHealthSourceKind,
+    items: LiteratureFulltextAcquisitionItemRecord[],
+  ): LiteratureFulltextAcquisitionItemRecord[] {
+    if (sourceKind === 'download') {
+      return items.filter((item) =>
+        item.selectedSourceKind !== null
+        && (
+          item.selectedSourceKind !== 'unpaywall'
+          || item.sourceUrl !== null
+          || item.finalUrl !== null
+          || item.contentAssetId !== null
+        ));
+    }
+    return items.filter((item) => item.selectedSourceKind === sourceKind);
+  }
+
+  private healthSourceToRuntimeSource(sourceKind: LiteratureFulltextAcquisitionHealthSourceKind): string {
+    if (sourceKind === 'explicit_url') {
+      return 'download';
+    }
+    return sourceKind;
+  }
+
+  private latestItemError(
+    items: LiteratureFulltextAcquisitionItemRecord[],
+  ): Pick<LiteratureFulltextAcquisitionItemRecord, 'errorCode' | 'errorMessage'> | null {
+    return [...items]
+      .filter((item) => item.errorCode || item.errorMessage)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] ?? null;
   }
 
   private async toItemDTO(item: LiteratureFulltextAcquisitionItemRecord): Promise<LiteratureFulltextAcquisitionItemDTO> {
@@ -1004,6 +1099,9 @@ export class LiteratureFulltextAcquisitionService {
   }
 
   private readErrorCode(error: unknown): string {
+    if (error instanceof AppError && error.message.includes('SOURCE_RATE_LIMIT')) {
+      return 'SOURCE_RATE_LIMIT';
+    }
     if (error instanceof AppError && error.message.includes('UNPAYWALL_NO_OA_PDF')) {
       return 'UNPAYWALL_NO_OA_PDF';
     }

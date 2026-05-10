@@ -263,6 +263,7 @@ export function normalizeLiteratureOverviewPayload(payload: unknown): Literature
 
       return {
         literature_id: literatureId,
+        canonical_work_key: toText(row.canonical_work_key) ?? `literature:${literatureId}`,
         title,
         authors: Array.isArray(row.authors)
           ? row.authors.filter((author): author is string => typeof author === 'string')

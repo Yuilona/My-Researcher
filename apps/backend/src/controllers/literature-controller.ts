@@ -1,13 +1,21 @@
 import type {
   CreateLiteratureContentProcessingRunRequest,
   CreateLiteratureContentProcessingRunResponse,
+  DryRunImportLiteratureKeyContentDossierResponse,
   DownloadLiteratureContentAssetRequest,
   DownloadLiteratureContentAssetResponse,
   GetLiteratureContentProcessingResponse,
   GetLiteratureMetadataResponse,
   GetPaperLiteratureResponse,
+  ImportLiteratureKeyContentDossierRequest,
+  ImportLiteratureKeyContentDossierResponse,
+  LiteratureClusterCandidateGenerationRequest,
+  LiteratureClusterCandidateGenerationResponse,
+  LiteratureKeyContentCurationBundleResponse,
   LiteratureCollectionImportRequest,
   LiteratureCollectionImportResponse,
+  ListLiteratureClustersQuery,
+  ListLiteratureClustersResponse,
   LiteratureOverviewQuery,
   LiteratureOverviewResponse,
   LiteratureRetrieveRequest,
@@ -18,6 +26,8 @@ import type {
   SyncPaperLiteratureFromTopicRequest,
   SyncPaperLiteratureFromTopicResponse,
   TopicLiteratureScopeResponse,
+  UpdateLiteratureClusterRequest,
+  UpdateLiteratureClusterResponse,
   UpdateLiteratureMetadataRequest,
   UpdateLiteratureMetadataResponse,
   UpdatePaperLiteratureLinkRequest,
@@ -32,6 +42,7 @@ import type {
 } from '@paper-engineering-assistant/shared/research-lifecycle/literature-contracts';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AppError } from '../errors/app-error.js';
+import { LiteratureClusterService } from '../services/literature-cluster-service.js';
 import { LiteratureService } from '../services/literature-service.js';
 
 type TopicParams = {
@@ -51,8 +62,15 @@ type LiteratureParams = {
   literatureId: string;
 };
 
+type ClusterParams = {
+  clusterId: string;
+};
+
 export class LiteratureController {
-  constructor(private readonly service: LiteratureService) {}
+  constructor(
+    private readonly service: LiteratureService,
+    private readonly clusterService: LiteratureClusterService,
+  ) {}
 
   async collectionImport(
     request: FastifyRequest<{ Body: LiteratureCollectionImportRequest }>,
@@ -241,6 +259,42 @@ export class LiteratureController {
     }
   }
 
+  async generateClusterCandidates(
+    request: FastifyRequest<{ Body: LiteratureClusterCandidateGenerationRequest }>,
+    reply: FastifyReply,
+  ): Promise<void> {
+    try {
+      const result = await this.clusterService.generateCandidates(request.body);
+      reply.status(200).send(result satisfies LiteratureClusterCandidateGenerationResponse);
+    } catch (error) {
+      this.handleError(reply, error);
+    }
+  }
+
+  async listClusters(
+    request: FastifyRequest<{ Querystring: ListLiteratureClustersQuery }>,
+    reply: FastifyReply,
+  ): Promise<void> {
+    try {
+      const result = await this.clusterService.listClusters(request.query);
+      reply.status(200).send(result satisfies ListLiteratureClustersResponse);
+    } catch (error) {
+      this.handleError(reply, error);
+    }
+  }
+
+  async updateCluster(
+    request: FastifyRequest<{ Params: ClusterParams; Body: UpdateLiteratureClusterRequest }>,
+    reply: FastifyReply,
+  ): Promise<void> {
+    try {
+      const result = await this.clusterService.updateCluster(request.params.clusterId, request.body);
+      reply.status(200).send(result satisfies UpdateLiteratureClusterResponse);
+    } catch (error) {
+      this.handleError(reply, error);
+    }
+  }
+
   async getContentProcessing(
     request: FastifyRequest<{ Params: LiteratureParams }>,
     reply: FastifyReply,
@@ -248,6 +302,42 @@ export class LiteratureController {
     try {
       const result = await this.service.getContentProcessing(request.params.literatureId);
       reply.status(200).send(result satisfies GetLiteratureContentProcessingResponse);
+    } catch (error) {
+      this.handleError(reply, error);
+    }
+  }
+
+  async getKeyContentCurationBundle(
+    request: FastifyRequest<{ Params: LiteratureParams }>,
+    reply: FastifyReply,
+  ): Promise<void> {
+    try {
+      const result = await this.service.getKeyContentCurationBundle(request.params.literatureId);
+      reply.status(200).send(result satisfies LiteratureKeyContentCurationBundleResponse);
+    } catch (error) {
+      this.handleError(reply, error);
+    }
+  }
+
+  async importKeyContentDossier(
+    request: FastifyRequest<{ Params: LiteratureParams; Body: ImportLiteratureKeyContentDossierRequest }>,
+    reply: FastifyReply,
+  ): Promise<void> {
+    try {
+      const result = await this.service.importKeyContentDossier(request.params.literatureId, request.body);
+      reply.status(200).send(result satisfies ImportLiteratureKeyContentDossierResponse);
+    } catch (error) {
+      this.handleError(reply, error);
+    }
+  }
+
+  async dryRunImportKeyContentDossier(
+    request: FastifyRequest<{ Params: LiteratureParams; Body: ImportLiteratureKeyContentDossierRequest }>,
+    reply: FastifyReply,
+  ): Promise<void> {
+    try {
+      const result = await this.service.dryRunImportKeyContentDossier(request.params.literatureId, request.body);
+      reply.status(200).send(result satisfies DryRunImportLiteratureKeyContentDossierResponse);
     } catch (error) {
       this.handleError(reply, error);
     }

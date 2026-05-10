@@ -1,9 +1,9 @@
 # API Index
 
-> Auto-generated at 2026-05-08T12:17:23.875Z — do NOT hand-edit.
-> Source: `docs/context/api/openapi.yaml` (SHA-256: `b5e7be7b9227...`)
+> Auto-generated at 2026-05-10T23:31:29.454Z — do NOT hand-edit.
+> Source: `docs/context/api/openapi.yaml` (SHA-256: `d48e72073a0a...`)
 
-Total endpoints: **92**
+Total endpoints: **98**
 
 | Method | Path | Summary | Auth | Input (required) | Output (core) | Errors |
 |--------|------|---------|------|------------------|---------------|--------|
@@ -21,13 +21,16 @@ Total endpoints: **92**
 | POST | /literature/collections/zotero-preview | Fetch Zotero literature candidates for manual review table. | none | library_type, library_id | fetched_count, items | 400, 500, 502 |
 | GET | /literature/overview | Get literature overview filtered by topic and/or paper. | none | — | summary, items, topic_id, paper_id | 400, 404, 500 |
 | POST | /literature/retrieve | Retrieve relevant literature chunks from active embedding versions. | none | query | items, meta | 400, 500 |
+| POST | /literature/clusters/candidates | Generate structured literature duplicate/cluster candidates. | none | — | generated_count, clusters, summary | 400, 500 |
+| GET | /literature/clusters | List structured literature clusters and candidate relations. | none | — | items | 400, 500 |
+| PATCH | /literature/clusters/{clusterId} | Confirm, reject, split, or edit a literature cluster decision. | none | clusterId | item | 400, 404, 500 |
 | GET | /topics/{topicId}/literature-scope | Get literature scope list for a topic. | none | topicId | topic_id, items | 404, 500 |
 | POST | /topics/{topicId}/literature-scope | Upsert literature scope actions for a topic. | none | actions | topic_id, items | 400, 404, 500 |
 | POST | /paper-projects/{id}/literature-links/from-topic | Sync in-scope topic literature into paper links. | none | topic_id | paper_id, topic_id, linked_count, skipped_count | 400, 404, 500 |
 | GET | /paper-projects/{id}/literature | Get literature links under a paper. | none | id | paper_id, items | 404, 500 |
 | PATCH | /paper-projects/{id}/literature-links/{linkId} | Update citation status or note of a paper literature link. | none | id, linkId | paper_id, item | 400, 404, 500 |
-| GET | /literature/{literatureId}/metadata | Get editable metadata fields of one literature. | none | literatureId | literature_id, title, abstract, key_content_digest, updated_at | 404, 500 |
-| PATCH | /literature/{literatureId}/metadata | Update literature metadata fields. | none | literatureId | literature_id, title, abstract, key_content_digest, authors, year, doi, arxiv_id, rights_class, tags, updated_at | 400, 404, 409, 500 |
+| GET | /literature/{literatureId}/metadata | Get editable metadata fields of one literature. | none | literatureId | literature_id, canonical_work_key, title, abstract, key_content_digest, updated_at | 404, 500 |
+| PATCH | /literature/{literatureId}/metadata | Update literature metadata fields. | none | literatureId | literature_id, canonical_work_key, title, abstract, key_content_digest, authors, year, doi, arxiv_id, rights_class, tags, updated_at | 400, 404, 409, 500 |
 | GET | /literature/{literatureId}/content-assets | List local content assets registered for one literature. | none | literatureId | literature_id, items | 404, 500 |
 | POST | /literature/{literatureId}/content-assets | Register a local literature content asset reference. | none | local_path | item | 400, 404, 500 |
 | POST | /literature/{literatureId}/content-assets/download | Download a remote fulltext asset and register it for one literature. | none | source_url | item | 400, 404, 413, 500, 502 |
@@ -41,6 +44,9 @@ Total endpoints: **92**
 | POST | /literature/fulltext-acquisition/jobs/{jobId}/cancel | Cancel a durable fulltext acquisition job and stop scheduling new downloads. | none | jobId | job | 400, 404, 500 |
 | POST | /literature/fulltext-acquisition/jobs/{jobId}/retry-failed | Requeue retryable failed fulltext acquisition items. | none | jobId | job | 400, 404, 500 |
 | GET | /literature/{literatureId}/content-processing | Get content-processing aggregate state and stage states for a literature. | none | literatureId | literature_id, state, stage_states | 404, 500 |
+| GET | /literature/{literatureId}/content-processing/key-content-curation-bundle | Export source-grounded inputs for Codex/manual key-content curation. | none | literatureId | literature_id, title, authors, year, abstract, abstract_profile, document, sections, paragraphs, anchors, source_refs, export_policy | 400, 404, 500 |
+| POST | /literature/{literatureId}/content-processing/key-content-dossier | Import a Codex/manual curated key-content dossier as KEY_CONTENT_READY. | none | curation_source, dossier | literature_id, artifact_id, readiness_status, checksum, display_digest, source, diagnostics, state | 400, 404, 500 |
+| POST | /literature/{literatureId}/content-processing/key-content-dossier/dry-run | Validate a Codex/manual curated key-content dossier without mutating KEY_CONTENT_READY. | none | curation_source, dossier | literature_id, valid, readiness_status, checksum, display_digest, source, issues, diagnostics, repaired_source_ref_count, would_mark_downstream_stale | 400, 404, 409, 500 |
 | GET | /literature/{literatureId}/content-processing/runs | List content-processing runs for one literature. | none | literatureId | literature_id, items | 404, 500 |
 | POST | /literature/{literatureId}/content-processing/runs | Trigger a content-processing run for one literature. | none | literatureId | run | 400, 404, 500 |
 | POST | /literature/content-processing/backfill/dry-runs | Plan a durable content-processing backfill without provider calls or writes. | none | — | estimate | 400, 500 |

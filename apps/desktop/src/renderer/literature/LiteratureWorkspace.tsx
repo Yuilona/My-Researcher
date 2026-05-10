@@ -3,6 +3,7 @@ import { AutoImportTab } from './auto-import/AutoImportTab';
 import { ManualImportTab } from './manual-import/ManualImportTab';
 import { OverviewTab } from './overview/OverviewTab';
 import { MetadataIntakePanel } from './intake/MetadataIntakePanel';
+import { ClusterReviewPanel } from './operations/ClusterReviewPanel';
 import { ContentProcessingOperationsPanel } from './operations/ContentProcessingOperationsPanel';
 import { LiteratureContentProcessingSettingsPanel } from './settings/LiteratureContentProcessingSettingsPanel';
 import type { ContentProcessingSubTabKey, LiteratureTabKey } from './shared/types';
@@ -31,6 +32,8 @@ export function LiteratureWorkspace({
           {activeLiteratureTab === 'content-processing' ? (
             contentProcessingSubTab === 'settings' ? (
               <LiteratureContentProcessingSettingsPanel />
+            ) : contentProcessingSubTab === 'clusters' ? (
+              <ClusterReviewPanel />
             ) : (
               <ContentProcessingOperationsPanel />
             )

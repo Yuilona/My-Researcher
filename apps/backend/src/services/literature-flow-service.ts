@@ -1,6 +1,10 @@
 import crypto from 'node:crypto';
+import { LITERATURE_KEY_CONTENT_CATEGORY_KEYS } from '@paper-engineering-assistant/shared/research-lifecycle/literature-contracts';
 import type {
+  DryRunImportLiteratureKeyContentDossierResponse,
   GetLiteratureContentProcessingResponse,
+  ImportLiteratureKeyContentDossierRequest,
+  ImportLiteratureKeyContentDossierResponse,
   LiteratureContentProcessingActionReasonCode,
   LiteratureContentProcessingActionSet,
   LiteratureContentProcessingRunDTO,
@@ -10,6 +14,11 @@ import type {
   LiteratureContentProcessingStageStatusMap,
   LiteratureContentProcessingTriggerSource,
   LiteratureContentProcessingStateDTO,
+  LiteratureKeyContentCategoryKey,
+  LiteratureKeyContentCurationBundleResponse,
+  LiteratureKeyContentDossierPayload,
+  LiteratureKeyContentReadyMethod,
+  LiteratureKeyContentSourceRef,
   ListLiteratureContentProcessingRunsResponse,
   RightsClass,
   TopicScopeStatus,
@@ -21,13 +30,19 @@ import type {
   LiteraturePipelineRunStepRecord,
   LiteraturePipelineStageStateRecord,
   LiteraturePipelineStateRecord,
+  LiteratureFulltextAnchorRecord,
+  LiteratureFulltextDocumentRecord,
+  LiteratureFulltextParagraphRecord,
+  LiteratureFulltextSectionRecord,
   LiteratureRecord,
   LiteratureRepository,
 } from '../repositories/literature-repository.js';
+import { sha256Text, stableStringify } from './literature-content-processing-utils.js';
 import { LiteratureFlowArtifactRuntime } from './literature-flow/literature-flow-artifact-runtime.js';
 import type { LiteratureContentProcessingSettingsService } from './literature-content-processing-settings-service.js';
 import { LiteratureAbstractReadinessService } from './literature-abstract-readiness-service.js';
 import { LiteratureCitationNormalizationService } from './literature-citation-normalization-service.js';
+import type { BackendLlmGateway } from './llm-gateway.js';
 import { OverviewStatusResolver, type OverviewStatusResolverInput } from './overview-status-resolver.js';
 import { PipelineOrchestrator, type StageExecutionContext, type StageExecutionResult } from './pipeline-orchestrator.js';
 
@@ -76,6 +91,28 @@ type ExtendedPipelineSignalState = PipelineSignalState & {
   indexed: boolean;
 };
 
+type KeyContentCurationFulltextBundle = {
+  document: LiteratureFulltextDocumentRecord;
+  sections: LiteratureFulltextSectionRecord[];
+  paragraphs: LiteratureFulltextParagraphRecord[];
+  anchors: LiteratureFulltextAnchorRecord[];
+};
+
+type KeyContentCurationValidationContext = {
+  documentChecksum: string;
+  abstractProfileId: string | null;
+  sectionIds: Set<string>;
+  paragraphIds: Set<string>;
+  anchorIds: Set<string>;
+  anchorLabels: Map<string, string>;
+};
+
+type RepairedKeyContentSourceRef = {
+  ref: LiteratureKeyContentSourceRef;
+  repaired: boolean;
+  strategy: string | null;
+};
+
 export class LiteratureFlowService {
   private readonly overviewStatusResolver = new OverviewStatusResolver();
   private readonly pipelineOrchestrator: PipelineOrchestrator;
@@ -85,13 +122,15 @@ export class LiteratureFlowService {
 
   constructor(
     private readonly repository: LiteratureRepository,
-    settingsService?: LiteratureContentProcessingSettingsService,
+    private readonly settingsService?: LiteratureContentProcessingSettingsService,
+    llmGateway?: BackendLlmGateway,
   ) {
     this.citationNormalizationService = new LiteratureCitationNormalizationService(repository);
     this.abstractReadinessService = new LiteratureAbstractReadinessService(repository);
     this.artifactRuntime = new LiteratureFlowArtifactRuntime(repository, {
       refreshPipelineState: async (literatureId) => this.refreshPipelineState(literatureId),
-      settingsService,
+      settingsService: this.settingsService,
+      llmGateway,
     });
     this.pipelineOrchestrator = new PipelineOrchestrator(repository, {
       executeStage: async (context) => this.executeStage(context),
@@ -184,6 +223,226 @@ export class LiteratureFlowService {
     };
   }
 
+  async getKeyContentCurationBundle(literatureId: string): Promise<LiteratureKeyContentCurationBundleResponse> {
+    await this.ensurePipelineScaffold(literatureId);
+    await this.assertKeyContentCurationPrerequisites(literatureId);
+    const literature = await this.assertLiteratureExists(literatureId);
+    const bundle = await this.loadLatestReadyFulltextBundle(literatureId);
+    if (!bundle) {
+      throw new AppError(409, 'INVALID_PAYLOAD', 'FULLTEXT_PREPROCESSED artifact is required before exporting a key-content curation bundle.');
+    }
+    const abstractProfile = await this.repository.findAbstractProfileByLiteratureId(literatureId);
+
+    return {
+      literature_id: literature.id,
+      title: literature.title,
+      authors: literature.authors,
+      year: literature.year,
+      abstract: literature.abstractText,
+      abstract_profile: abstractProfile
+        ? {
+            id: abstractProfile.id,
+            checksum: abstractProfile.checksum,
+            confidence: abstractProfile.confidence,
+            generated: abstractProfile.generated,
+          }
+        : null,
+      document: {
+        id: bundle.document.id,
+        source_asset_id: bundle.document.sourceAssetId,
+        normalized_text_checksum: bundle.document.normalizedTextChecksum,
+        parser_name: bundle.document.parserName,
+        parser_version: bundle.document.parserVersion,
+        status: bundle.document.status,
+        diagnostics: bundle.document.diagnostics,
+      },
+      sections: bundle.sections
+        .sort((left, right) => left.orderIndex - right.orderIndex)
+        .map((section) => ({
+          section_id: section.sectionId,
+          title: section.title,
+          level: section.level,
+          order_index: section.orderIndex,
+          start_offset: section.startOffset,
+          end_offset: section.endOffset,
+          page_start: section.pageStart,
+          page_end: section.pageEnd,
+          checksum: section.checksum,
+        })),
+      paragraphs: bundle.paragraphs
+        .sort((left, right) => left.orderIndex - right.orderIndex)
+        .map((paragraph) => ({
+          paragraph_id: paragraph.paragraphId,
+          section_id: paragraph.sectionId,
+          order_index: paragraph.orderIndex,
+          text: paragraph.text,
+          start_offset: paragraph.startOffset,
+          end_offset: paragraph.endOffset,
+          page_number: paragraph.pageNumber,
+          checksum: paragraph.checksum,
+          confidence: paragraph.confidence,
+        })),
+      anchors: bundle.anchors.map((anchor) => ({
+        anchor_id: anchor.anchorId,
+        anchor_type: anchor.anchorType,
+        label: anchor.label,
+        text: anchor.text,
+        page_number: anchor.pageNumber,
+        bbox: anchor.bbox,
+        target_refs: anchor.targetRefs,
+        checksum: anchor.checksum,
+      })),
+      source_refs: this.buildCurationSourceRefs(abstractProfile, bundle),
+      export_policy: {
+        accepted_curation_sources: ['codex_curated', 'manual_curated'],
+        required_schema_version: 'key_content.v1',
+        required_extraction_profile: 'paper_semantic_dossier.v1',
+        require_resolvable_source_refs: true,
+      },
+    };
+  }
+
+  async importKeyContentDossier(
+    literatureId: string,
+    request: ImportLiteratureKeyContentDossierRequest,
+  ): Promise<ImportLiteratureKeyContentDossierResponse> {
+    await this.ensurePipelineScaffold(literatureId);
+    await this.assertKeyContentCurationPrerequisites(literatureId);
+    const literature = await this.assertLiteratureExists(literatureId);
+    const bundle = await this.loadLatestReadyFulltextBundle(literatureId);
+    if (!bundle) {
+      throw new AppError(409, 'INVALID_PAYLOAD', 'FULLTEXT_PREPROCESSED artifact is required before importing a key-content dossier.');
+    }
+    const abstractProfile = await this.repository.findAbstractProfileByLiteratureId(literatureId);
+    const validationContext = this.buildCurationValidationContext(bundle, abstractProfile?.id ?? null);
+    const repairedDossier = this.repairCuratedDossierSourceRefs(request.dossier, validationContext);
+    const validationIssues = this.validateCuratedDossier(repairedDossier.dossier, validationContext);
+    if (validationIssues.length > 0) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'Imported key-content dossier failed validation.', {
+        issues: validationIssues.slice(0, 50),
+      });
+    }
+
+    const now = new Date().toISOString();
+    const importedPayload = this.buildImportedDossierPayload(
+      { ...request, dossier: repairedDossier.dossier },
+      bundle.document.normalizedTextChecksum,
+      now,
+      repairedDossier.diagnostics,
+    );
+    const checksum = sha256Text(stableStringify(importedPayload));
+    const existingArtifact = await this.repository.findPipelineArtifact(literatureId, 'KEY_CONTENT_READY', 'KEY_CONTENT_DOSSIER');
+    const artifact = await this.repository.upsertPipelineArtifact({
+      id: existingArtifact?.id ?? crypto.randomUUID(),
+      literatureId,
+      stageCode: 'KEY_CONTENT_READY',
+      artifactType: 'KEY_CONTENT_DOSSIER',
+      payload: importedPayload as unknown as Record<string, unknown>,
+      payloadPath: null,
+      checksum,
+      createdAt: existingArtifact?.createdAt ?? now,
+      updatedAt: now,
+    });
+    const readinessStatus = importedPayload.readiness_status;
+    if (readinessStatus === 'FAILED') {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'Imported key-content dossier must not have FAILED readiness_status.');
+    }
+
+    const existingStages = await this.repository.listPipelineStageStatesByLiteratureId(literatureId);
+    const existingKeyStage = existingStages.find((stage) => stage.stageCode === 'KEY_CONTENT_READY');
+    const diagnostics = importedPayload.quality_report.extraction_diagnostics;
+    await this.repository.upsertPipelineStageState({
+      id: existingKeyStage?.id ?? crypto.randomUUID(),
+      literatureId,
+      stageCode: 'KEY_CONTENT_READY',
+      status: 'SUCCEEDED',
+      lastRunId: null,
+      detail: {
+        stage_code: 'KEY_CONTENT_READY',
+        key_content_ready: true,
+        readiness_status: readinessStatus,
+        artifact_id: artifact.record.id,
+        checksum,
+        generated: true,
+        source: request.curation_source,
+        diagnostics,
+      },
+      updatedAt: now,
+    });
+
+    if (existingArtifact?.checksum !== checksum) {
+      await this.markStagesStale({
+        literatureId,
+        stages: ['CHUNKED', 'EMBEDDED', 'INDEXED'],
+        reasonCode: 'KEY_CONTENT_DOSSIER_IMPORTED',
+        reasonMessage: 'A curated key-content dossier was imported.',
+      });
+    }
+
+    const existingDigest = (literature.keyContentDigest ?? '').trim();
+    if (!existingDigest && importedPayload.display_digest.trim()) {
+      await this.repository.updateLiterature({
+        ...literature,
+        keyContentDigest: importedPayload.display_digest.trim(),
+        updatedAt: now,
+      });
+    }
+
+    const state = await this.refreshPipelineState(literatureId);
+    const stageStates = await this.repository.listPipelineStageStatesByLiteratureId(literatureId);
+    return {
+      literature_id: literatureId,
+      artifact_id: artifact.record.id,
+      readiness_status: readinessStatus,
+      checksum,
+      display_digest: importedPayload.display_digest,
+      source: request.curation_source,
+      diagnostics,
+      state: this.toPipelineStateDTO(state, stageStates),
+    };
+  }
+
+  async dryRunImportKeyContentDossier(
+    literatureId: string,
+    request: ImportLiteratureKeyContentDossierRequest,
+  ): Promise<DryRunImportLiteratureKeyContentDossierResponse> {
+    await this.ensurePipelineScaffold(literatureId);
+    await this.assertKeyContentCurationPrerequisites(literatureId);
+    await this.assertLiteratureExists(literatureId);
+    const bundle = await this.loadLatestReadyFulltextBundle(literatureId);
+    if (!bundle) {
+      throw new AppError(409, 'INVALID_PAYLOAD', 'FULLTEXT_PREPROCESSED artifact is required before importing a key-content dossier.');
+    }
+    const abstractProfile = await this.repository.findAbstractProfileByLiteratureId(literatureId);
+    const validationContext = this.buildCurationValidationContext(bundle, abstractProfile?.id ?? null);
+    const repairedDossier = this.repairCuratedDossierSourceRefs(request.dossier, validationContext);
+    const validationIssues = this.validateCuratedDossier(repairedDossier.dossier, validationContext);
+    const importedAt = new Date().toISOString();
+    const importedPayload = this.buildImportedDossierPayload(
+      { ...request, dossier: repairedDossier.dossier },
+      bundle.document.normalizedTextChecksum,
+      importedAt,
+      repairedDossier.diagnostics,
+    );
+    const checksum = validationIssues.length === 0
+      ? sha256Text(stableStringify(importedPayload))
+      : null;
+    const existingArtifact = await this.repository.findPipelineArtifact(literatureId, 'KEY_CONTENT_READY', 'KEY_CONTENT_DOSSIER');
+    return {
+      literature_id: literatureId,
+      valid: validationIssues.length === 0,
+      readiness_status: repairedDossier.dossier.readiness_status,
+      checksum,
+      display_digest: repairedDossier.dossier.display_digest,
+      source: request.curation_source,
+      issues: validationIssues,
+      diagnostics: importedPayload.quality_report.extraction_diagnostics,
+      repaired_source_ref_count: repairedDossier.diagnostics.filter((item) =>
+        item.code === 'KEY_CONTENT_SOURCE_REF_REPAIRED').length,
+      would_mark_downstream_stale: Boolean(checksum && existingArtifact?.checksum !== checksum),
+    };
+  }
+
   async listContentProcessingRuns(literatureId: string, limit?: number): Promise<ListLiteratureContentProcessingRunsResponse> {
     await this.assertLiteratureExists(literatureId);
     const runs = await this.repository.listPipelineRunsByLiteratureId(literatureId, limit);
@@ -224,6 +483,398 @@ export class LiteratureFlowService {
     }
 
     return stateByLiteratureId;
+  }
+
+  private async assertKeyContentCurationPrerequisites(literatureId: string): Promise<void> {
+    if (!(await this.isStageUsable(literatureId, 'ABSTRACT_READY'))) {
+      throw new AppError(409, 'INVALID_PAYLOAD', 'ABSTRACT_READY stage is required before key-content curation.');
+    }
+    if (!(await this.isStageUsable(literatureId, 'FULLTEXT_PREPROCESSED'))) {
+      throw new AppError(409, 'INVALID_PAYLOAD', 'FULLTEXT_PREPROCESSED stage is required before key-content curation.');
+    }
+  }
+
+  private async loadLatestReadyFulltextBundle(literatureId: string): Promise<KeyContentCurationFulltextBundle | null> {
+    const documents = await this.repository.listFulltextDocumentsByLiteratureId(literatureId);
+    const document = documents
+      .filter((item) => item.status === 'READY')
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+    if (!document) {
+      return null;
+    }
+    const [sections, paragraphs, anchors] = await Promise.all([
+      this.repository.listFulltextSectionsByDocumentId(document.id),
+      this.repository.listFulltextParagraphsByDocumentId(document.id),
+      this.repository.listFulltextAnchorsByDocumentId(document.id),
+    ]);
+    return { document, sections, paragraphs, anchors };
+  }
+
+  private buildCurationSourceRefs(
+    abstractProfile: Awaited<ReturnType<LiteratureRepository['findAbstractProfileByLiteratureId']>>,
+    bundle: KeyContentCurationFulltextBundle,
+  ): Array<Record<string, unknown>> {
+    const refs: Array<Record<string, unknown>> = [];
+    if (abstractProfile) {
+      refs.push({
+        ref_type: 'abstract',
+        ref_id: abstractProfile.id,
+        checksum: abstractProfile.checksum,
+      });
+    }
+    refs.push(...bundle.sections.map((section) => ({
+      ref_type: 'section',
+      ref_id: section.sectionId,
+      title: section.title,
+      checksum: section.checksum,
+    })));
+    refs.push(...bundle.paragraphs.map((paragraph) => ({
+      ref_type: 'paragraph',
+      ref_id: paragraph.paragraphId,
+      section_id: paragraph.sectionId,
+      checksum: paragraph.checksum,
+    })));
+    refs.push(...bundle.anchors.map((anchor) => ({
+      ref_type: 'anchor',
+      ref_id: anchor.anchorId,
+      anchor_type: anchor.anchorType,
+      label: anchor.label,
+      checksum: anchor.checksum,
+    })));
+    return refs;
+  }
+
+  private buildCurationValidationContext(
+    bundle: KeyContentCurationFulltextBundle,
+    abstractProfileId: string | null,
+  ): KeyContentCurationValidationContext {
+    return {
+      documentChecksum: bundle.document.normalizedTextChecksum,
+      abstractProfileId,
+      sectionIds: new Set(bundle.sections.map((section) => section.sectionId)),
+      paragraphIds: new Set(bundle.paragraphs.map((paragraph) => paragraph.paragraphId)),
+      anchorIds: new Set(bundle.anchors.map((anchor) => anchor.anchorId)),
+      anchorLabels: new Map(
+        bundle.anchors
+          .map((anchor) => [this.normalizeSourceRefLabel(anchor.label), anchor.anchorId] as const)
+          .filter(([label]) => label.length > 0),
+      ),
+    };
+  }
+
+  private repairCuratedDossierSourceRefs(
+    dossier: LiteratureKeyContentDossierPayload,
+    context: KeyContentCurationValidationContext,
+  ): {
+    dossier: LiteratureKeyContentDossierPayload;
+    diagnostics: Record<string, unknown>[];
+  } {
+    const diagnostics: Record<string, unknown>[] = [];
+    const categories = Object.fromEntries(LITERATURE_KEY_CONTENT_CATEGORY_KEYS.map((category) => {
+      const rows = dossier.categories[category].map((row) => ({
+        ...row,
+        source_refs: row.source_refs.map((ref) => {
+          const repaired = this.repairCuratedSourceRef(ref, context);
+          if (repaired.repaired) {
+            diagnostics.push({
+              code: 'KEY_CONTENT_SOURCE_REF_REPAIRED',
+              severity: 'info',
+              message: 'Repaired curated key-content source_ref to the active fulltext source-ref inventory.',
+              category,
+              item_id: row.id,
+              repair_strategy: repaired.strategy,
+              from: {
+                ref_type: ref.ref_type,
+                ref_id: ref.ref_id,
+              },
+              to: {
+                ref_type: repaired.ref.ref_type,
+                ref_id: repaired.ref.ref_id,
+              },
+            });
+          }
+          return repaired.ref;
+        }),
+      }));
+      return [category, rows];
+    })) as LiteratureKeyContentDossierPayload['categories'];
+
+    return {
+      dossier: {
+        ...dossier,
+        categories,
+      },
+      diagnostics,
+    };
+  }
+
+  private repairCuratedSourceRef(
+    ref: LiteratureKeyContentSourceRef,
+    context: KeyContentCurationValidationContext,
+  ): RepairedKeyContentSourceRef {
+    const typedIdCandidate = this.refIdFromTypedField(ref);
+    if (typedIdCandidate) {
+      const repaired = this.normalizeCuratedSourceRefCandidate(
+        ref,
+        typedIdCandidate.refType,
+        typedIdCandidate.refId,
+        context,
+        `${typedIdCandidate.refType}_id_field`,
+      );
+      if (repaired) {
+        return repaired;
+      }
+    }
+
+    const prefixed = this.parseSourceRefPrefixedId(ref.ref_id);
+    if (prefixed) {
+      const repaired = this.normalizeCuratedSourceRefCandidate(
+        ref,
+        prefixed.refType,
+        prefixed.refId,
+        context,
+        'prefixed_ref_id',
+      );
+      if (repaired) {
+        return repaired;
+      }
+    }
+
+    const exact = this.normalizeCuratedSourceRefCandidate(ref, ref.ref_type, ref.ref_id, context, 'exact');
+    if (exact) {
+      return exact;
+    }
+
+    if (ref.ref_type === 'anchor') {
+      const anchorId = context.anchorLabels.get(this.normalizeSourceRefLabel(ref.ref_id));
+      if (anchorId) {
+        return {
+          ref: {
+            ...ref,
+            ref_type: 'anchor',
+            ref_id: anchorId,
+            anchor_id: anchorId,
+          },
+          repaired: true,
+          strategy: 'anchor_label',
+        };
+      }
+    }
+
+    if (ref.ref_type === 'abstract' && context.abstractProfileId && ref.ref_id === 'abstract') {
+      return {
+        ref: {
+          ...ref,
+          ref_type: 'abstract',
+          ref_id: context.abstractProfileId,
+        },
+        repaired: true,
+        strategy: 'abstract_alias',
+      };
+    }
+
+    return { ref, repaired: false, strategy: null };
+  }
+
+  private normalizeCuratedSourceRefCandidate(
+    original: LiteratureKeyContentSourceRef,
+    refType: LiteratureKeyContentSourceRef['ref_type'],
+    refId: string,
+    context: KeyContentCurationValidationContext,
+    strategy: string,
+  ): RepairedKeyContentSourceRef | null {
+    const normalizedId = refId.trim();
+    if (!normalizedId) {
+      return null;
+    }
+
+    const candidate: LiteratureKeyContentSourceRef = {
+      ...original,
+      ref_type: refType,
+      ref_id: normalizedId,
+    };
+    if (refType === 'section') {
+      candidate.section_id = normalizedId;
+    } else if (refType === 'paragraph') {
+      candidate.paragraph_id = normalizedId;
+    } else if (refType === 'anchor') {
+      candidate.anchor_id = normalizedId;
+    }
+
+    if (!this.isResolvableKeyContentSourceRef(candidate, context)) {
+      return null;
+    }
+
+    return {
+      ref: candidate,
+      repaired: candidate.ref_type !== original.ref_type || candidate.ref_id !== original.ref_id,
+      strategy,
+    };
+  }
+
+  private refIdFromTypedField(
+    ref: LiteratureKeyContentSourceRef,
+  ): { refType: LiteratureKeyContentSourceRef['ref_type']; refId: string } | null {
+    if (ref.paragraph_id?.trim()) {
+      return { refType: 'paragraph', refId: ref.paragraph_id.trim() };
+    }
+    if (ref.section_id?.trim()) {
+      return { refType: 'section', refId: ref.section_id.trim() };
+    }
+    if (ref.anchor_id?.trim()) {
+      return { refType: 'anchor', refId: ref.anchor_id.trim() };
+    }
+    return null;
+  }
+
+  private parseSourceRefPrefixedId(
+    value: string,
+  ): { refType: LiteratureKeyContentSourceRef['ref_type']; refId: string } | null {
+    const trimmed = value.trim();
+    for (const refType of ['abstract', 'section', 'paragraph', 'anchor', 'manual'] satisfies Array<LiteratureKeyContentSourceRef['ref_type']>) {
+      const prefix = `${refType}:`;
+      if (trimmed.startsWith(prefix)) {
+        const refId = trimmed.slice(prefix.length).split(':')[0]?.trim() ?? '';
+        return refId ? { refType, refId } : null;
+      }
+    }
+    return null;
+  }
+
+  private normalizeSourceRefLabel(value: string | null): string {
+    return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  private validateCuratedDossier(
+    dossier: LiteratureKeyContentDossierPayload,
+    context: KeyContentCurationValidationContext,
+  ): string[] {
+    const issues: string[] = [];
+    if (dossier.schema_version !== 'key_content.v1') {
+      issues.push('schema_version must be key_content.v1.');
+    }
+    if (dossier.extraction_profile !== 'paper_semantic_dossier.v1') {
+      issues.push('extraction_profile must be paper_semantic_dossier.v1.');
+    }
+    if (dossier.readiness_status === 'FAILED') {
+      issues.push('readiness_status must be READY or PARTIAL_READY.');
+    }
+    const inputChecksum = this.readString(dossier.input_refs.fulltext_checksum)
+      ?? this.readString(dossier.input_refs.normalized_text_checksum);
+    if (inputChecksum && inputChecksum !== context.documentChecksum) {
+      issues.push('input_refs.fulltext_checksum does not match the active FULLTEXT_PREPROCESSED document.');
+    }
+    if (dossier.quality_report.blockers.length > 0) {
+      issues.push('quality_report.blockers must be empty for import.');
+    }
+
+    for (const category of LITERATURE_KEY_CONTENT_CATEGORY_KEYS) {
+      const rows = dossier.categories[category];
+      if (!Array.isArray(rows)) {
+        issues.push(`categories.${category} must be an array.`);
+        continue;
+      }
+      for (const row of rows) {
+        if (!row.statement.trim()) {
+          issues.push(`categories.${category}.${row.id || '<missing-id>'} has an empty statement.`);
+        }
+        if (row.provenance !== 'model_generated' && row.provenance !== 'user_edited') {
+          issues.push(
+            `categories.${category}.${row.id || '<missing-id>'}.provenance must be item-level "model_generated" or "user_edited"; use request.curation_source for codex_curated/manual_curated.`,
+          );
+        }
+        if (!Array.isArray(row.source_refs) || row.source_refs.length === 0) {
+          issues.push(`categories.${category}.${row.id} must include at least one source_ref.`);
+          continue;
+        }
+        for (const ref of row.source_refs) {
+          if (!this.isResolvableKeyContentSourceRef(ref, context)) {
+            issues.push(`categories.${category}.${row.id} has unresolved source_ref ${ref.ref_type}:${ref.ref_id}.`);
+          }
+        }
+      }
+    }
+    for (const coreCategory of ['research_problem', 'contributions', 'key_findings'] satisfies LiteratureKeyContentCategoryKey[]) {
+      if (dossier.categories[coreCategory].length === 0) {
+        issues.push(`categories.${coreCategory} must not be empty.`);
+      }
+    }
+    return [...new Set(issues)];
+  }
+
+  private isResolvableKeyContentSourceRef(
+    ref: LiteratureKeyContentSourceRef,
+    context: {
+      abstractProfileId: string | null;
+      sectionIds: Set<string>;
+      paragraphIds: Set<string>;
+      anchorIds: Set<string>;
+    },
+  ): boolean {
+    if (ref.ref_type === 'abstract') {
+      return Boolean(context.abstractProfileId && ref.ref_id === context.abstractProfileId);
+    }
+    if (ref.ref_type === 'section') {
+      return context.sectionIds.has(ref.ref_id);
+    }
+    if (ref.ref_type === 'paragraph') {
+      return context.paragraphIds.has(ref.ref_id);
+    }
+    if (ref.ref_type === 'anchor') {
+      return context.anchorIds.has(ref.ref_id);
+    }
+    return ref.ref_type === 'manual' && ref.ref_id.trim().length > 0;
+  }
+
+  private buildImportedDossierPayload(
+    request: ImportLiteratureKeyContentDossierRequest,
+    documentChecksum: string,
+    importedAt: string,
+    repairDiagnostics: Record<string, unknown>[] = [],
+  ): LiteratureKeyContentDossierPayload {
+    const existingDiagnostics = request.dossier.quality_report.extraction_diagnostics.filter((item) => {
+      const row = item && typeof item === 'object' && !Array.isArray(item) ? item as Record<string, unknown> : {};
+      const code = this.readString(row.code);
+      return code !== 'KEY_CONTENT_CURATED_IMPORT' && code !== 'KEY_CONTENT_LLM_TELEMETRY';
+    });
+    const diagnostics = [
+      ...existingDiagnostics,
+      ...repairDiagnostics,
+      {
+        code: 'KEY_CONTENT_CURATED_IMPORT',
+        severity: 'info',
+        message: `Imported curated key-content dossier from ${request.curation_source}.`,
+        curation_source: request.curation_source,
+        curator: request.curator ?? null,
+        imported_at: importedAt,
+      },
+      {
+        code: 'KEY_CONTENT_LLM_TELEMETRY',
+        severity: 'info',
+        message: 'LLM calls=0, retries=0, elapsed_ms=0.',
+        request_count: 0,
+        retry_count: 0,
+        timeout_count: 0,
+        rate_limit_count: 0,
+        elapsed_ms_total: 0,
+        prompt_templates: ['curated-import@none'],
+      },
+    ];
+    return {
+      ...request.dossier,
+      input_refs: {
+        ...request.dossier.input_refs,
+        fulltext_checksum: documentChecksum,
+        curation_source: request.curation_source,
+        curator: request.curator ?? null,
+        imported_at: importedAt,
+        external_model_calls: 0,
+      },
+      quality_report: {
+        ...request.dossier.quality_report,
+        extraction_diagnostics: diagnostics,
+      },
+    };
   }
 
   resolveOverviewStatus(input: OverviewStatusResolverInput) {
@@ -502,6 +1153,33 @@ export class LiteratureFlowService {
       if (!preprocessed) {
         return this.blockedResult(context.stageCode, 'PREREQUISITE_NOT_READY', 'FULLTEXT_PREPROCESSED artifact is required first.');
       }
+      const preprocessedChecksum = preprocessed.checksum ?? this.readString(preprocessed.payload.normalized_text_checksum);
+      if (!preprocessedChecksum) {
+        return this.blockedResult(context.stageCode, 'PREREQUISITE_NOT_READY', 'FULLTEXT_PREPROCESSED checksum is required first.');
+      }
+      const preferredMethod = await this.resolvePreferredKeyContentMethod();
+      if (preferredMethod !== 'llm_gateway') {
+        const curatedResult = await this.reuseCuratedKeyContentIfCurrent(
+          context.literatureId,
+          preprocessedChecksum,
+          preferredMethod,
+        );
+        if (curatedResult) {
+          return curatedResult;
+        }
+        return this.blockedResult(
+          context.stageCode,
+          'KEY_CONTENT_CURATION_REQUIRED',
+          `Preferred KEY_CONTENT_READY method is ${preferredMethod}; import a curated key-content dossier before continuing.`,
+          [{
+            code: 'KEY_CONTENT_CURATION_REQUIRED',
+            severity: 'blocker',
+            preferred_key_content_method: preferredMethod,
+            curation_bundle_route: `/literature/${context.literatureId}/content-processing/key-content-curation-bundle`,
+            dossier_import_route: `/literature/${context.literatureId}/content-processing/key-content-dossier`,
+          }],
+        );
+      }
       const digestResult = await this.artifactRuntime.ensureKeyContentReady(literature);
       if (!digestResult.keyContentReady) {
         return this.blockedResult(
@@ -584,6 +1262,7 @@ export class LiteratureFlowService {
       const vectorCount = Array.isArray(embedded.artifact.payload.vectors)
         ? embedded.artifact.payload.vectors.length
         : 0;
+      const embeddingTelemetry = this.readRecord(embedded.artifact.payload.telemetry);
       const embeddingVersion = await this.artifactRuntime.persistEmbeddingVersionSnapshot({
         literatureId: context.literatureId,
         chunkArtifact,
@@ -597,7 +1276,9 @@ export class LiteratureFlowService {
           vector_count: vectorCount,
           embedding_version_id: embeddingVersion.id,
           embedding_version_status: embeddingVersion.status,
+          reused_existing: embedded.reusedExisting,
           activated: false,
+          telemetry: embeddingTelemetry,
         },
         outputRef: {
           artifact_id: embedded.artifact.id,
@@ -605,7 +1286,9 @@ export class LiteratureFlowService {
           embedding_provider: embedded.artifact.payload.provider,
           embedding_version_id: embeddingVersion.id,
           embedding_version_status: embeddingVersion.status,
+          reused_existing: embedded.reusedExisting,
           activated: false,
+          telemetry: embeddingTelemetry,
         },
       };
     }
@@ -765,11 +1448,12 @@ export class LiteratureFlowService {
     return this.isArtifactPresentStatus(status);
   }
 
-  private async assertLiteratureExists(literatureId: string): Promise<void> {
+  private async assertLiteratureExists(literatureId: string): Promise<LiteratureRecord> {
     const literature = await this.repository.findLiteratureById(literatureId);
     if (!literature) {
       throw new AppError(404, 'NOT_FOUND', `Literature ${literatureId} not found.`);
     }
+    return literature;
   }
 
   private sortStageStates(stageStates: LiteraturePipelineStageStateRecord[]): LiteraturePipelineStageStateRecord[] {
@@ -882,6 +1566,63 @@ export class LiteratureFlowService {
     return { ok: true };
   }
 
+  private async resolvePreferredKeyContentMethod(): Promise<LiteratureKeyContentReadyMethod> {
+    return this.settingsService?.resolvePreferredKeyContentMethod?.() ?? 'llm_gateway';
+  }
+
+  private async reuseCuratedKeyContentIfCurrent(
+    literatureId: string,
+    fulltextChecksum: string,
+    preferredMethod: LiteratureKeyContentReadyMethod,
+  ): Promise<StageExecutionResult | null> {
+    const artifact = await this.repository.findPipelineArtifact(literatureId, 'KEY_CONTENT_READY', 'KEY_CONTENT_DOSSIER');
+    if (!artifact) {
+      return null;
+    }
+
+    const payload = artifact.payload as unknown as Partial<LiteratureKeyContentDossierPayload>;
+    const inputRefs = payload.input_refs && typeof payload.input_refs === 'object' && !Array.isArray(payload.input_refs)
+      ? payload.input_refs as Record<string, unknown>
+      : {};
+    const artifactFulltextChecksum = this.readString(inputRefs.fulltext_checksum)
+      ?? this.readString(inputRefs.normalized_text_checksum);
+    const curationSource = this.readString(inputRefs.curation_source);
+    if (artifactFulltextChecksum !== fulltextChecksum) {
+      return null;
+    }
+    if (curationSource !== 'codex_curated' && curationSource !== 'manual_curated') {
+      return null;
+    }
+
+    const readinessStatus = payload.readiness_status === 'PARTIAL_READY' ? 'PARTIAL_READY' : 'READY';
+    const diagnostics = Array.isArray(payload.quality_report?.extraction_diagnostics)
+      ? payload.quality_report.extraction_diagnostics
+      : [];
+    return {
+      status: 'SUCCEEDED',
+      detail: {
+        stage_code: 'KEY_CONTENT_READY',
+        key_content_ready: true,
+        readiness_status: readinessStatus,
+        artifact_id: artifact.id,
+        checksum: artifact.checksum,
+        generated: false,
+        source: curationSource,
+        preferred_key_content_method: preferredMethod,
+        diagnostics,
+      },
+      outputRef: {
+        artifact_id: artifact.id,
+        artifact_type: 'KEY_CONTENT_DOSSIER',
+        key_content_ready: true,
+        readiness_status: readinessStatus,
+        checksum: artifact.checksum,
+        generated: false,
+        source: curationSource,
+      },
+    };
+  }
+
   private failedResult(errorCode: string, errorMessage: string): StageExecutionResult {
     return {
       status: 'FAILED',
@@ -915,6 +1656,16 @@ export class LiteratureFlowService {
       errorCode: reasonCode,
       errorMessage: reasonMessage,
     };
+  }
+
+  private readString(value: unknown): string | null {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+  }
+
+  private readRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
   }
 }
 

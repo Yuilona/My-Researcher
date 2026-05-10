@@ -13,12 +13,22 @@ test('literature content-processing settings default to redacted OpenAI and larg
   assert.equal(settings.providers[0]?.provider, 'openai');
   assert.equal(settings.providers[0]?.api_key_set, false);
   assert.equal(settings.providers[0]?.api_key_last_updated_at, null);
+  assert.equal(settings.providers[1]?.provider, 'dashscope');
+  assert.equal(settings.providers[1]?.api_key_set, false);
   assert.equal(settings.embedding.active_profile_id, 'default');
   assert.equal(settings.embedding.profiles.find((profile) => profile.profile_id === 'default')?.model, 'text-embedding-3-large');
   assert.equal(settings.embedding.profiles.find((profile) => profile.profile_id === 'economy')?.model, 'text-embedding-3-small');
   assert.equal(settings.extraction.active_profile_id, 'default');
   assert.equal(settings.extraction.profiles.find((profile) => profile.profile_id === 'default')?.model, 'gpt-5.4-mini');
   assert.equal(settings.extraction.profiles.find((profile) => profile.profile_id === 'high_accuracy')?.model, 'gpt-5.5');
+  assert.deepEqual(settings.extraction.runtime, {
+    preferred_key_content_method: 'llm_gateway',
+    section_concurrency: 3,
+    request_timeout_ms: 120_000,
+    max_retries: 1,
+    prompt_profile_id: 'literature_key_content_v2',
+    diagnostic_policy: 'actionable_v1',
+  });
   assert.equal(settings.fulltext_parser.grobid.endpoint_url, 'http://localhost:8070');
   assert.equal(
     settings.effective_storage_roots.normalized_text,
@@ -54,7 +64,11 @@ test('literature content-processing settings preserve, replace, and clear secret
   assert.equal(config?.apiKey, 'sk-test-secret');
   const extractionConfig = await service.resolveOpenAIExtractionConfig();
   assert.equal(extractionConfig?.apiKey, 'sk-test-secret');
+  assert.equal(extractionConfig?.provider, 'openai');
   assert.equal(extractionConfig?.model, 'gpt-5.4-mini');
+  assert.equal(extractionConfig?.runtime.preferred_key_content_method, 'llm_gateway');
+  assert.equal(extractionConfig?.runtime.section_concurrency, 3);
+  assert.equal(await service.resolvePreferredKeyContentMethod(), 'llm_gateway');
   assert.equal(preserved.fulltext_parser.grobid.endpoint_url, 'http://localhost:8070');
   assert.equal(preserved.effective_storage_roots.raw_files, '/tmp/literature/raw');
   assert.equal(await service.resolveStorageRoot('indexes'), '/tmp/literature/indexes');
@@ -66,13 +80,28 @@ test('literature content-processing settings preserve, replace, and clear secret
     },
     extraction: {
       active_profile_id: 'high_accuracy',
+      runtime: {
+        preferred_key_content_method: 'codex_curated',
+        section_concurrency: 2,
+        request_timeout_ms: 90_000,
+        max_retries: 0,
+        prompt_profile_id: 'custom_key_content_v1',
+        diagnostic_policy: 'raw',
+      },
     },
   });
   assert.equal(replaced.embedding.active_profile_id, 'economy');
   assert.equal(replaced.extraction.active_profile_id, 'high_accuracy');
+  assert.equal(replaced.extraction.runtime.preferred_key_content_method, 'codex_curated');
+  assert.equal(replaced.extraction.runtime.section_concurrency, 2);
+  assert.equal(replaced.extraction.runtime.request_timeout_ms, 90_000);
+  assert.equal(replaced.extraction.runtime.max_retries, 0);
+  assert.equal(replaced.extraction.runtime.prompt_profile_id, 'custom_key_content_v1');
+  assert.equal(replaced.extraction.runtime.diagnostic_policy, 'raw');
   assert.notEqual(replaced.providers[0]?.api_key_last_updated_at, null);
   assert.equal((await service.resolveOpenAIEmbeddingConfig())?.apiKey, 'sk-test-replaced');
   assert.equal((await service.resolveOpenAIExtractionConfig())?.model, 'gpt-5.5');
+  assert.equal(await service.resolvePreferredKeyContentMethod(), 'codex_curated');
 
   const cleared = await service.updateSettings({
     providers: [{ provider: 'openai', api_key: null }],
@@ -80,6 +109,50 @@ test('literature content-processing settings preserve, replace, and clear secret
   assert.equal(cleared.providers[0]?.api_key_set, false);
   assert.equal(cleared.providers[0]?.api_key_last_updated_at, null);
   assert.equal(await service.resolveOpenAIEmbeddingConfig(), null);
+  assert.equal(await service.resolveOpenAIExtractionConfig(), null);
+});
+
+test('literature content-processing settings report OpenAI env fallback as configured without storing it', async () => {
+  const previous = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = 'sk-env-fallback-test';
+  try {
+    const service = new LiteratureContentProcessingSettingsService(new InMemoryApplicationSettingsRepository());
+    const settings = await service.getSettings();
+
+    assert.equal(settings.providers[0]?.provider, 'openai');
+    assert.equal(settings.providers[0]?.api_key_set, true);
+    assert.equal(settings.providers[0]?.api_key_last_updated_at, null);
+    assert.equal((await service.resolveOpenAIEmbeddingConfig())?.apiKey, 'sk-env-fallback-test');
+  } finally {
+    if (previous === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = previous;
+    }
+  }
+});
+
+test('literature content-processing settings support DashScope extraction profile without changing OpenAI embeddings', async () => {
+  const service = new LiteratureContentProcessingSettingsService(new InMemoryApplicationSettingsRepository());
+
+  await service.updateSettings({
+    providers: [
+      { provider: 'openai', api_key: 'sk-openai-test' },
+      { provider: 'dashscope', api_key: 'sk-dashscope-test' },
+    ],
+    extraction: {
+      active_profile_id: 'default',
+      profiles: [{ profile_id: 'default', provider: 'dashscope', model: 'qwen3.6-plus' }],
+    },
+  });
+
+  const embeddingConfig = await service.resolveOpenAIEmbeddingConfig();
+  assert.equal(embeddingConfig?.apiKey, 'sk-openai-test');
+
+  const extractionConfig = await service.resolveExtractionConfig();
+  assert.equal(extractionConfig?.apiKey, 'sk-dashscope-test');
+  assert.equal(extractionConfig?.provider, 'dashscope');
+  assert.equal(extractionConfig?.model, 'qwen3.6-plus');
   assert.equal(await service.resolveOpenAIExtractionConfig(), null);
 });
 

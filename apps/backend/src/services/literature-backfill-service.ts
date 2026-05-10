@@ -13,6 +13,8 @@ import type {
   LiteratureContentProcessingRunDTO,
   LiteratureContentProcessingStageCode,
   LiteratureContentProcessingBackfillWorkset,
+  LiteratureKeyContentBackfillCurationStatus,
+  LiteratureKeyContentReadyMethod,
   ListLiteratureContentProcessingBackfillJobsQuery,
   ListLiteratureContentProcessingBackfillJobsResponse,
   RightsClass,
@@ -63,6 +65,14 @@ type PlannedBackfillItem = LiteratureContentProcessingBackfillPlanItemDTO & {
   title: string;
 };
 
+type RunFailureResolution = {
+  itemStatus: LiteratureContentProcessingBatchItemStatus;
+  errorCode: string;
+  errorMessage: string;
+  retryable: boolean;
+  checkpointPatch: Record<string, unknown>;
+};
+
 type StageRunLimiter = <T>(stage: LiteratureContentProcessingStageCode, run: () => Promise<T>) => Promise<T>;
 
 export class LiteratureBackfillService {
@@ -74,6 +84,7 @@ export class LiteratureBackfillService {
     private readonly options: {
       pollIntervalMs?: number;
       contentRunTimeoutMs?: number;
+      resolvePreferredKeyContentMethod?: () => Promise<LiteratureKeyContentReadyMethod>;
     } = {},
   ) {}
 
@@ -125,7 +136,9 @@ export class LiteratureBackfillService {
       errorMessage: item.blocked ? 'Backfill item is blocked by current rights or run state.' : null,
       blockerCode: item.blocker_code,
       retryable: item.retryable,
-      checkpoint: {},
+      checkpoint: {
+        key_content_curation_status: item.key_content_curation_status ?? 'NOT_APPLICABLE',
+      },
       createdAt: now,
       startedAt: null,
       finishedAt: item.blocked ? now : null,
@@ -241,6 +254,7 @@ export class LiteratureBackfillService {
       ...originalFilters,
       failed: true,
     };
+    const preferredKeyContentMethod = await this.resolvePreferredKeyContentMethod();
     const now = new Date().toISOString();
     for (const item of retryableItems) {
       const literature = await this.repository.findLiteratureById(item.literatureId);
@@ -255,7 +269,13 @@ export class LiteratureBackfillService {
         continue;
       }
       const stageStates = await this.repository.listPipelineStageStatesByLiteratureId(item.literatureId);
-      const planned = this.planLiteratureItem(literature, stageStates, targetStage, retryStageFilters);
+      const planned = this.planLiteratureItem(
+        literature,
+        stageStates,
+        targetStage,
+        retryStageFilters,
+        preferredKeyContentMethod,
+      );
       if (!planned) {
         await this.repository.updateContentProcessingBatchItem(item.id, {
           status: 'SKIPPED',
@@ -280,7 +300,9 @@ export class LiteratureBackfillService {
         errorMessage: planned.blocked ? 'Backfill item is blocked by current rights or run state.' : null,
         blockerCode: planned.blocker_code,
         retryable: planned.retryable,
-        checkpoint: {},
+        checkpoint: {
+          key_content_curation_status: planned.key_content_curation_status ?? 'NOT_APPLICABLE',
+        },
         startedAt: null,
         finishedAt: planned.blocked ? now : null,
         updatedAt: now,
@@ -382,12 +404,14 @@ export class LiteratureBackfillService {
 
     const planItems: PlannedBackfillItem[] = [];
     let skippedReadyCount = 0;
+    const preferredKeyContentMethod = await this.resolvePreferredKeyContentMethod();
     for (const literature of selectedLiteratures) {
       const planned = this.planLiteratureItem(
         literature,
         stageStatesByLiterature.get(literature.id) ?? [],
         targetStage,
         stageFilters,
+        preferredKeyContentMethod,
       );
       if (!planned) {
         skippedReadyCount += 1;
@@ -405,7 +429,7 @@ export class LiteratureBackfillService {
       for (const stage of item.requested_stages) {
         stageCounts[stage] += 1;
       }
-      if (item.requested_stages.includes('KEY_CONTENT_READY')) {
+      if (preferredKeyContentMethod === 'llm_gateway' && item.requested_stages.includes('KEY_CONTENT_READY')) {
         extractionCalls += 1;
       }
       if (item.requested_stages.includes('EMBEDDED')) {
@@ -424,6 +448,9 @@ export class LiteratureBackfillService {
       planned_item_count: planItems.length,
       skipped_ready_count: skippedReadyCount,
       blocked_count: planItems.filter((item) => item.blocked).length,
+      curation_required_count: planItems.filter((item) =>
+        item.key_content_curation_status !== null
+        && item.key_content_curation_status !== 'NOT_APPLICABLE').length,
       stage_counts: stageCounts,
       rights_class_counts: [...rightsCounts.entries()].map(([rightsClass, count]) => ({
         rights_class: rightsClass,
@@ -451,6 +478,7 @@ export class LiteratureBackfillService {
         blocked: item.blocked,
         blocker_code: item.blocker_code,
         retryable: item.retryable,
+        key_content_curation_status: item.key_content_curation_status,
       })),
     };
   }
@@ -506,6 +534,7 @@ export class LiteratureBackfillService {
     stageStates: LiteraturePipelineStageStateRecord[],
     targetStage: LiteratureContentProcessingStageCode,
     stageFilters: Required<NonNullable<LiteratureContentProcessingBackfillWorkset['stage_filters']>>,
+    preferredKeyContentMethod: LiteratureKeyContentReadyMethod,
   ): PlannedBackfillItem | null {
     const targetIndex = STAGE_ORDER.indexOf(targetStage);
     const stageStatus = new Map(stageStates.map((stage) => [stage.stageCode, stage.status]));
@@ -537,6 +566,11 @@ export class LiteratureBackfillService {
     }
 
     const requestedStages = relevantStages.slice(firstActionableIndex);
+    const keyContentCurationStatus = this.resolveKeyContentCurationStatus(
+      requestedStages,
+      stageStatus,
+      preferredKeyContentMethod,
+    );
     if (requestedStages.some((stage) => DEEP_STAGES.has(stage))) {
       const rightsGate = this.checkDeepStageRights(literature.rightsClass);
       if (!rightsGate.ok) {
@@ -554,7 +588,30 @@ export class LiteratureBackfillService {
       blocked,
       blocker_code: blockerCode,
       retryable,
+      key_content_curation_status: keyContentCurationStatus,
     };
+  }
+
+  private resolveKeyContentCurationStatus(
+    requestedStages: LiteratureContentProcessingStageCode[],
+    stageStatus: Map<LiteratureContentProcessingStageCode, LiteraturePipelineStageStateRecord['status']>,
+    preferredKeyContentMethod: LiteratureKeyContentReadyMethod,
+  ): LiteratureKeyContentBackfillCurationStatus | null {
+    if (preferredKeyContentMethod === 'llm_gateway' || !requestedStages.includes('KEY_CONTENT_READY')) {
+      return null;
+    }
+
+    const keyContentStatus = stageStatus.get('KEY_CONTENT_READY') ?? 'NOT_STARTED';
+    if (keyContentStatus === 'SUCCEEDED') {
+      return 'NOT_APPLICABLE';
+    }
+    if (keyContentStatus === 'BLOCKED') {
+      return 'WAITING_FOR_DOSSIER';
+    }
+    if (keyContentStatus === 'FAILED') {
+      return 'IMPORT_FAILED';
+    }
+    return 'CURATION_REQUIRED';
   }
 
   private scheduleJob(jobId: string): void {
@@ -684,6 +741,7 @@ export class LiteratureBackfillService {
             ...currentItem.checkpoint,
             last_succeeded_stage: stage,
             last_content_processing_run_id: terminalRun.id,
+            ...(stage === 'KEY_CONTENT_READY' ? { key_content_curation_status: 'NOT_APPLICABLE' } : {}),
           },
           updatedAt: new Date().toISOString(),
         });
@@ -702,6 +760,7 @@ export class LiteratureBackfillService {
           ...currentItem.checkpoint,
           failed_stage: stage,
           failed_content_processing_run_id: terminalRun.id,
+          ...failure.checkpointPatch,
         },
         finishedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -716,6 +775,10 @@ export class LiteratureBackfillService {
       errorMessage: null,
       blockerCode: null,
       retryable: true,
+      checkpoint: {
+        ...currentItem.checkpoint,
+        key_content_curation_status: 'NOT_APPLICABLE',
+      },
       finishedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -752,23 +815,29 @@ export class LiteratureBackfillService {
     throw new Error(`Timed out after ${timeoutMs}ms waiting for content-processing run ${run.run_id}.`);
   }
 
-  private async resolveRunFailure(run: LiteraturePipelineRunRecord): Promise<{
-    itemStatus: LiteratureContentProcessingBatchItemStatus;
-    errorCode: string;
-    errorMessage: string;
-    retryable: boolean;
-  }> {
+  private async resolveRunFailure(run: LiteraturePipelineRunRecord): Promise<RunFailureResolution> {
     const steps = await this.repository.listPipelineRunStepsByRunId(run.id);
     const failedStep = [...steps].reverse().find((step) =>
       step.status === 'FAILED' || step.status === 'BLOCKED' || step.status === 'SKIPPED');
     const errorCode = failedStep?.errorCode ?? run.errorCode ?? 'CONTENT_PROCESSING_RUN_FAILED';
     const errorMessage = failedStep?.errorMessage ?? run.errorMessage ?? 'Content-processing run failed.';
+    const checkpointPatch = await this.resolveFailureCheckpointPatch(run, failedStep?.stageCode ?? null, errorCode);
+    if (errorCode === 'KEY_CONTENT_CURATION_REQUIRED') {
+      return {
+        itemStatus: 'BLOCKED',
+        errorCode,
+        errorMessage,
+        retryable: true,
+        checkpointPatch,
+      };
+    }
     if (failedStep?.status === 'BLOCKED') {
       return {
         itemStatus: 'BLOCKED',
         errorCode,
         errorMessage,
         retryable: !NON_RETRYABLE_CODES.has(errorCode),
+        checkpointPatch,
       };
     }
     if (run.status === 'SKIPPED') {
@@ -777,6 +846,7 @@ export class LiteratureBackfillService {
         errorCode,
         errorMessage,
         retryable: true,
+        checkpointPatch,
       };
     }
     if (run.status === 'PARTIAL') {
@@ -785,6 +855,7 @@ export class LiteratureBackfillService {
         errorCode,
         errorMessage,
         retryable: !NON_RETRYABLE_CODES.has(errorCode),
+        checkpointPatch,
       };
     }
     return {
@@ -792,6 +863,35 @@ export class LiteratureBackfillService {
       errorCode,
       errorMessage,
       retryable: !NON_RETRYABLE_CODES.has(errorCode),
+      checkpointPatch,
+    };
+  }
+
+  private async resolveFailureCheckpointPatch(
+    run: LiteraturePipelineRunRecord,
+    stageCode: LiteratureContentProcessingStageCode | null,
+    errorCode: string,
+  ): Promise<Record<string, unknown>> {
+    if (errorCode !== 'KEY_CONTENT_CURATION_REQUIRED') {
+      return {};
+    }
+
+    const stageStates = await this.repository.listPipelineStageStatesByLiteratureId(run.literatureId);
+    const stageState = stageStates.find((state) => state.stageCode === (stageCode ?? 'KEY_CONTENT_READY'));
+    const diagnostics = Array.isArray(stageState?.detail.diagnostics)
+      ? stageState.detail.diagnostics.filter((item): item is Record<string, unknown> =>
+        Boolean(item && typeof item === 'object' && !Array.isArray(item)))
+      : [];
+    const firstDiagnostic = diagnostics[0] ?? {};
+    return {
+      key_content_curation_status: 'WAITING_FOR_DOSSIER',
+      key_content_curation_required_at: new Date().toISOString(),
+      curation_bundle_route: typeof firstDiagnostic.curation_bundle_route === 'string'
+        ? firstDiagnostic.curation_bundle_route
+        : `/literature/${run.literatureId}/content-processing/key-content-curation-bundle`,
+      dossier_import_route: typeof firstDiagnostic.dossier_import_route === 'string'
+        ? firstDiagnostic.dossier_import_route
+        : `/literature/${run.literatureId}/content-processing/key-content-dossier`,
     };
   }
 
@@ -847,8 +947,11 @@ export class LiteratureBackfillService {
     if (totals.canceled > 0 && totals.succeeded === 0 && totals.failed === 0 && totals.blocked === 0 && totals.partial === 0) {
       return 'CANCELED';
     }
-    if (totals.failed > 0 || totals.blocked > 0 || totals.partial > 0) {
-      return totals.succeeded > 0 || totals.skipped > 0 ? 'PARTIAL' : 'FAILED';
+    if (totals.failed > 0) {
+      return totals.succeeded > 0 || totals.skipped > 0 || totals.blocked > 0 || totals.partial > 0 ? 'PARTIAL' : 'FAILED';
+    }
+    if (totals.blocked > 0 || totals.partial > 0) {
+      return 'PARTIAL';
     }
     return 'SUCCEEDED';
   }
@@ -953,6 +1056,22 @@ export class LiteratureBackfillService {
     return typeof stage === 'string' && STAGE_ORDER.includes(stage as LiteratureContentProcessingStageCode)
       ? stage as LiteratureContentProcessingStageCode
       : null;
+  }
+
+  private readKeyContentCurationStatus(
+    checkpoint: Record<string, unknown>,
+  ): LiteratureKeyContentBackfillCurationStatus | null {
+    const status = checkpoint.key_content_curation_status;
+    if (
+      status === 'NOT_APPLICABLE'
+      || status === 'CURATION_REQUIRED'
+      || status === 'WAITING_FOR_DOSSIER'
+      || status === 'READY_TO_IMPORT'
+      || status === 'IMPORT_FAILED'
+    ) {
+      return status;
+    }
+    return null;
   }
 
   private async refreshJobTotals(jobId: string): Promise<void> {
@@ -1061,6 +1180,7 @@ export class LiteratureBackfillService {
       error_message: item.errorMessage,
       blocker_code: item.blockerCode,
       retryable: item.retryable,
+      key_content_curation_status: this.readKeyContentCurationStatus(item.checkpoint),
       checkpoint: item.checkpoint,
       created_at: item.createdAt,
       started_at: item.startedAt,
@@ -1127,6 +1247,10 @@ export class LiteratureBackfillService {
         ? Math.max(1, Math.floor(options.provider_call_budget))
         : null,
     };
+  }
+
+  private async resolvePreferredKeyContentMethod(): Promise<LiteratureKeyContentReadyMethod> {
+    return this.options.resolvePreferredKeyContentMethod?.() ?? 'llm_gateway';
   }
 
   private readOptions(value: Record<string, unknown>): NormalizedBackfillOptions {

@@ -1,24 +1,32 @@
 import {
   createLiteratureContentProcessingRunRequestSchema,
   downloadLiteratureContentAssetRequestSchema,
+  importLiteratureKeyContentDossierRequestSchema,
+  literatureClusterCandidateGenerationRequestSchema,
   listLiteratureContentProcessingRunsQuerySchema,
+  listLiteratureClustersQuerySchema,
   literatureOverviewQuerySchema,
   literatureRetrieveRequestSchema,
   literatureCollectionImportRequestSchema,
   registerLiteratureContentAssetRequestSchema,
   syncPaperLiteratureFromTopicRequestSchema,
+  updateLiteratureClusterRequestSchema,
   updateLiteratureMetadataRequestSchema,
   updatePaperLiteratureLinkRequestSchema,
   upsertTopicLiteratureScopeRequestSchema,
   zoteroImportRequestSchema,
   type LiteratureOverviewQuery,
+  type LiteratureClusterCandidateGenerationRequest,
   type LiteratureCollectionImportRequest,
   type LiteratureRetrieveRequest,
+  type ListLiteratureClustersQuery,
   type ListLiteratureContentProcessingRunsQuery,
   type CreateLiteratureContentProcessingRunRequest,
   type DownloadLiteratureContentAssetRequest,
+  type ImportLiteratureKeyContentDossierRequest,
   type RegisterLiteratureContentAssetRequest,
   type SyncPaperLiteratureFromTopicRequest,
+  type UpdateLiteratureClusterRequest,
   type UpdateLiteratureMetadataRequest,
   type UpdatePaperLiteratureLinkRequest,
   type UpsertTopicLiteratureScopeRequest,
@@ -61,6 +69,15 @@ const literatureParamsSchema = {
   required: ['literatureId'],
   properties: {
     literatureId: { type: 'string', minLength: 1 },
+  },
+  additionalProperties: false,
+} as const;
+
+const literatureClusterParamsSchema = {
+  type: 'object',
+  required: ['clusterId'],
+  properties: {
+    clusterId: { type: 'string', minLength: 1 },
   },
   additionalProperties: false,
 } as const;
@@ -117,6 +134,37 @@ export async function registerLiteratureRoutes(
       },
     },
     async (request, reply) => controller.retrieve(request, reply),
+  );
+
+  app.post<{ Body: LiteratureClusterCandidateGenerationRequest }>(
+    '/literature/clusters/candidates',
+    {
+      schema: {
+        body: literatureClusterCandidateGenerationRequestSchema,
+      },
+    },
+    async (request, reply) => controller.generateClusterCandidates(request, reply),
+  );
+
+  app.get<{ Querystring: ListLiteratureClustersQuery }>(
+    '/literature/clusters',
+    {
+      schema: {
+        querystring: listLiteratureClustersQuerySchema,
+      },
+    },
+    async (request, reply) => controller.listClusters(request, reply),
+  );
+
+  app.patch<{ Params: { clusterId: string }; Body: UpdateLiteratureClusterRequest }>(
+    '/literature/clusters/:clusterId',
+    {
+      schema: {
+        params: literatureClusterParamsSchema,
+        body: updateLiteratureClusterRequestSchema,
+      },
+    },
+    async (request, reply) => controller.updateCluster(request, reply),
   );
 
   app.get<{ Params: { topicId: string } }>(
@@ -233,6 +281,38 @@ export async function registerLiteratureRoutes(
       },
     },
     async (request, reply) => controller.getContentProcessing(request, reply),
+  );
+
+  app.get<{ Params: { literatureId: string } }>(
+    '/literature/:literatureId/content-processing/key-content-curation-bundle',
+    {
+      schema: {
+        params: literatureParamsSchema,
+      },
+    },
+    async (request, reply) => controller.getKeyContentCurationBundle(request, reply),
+  );
+
+  app.post<{ Params: { literatureId: string }; Body: ImportLiteratureKeyContentDossierRequest }>(
+    '/literature/:literatureId/content-processing/key-content-dossier/dry-run',
+    {
+      schema: {
+        params: literatureParamsSchema,
+        body: importLiteratureKeyContentDossierRequestSchema,
+      },
+    },
+    async (request, reply) => controller.dryRunImportKeyContentDossier(request, reply),
+  );
+
+  app.post<{ Params: { literatureId: string }; Body: ImportLiteratureKeyContentDossierRequest }>(
+    '/literature/:literatureId/content-processing/key-content-dossier',
+    {
+      schema: {
+        params: literatureParamsSchema,
+        body: importLiteratureKeyContentDossierRequestSchema,
+      },
+    },
+    async (request, reply) => controller.importKeyContentDossier(request, reply),
   );
 
   app.post<{ Params: { literatureId: string }; Body: CreateLiteratureContentProcessingRunRequest }>(

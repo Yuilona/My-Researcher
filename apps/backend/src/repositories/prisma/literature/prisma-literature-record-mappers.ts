@@ -1,6 +1,10 @@
 import type {
   LiteratureAbstractProfileRecord,
   LiteratureCitationProfileRecord,
+  LiteratureClusterEvidenceRecord,
+  LiteratureClusterGraphRecord,
+  LiteratureClusterMemberRecord,
+  LiteratureClusterRecord,
   LiteratureContentAssetRecord,
   LiteratureContentProcessingBatchItemRecord,
   LiteratureContentProcessingBatchJobRecord,
@@ -194,6 +198,112 @@ export function toContentAssetRecord(row: {
     metadata: asRecord(row.metadata),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export function toLiteratureClusterRecord(row: {
+  id: string;
+  clusterType: string;
+  status: string;
+  representativeLiteratureId: string | null;
+  confidence: number;
+  method: string;
+  createdAt: Date;
+  updatedAt: Date;
+}): LiteratureClusterRecord {
+  return {
+    id: row.id,
+    clusterType: row.clusterType as LiteratureClusterRecord['clusterType'],
+    status: row.status as LiteratureClusterRecord['status'],
+    representativeLiteratureId: row.representativeLiteratureId,
+    confidence: row.confidence,
+    method: row.method,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export function toLiteratureClusterMemberRecord(row: {
+  id: string;
+  clusterId: string;
+  literatureId: string;
+  role: string;
+  relationType: string;
+  confidence: number;
+  decisionStatus: string;
+  createdAt: Date;
+  updatedAt: Date;
+}): LiteratureClusterMemberRecord {
+  return {
+    id: row.id,
+    clusterId: row.clusterId,
+    literatureId: row.literatureId,
+    role: row.role as LiteratureClusterMemberRecord['role'],
+    relationType: row.relationType as LiteratureClusterMemberRecord['relationType'],
+    confidence: row.confidence,
+    decisionStatus: row.decisionStatus as LiteratureClusterMemberRecord['decisionStatus'],
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export function toLiteratureClusterEvidenceRecord(row: {
+  id: string;
+  clusterId: string;
+  literatureIdA: string;
+  literatureIdB: string;
+  signalType: string;
+  score: number;
+  payload: unknown;
+  createdAt: Date;
+}): LiteratureClusterEvidenceRecord {
+  return {
+    id: row.id,
+    clusterId: row.clusterId,
+    literatureIdA: row.literatureIdA,
+    literatureIdB: row.literatureIdB,
+    signalType: row.signalType as LiteratureClusterEvidenceRecord['signalType'],
+    score: row.score,
+    payload: asRecord(row.payload),
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export function toLiteratureClusterGraphRecord(row: {
+  id: string;
+  clusterType: string;
+  status: string;
+  representativeLiteratureId: string | null;
+  confidence: number;
+  method: string;
+  createdAt: Date;
+  updatedAt: Date;
+  members: Array<{
+    id: string;
+    clusterId: string;
+    literatureId: string;
+    role: string;
+    relationType: string;
+    confidence: number;
+    decisionStatus: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+  evidence: Array<{
+    id: string;
+    clusterId: string;
+    literatureIdA: string;
+    literatureIdB: string;
+    signalType: string;
+    score: number;
+    payload: unknown;
+    createdAt: Date;
+  }>;
+}): LiteratureClusterGraphRecord {
+  return {
+    cluster: toLiteratureClusterRecord(row),
+    members: row.members.map((member) => toLiteratureClusterMemberRecord(member)),
+    evidence: row.evidence.map((evidence) => toLiteratureClusterEvidenceRecord(evidence)),
   };
 }
 

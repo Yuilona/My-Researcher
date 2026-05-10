@@ -581,8 +581,16 @@ test('research-lifecycle barrel keeps key contract helpers and schemas reachable
     'retry_failed',
     'view_reason',
   ]);
-  assert.deepEqual([...researchLifecycleContracts.LITERATURE_CONTENT_PROCESSING_PROVIDER_IDS], ['openai']);
+  assert.deepEqual([...researchLifecycleContracts.LITERATURE_CONTENT_PROCESSING_PROVIDER_IDS], ['openai', 'dashscope']);
   assert.deepEqual([...researchLifecycleContracts.LITERATURE_EMBEDDING_PROFILE_IDS], ['default', 'economy']);
+  assert.deepEqual([...researchLifecycleContracts.LITERATURE_KEY_CONTENT_ITEM_PROVENANCES], ['model_generated', 'user_edited']);
+  assert.deepEqual([...researchLifecycleContracts.LITERATURE_KEY_CONTENT_BACKFILL_CURATION_STATUSES], [
+    'NOT_APPLICABLE',
+    'CURATION_REQUIRED',
+    'WAITING_FOR_DOSSIER',
+    'READY_TO_IMPORT',
+    'IMPORT_FAILED',
+  ]);
   assert.ok(researchLifecycleContracts.updateLiteratureContentProcessingSettingsRequestSchema);
   assert.equal(
     researchLifecycleContracts.validateNoM6OverrideContext({

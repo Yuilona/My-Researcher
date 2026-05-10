@@ -3,6 +3,12 @@ import type {
   LiteratureContentAssetKind,
   LiteratureContentAssetSourceKind,
   LiteratureContentAssetStatus,
+  LiteratureClusterEvidenceSignalType,
+  LiteratureClusterMemberDecisionStatus,
+  LiteratureClusterMemberRole,
+  LiteratureClusterRelationType,
+  LiteratureClusterStatus,
+  LiteratureClusterType,
   LiteratureFulltextAcquisitionItemStatus as SharedLiteratureFulltextAcquisitionItemStatus,
   LiteratureFulltextAcquisitionJobStatus as SharedLiteratureFulltextAcquisitionJobStatus,
   LiteratureFulltextAcquisitionSourceKind,
@@ -351,6 +357,59 @@ export type LiteratureContentAssetRecord = {
   updatedAt: string;
 };
 
+export type LiteratureClusterRecord = {
+  id: string;
+  clusterType: LiteratureClusterType;
+  status: LiteratureClusterStatus;
+  representativeLiteratureId: string | null;
+  confidence: number;
+  method: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LiteratureClusterMemberRecord = {
+  id: string;
+  clusterId: string;
+  literatureId: string;
+  role: LiteratureClusterMemberRole;
+  relationType: LiteratureClusterRelationType;
+  confidence: number;
+  decisionStatus: LiteratureClusterMemberDecisionStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LiteratureClusterEvidenceRecord = {
+  id: string;
+  clusterId: string;
+  literatureIdA: string;
+  literatureIdB: string;
+  signalType: LiteratureClusterEvidenceSignalType;
+  score: number;
+  payload: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type LiteratureClusterGraphRecord = {
+  cluster: LiteratureClusterRecord;
+  members: LiteratureClusterMemberRecord[];
+  evidence: LiteratureClusterEvidenceRecord[];
+};
+
+export type LiteratureClusterUpdatePatch = Partial<Pick<
+  LiteratureClusterRecord,
+  'status' | 'representativeLiteratureId' | 'confidence' | 'method' | 'updatedAt'
+>>;
+
+export type ListLiteratureClustersFilter = {
+  status?: LiteratureClusterStatus;
+  clusterType?: LiteratureClusterType;
+  literatureId?: string;
+  literatureIds?: string[];
+  limit?: number;
+};
+
 export type LiteratureFulltextDocumentRecord = {
   id: string;
   literatureId: string;
@@ -478,7 +537,25 @@ export interface LiteratureRepository {
     record: LiteratureContentAssetRecord,
   ): Promise<{ record: LiteratureContentAssetRecord; created: boolean }>;
   listContentAssetsByLiteratureId(literatureId: string): Promise<LiteratureContentAssetRecord[]>;
+  listContentAssetsByChecksum(checksum: string): Promise<LiteratureContentAssetRecord[]>;
   findContentAssetById(assetId: string): Promise<LiteratureContentAssetRecord | null>;
+
+  upsertLiteratureCluster(
+    record: LiteratureClusterRecord,
+    members: LiteratureClusterMemberRecord[],
+    evidence: LiteratureClusterEvidenceRecord[],
+  ): Promise<LiteratureClusterGraphRecord>;
+  findLiteratureClusterById(clusterId: string): Promise<LiteratureClusterGraphRecord | null>;
+  listLiteratureClusters(filter?: ListLiteratureClustersFilter): Promise<LiteratureClusterGraphRecord[]>;
+  updateLiteratureCluster(
+    clusterId: string,
+    patch: LiteratureClusterUpdatePatch,
+  ): Promise<LiteratureClusterGraphRecord>;
+  updateLiteratureClusterMember(
+    clusterId: string,
+    literatureId: string,
+    patch: Partial<Omit<LiteratureClusterMemberRecord, 'id' | 'clusterId' | 'literatureId' | 'createdAt'>>,
+  ): Promise<LiteratureClusterMemberRecord>;
 
   upsertFulltextExtractionBundle(bundle: LiteratureFulltextExtractionBundle): Promise<LiteratureFulltextExtractionBundle>;
   findFulltextDocumentBySourceAssetId(sourceAssetId: string): Promise<LiteratureFulltextDocumentRecord | null>;

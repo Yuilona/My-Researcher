@@ -944,6 +944,7 @@ function normalizeBackfillEstimate(value: unknown): BackfillEstimate | null {
     planned_item_count: readNumber(root.planned_item_count),
     skipped_ready_count: readNumber(root.skipped_ready_count),
     blocked_count: readNumber(root.blocked_count),
+    curation_required_count: readNumber(root.curation_required_count),
     stage_counts: Object.fromEntries(targetStageOptions.map((stage) => [stage, readNumber(stageCounts[stage])])) as Record<PipelineStageCode, number>,
     rights_class_counts: Array.isArray(root.rights_class_counts)
       ? root.rights_class_counts.map((item) => {
@@ -971,6 +972,23 @@ function normalizeBackfillEstimate(value: unknown): BackfillEstimate | null {
           };
         })
       : [],
+    plan_items: Array.isArray(root.plan_items)
+      ? root.plan_items.map((item) => {
+          const row = asRecord(item);
+          return {
+            literature_id: toText(row?.literature_id) ?? '',
+            title: toText(row?.title) ?? '',
+            rights_class: readRightsClass(row?.rights_class),
+            requested_stages: Array.isArray(row?.requested_stages)
+              ? row.requested_stages.map((stage) => readStageCode(stage))
+              : [],
+            blocked: typeof row?.blocked === 'boolean' ? row.blocked : false,
+            blocker_code: toText(row?.blocker_code) ?? null,
+            retryable: typeof row?.retryable === 'boolean' ? row.retryable : false,
+            key_content_curation_status: readKeyContentCurationStatus(row?.key_content_curation_status),
+          };
+        })
+      : undefined,
   };
 }
 
@@ -1026,6 +1044,8 @@ function normalizeBackfillJob(value: unknown): BackfillJob | null {
             error_message: toText(row?.error_message) ?? null,
             blocker_code: toText(row?.blocker_code) ?? null,
             retryable: typeof row?.retryable === 'boolean' ? row.retryable : false,
+            key_content_curation_status: readKeyContentCurationStatus(row?.key_content_curation_status),
+            checkpoint: asRecord(row?.checkpoint) ?? {},
             updated_at: toText(row?.updated_at) ?? '',
           };
         })
@@ -1094,6 +1114,16 @@ function readItemStatus(value: unknown): BackfillJobItem['status'] {
     || value === 'CANCELED'
     ? value
     : 'FAILED';
+}
+
+function readKeyContentCurationStatus(value: unknown): BackfillJobItem['key_content_curation_status'] {
+  return value === 'NOT_APPLICABLE'
+    || value === 'CURATION_REQUIRED'
+    || value === 'WAITING_FOR_DOSSIER'
+    || value === 'READY_TO_IMPORT'
+    || value === 'IMPORT_FAILED'
+    ? value
+    : null;
 }
 
 function readNumber(value: unknown): number {

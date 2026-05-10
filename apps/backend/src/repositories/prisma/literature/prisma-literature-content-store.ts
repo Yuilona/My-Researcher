@@ -186,6 +186,22 @@ export class PrismaLiteratureContentStore {
     return rows.map((row) => toContentAssetRecord(row));
   }
 
+  async listContentAssetsByChecksum(checksum: string): Promise<LiteratureContentAssetRecord[]> {
+    const normalizedChecksum = checksum.trim();
+    if (!normalizedChecksum) {
+      return [];
+    }
+    const rows = await this.prisma.literatureContentAsset.findMany({
+      where: { checksum: normalizedChecksum },
+      orderBy: [
+        { createdAt: 'asc' },
+        { literatureId: 'asc' },
+        { id: 'asc' },
+      ],
+    });
+    return rows.map((row) => toContentAssetRecord(row));
+  }
+
   async findContentAssetById(assetId: string): Promise<LiteratureContentAssetRecord | null> {
     const row = await this.prisma.literatureContentAsset.findUnique({ where: { id: assetId } });
     return row ? toContentAssetRecord(row) : null;

@@ -10,6 +10,7 @@ import type {
   LiteratureEmbeddingProfileId,
   LiteratureExtractionProfileDTO,
   LiteratureExtractionProfileId,
+  LiteratureKeyContentReadyMethod,
   UpdateLiteratureContentProcessingSettingsRequest,
 } from '@paper-engineering-assistant/shared/research-lifecycle/literature-contracts';
 import { AppError } from '../errors/app-error.js';
@@ -17,7 +18,9 @@ import type { ApplicationSettingsRepository } from '../repositories/application-
 
 const SETTINGS_NAMESPACE = 'literature_content_processing';
 const OPENAI_PROVIDER: LiteratureContentProcessingProviderId = 'openai';
+const DASHSCOPE_PROVIDER: LiteratureContentProcessingProviderId = 'dashscope';
 const PROVIDER_OPENAI_KEY = 'provider.openai';
+const PROVIDER_DASHSCOPE_KEY = 'provider.dashscope';
 const EMBEDDING_KEY = 'embedding';
 const EXTRACTION_KEY = 'extraction';
 const STORAGE_ROOTS_KEY = 'storage_roots';
@@ -52,6 +55,15 @@ const DEFAULT_EXTRACTION_PROFILES: LiteratureExtractionProfileDTO[] = [
   },
 ];
 
+const DEFAULT_EXTRACTION_RUNTIME: LiteratureContentProcessingSettingsDTO['extraction']['runtime'] = {
+  preferred_key_content_method: 'llm_gateway',
+  section_concurrency: 3,
+  request_timeout_ms: 120_000,
+  max_retries: 1,
+  prompt_profile_id: 'literature_key_content_v2',
+  diagnostic_policy: 'actionable_v1',
+};
+
 const LEGACY_EXTRACTION_MODEL_BY_PROFILE: Partial<Record<LiteratureExtractionProfileId, string>> = {
   default: 'gpt-5-mini',
   high_accuracy: 'gpt-5.2',
@@ -73,16 +85,19 @@ export type ActiveEmbeddingProfileConfig = {
 
 export type OpenAIExtractionConfig = {
   apiKey: string;
+  provider: LiteratureContentProcessingProviderId;
   model: string;
   profileId: LiteratureExtractionProfileId;
+  runtime: LiteratureContentProcessingSettingsDTO['extraction']['runtime'];
 };
 
 export class LiteratureContentProcessingSettingsService {
   constructor(private readonly repository: ApplicationSettingsRepository) {}
 
   async getSettings(): Promise<LiteratureContentProcessingSettingsDTO> {
-    const [providerOpenAI, embedding, extraction, storageRoots, fulltextParser] = await Promise.all([
+    const [providerOpenAI, providerDashScope, embedding, extraction, storageRoots, fulltextParser] = await Promise.all([
       this.repository.findSetting(SETTINGS_NAMESPACE, PROVIDER_OPENAI_KEY),
+      this.repository.findSetting(SETTINGS_NAMESPACE, PROVIDER_DASHSCOPE_KEY),
       this.repository.findSetting(SETTINGS_NAMESPACE, EMBEDDING_KEY),
       this.repository.findSetting(SETTINGS_NAMESPACE, EXTRACTION_KEY),
       this.repository.findSetting(SETTINGS_NAMESPACE, STORAGE_ROOTS_KEY),
@@ -95,6 +110,7 @@ export class LiteratureContentProcessingSettingsService {
     const fulltextParserSettings = this.readFulltextParserSettings(fulltextParser?.value);
     const updatedAt = [
       providerOpenAI?.updatedAt,
+      providerDashScope?.updatedAt,
       embedding?.updatedAt,
       extraction?.updatedAt,
       storageRoots?.updatedAt,
@@ -108,8 +124,13 @@ export class LiteratureContentProcessingSettingsService {
       providers: [
         {
           provider: OPENAI_PROVIDER,
-          api_key_set: Boolean(providerOpenAI?.secretValue),
+          api_key_set: Boolean(providerOpenAI?.secretValue) || Boolean(process.env.OPENAI_API_KEY?.trim()),
           api_key_last_updated_at: this.readString(providerOpenAI?.value.api_key_last_updated_at),
+        },
+        {
+          provider: DASHSCOPE_PROVIDER,
+          api_key_set: Boolean(providerDashScope?.secretValue) || Boolean(process.env.DASHSCOPE_API_KEY?.trim()),
+          api_key_last_updated_at: this.readString(providerDashScope?.value.api_key_last_updated_at),
         },
       ],
       embedding: embeddingSettings,
@@ -128,10 +149,14 @@ export class LiteratureContentProcessingSettingsService {
 
     if (patch.providers) {
       for (const providerPatch of patch.providers) {
-        if (providerPatch.provider !== OPENAI_PROVIDER) {
+        if (providerPatch.provider !== OPENAI_PROVIDER && providerPatch.provider !== DASHSCOPE_PROVIDER) {
           throw new AppError(400, 'INVALID_PAYLOAD', `Unsupported provider ${providerPatch.provider}.`);
         }
-        await this.updateOpenAIProvider(providerPatch.api_key, now);
+        if (providerPatch.provider === OPENAI_PROVIDER) {
+          await this.updateOpenAIProvider(providerPatch.api_key, now);
+        } else {
+          await this.updateDashScopeProvider(providerPatch.api_key, now);
+        }
       }
     }
 
@@ -263,26 +288,47 @@ export class LiteratureContentProcessingSettingsService {
   async resolveOpenAIExtractionConfig(
     profileId?: LiteratureExtractionProfileId,
   ): Promise<OpenAIExtractionConfig | null> {
+    const config = await this.resolveExtractionConfig(profileId);
+    return config?.provider === OPENAI_PROVIDER ? config : null;
+  }
+
+  async resolveExtractionConfig(
+    profileId?: LiteratureExtractionProfileId,
+  ): Promise<OpenAIExtractionConfig | null> {
     const [providerOpenAI, settings] = await Promise.all([
       this.repository.findSetting(SETTINGS_NAMESPACE, PROVIDER_OPENAI_KEY),
       this.getSettings(),
     ]);
-    const apiKey = providerOpenAI?.secretValue?.trim() || process.env.OPENAI_API_KEY?.trim();
-    if (!apiKey) {
-      return null;
-    }
-
     const selectedProfileId = profileId ?? settings.extraction.active_profile_id;
     const profile = settings.extraction.profiles.find((item) => item.profile_id === selectedProfileId);
-    if (!profile || profile.provider !== OPENAI_PROVIDER) {
+    if (!profile) {
+      return null;
+    }
+    const apiKey = profile.provider === DASHSCOPE_PROVIDER
+      ? await this.resolveDashScopeProviderApiKey()
+      : providerOpenAI?.secretValue?.trim() || process.env.OPENAI_API_KEY?.trim();
+    if (!apiKey) {
       return null;
     }
 
     return {
       apiKey,
+      provider: profile.provider,
       model: profile.model,
       profileId: selectedProfileId,
+      runtime: settings.extraction.runtime,
     };
+  }
+
+  async resolveDashScopeProviderApiKey(): Promise<string | null> {
+    const providerDashScope = await this.repository.findSetting(SETTINGS_NAMESPACE, PROVIDER_DASHSCOPE_KEY);
+    const apiKey = providerDashScope?.secretValue?.trim() || process.env.DASHSCOPE_API_KEY?.trim();
+    return apiKey || null;
+  }
+
+  async resolvePreferredKeyContentMethod(): Promise<LiteratureKeyContentReadyMethod> {
+    const settings = await this.getSettings();
+    return settings.extraction.runtime.preferred_key_content_method;
   }
 
   private async updateOpenAIProvider(apiKeyPatch: string | null | undefined, now: string): Promise<void> {
@@ -305,6 +351,33 @@ export class LiteratureContentProcessingSettingsService {
       id: existing?.id ?? crypto.randomUUID(),
       namespace: SETTINGS_NAMESPACE,
       key: PROVIDER_OPENAI_KEY,
+      value,
+      secretValue: apiKey,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    });
+  }
+
+  private async updateDashScopeProvider(apiKeyPatch: string | null | undefined, now: string): Promise<void> {
+    if (apiKeyPatch === undefined) {
+      return;
+    }
+
+    const existing = await this.repository.findSetting(SETTINGS_NAMESPACE, PROVIDER_DASHSCOPE_KEY);
+    const apiKey = apiKeyPatch === null ? null : apiKeyPatch.trim();
+    if (apiKeyPatch !== null && !apiKey) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'DashScope API key cannot be blank.');
+    }
+
+    const value = {
+      provider: DASHSCOPE_PROVIDER,
+      api_key_last_updated_at: apiKey ? now : null,
+    };
+
+    await this.repository.upsertSetting({
+      id: existing?.id ?? crypto.randomUUID(),
+      namespace: SETTINGS_NAMESPACE,
+      key: PROVIDER_DASHSCOPE_KEY,
       value,
       secretValue: apiKey,
       createdAt: existing?.createdAt ?? now,
@@ -371,6 +444,7 @@ export class LiteratureContentProcessingSettingsService {
     if (!profiles.some((item) => item.profile_id === activeProfileId)) {
       throw new AppError(400, 'INVALID_PAYLOAD', `Unknown extraction profile ${activeProfileId}.`);
     }
+    const runtime = this.mergeExtractionRuntime(current.runtime, patch.runtime);
 
     await this.repository.upsertSetting({
       id: existing?.id ?? crypto.randomUUID(),
@@ -379,6 +453,7 @@ export class LiteratureContentProcessingSettingsService {
       value: {
         active_profile_id: activeProfileId,
         profiles,
+        runtime,
       },
       secretValue: existing?.secretValue ?? null,
       createdAt: existing?.createdAt ?? now,
@@ -470,6 +545,7 @@ export class LiteratureContentProcessingSettingsService {
     return {
       active_profile_id: mergedProfiles.some((item) => item.profile_id === activeProfileId) ? activeProfileId : 'default',
       profiles: mergedProfiles,
+      runtime: this.readExtractionRuntime(value?.runtime),
     };
   }
 
@@ -528,7 +604,7 @@ export class LiteratureContentProcessingSettingsService {
     if (!model) {
       throw new AppError(400, 'INVALID_PAYLOAD', 'Extraction profile model cannot be blank.');
     }
-    if (input.provider !== OPENAI_PROVIDER) {
+    if (input.provider !== OPENAI_PROVIDER && input.provider !== DASHSCOPE_PROVIDER) {
       throw new AppError(400, 'INVALID_PAYLOAD', `Unsupported extraction provider ${input.provider}.`);
     }
 
@@ -567,7 +643,11 @@ export class LiteratureContentProcessingSettingsService {
     }
     const row = value as Record<string, unknown>;
     const profileId = this.readExtractionProfileId(row.profile_id);
-    const provider = row.provider === OPENAI_PROVIDER ? OPENAI_PROVIDER : null;
+    const provider = row.provider === OPENAI_PROVIDER
+      ? OPENAI_PROVIDER
+      : row.provider === DASHSCOPE_PROVIDER
+        ? DASHSCOPE_PROVIDER
+        : null;
     const model = this.readString(row.model);
     if (!profileId || !provider || !model) {
       return null;
@@ -577,6 +657,84 @@ export class LiteratureContentProcessingSettingsService {
       provider,
       model,
     };
+  }
+
+  private readExtractionRuntime(value: unknown): LiteratureContentProcessingSettingsDTO['extraction']['runtime'] {
+    const row = value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+    return {
+      preferred_key_content_method: this.readKeyContentReadyMethod(row.preferred_key_content_method)
+        ?? DEFAULT_EXTRACTION_RUNTIME.preferred_key_content_method,
+      section_concurrency: this.clampInteger(
+        this.readNumber(row.section_concurrency, DEFAULT_EXTRACTION_RUNTIME.section_concurrency),
+        DEFAULT_EXTRACTION_RUNTIME.section_concurrency,
+        1,
+        8,
+      ),
+      request_timeout_ms: this.clampInteger(
+        this.readNumber(row.request_timeout_ms, DEFAULT_EXTRACTION_RUNTIME.request_timeout_ms),
+        DEFAULT_EXTRACTION_RUNTIME.request_timeout_ms,
+        1_000,
+        300_000,
+      ),
+      max_retries: this.clampInteger(
+        this.readNumber(row.max_retries, DEFAULT_EXTRACTION_RUNTIME.max_retries),
+        DEFAULT_EXTRACTION_RUNTIME.max_retries,
+        0,
+        3,
+      ),
+      prompt_profile_id: this.readString(row.prompt_profile_id) ?? DEFAULT_EXTRACTION_RUNTIME.prompt_profile_id,
+      diagnostic_policy: this.readString(row.diagnostic_policy) ?? DEFAULT_EXTRACTION_RUNTIME.diagnostic_policy,
+    };
+  }
+
+  private mergeExtractionRuntime(
+    current: LiteratureContentProcessingSettingsDTO['extraction']['runtime'],
+    patch: NonNullable<UpdateLiteratureContentProcessingSettingsRequest['extraction']>['runtime'],
+  ): LiteratureContentProcessingSettingsDTO['extraction']['runtime'] {
+    if (!patch) {
+      return current;
+    }
+    return {
+      preferred_key_content_method: patch.preferred_key_content_method === undefined
+        ? current.preferred_key_content_method
+        : this.normalizeKeyContentReadyMethod(patch.preferred_key_content_method),
+      section_concurrency: this.clampInteger(
+        patch.section_concurrency,
+        current.section_concurrency,
+        1,
+        8,
+      ),
+      request_timeout_ms: this.clampInteger(
+        patch.request_timeout_ms,
+        current.request_timeout_ms,
+        1_000,
+        300_000,
+      ),
+      max_retries: this.clampInteger(
+        patch.max_retries,
+        current.max_retries,
+        0,
+        3,
+      ),
+      prompt_profile_id: patch.prompt_profile_id?.trim() || current.prompt_profile_id,
+      diagnostic_policy: patch.diagnostic_policy?.trim() || current.diagnostic_policy,
+    };
+  }
+
+  private readKeyContentReadyMethod(value: unknown): LiteratureKeyContentReadyMethod | null {
+    return value === 'llm_gateway' || value === 'codex_curated' || value === 'manual_curated'
+      ? value
+      : null;
+  }
+
+  private normalizeKeyContentReadyMethod(value: LiteratureKeyContentReadyMethod): LiteratureKeyContentReadyMethod {
+    const method = this.readKeyContentReadyMethod(value);
+    if (!method) {
+      throw new AppError(400, 'INVALID_PAYLOAD', `Unsupported key-content ready method ${String(value)}.`);
+    }
+    return method;
   }
 
   private mergeDefaultProfiles(profiles: LiteratureEmbeddingProfileDTO[]): LiteratureEmbeddingProfileDTO[] {
@@ -686,5 +844,16 @@ export class LiteratureContentProcessingSettingsService {
 
   private readString(value: unknown): string | null {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+  }
+
+  private readNumber(value: unknown, fallback: number): number {
+    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  }
+
+  private clampInteger(value: number | undefined, fallback: number, min: number, max: number): number {
+    if (typeof value !== 'number' || !Number.isInteger(value)) {
+      return fallback;
+    }
+    return Math.min(max, Math.max(min, value));
   }
 }

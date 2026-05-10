@@ -1,20 +1,48 @@
-# Model routing profiles registry (template)
-#
-# Profiles are business-level intent labels (stable IDs) mapped to one or more provider/model candidates.
-# Feature code should call by `profile_id` whenever possible.
-
 version: 1
 
 profiles:
-  # Example: a general-purpose profile with a primary and fallback
-  - profile_id: balanced
-    intent: general_text_generation
+  - profile_id: literature-key-content-default
+    intent: source_grounded_key_content_extraction
     candidates:
-      - provider_id: example-provider
-        model_id: example-model-small
+      - provider_id: openai
+        model_id: gpt-5.4-mini
         weight: 100
     fallback:
-      # Optional: fallback candidates or another profile_id
-      - provider_id: example-provider
-        model_id: example-model-tiny
+      - provider_id: openai
+        model_id: gpt-5.5
+        weight: 100
+
+  - profile_id: literature-key-content-high-accuracy
+    intent: source_grounded_key_content_extraction_high_accuracy
+    candidates:
+      - provider_id: openai
+        model_id: gpt-5.5
+        weight: 100
+
+  - profile_id: literature-key-content-qwen-token-plan
+    intent: source_grounded_key_content_extraction_cost_comparison
+    candidates:
+      - provider_id: dashscope
+        model_id: qwen3.6-plus
+        weight: 100
+
+  - profile_id: literature-embedding-default
+    intent: literature_chunk_and_query_embedding
+    candidates:
+      - provider_id: openai
+        model_id: text-embedding-3-large
+        weight: 100
+
+  - profile_id: literature-embedding-economy
+    intent: literature_chunk_and_query_embedding_economy
+    candidates:
+      - provider_id: openai
+        model_id: text-embedding-3-small
+        weight: 100
+
+  - profile_id: literature-auto-pull-quality
+    intent: literature_candidate_quality_scoring
+    candidates:
+      - provider_id: openai
+        model_id: gpt-5.4-mini
         weight: 100

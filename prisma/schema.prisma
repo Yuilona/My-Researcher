@@ -97,6 +97,10 @@ model LiteratureRecord {
   fulltextAcquisitionItems    LiteratureFulltextAcquisitionItem[]
   autoPullSuggestions         AutoPullSuggestion[]
   titleCardSelections         TitleCardEvidenceSelection[]
+  representativeClusters      LiteratureCluster[]                    @relation("LiteratureClusterRepresentative")
+  clusterMemberships          LiteratureClusterMember[]
+  clusterEvidenceAsA          LiteratureClusterEvidence[]            @relation("LiteratureClusterEvidenceA")
+  clusterEvidenceAsB          LiteratureClusterEvidence[]            @relation("LiteratureClusterEvidenceB")
 
   @@index([normalizedTitle])
   @@index([activeEmbeddingVersionId])
@@ -181,6 +185,60 @@ model LiteratureContentAsset {
   @@unique([literatureId, localPath])
   @@index([literatureId, assetKind, status])
   @@index([checksum])
+}
+
+model LiteratureCluster {
+  id                         String                      @id
+  clusterType                String
+  status                     String
+  representativeLiteratureId String?
+  confidence                 Float                       @default(0)
+  method                     String
+  createdAt                  DateTime                    @db.Timestamptz(6)
+  updatedAt                  DateTime                    @db.Timestamptz(6)
+  representative             LiteratureRecord?           @relation("LiteratureClusterRepresentative", fields: [representativeLiteratureId], references: [id], onDelete: SetNull)
+  members                    LiteratureClusterMember[]
+  evidence                   LiteratureClusterEvidence[]
+
+  @@index([clusterType, status])
+  @@index([representativeLiteratureId])
+}
+
+model LiteratureClusterMember {
+  id             String            @id
+  clusterId      String
+  literatureId   String
+  role           String
+  relationType   String
+  confidence     Float             @default(0)
+  decisionStatus String
+  createdAt      DateTime          @db.Timestamptz(6)
+  updatedAt      DateTime          @db.Timestamptz(6)
+  cluster        LiteratureCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  literature     LiteratureRecord  @relation(fields: [literatureId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, literatureId])
+  @@index([literatureId, decisionStatus])
+  @@index([clusterId])
+}
+
+model LiteratureClusterEvidence {
+  id            String            @id
+  clusterId     String
+  literatureIdA String
+  literatureIdB String
+  signalType    String
+  score         Float             @default(0)
+  payload       Json              @default("{}")
+  createdAt     DateTime          @db.Timestamptz(6)
+  cluster       LiteratureCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  literatureA   LiteratureRecord  @relation("LiteratureClusterEvidenceA", fields: [literatureIdA], references: [id], onDelete: Cascade)
+  literatureB   LiteratureRecord  @relation("LiteratureClusterEvidenceB", fields: [literatureIdB], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, literatureIdA, literatureIdB, signalType])
+  @@index([clusterId])
+  @@index([literatureIdA, literatureIdB])
+  @@index([signalType])
 }
 
 model LiteratureFulltextDocument {

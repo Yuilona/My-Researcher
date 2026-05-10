@@ -99,7 +99,7 @@ export function isManualImportSubTabKey(value: string): value is ManualImportSub
 }
 
 export function isContentProcessingSubTabKey(value: string): value is ContentProcessingSubTabKey {
-  return value === 'operations' || value === 'settings';
+  return value === 'operations' || value === 'clusters' || value === 'settings';
 }
 
 export function normalizeLiteratureProvider(value: unknown): LiteratureProvider {

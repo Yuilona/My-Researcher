@@ -17,6 +17,7 @@ import type {
 } from '../repositories/literature-repository.js';
 import type { LiteratureContentProcessingSettingsService, OpenAIExtractionConfig } from './literature-content-processing-settings-service.js';
 import { normalizeWhitespace, sha256Text, stableStringify } from './literature-content-processing-utils.js';
+import { BackendLlmGateway, LlmGatewayError, type LlmCallTelemetry } from './llm-gateway.js';
 
 const KEY_CONTENT_SCHEMA_VERSION = 'key_content.v1' as const;
 const KEY_CONTENT_EXTRACTION_PROFILE = 'paper_semantic_dossier.v1' as const;
@@ -71,14 +72,33 @@ type ExtractionUnit = {
   text: string;
 };
 
+type SectionExtractionOutcome =
+  | {
+      ok: true;
+      unit: ExtractionUnit;
+      payload: Partial<LiteratureKeyContentDossierPayload>;
+      telemetry: LlmCallTelemetry;
+    }
+  | {
+      ok: false;
+      unit: ExtractionUnit;
+      diagnostics: Record<string, unknown>[];
+      telemetry: LlmCallTelemetry | null;
+    };
+
 export class LiteratureKeyContentExtractionService {
+  private readonly llmGateway: BackendLlmGateway;
+
   constructor(
     private readonly repository: LiteratureRepository,
     private readonly settingsService?: LiteratureContentProcessingSettingsService,
-  ) {}
+    llmGateway?: BackendLlmGateway,
+  ) {
+    this.llmGateway = llmGateway ?? new BackendLlmGateway({ settingsService });
+  }
 
   async extract(literature: LiteratureRecord): Promise<KeyContentExtractionResult> {
-    const config = await this.settingsService?.resolveOpenAIExtractionConfig();
+    const config = await this.settingsService?.resolveExtractionConfig();
     if (!config) {
       return {
         ready: false,
@@ -114,43 +134,60 @@ export class LiteratureKeyContentExtractionService {
       'KEY_CONTENT_DOSSIER',
     );
 
-    const extractedPayloads = [];
-    try {
-      for (const unit of units) {
-        extractedPayloads.push(await this.extractSection(literature, bundle, unit, config));
+    const telemetry: LlmCallTelemetry[] = [];
+    const extractedPayloads: Array<Partial<LiteratureKeyContentDossierPayload>> = [];
+    const diagnostics: Record<string, unknown>[] = [];
+    const extracted = await this.mapWithConcurrency(
+      units,
+      config.runtime.section_concurrency,
+      async (unit) => this.extractSectionSafely(literature, bundle, unit, config),
+    );
+    for (const item of extracted) {
+      if (item.ok) {
+        extractedPayloads.push(item.payload);
+        telemetry.push(item.telemetry);
+      } else {
+        diagnostics.push(...item.diagnostics);
+        if (item.telemetry) {
+          telemetry.push(item.telemetry);
+        }
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'OpenAI key-content extraction failed.';
+    }
+    if (extractedPayloads.length === 0) {
       return {
         ready: false,
         reasonCode: 'KEY_CONTENT_EXTRACTION_FAILED',
-        reasonMessage: message,
-        diagnostics: [{ code: 'KEY_CONTENT_EXTRACTION_FAILED', severity: 'blocker', message }],
+        reasonMessage: this.readString(diagnostics[0]?.message)
+          ?? 'OpenAI key-content extraction failed for every fulltext section.',
+        diagnostics: diagnostics.length > 0
+          ? diagnostics.map((item) => ({ ...item, severity: 'blocker' }))
+          : [{ code: 'KEY_CONTENT_EXTRACTION_FAILED', severity: 'blocker' }],
       };
     }
 
     const generatedAt = new Date().toISOString();
     const inputRefs = this.buildInputRefs(bundle, config);
-    const diagnostics: Record<string, unknown>[] = [];
     let categories = this.emptyCategories();
     for (const payload of extractedPayloads) {
       const normalized = this.normalizeCategories(payload.categories, bundle, diagnostics);
       for (const category of CATEGORY_KEYS) {
         categories[category].push(...normalized[category]);
       }
-      diagnostics.push(...this.readDiagnostics(payload));
+      diagnostics.push(...this.readDiagnostics(payload, config));
     }
 
     try {
-      categories = await this.consolidatePaperLevel(literature, bundle, categories, config, diagnostics);
+      const consolidation = await this.consolidatePaperLevel(literature, bundle, categories, config, diagnostics);
+      categories = consolidation.categories;
+      telemetry.push(consolidation.telemetry);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'OpenAI paper-level key-content consolidation failed.';
-      return {
-        ready: false,
-        reasonCode: 'KEY_CONTENT_CONSOLIDATION_FAILED',
-        reasonMessage: message,
-        diagnostics: [{ code: 'KEY_CONTENT_CONSOLIDATION_FAILED', severity: 'blocker', message }],
-      };
+      categories = this.deterministicConsolidateCategories(categories);
+      diagnostics.push({
+        code: 'KEY_CONTENT_PAPER_LEVEL_CONSOLIDATION_FALLBACK',
+        severity: 'warning',
+        message: `Paper-level LLM consolidation failed; used deterministic source-preserving consolidation. ${message}`,
+      });
     }
 
     this.mergeUserEditedItems(categories, existingArtifact);
@@ -169,6 +206,7 @@ export class LiteratureKeyContentExtractionService {
       display_digest: displayDigest,
       generated_at: generatedAt,
     };
+    payload.quality_report.extraction_diagnostics.push(this.buildLlmTelemetryDiagnostic(telemetry));
     const checksum = sha256Text(stableStringify(payload));
 
     if (readinessStatus === 'FAILED') {
@@ -187,6 +225,85 @@ export class LiteratureKeyContentExtractionService {
       checksum,
       displayDigest,
       diagnostics: payload.quality_report.extraction_diagnostics,
+    };
+  }
+
+  private async mapWithConcurrency<T, R>(
+    items: T[],
+    concurrency: number,
+    mapper: (item: T, index: number) => Promise<R>,
+  ): Promise<R[]> {
+    const limit = Math.max(1, Math.min(items.length, concurrency));
+    const results = new Array<R>(items.length);
+    let nextIndex = 0;
+    await Promise.all(Array.from({ length: limit }, async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await mapper(items[index]!, index);
+      }
+    }));
+    return results;
+  }
+
+  private buildLlmTelemetryDiagnostic(telemetry: LlmCallTelemetry[]): Record<string, unknown> {
+    return {
+      code: 'KEY_CONTENT_LLM_TELEMETRY',
+      severity: 'info',
+      message: `LLM calls=${telemetry.reduce((sum, item) => sum + item.request_count, 0)}, retries=${telemetry.reduce((sum, item) => sum + item.retry_count, 0)}, elapsed_ms=${telemetry.reduce((sum, item) => sum + item.elapsed_ms, 0)}.`,
+      request_count: telemetry.reduce((sum, item) => sum + item.request_count, 0),
+      retry_count: telemetry.reduce((sum, item) => sum + item.retry_count, 0),
+      timeout_count: telemetry.reduce((sum, item) => sum + item.timeout_count, 0),
+      rate_limit_count: telemetry.reduce((sum, item) => sum + item.rate_limit_count, 0),
+      elapsed_ms_total: telemetry.reduce((sum, item) => sum + item.elapsed_ms, 0),
+      input_tokens_total: this.sumTelemetryValues(telemetry, 'input_tokens'),
+      output_tokens_total: this.sumTelemetryValues(telemetry, 'output_tokens'),
+      embedding_input_tokens_total: this.sumTelemetryValues(telemetry, 'embedding_input_tokens'),
+      total_tokens: this.sumTelemetryValues(telemetry, 'total_tokens'),
+      cost_usd: this.sumTelemetryValues(telemetry, 'cost_usd'),
+      prompt_templates: [...new Set(telemetry.map((item) =>
+        `${item.prompt_template_id ?? 'embedding'}@${item.prompt_template_version ?? 'none'}`,
+      ))],
+    };
+  }
+
+  private sumTelemetryValues(
+    telemetry: LlmCallTelemetry[],
+    key: 'input_tokens' | 'output_tokens' | 'embedding_input_tokens' | 'total_tokens' | 'cost_usd',
+  ): number | null {
+    let total = 0;
+    let seen = false;
+    for (const item of telemetry) {
+      const value = item[key];
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        total += value;
+        seen = true;
+      }
+    }
+    return seen ? total : null;
+  }
+
+  private emptyTelemetry(
+    config: OpenAIExtractionConfig,
+    promptTemplateId: string,
+    promptTemplateVersion: string,
+  ): LlmCallTelemetry {
+    return {
+      provider_id: config.provider,
+      model_id: config.model,
+      profile_id: config.profileId,
+      prompt_template_id: promptTemplateId,
+      prompt_template_version: promptTemplateVersion,
+      elapsed_ms: 0,
+      request_count: 0,
+      retry_count: 0,
+      timeout_count: 0,
+      rate_limit_count: 0,
+      input_tokens: null,
+      output_tokens: null,
+      embedding_input_tokens: null,
+      total_tokens: null,
+      cost_usd: null,
     };
   }
 
@@ -243,48 +360,80 @@ export class LiteratureKeyContentExtractionService {
     bundle: ExtractionSourceBundle,
     unit: ExtractionUnit,
     config: OpenAIExtractionConfig,
-  ): Promise<Partial<LiteratureKeyContentDossierPayload>> {
-    const response = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: config.model,
-        input: [
-          {
-            role: 'system',
-            content: [
-              'Extract a source-grounded semantic dossier section for a CS paper.',
-              'Return JSON only through the provided schema.',
-              'Every evidence-bearing item must cite source_refs using paragraph ids, section ids, anchors, or the abstract ref.',
-              'Do not invent claims not supported by the supplied source text.',
-            ].join(' '),
-          },
-          {
-            role: 'user',
-            content: this.buildSectionPrompt(literature, bundle, unit),
-          },
-        ],
-        text: {
-          format: {
-            type: 'json_schema',
-            name: 'literature_key_content_section',
-            strict: true,
-            schema: this.openAIOutputSchema(),
-          },
+  ): Promise<{ payload: Partial<LiteratureKeyContentDossierPayload>; telemetry: LlmCallTelemetry }> {
+    const response = await this.llmGateway.createStructuredOutput<Partial<LiteratureKeyContentDossierPayload>>({
+      executionContext: {
+        feature: 'literature_content_processing',
+        operation: 'key_content_section',
+        literatureId: literature.id,
+        metadata: {
+          section_id: unit.section.sectionId,
+          paragraph_count: unit.paragraphs.length,
         },
-      }),
+      },
+      model: {
+        providerId: config.provider,
+        modelId: config.model,
+        profileId: config.profileId,
+      },
+      prompt: {
+        promptTemplateId: 'literature-key-content-section',
+        version: config.runtime.prompt_profile_id,
+      },
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'Extract a source-grounded semantic dossier section for a CS paper.',
+            'Return JSON only through the provided schema.',
+            'Every evidence-bearing item must cite source_refs by copying an exact ref_type and bare ref_id from source_refs_json.',
+            'Do not output concatenated refs, bibliography text, labels, or quoted source text as ref_id.',
+            'Do not invent claims not supported by the supplied source text.',
+          ].join(' '),
+        },
+        {
+          role: 'user',
+          content: this.buildSectionPrompt(literature, bundle, unit),
+        },
+      ],
+      schemaName: 'literature_key_content_section',
+      schema: this.openAIOutputSchema(),
+      policy: {
+        timeoutMs: config.runtime.request_timeout_ms,
+        maxRetries: config.runtime.max_retries,
+      },
     });
+    return { payload: response.parsed, telemetry: response.telemetry };
+  }
 
-    if (!response.ok) {
-      throw new Error(`OpenAI key-content extraction failed with status ${response.status}`);
+  private async extractSectionSafely(
+    literature: LiteratureRecord,
+    bundle: ExtractionSourceBundle,
+    unit: ExtractionUnit,
+    config: OpenAIExtractionConfig,
+  ): Promise<SectionExtractionOutcome> {
+    try {
+      const extracted = await this.extractSection(literature, bundle, unit, config);
+      return {
+        ok: true,
+        unit,
+        payload: extracted.payload,
+        telemetry: extracted.telemetry,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'OpenAI key-content section extraction failed.';
+      return {
+        ok: false,
+        unit,
+        diagnostics: [{
+          code: 'KEY_CONTENT_SECTION_EXTRACTION_FAILED',
+          severity: 'warning',
+          message,
+          section_id: unit.section.sectionId,
+        }],
+        telemetry: error instanceof LlmGatewayError ? error.telemetry ?? null : null,
+      };
     }
-
-    const payload = await response.json() as Record<string, unknown>;
-    return this.readStructuredPayload(payload);
   }
 
   private async consolidatePaperLevel(
@@ -293,53 +442,57 @@ export class LiteratureKeyContentExtractionService {
     categories: CategoryMap,
     config: OpenAIExtractionConfig,
     diagnostics: Record<string, unknown>[],
-  ): Promise<CategoryMap> {
+  ): Promise<{ categories: CategoryMap; telemetry: LlmCallTelemetry }> {
     const inputItemCount = this.countCategoryItems(categories);
     if (inputItemCount === 0) {
-      return categories;
+      return {
+        categories,
+        telemetry: this.emptyTelemetry(config, 'literature-key-content-consolidation', config.runtime.prompt_profile_id),
+      };
     }
 
-    const response = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: config.model,
-        input: [
-          {
-            role: 'system',
-            content: [
-              'Consolidate section-level CS paper dossier items into a paper-level semantic dossier.',
-              'Deduplicate equivalent claims, preserve distinct nuanced claims, reconcile conflicts explicitly, and keep source_refs for every evidence-bearing item.',
-              'Return JSON only through the provided schema.',
-            ].join(' '),
-          },
-          {
-            role: 'user',
-            content: this.buildConsolidationPrompt(literature, bundle, categories),
-          },
-        ],
-        text: {
-          format: {
-            type: 'json_schema',
-            name: 'literature_key_content_consolidation',
-            strict: true,
-            schema: this.openAIOutputSchema(),
-          },
+    const response = await this.llmGateway.createStructuredOutput<Partial<LiteratureKeyContentDossierPayload>>({
+      executionContext: {
+        feature: 'literature_content_processing',
+        operation: 'key_content_consolidation',
+        literatureId: literature.id,
+        metadata: {
+          input_item_count: inputItemCount,
         },
-      }),
+      },
+      model: {
+        providerId: config.provider,
+        modelId: config.model,
+        profileId: config.profileId,
+      },
+      prompt: {
+        promptTemplateId: 'literature-key-content-consolidation',
+        version: config.runtime.prompt_profile_id,
+      },
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'Consolidate section-level CS paper dossier items into a paper-level semantic dossier.',
+            'Deduplicate equivalent claims, preserve distinct nuanced claims, reconcile conflicts explicitly, and keep source_refs for every evidence-bearing item.',
+            'Preserve existing source_refs from the section-level items; do not invent new source refs.',
+            'Return JSON only through the provided schema.',
+          ].join(' '),
+        },
+        {
+          role: 'user',
+          content: this.buildConsolidationPrompt(literature, bundle, categories),
+        },
+      ],
+      schemaName: 'literature_key_content_consolidation',
+      schema: this.openAIOutputSchema(),
+      policy: {
+        timeoutMs: config.runtime.request_timeout_ms,
+        maxRetries: config.runtime.max_retries,
+      },
     });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI key-content consolidation failed with status ${response.status}`);
-    }
-
-    const payload = await response.json() as Record<string, unknown>;
-    const structured = this.readStructuredPayload(payload);
-    const consolidationDiagnostics = this.readDiagnostics(structured);
+    const structured = response.parsed;
+    const consolidationDiagnostics = this.readDiagnostics(structured, config);
     diagnostics.push(...consolidationDiagnostics);
     const consolidated = this.normalizeCategories(structured.categories, bundle, diagnostics);
     if (this.countCategoryItems(consolidated) === 0) {
@@ -350,7 +503,7 @@ export class LiteratureKeyContentExtractionService {
       severity: 'info',
       message: `Consolidated ${inputItemCount} section-level items into ${this.countCategoryItems(consolidated)} paper-level items.`,
     });
-    return consolidated;
+    return { categories: consolidated, telemetry: response.telemetry };
   }
 
   private buildSectionPrompt(
@@ -359,10 +512,7 @@ export class LiteratureKeyContentExtractionService {
     unit: ExtractionUnit,
   ): string {
     const abstractText = bundle.abstractProfile?.abstractText?.trim() ?? '';
-    const anchorSummary = bundle.anchors
-      .slice(0, 40)
-      .map((anchor) => `${anchor.anchorType}:${anchor.anchorId}:${normalizeWhitespace(anchor.text ?? anchor.label ?? '')}`)
-      .join('\n');
+    const sourceRefs = this.buildSourceRefInventory(bundle, unit);
     return [
       `Title: ${literature.title}`,
       `Authors: ${literature.authors.join(', ') || 'unknown'}`,
@@ -372,10 +522,9 @@ export class LiteratureKeyContentExtractionService {
       `Document id: ${bundle.document.id}`,
       `Section id: ${unit.section.sectionId}`,
       `Section title: ${unit.section.title}`,
-      'Available source refs:',
-      `- section:${unit.section.sectionId}`,
-      ...unit.paragraphs.map((paragraph) => `- paragraph:${paragraph.paragraphId}`),
-      anchorSummary ? `Anchors:\n${anchorSummary}` : 'Anchors: none',
+      'source_refs_json:',
+      stableStringify(sourceRefs),
+      'Source-ref rule: every source_refs item in your output must copy ref_type and bare ref_id exactly from source_refs_json.',
       'Section text:',
       unit.text,
     ].join('\n\n');
@@ -386,84 +535,146 @@ export class LiteratureKeyContentExtractionService {
     bundle: ExtractionSourceBundle,
     categories: CategoryMap,
   ): string {
-    const sourceInventory = [
-      ...bundle.sections.map((section) => `section:${section.sectionId}:${section.title}`),
-      ...bundle.paragraphs.map((paragraph) => `paragraph:${paragraph.paragraphId}:section=${paragraph.sectionId}`),
-      ...bundle.anchors.map((anchor) => `anchor:${anchor.anchorId}:type=${anchor.anchorType}:label=${anchor.label ?? ''}`),
-    ].slice(0, 120);
+    const sourceInventory = this.buildSourceRefInventory(bundle).slice(0, 240);
+    const compactCategories = this.buildCompactConsolidationCategories(categories);
     return [
       `Title: ${literature.title}`,
       `Authors: ${literature.authors.join(', ') || 'unknown'}`,
       `Year: ${literature.year ?? 'unknown'}`,
       `Abstract: ${bundle.abstractProfile?.abstractText ?? 'unavailable'}`,
       `Document id: ${bundle.document.id}`,
-      'Valid source refs:',
-      sourceInventory.join('\n') || 'none',
+      'valid_source_refs_json:',
+      stableStringify(sourceInventory),
       'Section-level dossier categories to consolidate:',
-      stableStringify({ categories }),
+      stableStringify({ categories: compactCategories }),
       'Consolidation rules:',
       '- Merge semantically equivalent duplicate claims.',
       '- Keep fine-grained distinctions when they matter for cross-paper comparison, methods, formulas, datasets, metrics, limitations, and evidence.',
       '- If claims conflict, keep the canonical claim and add the conflict context in notes while preserving the conflicting source_refs.',
-      '- Do not create new claims without source_refs from the valid source inventory.',
+      '- Preserve source_refs already attached to section-level items whenever possible.',
+      '- If you add a new source_ref, it must copy ref_type and bare ref_id exactly from valid_source_refs_json.',
     ].join('\n\n');
   }
 
-  private readStructuredPayload(payload: Record<string, unknown>): Partial<LiteratureKeyContentDossierPayload> {
-    const parsed = this.tryReadObject(payload.output_parsed)
-      ?? this.tryParseJsonObject(payload.output_text)
-      ?? this.tryReadFromResponsesOutput(payload.output)
-      ?? this.tryReadFromChatOutput(payload);
-    if (!parsed) {
-      throw new Error('OpenAI key-content response did not include parseable structured output.');
+  private buildCompactConsolidationCategories(categories: CategoryMap): Record<CategoryKey, Array<Record<string, unknown>>> {
+    return Object.fromEntries(CATEGORY_KEYS.map((category) => [
+      category,
+      categories[category].slice(0, 40).map((item) => ({
+        id: item.id,
+        type: item.type,
+        statement: this.truncateForPrompt(item.statement, 700),
+        details: this.truncateForPrompt(item.details, 500),
+        source_refs: item.source_refs.slice(0, 6).map((ref) => ({
+          ref_type: ref.ref_type,
+          ref_id: ref.ref_id,
+        })),
+        confidence: item.confidence,
+        evidence_strength: item.evidence_strength,
+        notes: item.notes ? this.truncateForPrompt(item.notes, 300) : null,
+      })),
+    ])) as unknown as Record<CategoryKey, Array<Record<string, unknown>>>;
+  }
+
+  private truncateForPrompt(value: string, maxLength: number): string {
+    return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3)}...`;
+  }
+
+  private deterministicConsolidateCategories(categories: CategoryMap): CategoryMap {
+    const consolidated = this.emptyCategories();
+    for (const category of CATEGORY_KEYS) {
+      const byStatement = new Map<string, LiteratureKeyContentItem>();
+      for (const item of categories[category]) {
+        const key = normalizeWhitespace(item.statement).toLowerCase();
+        const existing = byStatement.get(key);
+        if (!existing) {
+          byStatement.set(key, item);
+          continue;
+        }
+        byStatement.set(key, {
+          ...existing,
+          details: existing.details.length >= item.details.length ? existing.details : item.details,
+          source_refs: this.mergeSourceRefs(existing.source_refs, item.source_refs),
+          confidence: Math.max(existing.confidence, item.confidence),
+          evidence_strength: this.maxEvidenceStrength(existing.evidence_strength, item.evidence_strength),
+          notes: existing.notes ?? item.notes,
+        });
+      }
+      consolidated[category] = [...byStatement.values()];
     }
-    return parsed as Partial<LiteratureKeyContentDossierPayload>;
+    return consolidated;
+  }
+
+  private mergeSourceRefs(
+    left: LiteratureKeyContentSourceRef[],
+    right: LiteratureKeyContentSourceRef[],
+  ): LiteratureKeyContentSourceRef[] {
+    const byKey = new Map<string, LiteratureKeyContentSourceRef>();
+    for (const ref of [...left, ...right]) {
+      byKey.set(`${ref.ref_type}:${ref.ref_id}`, ref);
+    }
+    return [...byKey.values()];
+  }
+
+  private maxEvidenceStrength(
+    left: LiteratureKeyContentEvidenceStrength,
+    right: LiteratureKeyContentEvidenceStrength,
+  ): LiteratureKeyContentEvidenceStrength {
+    const order: Record<LiteratureKeyContentEvidenceStrength, number> = {
+      unknown: 0,
+      low: 1,
+      medium: 2,
+      high: 3,
+    };
+    return order[right] > order[left] ? right : left;
+  }
+
+  private buildSourceRefInventory(
+    bundle: ExtractionSourceBundle,
+    unit?: ExtractionUnit,
+  ): Array<Record<string, unknown>> {
+    const sectionIds = new Set(unit ? [unit.section.sectionId] : bundle.sections.map((section) => section.sectionId));
+    const paragraphIds = new Set(unit ? unit.paragraphs.map((paragraph) => paragraph.paragraphId) : bundle.paragraphs.map((paragraph) => paragraph.paragraphId));
+    const refs: Array<Record<string, unknown>> = [];
+    if (bundle.abstractProfile) {
+      refs.push({
+        ref_type: 'abstract',
+        ref_id: bundle.abstractProfile.id,
+        aliases: ['abstract'],
+      });
+    }
+    for (const section of bundle.sections) {
+      if (!sectionIds.has(section.sectionId)) {
+        continue;
+      }
+      refs.push({
+        ref_type: 'section',
+        ref_id: section.sectionId,
+        title: section.title,
+      });
+    }
+    for (const paragraph of bundle.paragraphs) {
+      if (!paragraphIds.has(paragraph.paragraphId)) {
+        continue;
+      }
+      refs.push({
+        ref_type: 'paragraph',
+        ref_id: paragraph.paragraphId,
+        section_id: paragraph.sectionId,
+      });
+    }
+    for (const anchor of bundle.anchors.slice(0, unit ? 60 : 180)) {
+      refs.push({
+        ref_type: 'anchor',
+        ref_id: anchor.anchorId,
+        anchor_type: anchor.anchorType,
+        label: anchor.label ?? null,
+      });
+    }
+    return refs;
   }
 
   private tryReadObject(value: unknown): Record<string, unknown> | null {
     return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
-  }
-
-  private tryParseJsonObject(value: unknown): Record<string, unknown> | null {
-    if (typeof value !== 'string') {
-      return null;
-    }
-    try {
-      return this.tryReadObject(JSON.parse(value));
-    } catch {
-      return null;
-    }
-  }
-
-  private tryReadFromResponsesOutput(value: unknown): Record<string, unknown> | null {
-    if (!Array.isArray(value)) {
-      return null;
-    }
-    for (const item of value) {
-      const row = this.tryReadObject(item);
-      const content = Array.isArray(row?.content) ? row.content : [];
-      for (const contentItem of content) {
-        const contentRow = this.tryReadObject(contentItem);
-        const parsed = this.tryParseJsonObject(contentRow?.text) ?? this.tryReadObject(contentRow?.parsed);
-        if (parsed) {
-          return parsed;
-        }
-      }
-    }
-    return null;
-  }
-
-  private tryReadFromChatOutput(payload: Record<string, unknown>): Record<string, unknown> | null {
-    const choices = Array.isArray(payload.choices) ? payload.choices : [];
-    for (const choice of choices) {
-      const row = this.tryReadObject(choice);
-      const message = this.tryReadObject(row?.message);
-      const parsed = this.tryParseJsonObject(message?.content);
-      if (parsed) {
-        return parsed;
-      }
-    }
-    return null;
   }
 
   private normalizeCategories(
@@ -531,26 +742,114 @@ export class LiteratureKeyContentExtractionService {
       return [];
     }
     const refs: LiteratureKeyContentSourceRef[] = [];
+    const unresolved: Array<{ ref_type: unknown; ref_id: string }> = [];
     for (const item of value) {
       const row = this.tryReadObject(item);
       if (!row) {
         continue;
       }
-      const refType = row.ref_type;
-      const refId = normalizeWhitespace(this.readString(row.ref_id) ?? '');
-      const resolved = this.resolveSourceRef(refType, refId, bundle);
+      const candidate = this.repairSourceRefCandidate(row.ref_type, normalizeWhitespace(this.readString(row.ref_id) ?? ''), bundle);
+      const resolved = candidate ? this.resolveSourceRef(candidate.refType, candidate.refId, bundle) : null;
       if (resolved) {
         refs.push(resolved);
-      } else if (refId) {
+      } else if (candidate?.refId) {
+        unresolved.push({ ref_type: candidate.refType, ref_id: candidate.refId });
+      }
+    }
+    if (refs.length === 0) {
+      for (const item of unresolved) {
         diagnostics.push({
           code: 'SOURCE_REF_UNRESOLVED',
           severity: 'warning',
-          ref_type: refType,
-          ref_id: refId,
+          ref_type: item.ref_type,
+          ref_id: item.ref_id,
         });
       }
     }
     return refs;
+  }
+
+  private repairSourceRefCandidate(
+    rawRefType: unknown,
+    rawRefId: string,
+    bundle: ExtractionSourceBundle,
+  ): { refType: string; refId: string } | null {
+    const refType = typeof rawRefType === 'string' ? rawRefType.trim().toLowerCase() : '';
+    const refId = rawRefId.trim();
+    if (!refId) {
+      return null;
+    }
+
+    const direct = this.findResolvableSourceRef(refType, refId, bundle);
+    if (direct) {
+      return direct;
+    }
+
+    const prefixed = refId.match(/^(abstract|section|paragraph|anchor|manual)\s*[:#]\s*(.+)$/i);
+    if (prefixed) {
+      const prefixType = prefixed[1]!.toLowerCase();
+      const prefixId = normalizeWhitespace(prefixed[2] ?? '').split(/\s+/)[0] ?? '';
+      const resolved = this.findResolvableSourceRef(prefixType, prefixId, bundle);
+      if (resolved) {
+        return resolved;
+      }
+    }
+
+    const colonParts = refId.split(':').map((item) => item.trim()).filter(Boolean);
+    if (colonParts.length >= 2) {
+      const [prefix, id] = colonParts;
+      if (prefix && id) {
+        const anchorByType = bundle.anchors.find((anchor) =>
+          anchor.anchorType.toLowerCase() === prefix.toLowerCase() && anchor.anchorId === id,
+        );
+        if (anchorByType) {
+          return { refType: 'anchor', refId: anchorByType.anchorId };
+        }
+        const resolved = this.findResolvableSourceRef(refType || prefix, id, bundle);
+        if (resolved) {
+          return resolved;
+        }
+      }
+    }
+
+    const normalizedLabel = this.normalizedLookupKey(refId);
+    const anchorByLabel = bundle.anchors.find((anchor) =>
+      this.normalizedLookupKey(anchor.label ?? '') === normalizedLabel
+        || this.normalizedLookupKey(anchor.text ?? '') === normalizedLabel,
+    );
+    if (anchorByLabel) {
+      return { refType: 'anchor', refId: anchorByLabel.anchorId };
+    }
+
+    const inferred = this.findResolvableSourceRef('', refId, bundle);
+    return inferred ?? { refType: refType || 'unknown', refId };
+  }
+
+  private findResolvableSourceRef(
+    refType: string,
+    refId: string,
+    bundle: ExtractionSourceBundle,
+  ): { refType: string; refId: string } | null {
+    if ((refType === 'abstract' || refType === '') && bundle.abstractProfile && (refId === 'abstract' || refId === bundle.abstractProfile.id)) {
+      return { refType: 'abstract', refId: bundle.abstractProfile.id };
+    }
+    if ((refType === 'section' || refType === '') && bundle.sections.some((item) => item.sectionId === refId)) {
+      return { refType: 'section', refId };
+    }
+    if ((refType === 'paragraph' || refType === '') && bundle.paragraphs.some((item) => item.paragraphId === refId)) {
+      return { refType: 'paragraph', refId };
+    }
+    if ((refType === 'anchor' || refType === '') && bundle.anchors.some((item) => item.anchorId === refId)) {
+      return { refType: 'anchor', refId };
+    }
+    if (refType === 'manual' && refId) {
+      return { refType: 'manual', refId };
+    }
+    return null;
+  }
+
+  private normalizedLookupKey(value: string): string {
+    return normalizeWhitespace(value).toLowerCase();
   }
 
   private resolveSourceRef(
@@ -754,9 +1053,48 @@ export class LiteratureKeyContentExtractionService {
     };
   }
 
-  private readDiagnostics(payload: Partial<LiteratureKeyContentDossierPayload>): Record<string, unknown>[] {
+  private readDiagnostics(
+    payload: Partial<LiteratureKeyContentDossierPayload>,
+    config: OpenAIExtractionConfig,
+  ): Record<string, unknown>[] {
     const diagnostics = payload.quality_report?.extraction_diagnostics;
-    return Array.isArray(diagnostics) ? diagnostics : [];
+    if (!Array.isArray(diagnostics)) {
+      return [];
+    }
+    return diagnostics
+      .map((item) => this.normalizeDiagnostic(item, config.runtime.diagnostic_policy))
+      .filter((item): item is Record<string, unknown> => item !== null);
+  }
+
+  private normalizeDiagnostic(value: unknown, policy: string): Record<string, unknown> | null {
+    const row = this.tryReadObject(value);
+    if (!row) {
+      return null;
+    }
+    const code = this.readString(row.code) ?? 'MODEL_DIAGNOSTIC';
+    const rawSeverity = this.readString(row.severity) ?? 'info';
+    let severity = rawSeverity === 'warning' || rawSeverity === 'blocker' ? rawSeverity : 'info';
+    if (policy === 'actionable_v1' && severity === 'warning' && this.isGenericLimitedSourceDiagnostic(code)) {
+      severity = 'info';
+    }
+    return {
+      code,
+      severity,
+      message: this.readString(row.message) ?? '',
+    };
+  }
+
+  private isGenericLimitedSourceDiagnostic(code: string): boolean {
+    const normalized = code.toLowerCase();
+    return normalized.includes('limited_source')
+      || normalized.includes('limited_context')
+      || normalized.includes('limited_scope')
+      || normalized.includes('scope_limited')
+      || normalized.includes('source_scope_limited')
+      || normalized.includes('no_numeric_result')
+      || normalized.includes('no_experiment')
+      || normalized.includes('no_dataset')
+      || normalized.includes('scope_warning');
   }
 
   private emptyCategories(): CategoryMap {

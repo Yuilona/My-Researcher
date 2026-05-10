@@ -328,6 +328,7 @@ paths:
               example:
                 results:
                   - literature_id: LIT-0001
+                    canonical_work_key: doi:10.1145/1234567.8901234
                     is_new: true
                     matched_by: none
                     title: Calibrating LLM Evaluators for Citation Grounding
@@ -373,6 +374,7 @@ paths:
                 scope_upserted_count: 8
                 results:
                   - literature_id: LIT-1001
+                    canonical_work_key: tay:7b0f4d6c
                     is_new: true
                     matched_by: none
                     title: Retrieval-Augmented Evaluation Benchmarks
@@ -472,6 +474,100 @@ paths:
                 $ref: '#/components/schemas/LiteratureRetrieveResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /literature/clusters/candidates:
+    post:
+      operationId: generateLiteratureClusterCandidates
+      summary: Generate structured literature duplicate/cluster candidates.
+      tags: [literature]
+      description: Produces candidate clusters from exact asset/text signals and conservative near-duplicate metadata signals. Automatic generation does not confirm merges.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LiteratureClusterCandidateGenerationRequest'
+      responses:
+        '200':
+          description: Generated cluster candidates.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiteratureClusterCandidateGenerationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /literature/clusters:
+    get:
+      operationId: listLiteratureClusters
+      summary: List structured literature clusters and candidate relations.
+      tags: [literature]
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/LiteratureClusterStatus'
+        - name: cluster_type
+          in: query
+          schema:
+            $ref: '#/components/schemas/LiteratureClusterType'
+        - name: literature_id
+          in: query
+          schema:
+            type: string
+            minLength: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: Literature clusters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListLiteratureClustersResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /literature/clusters/{clusterId}:
+    patch:
+      operationId: updateLiteratureCluster
+      summary: Confirm, reject, split, or edit a literature cluster decision.
+      tags: [literature]
+      parameters:
+        - name: clusterId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLiteratureClusterRequest'
+      responses:
+        '200':
+          description: Updated literature cluster.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateLiteratureClusterResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -1014,6 +1110,98 @@ paths:
                 $ref: '#/components/schemas/GetLiteratureContentProcessingResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /literature/{literatureId}/content-processing/key-content-curation-bundle:
+    get:
+      operationId: getLiteratureKeyContentCurationBundle
+      summary: Export source-grounded inputs for Codex/manual key-content curation.
+      tags: [literature]
+      parameters:
+        - name: literatureId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Key-content curation bundle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiteratureKeyContentCurationBundleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /literature/{literatureId}/content-processing/key-content-dossier:
+    post:
+      operationId: importLiteratureKeyContentDossier
+      summary: Import a Codex/manual curated key-content dossier as KEY_CONTENT_READY.
+      tags: [literature]
+      parameters:
+        - name: literatureId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportLiteratureKeyContentDossierRequest'
+      responses:
+        '200':
+          description: Curated key-content dossier imported.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportLiteratureKeyContentDossierResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /literature/{literatureId}/content-processing/key-content-dossier/dry-run:
+    post:
+      operationId: dryRunImportLiteratureKeyContentDossier
+      summary: Validate a Codex/manual curated key-content dossier without mutating KEY_CONTENT_READY.
+      tags: [literature]
+      parameters:
+        - name: literatureId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportLiteratureKeyContentDossierRequest'
+      responses:
+        '200':
+          description: Curated key-content dossier validation result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DryRunImportLiteratureKeyContentDossierResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -3185,9 +3373,11 @@ components:
 
     LiteratureCollectionImportResult:
       type: object
-      required: [literature_id, is_new, matched_by, title, source_provider, source_url]
+      required: [literature_id, canonical_work_key, is_new, matched_by, title, source_provider, source_url]
       properties:
         literature_id:
+          type: string
+        canonical_work_key:
           type: string
         is_new:
           type: boolean
@@ -3532,7 +3722,7 @@ components:
 
     LiteratureContentProcessingProviderId:
       type: string
-      enum: [openai]
+      enum: [openai, dashscope]
 
     LiteratureEmbeddingProfileId:
       type: string
@@ -3542,9 +3732,49 @@ components:
       type: string
       enum: [default, high_accuracy]
 
+    LiteratureKeyContentReadyMethod:
+      type: string
+      enum: [llm_gateway, codex_curated, manual_curated]
+
+    LiteratureKeyContentBackfillCurationStatus:
+      type: string
+      enum: [NOT_APPLICABLE, CURATION_REQUIRED, WAITING_FOR_DOSSIER, READY_TO_IMPORT, IMPORT_FAILED]
+
     LiteratureRetrieveProfileId:
       type: string
       enum: [general, topic_exploration, paper_management, writing_evidence]
+
+    LiteratureClusterType:
+      type: string
+      enum: [same_work, version_family, related_topic]
+
+    LiteratureClusterStatus:
+      type: string
+      enum: [candidate, confirmed, rejected, split]
+
+    LiteratureClusterReviewOutcome:
+      type: string
+      enum: [pending_review, same_work_confirmed, version_family_confirmed, related_topic_confirmed, rejected, split]
+
+    LiteratureClusterConsumptionScope:
+      type: string
+      enum: [none, retrieval_dedup, related_topic_reference]
+
+    LiteratureClusterMemberRole:
+      type: string
+      enum: [representative, variant, related]
+
+    LiteratureClusterMemberDecisionStatus:
+      type: string
+      enum: [pending, accepted, rejected]
+
+    LiteratureClusterRelationType:
+      type: string
+      enum: [same_pdf, same_normalized_text, same_work, preprint_of, published_version_of, near_duplicate, related_method]
+
+    LiteratureClusterEvidenceSignalType:
+      type: string
+      enum: [doi, arxiv_id, title_author_year, pdf_sha256, text_fingerprint, title_similarity, author_overlap, abstract_similarity, embedding_similarity]
 
     LiteratureContentProcessingProviderSettings:
       type: object
@@ -3604,7 +3834,7 @@ components:
 
     LiteratureContentProcessingExtractionSettings:
       type: object
-      required: [active_profile_id, profiles]
+      required: [active_profile_id, profiles, runtime]
       properties:
         active_profile_id:
           $ref: '#/components/schemas/LiteratureExtractionProfileId'
@@ -3612,6 +3842,38 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LiteratureExtractionProfile'
+        runtime:
+          $ref: '#/components/schemas/LiteratureExtractionRuntimeSettings'
+      additionalProperties: false
+
+    LiteratureExtractionRuntimeSettings:
+      type: object
+      required: [preferred_key_content_method, section_concurrency, request_timeout_ms, max_retries, prompt_profile_id, diagnostic_policy]
+      properties:
+        preferred_key_content_method:
+          $ref: '#/components/schemas/LiteratureKeyContentReadyMethod'
+          default: llm_gateway
+        section_concurrency:
+          type: integer
+          minimum: 1
+          maximum: 8
+          default: 3
+        request_timeout_ms:
+          type: integer
+          minimum: 1000
+          maximum: 300000
+          default: 120000
+        max_retries:
+          type: integer
+          minimum: 0
+          maximum: 3
+          default: 1
+        prompt_profile_id:
+          type: string
+          default: literature_key_content_v2
+        diagnostic_policy:
+          type: string
+          default: actionable_v1
       additionalProperties: false
 
     LiteratureContentProcessingStorageRoots:
@@ -3870,6 +4132,30 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/LiteratureExtractionProfile'
+            runtime:
+              type: object
+              properties:
+                preferred_key_content_method:
+                  $ref: '#/components/schemas/LiteratureKeyContentReadyMethod'
+                section_concurrency:
+                  type: integer
+                  minimum: 1
+                  maximum: 8
+                request_timeout_ms:
+                  type: integer
+                  minimum: 1000
+                  maximum: 300000
+                max_retries:
+                  type: integer
+                  minimum: 0
+                  maximum: 3
+                prompt_profile_id:
+                  type: string
+                  minLength: 1
+                diagnostic_policy:
+                  type: string
+                  minLength: 1
+              additionalProperties: false
           additionalProperties: false
         storage_roots:
           type: object
@@ -4050,6 +4336,355 @@ components:
             $ref: '#/components/schemas/LiteratureContentProcessingStageState'
       additionalProperties: false
 
+    LiteratureKeyContentCurationSource:
+      type: string
+      enum: [codex_curated, manual_curated]
+
+    LiteratureKeyContentSourceRef:
+      type: object
+      required: [ref_type, ref_id]
+      properties:
+        ref_type:
+          type: string
+          enum: [abstract, section, paragraph, anchor, manual]
+        ref_id:
+          type: string
+          minLength: 1
+        document_id:
+          type: string
+        section_id:
+          type: string
+        paragraph_id:
+          type: string
+        anchor_id:
+          type: string
+        checksum:
+          type: [string, 'null']
+        start_offset:
+          type: [integer, 'null']
+          minimum: 0
+        end_offset:
+          type: [integer, 'null']
+          minimum: 0
+      additionalProperties: false
+
+    LiteratureKeyContentItem:
+      type: object
+      required: [id, type, statement, details, source_refs, confidence, evidence_strength, notes, provenance]
+      properties:
+        id:
+          type: string
+          minLength: 1
+        type:
+          type: string
+          minLength: 1
+        statement:
+          type: string
+          minLength: 1
+        details:
+          type: string
+        source_refs:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/LiteratureKeyContentSourceRef'
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        evidence_strength:
+          type: string
+          enum: [unknown, low, medium, high]
+        notes:
+          type: [string, 'null']
+        provenance:
+          type: string
+          enum: [model_generated, user_edited]
+      additionalProperties: false
+
+    LiteratureKeyContentCategories:
+      type: object
+      required:
+        - research_problem
+        - contributions
+        - method
+        - datasets_and_benchmarks
+        - experiments
+        - key_findings
+        - limitations
+        - reproducibility
+        - related_work_positioning
+        - evidence_candidates
+        - figure_insights
+        - table_insights
+        - claim_evidence_map
+        - automation_signals
+      properties:
+        research_problem:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureKeyContentItem'
+        contributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureKeyContentItem'
+        method:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureKeyContentItem'
+        datasets_and_benchmarks:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureKeyContentItem'
+        experiments:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureKeyContentItem'
+        key_findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureKeyContentItem'
+        limitations:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureKeyContentItem'
+        reproducibility:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureKeyContentItem'
+        related_work_positioning:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureKeyContentItem'
+        evidence_candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureKeyContentItem'
+        figure_insights:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureKeyContentItem'
+        table_insights:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureKeyContentItem'
+        claim_evidence_map:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureKeyContentItem'
+        automation_signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureKeyContentItem'
+      additionalProperties: false
+
+    LiteratureKeyContentDossierPayload:
+      type: object
+      required: [schema_version, extraction_profile, readiness_status, input_refs, categories, quality_report, display_digest, generated_at]
+      properties:
+        schema_version:
+          type: string
+          enum: [key_content.v1]
+        extraction_profile:
+          type: string
+          enum: [paper_semantic_dossier.v1]
+        readiness_status:
+          type: string
+          enum: [READY, PARTIAL_READY, FAILED]
+        input_refs:
+          type: object
+          additionalProperties: true
+        categories:
+          $ref: '#/components/schemas/LiteratureKeyContentCategories'
+        quality_report:
+          type: object
+          required: [completeness_score, confidence, blockers, warnings, conflicts, extraction_diagnostics]
+          properties:
+            completeness_score:
+              type: number
+              minimum: 0
+              maximum: 1
+            confidence:
+              type: number
+              minimum: 0
+              maximum: 1
+            blockers:
+              type: array
+              items:
+                type: string
+            warnings:
+              type: array
+              items:
+                type: string
+            conflicts:
+              type: array
+              items:
+                type: string
+            extraction_diagnostics:
+              type: array
+              items:
+                type: object
+          additionalProperties: false
+        display_digest:
+          type: string
+        generated_at:
+          type: string
+      additionalProperties: false
+
+    LiteratureKeyContentCurationBundleResponse:
+      type: object
+      required: [literature_id, title, authors, year, abstract, abstract_profile, document, sections, paragraphs, anchors, source_refs, export_policy]
+      properties:
+        literature_id:
+          type: string
+        title:
+          type: string
+        authors:
+          type: array
+          items:
+            type: string
+        year:
+          type: [integer, 'null']
+        abstract:
+          type: [string, 'null']
+        abstract_profile:
+          type: [object, 'null']
+        document:
+          type: object
+          required: [id, source_asset_id, normalized_text_checksum, parser_name, parser_version, status, diagnostics]
+          properties:
+            id:
+              type: string
+            source_asset_id:
+              type: string
+            normalized_text_checksum:
+              type: string
+            parser_name:
+              type: string
+            parser_version:
+              type: string
+            status:
+              type: string
+            diagnostics:
+              type: array
+              items:
+                type: object
+          additionalProperties: false
+        sections:
+          type: array
+          items:
+            type: object
+        paragraphs:
+          type: array
+          items:
+            type: object
+        anchors:
+          type: array
+          items:
+            type: object
+        source_refs:
+          type: array
+          items:
+            type: object
+        export_policy:
+          type: object
+          required: [accepted_curation_sources, required_schema_version, required_extraction_profile, require_resolvable_source_refs]
+          properties:
+            accepted_curation_sources:
+              type: array
+              items:
+                $ref: '#/components/schemas/LiteratureKeyContentCurationSource'
+            required_schema_version:
+              type: string
+              enum: [key_content.v1]
+            required_extraction_profile:
+              type: string
+              enum: [paper_semantic_dossier.v1]
+            require_resolvable_source_refs:
+              type: boolean
+          additionalProperties: false
+      additionalProperties: false
+
+    ImportLiteratureKeyContentDossierRequest:
+      type: object
+      required: [curation_source, dossier]
+      properties:
+        curation_source:
+          $ref: '#/components/schemas/LiteratureKeyContentCurationSource'
+        curator:
+          type: string
+          minLength: 1
+        dossier:
+          $ref: '#/components/schemas/LiteratureKeyContentDossierPayload'
+      additionalProperties: false
+
+    ImportLiteratureKeyContentDossierResponse:
+      type: object
+      required: [literature_id, artifact_id, readiness_status, checksum, display_digest, source, diagnostics, state]
+      properties:
+        literature_id:
+          type: string
+        artifact_id:
+          type: string
+        readiness_status:
+          type: string
+          enum: [READY, PARTIAL_READY]
+        checksum:
+          type: string
+        display_digest:
+          type: string
+        source:
+          $ref: '#/components/schemas/LiteratureKeyContentCurationSource'
+        diagnostics:
+          type: array
+          items:
+            type: object
+        state:
+          $ref: '#/components/schemas/LiteratureContentProcessingState'
+      additionalProperties: false
+
+    DryRunImportLiteratureKeyContentDossierResponse:
+      type: object
+      required:
+        - literature_id
+        - valid
+        - readiness_status
+        - checksum
+        - display_digest
+        - source
+        - issues
+        - diagnostics
+        - repaired_source_ref_count
+        - would_mark_downstream_stale
+      properties:
+        literature_id:
+          type: string
+        valid:
+          type: boolean
+        readiness_status:
+          type: string
+          enum: [READY, PARTIAL_READY, FAILED]
+        checksum:
+          type: [string, 'null']
+        display_digest:
+          type: string
+        source:
+          $ref: '#/components/schemas/LiteratureKeyContentCurationSource'
+        issues:
+          type: array
+          items:
+            type: string
+        diagnostics:
+          type: array
+          items:
+            type: object
+        repaired_source_ref_count:
+          type: integer
+          minimum: 0
+        would_mark_downstream_stale:
+          type: boolean
+      additionalProperties: false
+
     CreateLiteratureContentProcessingRunRequest:
       type: object
       properties:
@@ -4203,7 +4838,7 @@ components:
 
     LiteratureContentProcessingBackfillPlanItem:
       type: object
-      required: [literature_id, title, rights_class, requested_stages, blocked, blocker_code, retryable]
+      required: [literature_id, title, rights_class, requested_stages, blocked, blocker_code, retryable, key_content_curation_status]
       properties:
         literature_id:
           type: string
@@ -4221,6 +4856,10 @@ components:
           type: [string, 'null']
         retryable:
           type: boolean
+        key_content_curation_status:
+          anyOf:
+            - $ref: '#/components/schemas/LiteratureKeyContentBackfillCurationStatus'
+            - type: 'null'
       additionalProperties: false
 
     LiteratureContentProcessingBackfillStageCounts:
@@ -4286,6 +4925,7 @@ components:
         - planned_item_count
         - skipped_ready_count
         - blocked_count
+        - curation_required_count
         - stage_counts
         - rights_class_counts
         - estimated_provider_calls
@@ -4317,6 +4957,9 @@ components:
           type: integer
           minimum: 0
         blocked_count:
+          type: integer
+          minimum: 0
+        curation_required_count:
           type: integer
           minimum: 0
         stage_counts:
@@ -4364,6 +5007,7 @@ components:
         - error_message
         - blocker_code
         - retryable
+        - key_content_curation_status
         - checkpoint
         - created_at
         - started_at
@@ -4400,6 +5044,10 @@ components:
           type: [string, 'null']
         retryable:
           type: boolean
+        key_content_curation_status:
+          anyOf:
+            - $ref: '#/components/schemas/LiteratureKeyContentBackfillCurationStatus'
+            - type: 'null'
         checkpoint:
           type: object
         created_at:
@@ -4903,6 +5551,78 @@ components:
           minimum: 0
       additionalProperties: false
 
+    LiteratureFulltextAcquisitionSourceHealth:
+      type: object
+      required:
+        - source_kind
+        - runtime_source
+        - planned_count
+        - succeeded_count
+        - failed_count
+        - blocked_count
+        - retryable_failure_count
+        - non_retryable_failure_count
+        - error_counts_by_code
+        - runtime_status
+        - cooldown_until
+        - failure_count
+        - last_error_code
+        - last_error_message
+        - last_request_at
+        - last_success_at
+        - last_failure_at
+      properties:
+        source_kind:
+          type: string
+          enum: [explicit_url, arxiv, unpaywall, download]
+        runtime_source:
+          type: string
+        planned_count:
+          type: integer
+          minimum: 0
+        succeeded_count:
+          type: integer
+          minimum: 0
+        failed_count:
+          type: integer
+          minimum: 0
+        blocked_count:
+          type: integer
+          minimum: 0
+        retryable_failure_count:
+          type: integer
+          minimum: 0
+        non_retryable_failure_count:
+          type: integer
+          minimum: 0
+        error_counts_by_code:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+        runtime_status:
+          type: [string, 'null']
+        cooldown_until:
+          type: [string, 'null']
+          format: date-time
+        failure_count:
+          type: integer
+          minimum: 0
+        last_error_code:
+          type: [string, 'null']
+        last_error_message:
+          type: [string, 'null']
+        last_request_at:
+          type: [string, 'null']
+          format: date-time
+        last_success_at:
+          type: [string, 'null']
+          format: date-time
+        last_failure_at:
+          type: [string, 'null']
+          format: date-time
+      additionalProperties: false
+
     LiteratureFulltextAcquisitionJob:
       type: object
       required:
@@ -4920,6 +5640,7 @@ components:
         - canceled_at
         - finished_at
         - updated_at
+        - source_health
       properties:
         job_id:
           type: string
@@ -4955,6 +5676,10 @@ components:
         updated_at:
           type: string
           format: date-time
+        source_health:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureFulltextAcquisitionSourceHealth'
         items:
           type: array
           items:
@@ -5153,6 +5878,7 @@ components:
       type: object
       required:
         - literature_id
+        - canonical_work_key
         - title
         - authors
         - year
@@ -5169,6 +5895,8 @@ components:
         - content_processing_actions
       properties:
         literature_id:
+          type: string
+        canonical_work_key:
           type: string
         title:
           type: string
@@ -5254,12 +5982,15 @@ components:
       type: object
       required:
         - literature_id
+        - canonical_work_key
         - title
         - abstract
         - key_content_digest
         - updated_at
       properties:
         literature_id:
+          type: string
+        canonical_work_key:
           type: string
         title:
           type: string
@@ -5488,6 +6219,28 @@ components:
               type: number
             profile_boost:
               type: number
+            weighted_vector:
+              type: number
+            weighted_lexical:
+              type: number
+            weighted_metadata:
+              type: number
+            matched_tokens:
+              type: array
+              items:
+                type: string
+            missing_tokens:
+              type: array
+              items:
+                type: string
+            exact_phrases:
+              type: array
+              items:
+                type: string
+            metadata_matched_tokens:
+              type: array
+              items:
+                type: string
           additionalProperties: false
       additionalProperties: false
 
@@ -5495,6 +6248,7 @@ components:
       type: object
       required:
         - literature_id
+        - canonical_work_key
         - title
         - embedding_version_id
         - retrieval_profile
@@ -5506,6 +6260,8 @@ components:
         - evidence_chunks
       properties:
         literature_id:
+          type: string
+        canonical_work_key:
           type: string
         title:
           type: string
@@ -5547,7 +6303,7 @@ components:
             $ref: '#/components/schemas/LiteratureRetrieveHit'
         meta:
           type: object
-          required: [profile, query_tokens, degraded_mode, freshness_warnings, profiles_used, skipped_profiles]
+          required: [profile, query_tokens, degraded_mode, freshness_warnings, profiles_used, skipped_profiles, query_embedding_telemetry]
           properties:
             profile:
               $ref: '#/components/schemas/LiteratureRetrieveProfileId'
@@ -5602,7 +6358,306 @@ components:
                   reason:
                     type: string
                 additionalProperties: false
+            query_embedding_telemetry:
+              oneOf:
+                - $ref: '#/components/schemas/LiteratureLlmCallTelemetry'
+                - type: 'null'
           additionalProperties: false
+      additionalProperties: false
+
+    LiteratureClusterMember:
+      type: object
+      required: [member_id, cluster_id, literature_id, role, relation_type, confidence, decision_status, title, canonical_work_key, created_at, updated_at]
+      properties:
+        member_id:
+          type: string
+        cluster_id:
+          type: string
+        literature_id:
+          type: string
+        role:
+          $ref: '#/components/schemas/LiteratureClusterMemberRole'
+        relation_type:
+          $ref: '#/components/schemas/LiteratureClusterRelationType'
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        decision_status:
+          $ref: '#/components/schemas/LiteratureClusterMemberDecisionStatus'
+        title:
+          type: [string, 'null']
+        canonical_work_key:
+          type: [string, 'null']
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+
+    LiteratureClusterEvidence:
+      type: object
+      required: [evidence_id, cluster_id, literature_id_a, literature_id_b, signal_type, score, payload, created_at]
+      properties:
+        evidence_id:
+          type: string
+        cluster_id:
+          type: string
+        literature_id_a:
+          type: string
+        literature_id_b:
+          type: string
+        signal_type:
+          $ref: '#/components/schemas/LiteratureClusterEvidenceSignalType'
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+        payload:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+
+    LiteratureClusterReview:
+      type: object
+      required:
+        - outcome
+        - consumption_scope
+        - retrieval_dedup_active
+        - review_required
+        - accepted_member_count
+        - rejected_member_count
+        - pending_member_count
+        - blocking_reasons
+      properties:
+        outcome:
+          $ref: '#/components/schemas/LiteratureClusterReviewOutcome'
+        consumption_scope:
+          $ref: '#/components/schemas/LiteratureClusterConsumptionScope'
+        retrieval_dedup_active:
+          type: boolean
+        review_required:
+          type: boolean
+        accepted_member_count:
+          type: integer
+          minimum: 0
+        rejected_member_count:
+          type: integer
+          minimum: 0
+        pending_member_count:
+          type: integer
+          minimum: 0
+        blocking_reasons:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+
+    LiteratureCluster:
+      type: object
+      required: [cluster_id, cluster_type, status, representative_literature_id, confidence, method, created_at, updated_at, review, members, evidence]
+      properties:
+        cluster_id:
+          type: string
+        cluster_type:
+          $ref: '#/components/schemas/LiteratureClusterType'
+        status:
+          $ref: '#/components/schemas/LiteratureClusterStatus'
+        representative_literature_id:
+          type: [string, 'null']
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        method:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        review:
+          $ref: '#/components/schemas/LiteratureClusterReview'
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureClusterMember'
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureClusterEvidence'
+      additionalProperties: false
+
+    LiteratureClusterCandidateGenerationRequest:
+      type: object
+      properties:
+        cluster_types:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/LiteratureClusterType'
+        min_confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        include_existing:
+          type: boolean
+          default: true
+      additionalProperties: false
+
+    LiteratureClusterCandidateGenerationResponse:
+      type: object
+      required: [generated_count, clusters, summary]
+      properties:
+        generated_count:
+          type: integer
+          minimum: 0
+        clusters:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureCluster'
+        summary:
+          type: object
+          required: [same_pdf_count, same_normalized_text_count, title_author_year_count, fuzzy_near_duplicate_count, embedding_similarity_count]
+          properties:
+            same_pdf_count:
+              type: integer
+              minimum: 0
+            same_normalized_text_count:
+              type: integer
+              minimum: 0
+            title_author_year_count:
+              type: integer
+              minimum: 0
+            fuzzy_near_duplicate_count:
+              type: integer
+              minimum: 0
+            embedding_similarity_count:
+              type: integer
+              minimum: 0
+          additionalProperties: false
+      additionalProperties: false
+
+    ListLiteratureClustersResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureCluster'
+      additionalProperties: false
+
+    UpdateLiteratureClusterRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/LiteratureClusterStatus'
+        review_outcome:
+          $ref: '#/components/schemas/LiteratureClusterReviewOutcome'
+        representative_literature_id:
+          anyOf:
+            - type: string
+              minLength: 1
+            - type: 'null'
+        member_decisions:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [literature_id]
+            properties:
+              literature_id:
+                type: string
+                minLength: 1
+              decision_status:
+                $ref: '#/components/schemas/LiteratureClusterMemberDecisionStatus'
+              role:
+                $ref: '#/components/schemas/LiteratureClusterMemberRole'
+            additionalProperties: false
+            anyOf:
+              - required: [decision_status]
+              - required: [role]
+      additionalProperties: false
+      anyOf:
+        - required: [status]
+        - required: [review_outcome]
+        - required: [representative_literature_id]
+        - required: [member_decisions]
+
+    UpdateLiteratureClusterResponse:
+      type: object
+      required: [item]
+      properties:
+        item:
+          $ref: '#/components/schemas/LiteratureCluster'
+      additionalProperties: false
+
+    LiteratureLlmCallTelemetry:
+      type: object
+      required:
+        - provider_id
+        - model_id
+        - profile_id
+        - prompt_template_id
+        - prompt_template_version
+        - elapsed_ms
+        - request_count
+        - retry_count
+        - timeout_count
+        - rate_limit_count
+        - input_tokens
+        - output_tokens
+        - embedding_input_tokens
+        - total_tokens
+        - cost_usd
+      properties:
+        provider_id:
+          type: string
+        model_id:
+          type: string
+        profile_id:
+          type: [string, 'null']
+        prompt_template_id:
+          type: [string, 'null']
+        prompt_template_version:
+          type: [string, 'null']
+        elapsed_ms:
+          type: integer
+          minimum: 0
+        request_count:
+          type: integer
+          minimum: 0
+        retry_count:
+          type: integer
+          minimum: 0
+        timeout_count:
+          type: integer
+          minimum: 0
+        rate_limit_count:
+          type: integer
+          minimum: 0
+        input_tokens:
+          type: [integer, 'null']
+          minimum: 0
+        output_tokens:
+          type: [integer, 'null']
+          minimum: 0
+        embedding_input_tokens:
+          type: [integer, 'null']
+          minimum: 0
+        total_tokens:
+          type: [integer, 'null']
+          minimum: 0
+        cost_usd:
+          type: [number, 'null']
+          minimum: 0
       additionalProperties: false
 
     UpdateLiteratureMetadataRequest:
@@ -5642,6 +6697,7 @@ components:
       type: object
       required:
         - literature_id
+        - canonical_work_key
         - title
         - abstract
         - key_content_digest
@@ -5654,6 +6710,8 @@ components:
         - updated_at
       properties:
         literature_id:
+          type: string
+        canonical_work_key:
           type: string
         title:
           type: string

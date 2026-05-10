@@ -6,6 +6,7 @@ import type {
   LiteratureEmbeddingProfileId,
   LiteratureExtractionProfileId,
   LiteratureFulltextParserHealth,
+  LiteratureKeyContentReadyMethod,
   LiteratureLocalSecretsStatus,
   UiOperationStatus,
 } from '../shared/types';
@@ -40,6 +41,10 @@ type ExtractionChoice = {
   label: string;
   defaultModel: string;
 };
+type KeyContentMethodChoice = {
+  id: LiteratureKeyContentReadyMethod;
+  label: string;
+};
 
 const embeddingChoices: EmbeddingChoice[] = [
   {
@@ -64,6 +69,21 @@ const extractionChoices: ExtractionChoice[] = [
     id: 'high_accuracy',
     label: '高精度',
     defaultModel: 'gpt-5.5',
+  },
+];
+
+const keyContentMethodChoices: KeyContentMethodChoice[] = [
+  {
+    id: 'llm_gateway',
+    label: 'LLM Gateway',
+  },
+  {
+    id: 'codex_curated',
+    label: 'Codex 策展',
+  },
+  {
+    id: 'manual_curated',
+    label: '人工策展',
   },
 ];
 
@@ -106,10 +126,18 @@ function normalizeParserHealth(payload: unknown): LiteratureFulltextParserHealth
   };
 }
 
+function normalizeKeyContentReadyMethod(value: unknown): LiteratureKeyContentReadyMethod {
+  if (value === 'codex_curated' || value === 'manual_curated') {
+    return value;
+  }
+  return 'llm_gateway';
+}
+
 function normalizeSettings(payload: unknown): LiteratureContentProcessingSettings | null {
   const root = asRecord(payload);
   const embedding = asRecord(root?.embedding);
   const extraction = asRecord(root?.extraction);
+  const extractionRuntime = asRecord(extraction?.runtime);
   const storageRoots = normalizeStorageRoots(root?.storage_roots);
   const effectiveStorageRoots = normalizeStorageRoots(root?.effective_storage_roots);
   const fulltextParser = asRecord(root?.fulltext_parser);
@@ -129,7 +157,7 @@ function normalizeSettings(payload: unknown): LiteratureContentProcessingSetting
       .map((item) => asRecord(item))
       .filter((item): item is Record<string, unknown> => item !== null)
       .map((item) => ({
-        provider: 'openai',
+        provider: toText(item.provider) === 'dashscope' ? 'dashscope' : 'openai',
         api_key_set: item.api_key_set === true,
         api_key_last_updated_at: toText(item.api_key_last_updated_at) ?? null,
       })),
@@ -152,9 +180,17 @@ function normalizeSettings(payload: unknown): LiteratureContentProcessingSetting
         .filter((item): item is Record<string, unknown> => item !== null)
         .map((item) => ({
           profile_id: toText(item.profile_id) === 'high_accuracy' ? 'high_accuracy' : 'default',
-          provider: 'openai',
+          provider: toText(item.provider) === 'dashscope' ? 'dashscope' : 'openai',
           model: toText(item.model) ?? '',
         })),
+      runtime: {
+        preferred_key_content_method: normalizeKeyContentReadyMethod(extractionRuntime?.preferred_key_content_method),
+        section_concurrency: typeof extractionRuntime?.section_concurrency === 'number' ? extractionRuntime.section_concurrency : 3,
+        request_timeout_ms: typeof extractionRuntime?.request_timeout_ms === 'number' ? extractionRuntime.request_timeout_ms : 120_000,
+        max_retries: typeof extractionRuntime?.max_retries === 'number' ? extractionRuntime.max_retries : 1,
+        prompt_profile_id: toText(extractionRuntime?.prompt_profile_id) ?? 'literature_key_content_v2',
+        diagnostic_policy: toText(extractionRuntime?.diagnostic_policy) ?? 'actionable_v1',
+      },
     },
     storage_roots: storageRoots,
     effective_storage_roots: effectiveStorageRoots,
@@ -199,6 +235,7 @@ export function LiteratureContentProcessingSettingsPanel() {
   const [apiKeyEditing, setApiKeyEditing] = useState<boolean>(false);
   const [activeProfileId, setActiveProfileId] = useState<LiteratureEmbeddingProfileId>('default');
   const [activeExtractionProfileId, setActiveExtractionProfileId] = useState<LiteratureExtractionProfileId>('default');
+  const [preferredKeyContentMethod, setPreferredKeyContentMethod] = useState<LiteratureKeyContentReadyMethod>('llm_gateway');
   const [storageRootForm, setStorageRootForm] = useState<StorageRootForm>(() => emptyStorageRootForm());
   const [grobidEndpointUrl, setGrobidEndpointUrl] = useState<string>('http://localhost:8070');
   const [parserHealth, setParserHealth] = useState<LiteratureFulltextParserHealth | null>(null);
@@ -249,6 +286,7 @@ export function LiteratureContentProcessingSettingsPanel() {
       setSettings(normalized);
       setActiveProfileId(normalized.embedding.active_profile_id);
       setActiveExtractionProfileId(normalized.extraction.active_profile_id);
+      setPreferredKeyContentMethod(normalized.extraction.runtime.preferred_key_content_method);
       setGrobidEndpointUrl(normalized.fulltext_parser.grobid.endpoint_url);
       setApiKeyInput('');
       setApiKeyEditing(false);
@@ -324,7 +362,12 @@ export function LiteratureContentProcessingSettingsPanel() {
         body: {
           ...(providerPatch ? { providers: providerPatch } : {}),
           embedding: { active_profile_id: activeProfileId },
-          extraction: { active_profile_id: activeExtractionProfileId },
+          extraction: {
+            active_profile_id: activeExtractionProfileId,
+            runtime: {
+              preferred_key_content_method: preferredKeyContentMethod,
+            },
+          },
           storage_roots: storageRoots,
           fulltext_parser: { grobid: { endpoint_url: grobidEndpointUrl.trim() } },
         },
@@ -345,6 +388,9 @@ export function LiteratureContentProcessingSettingsPanel() {
         await refreshLocalSecretsStatus();
       }
       setSettings(normalized);
+      setActiveProfileId(normalized.embedding.active_profile_id);
+      setActiveExtractionProfileId(normalized.extraction.active_profile_id);
+      setPreferredKeyContentMethod(normalized.extraction.runtime.preferred_key_content_method);
       setGrobidEndpointUrl(normalized.fulltext_parser.grobid.endpoint_url);
       setApiKeyInput('');
       setApiKeyEditing(false);
@@ -546,7 +592,7 @@ export function LiteratureContentProcessingSettingsPanel() {
       </section>
 
       <section className="literature-section-block" aria-label="模型方案">
-        <div data-ui="grid" data-cols="2" data-gap="3">
+        <div data-ui="grid" data-cols="3" data-gap="3">
           <label data-ui="field">
             <span data-ui="text" data-variant="caption" data-tone="secondary">Embedding 配置</span>
             <select
@@ -580,6 +626,24 @@ export function LiteratureContentProcessingSettingsPanel() {
             >
               {extractionOptions.map((option) => (
                 <option key={option.id} value={option.id}>{option.label} · {option.modelHint}</option>
+              ))}
+            </select>
+          </label>
+          <label data-ui="field">
+            <span data-ui="text" data-variant="caption" data-tone="secondary">KEY_CONTENT_READY 方法</span>
+            <select
+              data-ui="select"
+              data-size="sm"
+              className="literature-content-processing-profile-select"
+              value={preferredKeyContentMethod}
+              onChange={(event) => {
+                setPreferredKeyContentMethod(normalizeKeyContentReadyMethod(event.target.value));
+                event.currentTarget.blur();
+                markDirty();
+              }}
+            >
+              {keyContentMethodChoices.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
               ))}
             </select>
           </label>

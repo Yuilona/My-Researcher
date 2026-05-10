@@ -7,6 +7,7 @@ import test, { after } from 'node:test';
 import type { RightsClass } from '@paper-engineering-assistant/shared/research-lifecycle/literature-contracts';
 import { InMemoryLiteratureRepository } from '../repositories/in-memory-literature-repository.js';
 import type { LiteratureRepository } from '../repositories/literature-repository.js';
+import { AppError } from '../errors/app-error.js';
 import type { LiteratureContentProcessingSettingsService } from './literature-content-processing-settings-service.js';
 import { LiteratureFlowService, PIPELINE_STAGE_CODES } from './literature-flow-service.js';
 
@@ -118,10 +119,20 @@ function createMockSettingsService(
       return directory;
     },
     resolveGrobidEndpointUrl: async () => options.grobidEndpointUrl ?? 'http://localhost:8070',
-    resolveOpenAIExtractionConfig: async () => ({
+    resolveOpenAIProviderApiKey: async () => 'sk-test',
+    resolveExtractionConfig: async () => ({
       apiKey: 'sk-test',
+      provider: 'openai',
       model: 'gpt-5.4-mini',
       profileId: 'default',
+      runtime: {
+        preferred_key_content_method: 'llm_gateway',
+        section_concurrency: 3,
+        request_timeout_ms: 120_000,
+        max_retries: 1,
+        prompt_profile_id: 'literature_key_content_v2',
+        diagnostic_policy: 'actionable_v1',
+      },
     }),
     resolveOpenAIEmbeddingConfig: async () => ({
       apiKey: 'sk-test',
@@ -135,6 +146,7 @@ function createMockSettingsService(
       model: 'text-embedding-3-large',
       dimensions: 3,
     }),
+    resolvePreferredKeyContentMethod: async () => 'llm_gateway',
   } as LiteratureContentProcessingSettingsService;
 }
 
@@ -238,6 +250,55 @@ function buildMockDossierPayload() {
       extraction_diagnostics: [],
     },
     display_digest: 'Source-grounded pipeline dossier.',
+  };
+}
+
+function buildCuratedDossierPayload(paragraphId: string, documentChecksum: string) {
+  const ref = { ref_type: 'paragraph' as const, ref_id: paragraphId };
+  const item = (id: string, type: string, statement: string) => ({
+    id,
+    type,
+    statement,
+    details: `${statement} details.`,
+    source_refs: [ref],
+    confidence: 0.95,
+    evidence_strength: 'high' as const,
+    notes: null,
+    provenance: 'model_generated' as const,
+  });
+  return {
+    schema_version: 'key_content.v1' as const,
+    extraction_profile: 'paper_semantic_dossier.v1' as const,
+    readiness_status: 'READY' as const,
+    input_refs: {
+      fulltext_checksum: documentChecksum,
+    },
+    categories: {
+      research_problem: [item('curated-rp-1', 'problem', 'The paper needs curated evidence extraction.')],
+      contributions: [item('curated-contrib-1', 'contribution', 'The curated path imports source-grounded dossiers.')],
+      method: [item('curated-method-1', 'method', 'The method validates source refs before import.')],
+      datasets_and_benchmarks: [],
+      experiments: [],
+      key_findings: [item('curated-finding-1', 'finding', 'Curated import reaches KEY_CONTENT_READY without provider calls.')],
+      limitations: [],
+      reproducibility: [],
+      related_work_positioning: [],
+      evidence_candidates: [item('curated-evidence-1', 'evidence', 'The paragraph source ref grounds the dossier.')],
+      figure_insights: [],
+      table_insights: [],
+      claim_evidence_map: [],
+      automation_signals: [],
+    },
+    quality_report: {
+      completeness_score: 0.357,
+      confidence: 0.95,
+      blockers: [],
+      warnings: [],
+      conflicts: [],
+      extraction_diagnostics: [],
+    },
+    display_digest: 'Curated source-grounded key-content dossier.',
+    generated_at: '2026-05-10T00:00:00.000Z',
   };
 }
 
@@ -346,6 +407,177 @@ test('literature flow blocks KEY_CONTENT_READY when extraction provider is not c
   const stageStates = await repository.listPipelineStageStatesByLiteratureId('LIT-FLOW-NO-KEY');
   const keyStage = stageStates.find((item) => item.stageCode === 'KEY_CONTENT_READY');
   assert.equal(keyStage?.status, 'BLOCKED');
+});
+
+test('literature flow exports and imports curated key-content dossier without extraction provider', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const service = new LiteratureFlowService(repository, createMockSettingsService());
+  await seedLiterature(repository, 'LIT-FLOW-CURATED', 'OA', {
+    abstractText: 'Trusted abstract for curated key-content import.',
+    fulltextText: '# Method\n\nCurated paragraph evidence for key-content import.',
+  });
+  const prepRun = await service.triggerContentProcessingRun('LIT-FLOW-CURATED', ['ABSTRACT_READY', 'FULLTEXT_PREPROCESSED']);
+  assert.equal((await waitForTerminalRun(repository, prepRun.run_id)).status, 'SUCCESS');
+
+  const bundle = await service.getKeyContentCurationBundle('LIT-FLOW-CURATED');
+  assert.equal(bundle.literature_id, 'LIT-FLOW-CURATED');
+  assert.equal(bundle.paragraphs.length, 1);
+  assert.equal(bundle.export_policy.accepted_curation_sources.includes('codex_curated'), true);
+
+  const imported = await service.importKeyContentDossier('LIT-FLOW-CURATED', {
+    curation_source: 'codex_curated',
+    curator: 'codex',
+    dossier: buildCuratedDossierPayload(bundle.paragraphs[0]!.paragraph_id, bundle.document.normalized_text_checksum),
+  });
+
+  assert.equal(imported.readiness_status, 'READY');
+  assert.equal(imported.source, 'codex_curated');
+  assert.equal(imported.state.key_content_ready, true);
+  assert.equal(imported.diagnostics.some((item) => item.code === 'KEY_CONTENT_CURATED_IMPORT'), true);
+  const keyStage = (await repository.listPipelineStageStatesByLiteratureId('LIT-FLOW-CURATED'))
+    .find((item) => item.stageCode === 'KEY_CONTENT_READY');
+  assert.equal(keyStage?.status, 'SUCCEEDED');
+  assert.equal(keyStage?.detail.source, 'codex_curated');
+  const artifact = await repository.findPipelineArtifact('LIT-FLOW-CURATED', 'KEY_CONTENT_READY', 'KEY_CONTENT_DOSSIER');
+  assert.equal(artifact?.payload.input_refs && typeof artifact.payload.input_refs === 'object', true);
+});
+
+test('literature flow honors preferred curated KEY_CONTENT_READY method during stage execution', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const settingsService = {
+    ...createMockSettingsService(),
+    resolvePreferredKeyContentMethod: async () => 'codex_curated' as const,
+  } as LiteratureContentProcessingSettingsService;
+  const service = new LiteratureFlowService(repository, settingsService);
+  await seedLiterature(repository, 'LIT-FLOW-CURATED-METHOD', 'OA', {
+    abstractText: 'Trusted abstract for preferred curated method.',
+    fulltextText: '# Method\n\nCurated method paragraph for preferred KEY_CONTENT_READY execution.',
+  });
+
+  const blockedRun = await service.triggerContentProcessingRun('LIT-FLOW-CURATED-METHOD', [
+    'ABSTRACT_READY',
+    'FULLTEXT_PREPROCESSED',
+    'KEY_CONTENT_READY',
+  ]);
+  const blockedTerminal = await waitForTerminalRun(repository, blockedRun.run_id);
+  assert.equal(blockedTerminal.status, 'PARTIAL');
+  assert.equal(blockedTerminal.errorCode, 'KEY_CONTENT_CURATION_REQUIRED');
+
+  const bundle = await service.getKeyContentCurationBundle('LIT-FLOW-CURATED-METHOD');
+  await service.importKeyContentDossier('LIT-FLOW-CURATED-METHOD', {
+    curation_source: 'codex_curated',
+    curator: 'codex',
+    dossier: buildCuratedDossierPayload(bundle.paragraphs[0]!.paragraph_id, bundle.document.normalized_text_checksum),
+  });
+
+  const restoreFetch = mockOpenAIContentProcessing();
+  try {
+    const run = await service.triggerContentProcessingRun('LIT-FLOW-CURATED-METHOD', [
+      'KEY_CONTENT_READY',
+      'CHUNKED',
+      'EMBEDDED',
+      'INDEXED',
+    ]);
+    const terminal = await waitForTerminalRun(repository, run.run_id);
+    assert.equal(terminal.status, 'SUCCESS');
+  } finally {
+    restoreFetch();
+  }
+
+  const keyStage = (await repository.listPipelineStageStatesByLiteratureId('LIT-FLOW-CURATED-METHOD'))
+    .find((item) => item.stageCode === 'KEY_CONTENT_READY');
+  assert.equal(keyStage?.status, 'SUCCEEDED');
+  assert.equal(keyStage?.detail.source, 'codex_curated');
+  assert.equal(keyStage?.detail.preferred_key_content_method, 'codex_curated');
+});
+
+test('literature flow rejects curated key-content dossier with unresolved source refs', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const service = new LiteratureFlowService(repository, createMockSettingsService());
+  await seedLiterature(repository, 'LIT-FLOW-CURATED-BAD-REF', 'OA', {
+    abstractText: 'Trusted abstract for curated key-content validation.',
+    fulltextText: '# Method\n\nCurated paragraph evidence for validation.',
+  });
+  const prepRun = await service.triggerContentProcessingRun('LIT-FLOW-CURATED-BAD-REF', ['ABSTRACT_READY', 'FULLTEXT_PREPROCESSED']);
+  assert.equal((await waitForTerminalRun(repository, prepRun.run_id)).status, 'SUCCESS');
+  const bundle = await service.getKeyContentCurationBundle('LIT-FLOW-CURATED-BAD-REF');
+  const dossier = buildCuratedDossierPayload('missing-paragraph', bundle.document.normalized_text_checksum);
+
+  await assert.rejects(
+    service.importKeyContentDossier('LIT-FLOW-CURATED-BAD-REF', {
+      curation_source: 'codex_curated',
+      dossier,
+    }),
+    (error) => error instanceof AppError
+      && error.statusCode === 400
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && Array.isArray(error.details?.issues),
+  );
+});
+
+test('literature flow repairs common curated source-ref variants before import', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const service = new LiteratureFlowService(repository, createMockSettingsService());
+  await seedLiterature(repository, 'LIT-FLOW-CURATED-REF-REPAIR', 'OA', {
+    abstractText: 'Trusted abstract for curated source-ref repair.',
+    fulltextText: '# Method\n\nCurated paragraph evidence for source-ref repair.',
+  });
+  const prepRun = await service.triggerContentProcessingRun('LIT-FLOW-CURATED-REF-REPAIR', ['ABSTRACT_READY', 'FULLTEXT_PREPROCESSED']);
+  assert.equal((await waitForTerminalRun(repository, prepRun.run_id)).status, 'SUCCESS');
+  const bundle = await service.getKeyContentCurationBundle('LIT-FLOW-CURATED-REF-REPAIR');
+  const paragraphId = bundle.paragraphs[0]!.paragraph_id;
+  const dossier = buildCuratedDossierPayload(paragraphId, bundle.document.normalized_text_checksum);
+  for (const rows of Object.values(dossier.categories)) {
+    for (const row of rows) {
+      row.source_refs = [{
+        ref_type: 'manual',
+        ref_id: `paragraph:${paragraphId}:Curated paragraph evidence`,
+      }] as unknown as typeof row.source_refs;
+    }
+  }
+
+  const imported = await service.importKeyContentDossier('LIT-FLOW-CURATED-REF-REPAIR', {
+    curation_source: 'codex_curated',
+    dossier,
+  });
+
+  assert.equal(imported.readiness_status, 'READY');
+  assert.equal(imported.diagnostics.some((item) => item.code === 'KEY_CONTENT_SOURCE_REF_REPAIRED'), true);
+  const artifact = await repository.findPipelineArtifact(
+    'LIT-FLOW-CURATED-REF-REPAIR',
+    'KEY_CONTENT_READY',
+    'KEY_CONTENT_DOSSIER',
+  );
+  const payload = artifact?.payload as ReturnType<typeof buildCuratedDossierPayload> | undefined;
+  assert.equal(payload?.categories.research_problem[0]?.source_refs[0]?.ref_type, 'paragraph');
+  assert.equal(payload?.categories.research_problem[0]?.source_refs[0]?.ref_id, paragraphId);
+});
+
+test('literature flow reports item provenance separately from dossier curation source', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const service = new LiteratureFlowService(repository, createMockSettingsService());
+  await seedLiterature(repository, 'LIT-FLOW-CURATED-BAD-PROVENANCE', 'OA', {
+    abstractText: 'Trusted abstract for curated provenance validation.',
+    fulltextText: '# Method\n\nCurated paragraph evidence for provenance validation.',
+  });
+  const prepRun = await service.triggerContentProcessingRun('LIT-FLOW-CURATED-BAD-PROVENANCE', ['ABSTRACT_READY', 'FULLTEXT_PREPROCESSED']);
+  assert.equal((await waitForTerminalRun(repository, prepRun.run_id)).status, 'SUCCESS');
+  const bundle = await service.getKeyContentCurationBundle('LIT-FLOW-CURATED-BAD-PROVENANCE');
+  const dossier = buildCuratedDossierPayload(bundle.paragraphs[0]!.paragraph_id, bundle.document.normalized_text_checksum);
+  dossier.categories.research_problem[0]!.provenance = 'human_curated' as 'model_generated';
+
+  await assert.rejects(
+    service.importKeyContentDossier('LIT-FLOW-CURATED-BAD-PROVENANCE', {
+      curation_source: 'manual_curated',
+      dossier,
+    }),
+    (error) => error instanceof AppError
+      && error.statusCode === 400
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && Array.isArray(error.details?.issues)
+      && error.details.issues.some((issue) =>
+        String(issue).includes('item-level "model_generated" or "user_edited"')),
+  );
 });
 
 test('literature flow blocks PDF preprocessing when GROBID is unavailable', async () => {
@@ -627,7 +859,7 @@ test('literature flow enforces USER_AUTH gate by global env switch', async () =>
   }
 });
 
-test('literature flow creates new embedding versions on rerun and switches active version after INDEXED success', async () => {
+test('literature flow reuses current embedding artifacts and version when CHUNKED input is unchanged', async () => {
   const repository = new InMemoryLiteratureRepository();
   const service = new LiteratureFlowService(repository, createMockSettingsService());
   const restoreFetch = mockOpenAIContentProcessing();
@@ -646,29 +878,68 @@ test('literature flow creates new embedding versions on rerun and switches activ
     assert.ok(literatureAfterFirst?.activeEmbeddingVersionId);
     const activeAfterFirst = literatureAfterFirst.activeEmbeddingVersionId!;
 
-    const literature = await repository.findLiteratureById('LIT-FLOW-VERSIONING');
-    assert.ok(literature);
-    await repository.updateLiterature({
-      ...literature,
-      keyContentDigest: 'Versioning test digest updated for rerun.',
-      updatedAt: new Date().toISOString(),
-    });
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      if (String(input).endsWith('/v1/embeddings')) {
+        throw new Error('embedding provider should not be called for unchanged chunks');
+      }
+      return new Response('{}', { status: 404 });
+    }) as typeof fetch;
 
-    const secondRun = await service.triggerContentProcessingRun('LIT-FLOW-VERSIONING', ['FULLTEXT_PREPROCESSED', 'KEY_CONTENT_READY', 'CHUNKED', 'EMBEDDED', 'INDEXED']);
+    const secondRun = await service.triggerContentProcessingRun('LIT-FLOW-VERSIONING', ['EMBEDDED', 'INDEXED']);
     const secondTerminal = await waitForTerminalRun(repository, secondRun.run_id);
     assert.equal(secondTerminal.status, 'SUCCESS');
 
     const versions = await repository.listEmbeddingVersionsByLiteratureIds(['LIT-FLOW-VERSIONING']);
-    assert.equal(versions.length, 2);
-    assert.equal(versions[1]?.versionNo, 2);
+    assert.equal(versions.length, 1);
     assert.equal(versions.every((version) => version.status === 'INDEXED'), true);
 
     const literatureAfterSecond = await repository.findLiteratureById('LIT-FLOW-VERSIONING');
     assert.ok(literatureAfterSecond?.activeEmbeddingVersionId);
-    assert.notEqual(literatureAfterSecond?.activeEmbeddingVersionId, activeAfterFirst);
+    assert.equal(literatureAfterSecond?.activeEmbeddingVersionId, activeAfterFirst);
 
-    const oldVersion = await repository.findEmbeddingVersionById(activeAfterFirst);
-    assert.ok(oldVersion);
+    const steps = await repository.listPipelineRunStepsByRunId(secondRun.run_id);
+    const embeddedStep = steps.find((step) => step.stageCode === 'EMBEDDED');
+    assert.equal(embeddedStep?.outputRef.reused_existing, true);
+  } finally {
+    restoreFetch();
+  }
+});
+
+test('literature flow creates a new embedding version when fulltext chunks change', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const service = new LiteratureFlowService(repository, createMockSettingsService());
+  const restoreFetch = mockOpenAIContentProcessing();
+  await seedLiterature(repository, 'LIT-FLOW-VERSIONING-CHANGED', 'OA', {
+    abstractText: 'Trusted abstract for changed embedding version.',
+    keyContentDigest: 'Trusted key content digest for changed embedding version.',
+    fulltextText: 'Initial fulltext evidence for changed embedding version.',
+  });
+
+  try {
+    const firstRun = await service.triggerContentProcessingRun('LIT-FLOW-VERSIONING-CHANGED', ['ABSTRACT_READY', 'FULLTEXT_PREPROCESSED', 'KEY_CONTENT_READY', 'CHUNKED', 'EMBEDDED', 'INDEXED']);
+    const firstTerminal = await waitForTerminalRun(repository, firstRun.run_id);
+    assert.equal(firstTerminal.status, 'SUCCESS');
+
+    const literatureAfterFirst = await repository.findLiteratureById('LIT-FLOW-VERSIONING-CHANGED');
+    assert.ok(literatureAfterFirst?.activeEmbeddingVersionId);
+    const activeAfterFirst = literatureAfterFirst.activeEmbeddingVersionId!;
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await seedRawFulltextAsset(
+      repository,
+      'LIT-FLOW-VERSIONING-CHANGED',
+      'Changed fulltext evidence that should produce a new chunk artifact.',
+    );
+
+    const secondRun = await service.triggerContentProcessingRun('LIT-FLOW-VERSIONING-CHANGED', ['FULLTEXT_PREPROCESSED', 'KEY_CONTENT_READY', 'CHUNKED', 'EMBEDDED', 'INDEXED']);
+    const secondTerminal = await waitForTerminalRun(repository, secondRun.run_id);
+    assert.equal(secondTerminal.status, 'SUCCESS');
+
+    const versions = await repository.listEmbeddingVersionsByLiteratureIds(['LIT-FLOW-VERSIONING-CHANGED']);
+    assert.equal(versions.length, 2);
+    assert.equal(versions[1]?.versionNo, 2);
+    const literatureAfterSecond = await repository.findLiteratureById('LIT-FLOW-VERSIONING-CHANGED');
+    assert.notEqual(literatureAfterSecond?.activeEmbeddingVersionId, activeAfterFirst);
   } finally {
     restoreFetch();
   }

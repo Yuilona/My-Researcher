@@ -52,7 +52,7 @@ export type LiteratureProvider = 'crossref' | 'arxiv' | 'manual' | 'web' | 'zote
 export type LiteratureTabKey = 'auto-import' | 'manual-import' | 'overview' | 'content-processing';
 export type AutoImportSubTabKey = 'topic-settings' | 'rule-center' | 'runs-alerts';
 export type ManualImportSubTabKey = 'file-review' | 'zotero-sync';
-export type ContentProcessingSubTabKey = 'operations' | 'settings';
+export type ContentProcessingSubTabKey = 'operations' | 'clusters' | 'settings';
 export type TitleCardPrimaryTabKey =
   | 'overview'
   | 'evidence'
@@ -163,6 +163,12 @@ export type ContentProcessingBatchItemStatus =
   | 'FAILED'
   | 'SKIPPED'
   | 'CANCELED';
+export type KeyContentBackfillCurationStatus =
+  | 'NOT_APPLICABLE'
+  | 'CURATION_REQUIRED'
+  | 'WAITING_FOR_DOSSIER'
+  | 'READY_TO_IMPORT'
+  | 'IMPORT_FAILED';
 export type LiteratureRightsClass = 'OA' | 'USER_AUTH' | 'RESTRICTED' | 'UNKNOWN';
 export type BackfillStageFilters = {
   missing: boolean;
@@ -195,6 +201,7 @@ export type BackfillEstimate = {
   planned_item_count: number;
   skipped_ready_count: number;
   blocked_count: number;
+  curation_required_count: number;
   stage_counts: Record<PipelineStageCode, number>;
   rights_class_counts: Array<{ rights_class: LiteratureRightsClass; count: number }>;
   estimated_provider_calls: {
@@ -208,6 +215,16 @@ export type BackfillEstimate = {
     reason_code: string;
     reason_message: string;
     retryable: boolean;
+  }>;
+  plan_items?: Array<{
+    literature_id: string;
+    title: string;
+    rights_class: LiteratureRightsClass;
+    requested_stages: PipelineStageCode[];
+    blocked: boolean;
+    blocker_code: string | null;
+    retryable: boolean;
+    key_content_curation_status: KeyContentBackfillCurationStatus | null;
   }>;
 };
 export type BackfillJobItem = {
@@ -224,6 +241,8 @@ export type BackfillJobItem = {
   error_message: string | null;
   blocker_code: string | null;
   retryable: boolean;
+  key_content_curation_status: KeyContentBackfillCurationStatus | null;
+  checkpoint: Record<string, unknown>;
   updated_at: string;
 };
 export type BackfillJob = {
@@ -264,9 +283,101 @@ export type CleanupDryRunResult = {
   estimated_token_indexes_to_remove: number;
 };
 
-export type LiteratureContentProcessingProviderId = 'openai';
+export type LiteratureClusterType = 'same_work' | 'version_family' | 'related_topic';
+export type LiteratureClusterStatus = 'candidate' | 'confirmed' | 'rejected' | 'split';
+export type LiteratureClusterMemberRole = 'representative' | 'variant' | 'related';
+export type LiteratureClusterMemberDecisionStatus = 'pending' | 'accepted' | 'rejected';
+export type LiteratureClusterRelationType =
+  | 'same_pdf'
+  | 'same_normalized_text'
+  | 'same_work'
+  | 'preprint_of'
+  | 'published_version_of'
+  | 'near_duplicate'
+  | 'related_method';
+export type LiteratureClusterEvidenceSignalType =
+  | 'doi'
+  | 'arxiv_id'
+  | 'title_author_year'
+  | 'pdf_sha256'
+  | 'text_fingerprint'
+  | 'title_similarity'
+  | 'author_overlap'
+  | 'abstract_similarity'
+  | 'embedding_similarity';
+export type LiteratureClusterReviewOutcome =
+  | 'pending_review'
+  | 'same_work_confirmed'
+  | 'version_family_confirmed'
+  | 'related_topic_confirmed'
+  | 'rejected'
+  | 'split';
+export type LiteratureClusterConsumptionScope = 'none' | 'retrieval_dedup' | 'related_topic_reference';
+export type LiteratureClusterReview = {
+  outcome: LiteratureClusterReviewOutcome;
+  consumption_scope: LiteratureClusterConsumptionScope;
+  retrieval_dedup_active: boolean;
+  review_required: boolean;
+  accepted_member_count: number;
+  rejected_member_count: number;
+  pending_member_count: number;
+  blocking_reasons: string[];
+};
+export type LiteratureClusterMember = {
+  member_id: string;
+  cluster_id: string;
+  literature_id: string;
+  role: LiteratureClusterMemberRole;
+  relation_type: LiteratureClusterRelationType;
+  confidence: number;
+  decision_status: LiteratureClusterMemberDecisionStatus;
+  title: string | null;
+  canonical_work_key: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type LiteratureClusterEvidence = {
+  evidence_id: string;
+  cluster_id: string;
+  literature_id_a: string;
+  literature_id_b: string;
+  signal_type: LiteratureClusterEvidenceSignalType;
+  score: number;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+export type LiteratureCluster = {
+  cluster_id: string;
+  cluster_type: LiteratureClusterType;
+  status: LiteratureClusterStatus;
+  representative_literature_id: string | null;
+  confidence: number;
+  method: string;
+  created_at: string;
+  updated_at: string;
+  review: LiteratureClusterReview;
+  members: LiteratureClusterMember[];
+  evidence: LiteratureClusterEvidence[];
+};
+export type ListLiteratureClustersResponse = {
+  items: LiteratureCluster[];
+};
+export type ClusterCandidateGenerationResponse = {
+  generated_count: number;
+  clusters: LiteratureCluster[];
+  summary: {
+    same_pdf_count: number;
+    same_normalized_text_count: number;
+    title_author_year_count: number;
+    fuzzy_near_duplicate_count: number;
+    embedding_similarity_count: number;
+  };
+};
+
+export type LiteratureContentProcessingProviderId = 'openai' | 'dashscope';
 export type LiteratureEmbeddingProfileId = 'default' | 'economy';
 export type LiteratureExtractionProfileId = 'default' | 'high_accuracy';
+export type LiteratureKeyContentReadyMethod = 'llm_gateway' | 'codex_curated' | 'manual_curated';
 export type LiteratureContentProcessingProviderSettings = {
   provider: LiteratureContentProcessingProviderId;
   api_key_set: boolean;
@@ -319,6 +430,14 @@ export type LiteratureContentProcessingSettings = {
   extraction: {
     active_profile_id: LiteratureExtractionProfileId;
     profiles: LiteratureExtractionProfile[];
+    runtime: {
+      preferred_key_content_method: LiteratureKeyContentReadyMethod;
+      section_concurrency: number;
+      request_timeout_ms: number;
+      max_retries: number;
+      prompt_profile_id: string;
+      diagnostic_policy: string;
+    };
   };
   storage_roots: LiteratureContentProcessingStorageRoots;
   effective_storage_roots: LiteratureContentProcessingStorageRoots;
@@ -500,6 +619,7 @@ export type LiteratureOverviewSummary = {
 
 export type LiteratureOverviewItem = {
   literature_id: string;
+  canonical_work_key: string;
   title: string;
   authors: string[];
   year: number | null;
@@ -535,6 +655,7 @@ export type LiteratureOverviewData = {
 
 export type LiteratureMetadataRecord = {
   literature_id: string;
+  canonical_work_key: string;
   title: string;
   abstract: string | null;
   key_content_digest: string | null;

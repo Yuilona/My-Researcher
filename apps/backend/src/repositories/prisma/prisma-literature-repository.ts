@@ -2,6 +2,11 @@ import type { PrismaClient } from '@prisma/client';
 import type {
   LiteratureAbstractProfileRecord,
   LiteratureCitationProfileRecord,
+  LiteratureClusterEvidenceRecord,
+  LiteratureClusterGraphRecord,
+  LiteratureClusterMemberRecord,
+  LiteratureClusterRecord,
+  LiteratureClusterUpdatePatch,
   LiteratureContentAssetRecord,
   LiteratureContentProcessingBatchItemRecord,
   LiteratureContentProcessingBatchItemStatus,
@@ -24,12 +29,14 @@ import type {
   LiteraturePipelineStateRecord,
   LiteratureRecord,
   LiteratureRepository,
+  ListLiteratureClustersFilter,
   LiteratureSourceRuntimeStateRecord,
   LiteratureSourceRecord,
   PaperLiteratureLinkRecord,
   TopicLiteratureScopeRecord,
 } from '../literature-repository.js';
 import { PrismaLiteratureBatchStore } from './literature/prisma-literature-batch-store.js';
+import { PrismaLiteratureClusterStore } from './literature/prisma-literature-cluster-store.js';
 import { PrismaLiteratureCoreStore } from './literature/prisma-literature-core-store.js';
 import { PrismaLiteratureContentStore } from './literature/prisma-literature-content-store.js';
 import { PrismaLiteratureEmbeddingStore } from './literature/prisma-literature-embedding-store.js';
@@ -41,6 +48,7 @@ export class PrismaLiteratureRepository implements LiteratureRepository {
   private readonly pipelineStore: PrismaLiteraturePipelineStore;
   private readonly embeddingStore: PrismaLiteratureEmbeddingStore;
   private readonly batchStore: PrismaLiteratureBatchStore;
+  private readonly clusterStore: PrismaLiteratureClusterStore;
 
   constructor(prisma: PrismaClient) {
     this.coreStore = new PrismaLiteratureCoreStore(prisma);
@@ -48,6 +56,7 @@ export class PrismaLiteratureRepository implements LiteratureRepository {
     this.pipelineStore = new PrismaLiteraturePipelineStore(prisma);
     this.embeddingStore = new PrismaLiteratureEmbeddingStore(prisma);
     this.batchStore = new PrismaLiteratureBatchStore(prisma);
+    this.clusterStore = new PrismaLiteratureClusterStore(prisma);
   }
 
   async countLiteratures(): Promise<number> {
@@ -138,8 +147,43 @@ export class PrismaLiteratureRepository implements LiteratureRepository {
     return this.contentStore.listContentAssetsByLiteratureId(literatureId);
   }
 
+  async listContentAssetsByChecksum(checksum: string): Promise<LiteratureContentAssetRecord[]> {
+    return this.contentStore.listContentAssetsByChecksum(checksum);
+  }
+
   async findContentAssetById(assetId: string): Promise<LiteratureContentAssetRecord | null> {
     return this.contentStore.findContentAssetById(assetId);
+  }
+
+  async upsertLiteratureCluster(
+    record: LiteratureClusterRecord,
+    members: LiteratureClusterMemberRecord[],
+    evidence: LiteratureClusterEvidenceRecord[],
+  ): Promise<LiteratureClusterGraphRecord> {
+    return this.clusterStore.upsertLiteratureCluster(record, members, evidence);
+  }
+
+  async findLiteratureClusterById(clusterId: string): Promise<LiteratureClusterGraphRecord | null> {
+    return this.clusterStore.findLiteratureClusterById(clusterId);
+  }
+
+  async listLiteratureClusters(filter?: ListLiteratureClustersFilter): Promise<LiteratureClusterGraphRecord[]> {
+    return this.clusterStore.listLiteratureClusters(filter);
+  }
+
+  async updateLiteratureCluster(
+    clusterId: string,
+    patch: LiteratureClusterUpdatePatch,
+  ): Promise<LiteratureClusterGraphRecord> {
+    return this.clusterStore.updateLiteratureCluster(clusterId, patch);
+  }
+
+  async updateLiteratureClusterMember(
+    clusterId: string,
+    literatureId: string,
+    patch: Partial<Omit<LiteratureClusterMemberRecord, 'id' | 'clusterId' | 'literatureId' | 'createdAt'>>,
+  ): Promise<LiteratureClusterMemberRecord> {
+    return this.clusterStore.updateLiteratureClusterMember(clusterId, literatureId, patch);
   }
 
   async upsertFulltextExtractionBundle(

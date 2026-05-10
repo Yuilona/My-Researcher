@@ -16,6 +16,11 @@ async function seedLocalLiterature(
     model?: string;
     dimension?: number;
     vector?: number[];
+    authors?: string[];
+    year?: number | null;
+    doiNormalized?: string | null;
+    arxivId?: string | null;
+    titleAuthorsYearHash?: string | null;
   },
 ): Promise<void> {
   const now = new Date().toISOString();
@@ -24,12 +29,12 @@ async function seedLocalLiterature(
     title: input.title,
     abstractText: null,
     keyContentDigest: null,
-    authors: ['Tester'],
-    year: 2025,
-    doiNormalized: `10.1000/${input.literatureId.toLowerCase()}`,
-    arxivId: null,
+    authors: input.authors ?? ['Tester'],
+    year: input.year === undefined ? 2025 : input.year,
+    doiNormalized: input.doiNormalized === undefined ? `10.1000/${input.literatureId.toLowerCase()}` : input.doiNormalized,
+    arxivId: input.arxivId === undefined ? null : input.arxivId,
     normalizedTitle: input.title.toLowerCase(),
-    titleAuthorsYearHash: `hash-${input.literatureId}`,
+    titleAuthorsYearHash: input.titleAuthorsYearHash === undefined ? `hash-${input.literatureId}` : input.titleAuthorsYearHash,
     rightsClass: 'OA',
     tags: [],
     activeEmbeddingVersionId: input.versionId,
@@ -113,6 +118,273 @@ test('retrieve ranks literature by hybrid score and returns chunk evidence', asy
   assert.equal(response.meta.degraded_mode, true);
   assert.equal(response.meta.profiles_used.length, 0);
   assert.equal(response.meta.skipped_profiles.length, 1);
+  assert.equal(response.meta.query_embedding_telemetry, null);
+});
+
+test('retrieve boosts exact phrase lexical matches and explains matched tokens', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const service = new LiteratureRetrievalService(repository);
+
+  await seedLocalLiterature(repository, {
+    literatureId: 'LIT-RET-PHRASE',
+    title: 'Phrase Match Work',
+    versionId: 'EV-RET-PHRASE',
+    chunkText: 'The masked language modeling objective is central to this encoder pretraining method.',
+  });
+  await seedLocalLiterature(repository, {
+    literatureId: 'LIT-RET-BAG',
+    title: 'Bag Match Work',
+    versionId: 'EV-RET-BAG',
+    chunkText: 'The method masks tokens in a language encoder and studies modeling objectives separately.',
+  });
+
+  const response = await service.retrieve({
+    query: 'masked language modeling',
+    top_k: 2,
+  });
+
+  assert.equal(response.items[0]?.literature_id, 'LIT-RET-PHRASE');
+  const breakdown = response.items[0]?.evidence_chunks[0]?.score_breakdown;
+  assert.deepEqual(breakdown?.matched_tokens, ['masked', 'language', 'modeling']);
+  assert.equal(breakdown?.missing_tokens?.length, 0);
+  assert.equal(breakdown?.exact_phrases?.includes('masked language modeling'), true);
+  assert.equal((breakdown?.weighted_lexical ?? 0) > 0, true);
+});
+
+test('retrieve uses literature metadata for exact identifier and title term matches', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const service = new LiteratureRetrievalService(repository);
+
+  await seedLocalLiterature(repository, {
+    literatureId: 'LIT-RET-ALPHAFOLD',
+    title: 'Highly accurate protein structure prediction with AlphaFold',
+    versionId: 'EV-RET-ALPHAFOLD',
+    chunkText: 'The benchmark reports accurate coordinate prediction and ablation evidence.',
+    doiNormalized: '10.1000/protein-structure',
+  });
+  await seedLocalLiterature(repository, {
+    literatureId: 'LIT-RET-GENERIC-PROTEIN',
+    title: 'Generic protein structure benchmark',
+    versionId: 'EV-RET-GENERIC-PROTEIN',
+    chunkText: 'The benchmark reports accurate coordinate prediction and ablation evidence.',
+    doiNormalized: '10.1000/generic-protein',
+  });
+
+  const response = await service.retrieve({
+    query: 'AlphaFold',
+    top_k: 2,
+  });
+
+  assert.equal(response.items[0]?.literature_id, 'LIT-RET-ALPHAFOLD');
+  const breakdown = response.items[0]?.evidence_chunks[0]?.score_breakdown;
+  assert.equal(breakdown?.matched_tokens?.includes('alphafold'), false);
+  assert.equal(breakdown?.metadata_matched_tokens?.includes('alphafold'), true);
+  assert.equal((breakdown?.weighted_metadata ?? 0) > 0, true);
+});
+
+test('retrieve deduplicates split records by canonical work identity before applying top-k', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const service = new LiteratureRetrievalService(repository);
+
+  await seedLocalLiterature(repository, {
+    literatureId: 'LIT-RET-DUP-DOI',
+    title: 'Canonical Duplicate Work',
+    versionId: 'EV-RET-DUP-DOI',
+    chunkText: 'canonical duplicate evidence from doi record',
+    authors: ['Ada Lovelace'],
+    year: 2026,
+    doiNormalized: '10.1000/canonical-duplicate',
+    arxivId: null,
+    titleAuthorsYearHash: null,
+  });
+  await seedLocalLiterature(repository, {
+    literatureId: 'LIT-RET-DUP-ARXIV',
+    title: 'Canonical Duplicate Work',
+    versionId: 'EV-RET-DUP-ARXIV',
+    chunkText: 'canonical duplicate evidence from arxiv record with extra evidence',
+    authors: ['Ada Lovelace'],
+    year: 2026,
+    doiNormalized: null,
+    arxivId: '2601.00001',
+    titleAuthorsYearHash: null,
+  });
+  await seedLocalLiterature(repository, {
+    literatureId: 'LIT-RET-DUP-HISTORICAL',
+    title: 'Canonical Duplicate Work',
+    versionId: 'EV-RET-DUP-HISTORICAL',
+    chunkText: 'canonical duplicate evidence from a historical split record with the strongest lexical match',
+    authors: ['Ada Lovelace'],
+    year: 2026,
+    doiNormalized: null,
+    arxivId: null,
+    titleAuthorsYearHash: null,
+  });
+  await seedLocalLiterature(repository, {
+    literatureId: 'LIT-RET-UNIQUE',
+    title: 'Unique Neighbor Work',
+    versionId: 'EV-RET-UNIQUE',
+    chunkText: 'canonical duplicate evidence from a separate comparison work',
+    authors: ['Grace Hopper'],
+    year: 2026,
+    doiNormalized: '10.1000/unique-neighbor',
+    arxivId: null,
+    titleAuthorsYearHash: null,
+  });
+
+  const response = await service.retrieve({
+    query: 'canonical duplicate evidence',
+    top_k: 5,
+  });
+
+  assert.equal(response.items.length, 2);
+  assert.equal(
+    response.items.filter((item) => item.title === 'Canonical Duplicate Work').length,
+    1,
+  );
+  assert.equal(
+    response.items.find((item) => item.title === 'Canonical Duplicate Work')?.canonical_work_key,
+    'doi:10.1000/canonical-duplicate',
+  );
+  assert.equal(
+    response.items.find((item) => item.title === 'Canonical Duplicate Work')?.literature_id,
+    'LIT-RET-DUP-DOI',
+  );
+  assert.equal(response.items.some((item) => item.literature_id === 'LIT-RET-DUP-HISTORICAL'), false);
+  assert.equal(response.items.some((item) => item.literature_id === 'LIT-RET-UNIQUE'), true);
+});
+
+test('retrieve consumes confirmed same-work clusters while ignoring candidate clusters', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const service = new LiteratureRetrievalService(repository);
+  const now = new Date().toISOString();
+  let capturedClusterFilter: Parameters<InMemoryLiteratureRepository['listLiteratureClusters']>[0] | undefined;
+  const originalListLiteratureClusters = repository.listLiteratureClusters.bind(repository);
+  repository.listLiteratureClusters = async (filter) => {
+    capturedClusterFilter = filter;
+    return originalListLiteratureClusters(filter);
+  };
+
+  await seedLocalLiterature(repository, {
+    literatureId: 'LIT-RET-CLUSTER-CANONICAL',
+    title: 'Confirmed Cluster Canonical Work',
+    versionId: 'EV-RET-CLUSTER-CANONICAL',
+    chunkText: 'clustered duplicate evidence from canonical record',
+    authors: ['Ada Lovelace'],
+    year: 2026,
+    doiNormalized: '10.1000/cluster-canonical',
+    titleAuthorsYearHash: null,
+  });
+  await seedLocalLiterature(repository, {
+    literatureId: 'LIT-RET-CLUSTER-VARIANT',
+    title: 'Confirmed Cluster Variant Work',
+    versionId: 'EV-RET-CLUSTER-VARIANT',
+    chunkText: 'clustered duplicate evidence from variant record with stronger lexical duplicate evidence',
+    authors: ['A. Lovelace'],
+    year: 2027,
+    doiNormalized: null,
+    titleAuthorsYearHash: null,
+  });
+  await seedLocalLiterature(repository, {
+    literatureId: 'LIT-RET-CLUSTER-CANDIDATE',
+    title: 'Candidate Cluster Work',
+    versionId: 'EV-RET-CLUSTER-CANDIDATE',
+    chunkText: 'clustered duplicate evidence from candidate-only record',
+    authors: ['Ada Lovelace'],
+    year: 2026,
+    doiNormalized: '10.1000/cluster-candidate',
+    titleAuthorsYearHash: null,
+  });
+
+  await repository.upsertLiteratureCluster({
+    id: 'LCL-CONFIRMED',
+    clusterType: 'same_work',
+    status: 'confirmed',
+    representativeLiteratureId: 'LIT-RET-CLUSTER-CANONICAL',
+    confidence: 0.91,
+    method: 'unit',
+    createdAt: now,
+    updatedAt: now,
+  }, [
+    {
+      id: 'LCM-CONFIRMED-1',
+      clusterId: 'LCL-CONFIRMED',
+      literatureId: 'LIT-RET-CLUSTER-CANONICAL',
+      role: 'representative',
+      relationType: 'near_duplicate',
+      confidence: 0.91,
+      decisionStatus: 'accepted',
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'LCM-CONFIRMED-2',
+      clusterId: 'LCL-CONFIRMED',
+      literatureId: 'LIT-RET-CLUSTER-VARIANT',
+      role: 'variant',
+      relationType: 'near_duplicate',
+      confidence: 0.91,
+      decisionStatus: 'accepted',
+      createdAt: now,
+      updatedAt: now,
+    },
+  ], [
+    {
+      id: 'LCE-CONFIRMED-1',
+      clusterId: 'LCL-CONFIRMED',
+      literatureIdA: 'LIT-RET-CLUSTER-CANONICAL',
+      literatureIdB: 'LIT-RET-CLUSTER-VARIANT',
+      signalType: 'title_similarity',
+      score: 0.91,
+      payload: {},
+      createdAt: now,
+    },
+  ]);
+  await repository.upsertLiteratureCluster({
+    id: 'LCL-CANDIDATE',
+    clusterType: 'same_work',
+    status: 'candidate',
+    representativeLiteratureId: 'LIT-RET-CLUSTER-CANONICAL',
+    confidence: 0.91,
+    method: 'unit',
+    createdAt: now,
+    updatedAt: now,
+  }, [
+    {
+      id: 'LCM-CANDIDATE-1',
+      clusterId: 'LCL-CANDIDATE',
+      literatureId: 'LIT-RET-CLUSTER-CANONICAL',
+      role: 'representative',
+      relationType: 'near_duplicate',
+      confidence: 0.91,
+      decisionStatus: 'pending',
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'LCM-CANDIDATE-2',
+      clusterId: 'LCL-CANDIDATE',
+      literatureId: 'LIT-RET-CLUSTER-CANDIDATE',
+      role: 'variant',
+      relationType: 'near_duplicate',
+      confidence: 0.91,
+      decisionStatus: 'pending',
+      createdAt: now,
+      updatedAt: now,
+    },
+  ], []);
+
+  const response = await service.retrieve({
+    query: 'clustered duplicate evidence',
+    top_k: 10,
+  });
+
+  assert.equal(response.items.some((item) => item.literature_id === 'LIT-RET-CLUSTER-VARIANT'), false);
+  assert.equal(response.items.some((item) => item.literature_id === 'LIT-RET-CLUSTER-CANONICAL'), true);
+  assert.equal(response.items.some((item) => item.literature_id === 'LIT-RET-CLUSTER-CANDIDATE'), true);
+  assert.deepEqual(
+    new Set(capturedClusterFilter?.literatureIds ?? []),
+    new Set(['LIT-RET-CLUSTER-CANONICAL', 'LIT-RET-CLUSTER-VARIANT', 'LIT-RET-CLUSTER-CANDIDATE']),
+  );
 });
 
 test('retrieve skips OpenAI profile when API key is not configured', async () => {
@@ -189,6 +461,7 @@ test('retrieve skips OpenAI profile when API key is not configured', async () =>
   assert.equal(response.meta.profiles_used.length, 0);
   assert.equal(response.meta.skipped_profiles.length, 1);
   assert.equal(response.meta.skipped_profiles[0]?.provider, 'openai');
+  assert.equal(response.meta.query_embedding_telemetry, null);
 });
 
 test('retrieve uses only the configured active embedding profile when active versions are mixed', async () => {
@@ -214,6 +487,7 @@ test('retrieve uses only the configured active embedding profile when active ver
     vector: [0.9, 0.1, 0.1],
   });
   const settingsService = {
+    resolveOpenAIProviderApiKey: async () => 'sk-test',
     resolveActiveEmbeddingProfile: async () => ({
       profileId: 'default',
       provider: 'openai',
@@ -233,6 +507,7 @@ test('retrieve uses only the configured active embedding profile when active ver
     embeddingCallCount += 1;
     return new Response(JSON.stringify({
       data: [{ embedding: [0.1, 0.2, 0.3] }],
+      usage: { prompt_tokens: 2, total_tokens: 2 },
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -252,6 +527,8 @@ test('retrieve uses only the configured active embedding profile when active ver
     assert.equal(response.meta.profiles_used[0]?.model, 'text-embedding-3-large');
     assert.equal(response.meta.skipped_profiles.length, 1);
     assert.equal(response.meta.skipped_profiles[0]?.model, 'text-embedding-3-small');
+    assert.equal(response.meta.query_embedding_telemetry?.embedding_input_tokens, 2);
+    assert.equal(response.meta.query_embedding_telemetry?.total_tokens, 2);
   } finally {
     globalThis.fetch = previousFetch;
   }

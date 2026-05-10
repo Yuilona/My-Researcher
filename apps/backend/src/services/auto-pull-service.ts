@@ -73,6 +73,7 @@ import type {
 import type { LiteratureAcquisitionSettingsService } from './literature-acquisition-settings-service.js';
 import type { LiteratureContentProcessingSettingsService } from './literature-content-processing-settings-service.js';
 import { LiteratureService } from './literature-service.js';
+import type { BackendLlmGateway } from './llm-gateway.js';
 
 export class AutoPullService {
   private readonly runJobs = new Map<string, Promise<void>>();
@@ -82,6 +83,7 @@ export class AutoPullService {
     private readonly literatureService: LiteratureService,
     private readonly contentProcessingSettingsService?: LiteratureContentProcessingSettingsService,
     private readonly acquisitionSettingsService?: LiteratureAcquisitionSettingsService,
+    private readonly llmGateway?: BackendLlmGateway,
   ) {}
 
   async createTopicProfile(request: CreateTopicProfileRequest): Promise<TopicProfileDTO> {
@@ -1374,6 +1376,7 @@ export class AutoPullService {
     return scoreAutoPullRankedCandidates(candidates, rankingMode, {
       contentProcessingSettingsService: this.contentProcessingSettingsService,
       acquisitionSettingsService: this.acquisitionSettingsService,
+      llmGateway: this.llmGateway,
     });
   }
 

@@ -8,6 +8,18 @@ import { buildApp } from '../app.js';
 
 const tempDirs = new Set<string>();
 
+type SourceHealthSummary = {
+  source_kind: string;
+  planned_count: number;
+  succeeded_count: number;
+  failed_count: number;
+  blocked_count: number;
+  retryable_failure_count: number;
+  non_retryable_failure_count: number;
+  error_counts_by_code: Record<string, number>;
+  runtime_status: string | null;
+};
+
 after(async () => {
   await Promise.all([...tempDirs].map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
@@ -81,6 +93,55 @@ function buildMockDossierPayload() {
   };
 }
 
+function buildRouteCuratedDossier(paragraphId: string, documentChecksum: string) {
+  const ref = { ref_type: 'paragraph', ref_id: paragraphId };
+  const item = (id: string, type: string, statement: string) => ({
+    id,
+    type,
+    statement,
+    details: `${statement} details.`,
+    source_refs: [ref],
+    confidence: 0.92,
+    evidence_strength: 'high',
+    notes: null,
+    provenance: 'model_generated',
+  });
+  return {
+    schema_version: 'key_content.v1',
+    extraction_profile: 'paper_semantic_dossier.v1',
+    readiness_status: 'READY',
+    input_refs: {
+      fulltext_checksum: documentChecksum,
+    },
+    categories: {
+      research_problem: [item('route-curated-rp-1', 'problem', 'The paper needs route-level curated key content.')],
+      contributions: [item('route-curated-contrib-1', 'contribution', 'The route imports a curated dossier.')],
+      method: [item('route-curated-method-1', 'method', 'The method validates source refs before import.')],
+      datasets_and_benchmarks: [],
+      experiments: [],
+      key_findings: [item('route-curated-finding-1', 'finding', 'Curated import reaches KEY_CONTENT_READY.')],
+      limitations: [],
+      reproducibility: [],
+      related_work_positioning: [],
+      evidence_candidates: [item('route-curated-evidence-1', 'evidence', 'Paragraph evidence grounds the imported dossier.')],
+      figure_insights: [],
+      table_insights: [],
+      claim_evidence_map: [],
+      automation_signals: [],
+    },
+    quality_report: {
+      completeness_score: 0.357,
+      confidence: 0.92,
+      blockers: [],
+      warnings: [],
+      conflicts: [],
+      extraction_diagnostics: [],
+    },
+    display_digest: 'Route-level curated key-content dossier.',
+    generated_at: '2026-05-10T00:00:00.000Z',
+  };
+}
+
 function mockPublicDnsLookup(): () => void {
   const previousLookup = dns.lookup;
   (dns as unknown as { lookup: typeof dns.lookup }).lookup = (async () => [
@@ -108,7 +169,7 @@ async function waitForBackfillJob(app: ReturnType<typeof buildApp>, jobId: strin
 }
 
 async function waitForFulltextAcquisitionJob(app: ReturnType<typeof buildApp>, jobId: string) {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
+  for (let attempt = 0; attempt < 400; attempt += 1) {
     const res = await app.inject({
       method: 'GET',
       url: `/literature/fulltext-acquisition/jobs/${encodeURIComponent(jobId)}`,
@@ -147,6 +208,7 @@ test('literature content-processing settings routes redact provider API keys', a
   assert.equal(initialBody.providers[0]?.api_key_set, false);
   assert.equal(initialBody.embedding.profiles[0]?.model, 'text-embedding-3-large');
   assert.equal(initialBody.extraction.profiles[0]?.model, 'gpt-5.4-mini');
+  assert.equal(initialBody.extraction.runtime.preferred_key_content_method, 'llm_gateway');
   assert.equal(initialBody.fulltext_parser.grobid.endpoint_url, 'http://localhost:8070');
   assert.equal(typeof initialBody.effective_storage_roots.normalized_text, 'string');
 
@@ -160,6 +222,9 @@ test('literature content-processing settings routes redact provider API keys', a
       },
       extraction: {
         active_profile_id: 'high_accuracy',
+        runtime: {
+          preferred_key_content_method: 'codex_curated',
+        },
       },
       storage_roots: {
         raw_files: '/tmp/literature/raw',
@@ -182,6 +247,7 @@ test('literature content-processing settings routes redact provider API keys', a
   assert.equal(patchBody.providers[0]?.api_key_set, true);
   assert.equal(patchBody.embedding.active_profile_id, 'economy');
   assert.equal(patchBody.extraction.active_profile_id, 'high_accuracy');
+  assert.equal(patchBody.extraction.runtime.preferred_key_content_method, 'codex_curated');
   assert.equal(patchBody.storage_roots.indexes, '/tmp/literature/indexes');
   assert.equal(patchBody.effective_storage_roots.indexes, '/tmp/literature/indexes');
   assert.equal(patchBody.fulltext_parser.grobid.endpoint_url, 'http://grobid.test');
@@ -578,6 +644,152 @@ test('literature content asset download route rejects localhost targets before f
   }
 });
 
+test('literature key-content curation routes export bundle and import curated dossier', async () => {
+  const app = buildApp();
+
+  const importRes = await app.inject({
+    method: 'POST',
+    url: '/literature/collections/import',
+    payload: {
+      items: [{
+        provider: 'manual',
+        external_id: 'curated-route-1',
+        title: 'Curated Route Paper',
+        abstract: 'Trusted abstract for curated route import.',
+        authors: ['Curator'],
+        year: 2026,
+        source_url: 'https://example.test/curated-route-1',
+        rights_class: 'OA',
+      }],
+    },
+  });
+  assert.equal(importRes.statusCode, 200);
+  const literatureId = importRes.json().results[0].literature_id;
+
+  const fulltextDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pea-route-curated-'));
+  tempDirs.add(fulltextDir);
+  const fulltextPath = path.join(fulltextDir, 'curated-route.md');
+  await fs.writeFile(
+    fulltextPath,
+    '# Method\n\nCurated route paragraph evidence for key-content import.',
+    'utf8',
+  );
+  const registerAssetRes = await app.inject({
+    method: 'POST',
+    url: `/literature/${encodeURIComponent(literatureId)}/content-assets`,
+    payload: {
+      local_path: fulltextPath,
+      mime_type: 'text/markdown',
+    },
+  });
+  assert.equal(registerAssetRes.statusCode, 200);
+
+  const triggerRes = await app.inject({
+    method: 'POST',
+    url: `/literature/${encodeURIComponent(literatureId)}/content-processing/runs`,
+    payload: {
+      requested_stages: ['ABSTRACT_READY', 'FULLTEXT_PREPROCESSED'],
+    },
+  });
+  assert.equal(triggerRes.statusCode, 200);
+  let runCompleted = false;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const runsRes = await app.inject({
+      method: 'GET',
+      url: `/literature/${encodeURIComponent(literatureId)}/content-processing/runs?limit=1`,
+    });
+    assert.equal(runsRes.statusCode, 200);
+    if (runsRes.json().items[0]?.status === 'SUCCESS') {
+      runCompleted = true;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.equal(runCompleted, true);
+
+  const bundleRes = await app.inject({
+    method: 'GET',
+    url: `/literature/${encodeURIComponent(literatureId)}/content-processing/key-content-curation-bundle`,
+  });
+  assert.equal(bundleRes.statusCode, 200);
+  const bundle = bundleRes.json();
+  assert.equal(bundle.literature_id, literatureId);
+  assert.equal(bundle.paragraphs.length, 1);
+  assert.equal(bundle.export_policy.accepted_curation_sources.includes('codex_curated'), true);
+
+  const dryRunRes = await app.inject({
+    method: 'POST',
+    url: `/literature/${encodeURIComponent(literatureId)}/content-processing/key-content-dossier/dry-run`,
+    payload: {
+      curation_source: 'codex_curated',
+      curator: 'codex',
+      dossier: buildRouteCuratedDossier(
+        `paragraph:${bundle.paragraphs[0].paragraph_id}:Curated route paragraph evidence`,
+        bundle.document.normalized_text_checksum,
+      ),
+    },
+  });
+  assert.equal(dryRunRes.statusCode, 200);
+  const dryRunBody = dryRunRes.json();
+  assert.equal(dryRunBody.valid, true);
+  assert.equal(dryRunBody.repaired_source_ref_count > 0, true);
+  assert.equal(dryRunBody.would_mark_downstream_stale, true);
+
+  const importDossierRes = await app.inject({
+    method: 'POST',
+    url: `/literature/${encodeURIComponent(literatureId)}/content-processing/key-content-dossier`,
+    payload: {
+      curation_source: 'codex_curated',
+      curator: 'codex',
+      dossier: buildRouteCuratedDossier(bundle.paragraphs[0].paragraph_id, bundle.document.normalized_text_checksum),
+    },
+  });
+  assert.equal(importDossierRes.statusCode, 200);
+  const importDossierBody = importDossierRes.json();
+  assert.equal(importDossierBody.source, 'codex_curated');
+  assert.equal(importDossierBody.readiness_status, 'READY');
+  assert.equal(importDossierBody.state.key_content_ready, true);
+
+  const contentProcessingRes = await app.inject({
+    method: 'GET',
+    url: `/literature/${encodeURIComponent(literatureId)}/content-processing`,
+  });
+  assert.equal(contentProcessingRes.statusCode, 200);
+  const keyStage = contentProcessingRes.json().stage_states.find((item: { stage_code: string }) => item.stage_code === 'KEY_CONTENT_READY');
+  assert.equal(keyStage.status, 'SUCCEEDED');
+  assert.equal(keyStage.detail.source, 'codex_curated');
+
+  const badImportRes = await app.inject({
+    method: 'POST',
+    url: `/literature/${encodeURIComponent(literatureId)}/content-processing/key-content-dossier`,
+    payload: {
+      curation_source: 'codex_curated',
+      dossier: buildRouteCuratedDossier('missing-paragraph', bundle.document.normalized_text_checksum),
+    },
+  });
+  assert.equal(badImportRes.statusCode, 400);
+  assert.equal(badImportRes.json().error.code, 'INVALID_PAYLOAD');
+
+  const badProvenanceDossier = buildRouteCuratedDossier(
+    bundle.paragraphs[0].paragraph_id,
+    bundle.document.normalized_text_checksum,
+  );
+  badProvenanceDossier.categories.research_problem[0].provenance = 'human_curated';
+  const badProvenanceRes = await app.inject({
+    method: 'POST',
+    url: `/literature/${encodeURIComponent(literatureId)}/content-processing/key-content-dossier`,
+    payload: {
+      curation_source: 'codex_curated',
+      dossier: badProvenanceDossier,
+    },
+  });
+  assert.equal(badProvenanceRes.statusCode, 400);
+  assert.equal(badProvenanceRes.json().error.code, 'INVALID_PAYLOAD');
+  assert.match(badProvenanceRes.json().error.message, /item-level provenance/);
+
+  await app.close();
+});
+
 test('literature fulltext acquisition job downloads arxiv PDF as a separate job', async () => {
   const app = buildApp();
   const rawFilesRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'pea-acquisition-download-'));
@@ -666,6 +878,15 @@ test('literature fulltext acquisition job downloads arxiv PDF as a separate job'
     assert.equal(job.items[0]?.selected_source_kind, 'arxiv');
     assert.equal(typeof job.items[0]?.content_asset_id, 'string');
     assert.equal(job.totals.succeeded, 1);
+    const sourceHealth = new Map(
+      (job.source_health as SourceHealthSummary[]).map((item) => [item.source_kind, item]),
+    );
+    assert.equal(sourceHealth.get('arxiv')?.planned_count, 1);
+    assert.equal(sourceHealth.get('arxiv')?.succeeded_count, 1);
+    assert.equal(sourceHealth.get('arxiv')?.runtime_status, 'READY');
+    assert.equal(sourceHealth.get('download')?.planned_count, 1);
+    assert.equal(sourceHealth.get('download')?.succeeded_count, 1);
+    assert.equal(sourceHealth.get('download')?.runtime_status, 'READY');
 
     const assetsRes = await app.inject({
       method: 'GET',
@@ -677,6 +898,372 @@ test('literature fulltext acquisition job downloads arxiv PDF as a separate job'
   } finally {
     globalThis.fetch = previousFetch;
     restoreDnsLookup();
+    await app.close();
+  }
+});
+
+test('literature fulltext acquisition dry-run prioritizes explicit URL before arxiv and unpaywall', async () => {
+  const app = buildApp();
+  const rawFilesRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'pea-acquisition-explicit-'));
+  tempDirs.add(rawFilesRoot);
+  const previousFetch = globalThis.fetch;
+  const restoreDnsLookup = mockPublicDnsLookup();
+
+  try {
+    const contentSettingsRes = await app.inject({
+      method: 'PATCH',
+      url: '/settings/literature-content-processing',
+      payload: {
+        storage_roots: {
+          raw_files: rawFilesRoot,
+        },
+      },
+    });
+    assert.equal(contentSettingsRes.statusCode, 200);
+
+    const settingsRes = await app.inject({
+      method: 'PATCH',
+      url: '/settings/literature-acquisition',
+      payload: {
+        unpaywall: {
+          enabled: true,
+          email: 'oa@example.com',
+        },
+        downloader: {
+          max_byte_size: 1024,
+          timeout_ms: 5000,
+          max_redirects: 1,
+          require_pdf_signature: true,
+        },
+        source_throttle: {
+          arxiv: { min_interval_ms: 0, concurrency: 1 },
+          unpaywall: { min_interval_ms: 0, concurrency: 1 },
+          download: { min_interval_ms: 0, concurrency: 1 },
+        },
+      },
+    });
+    assert.equal(settingsRes.statusCode, 200);
+
+    const importRes = await app.inject({
+      method: 'POST',
+      url: '/literature/collections/import',
+      payload: {
+        items: [{
+          provider: 'arxiv',
+          external_id: '2601.00002',
+          title: 'Acquisition Explicit Priority Paper',
+          abstract: 'Priority abstract.',
+          authors: ['Priority Author'],
+          year: 2026,
+          doi: '10.5555/explicit-priority',
+          arxiv_id: '2601.00002',
+          source_url: 'https://arxiv.org/abs/2601.00002',
+          rights_class: 'OA',
+        }],
+      },
+    });
+    assert.equal(importRes.statusCode, 200);
+    const literatureId = importRes.json().results[0]?.literature_id;
+    assert.equal(typeof literatureId, 'string');
+
+    const explicitUrl = 'https://example.com/explicit-priority.pdf';
+    const dryRunRes = await app.inject({
+      method: 'POST',
+      url: '/literature/fulltext-acquisition/dry-runs',
+      payload: {
+        workset: {
+          literature_ids: [literatureId],
+          explicit_urls: [{
+            literature_id: literatureId,
+            source_url: explicitUrl,
+          }],
+        },
+      },
+    });
+    assert.equal(dryRunRes.statusCode, 200);
+    const planItem = dryRunRes.json().estimate.plan_items[0];
+    assert.equal(planItem.selected_source_kind, 'explicit_url');
+    assert.equal(planItem.source_url, explicitUrl);
+    assert.deepEqual(
+      planItem.candidates.map((item: { source_kind: string }) => item.source_kind),
+      ['explicit_url', 'arxiv', 'unpaywall'],
+    );
+
+    const payload = Buffer.from('%PDF-1.4 explicit route body');
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      assert.equal(String(input), explicitUrl);
+      return new Response(payload, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Length': String(payload.length),
+        },
+      });
+    }) as typeof fetch;
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/literature/fulltext-acquisition/jobs',
+      payload: {
+        workset: {
+          literature_ids: [literatureId],
+          explicit_urls: [{
+            literature_id: literatureId,
+            source_url: explicitUrl,
+          }],
+        },
+      },
+    });
+    assert.equal(createRes.statusCode, 201);
+    const job = await waitForFulltextAcquisitionJob(app, createRes.json().job.job_id);
+    assert.equal(job.status, 'SUCCEEDED');
+    assert.equal(job.items[0]?.selected_source_kind, 'explicit_url');
+    assert.equal(job.totals.succeeded, 1);
+    const sourceHealth = new Map(
+      (job.source_health as SourceHealthSummary[]).map((item) => [item.source_kind, item]),
+    );
+    assert.equal(sourceHealth.get('explicit_url')?.planned_count, 1);
+    assert.equal(sourceHealth.get('explicit_url')?.succeeded_count, 1);
+    assert.equal(sourceHealth.get('explicit_url')?.runtime_status, 'READY');
+    assert.equal(sourceHealth.get('download')?.planned_count, 1);
+    assert.equal(sourceHealth.get('download')?.succeeded_count, 1);
+  } finally {
+    globalThis.fetch = previousFetch;
+    restoreDnsLookup();
+    await app.close();
+  }
+});
+
+test('literature fulltext acquisition job resolves and downloads Unpaywall OA PDF', async () => {
+  const app = buildApp();
+  const rawFilesRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'pea-acquisition-unpaywall-'));
+  tempDirs.add(rawFilesRoot);
+  const previousFetch = globalThis.fetch;
+  const restoreDnsLookup = mockPublicDnsLookup();
+
+  try {
+    const contentSettingsRes = await app.inject({
+      method: 'PATCH',
+      url: '/settings/literature-content-processing',
+      payload: {
+        storage_roots: {
+          raw_files: rawFilesRoot,
+        },
+      },
+    });
+    assert.equal(contentSettingsRes.statusCode, 200);
+
+    const acquisitionSettingsRes = await app.inject({
+      method: 'PATCH',
+      url: '/settings/literature-acquisition',
+      payload: {
+        unpaywall: {
+          enabled: true,
+          email: 'oa@example.com',
+        },
+        downloader: {
+          max_byte_size: 1024,
+          timeout_ms: 5000,
+          max_redirects: 1,
+          require_pdf_signature: true,
+        },
+        source_throttle: {
+          unpaywall: { min_interval_ms: 0, concurrency: 1 },
+          download: { min_interval_ms: 0, concurrency: 1 },
+        },
+      },
+    });
+    assert.equal(acquisitionSettingsRes.statusCode, 200);
+
+    const importRes = await app.inject({
+      method: 'POST',
+      url: '/literature/collections/import',
+      payload: {
+        items: [{
+          provider: 'crossref',
+          external_id: '10.5555/unpaywall-success',
+          title: 'Unpaywall Success Paper',
+          abstract: 'Unpaywall success abstract.',
+          authors: ['OA Author'],
+          year: 2026,
+          doi: '10.5555/unpaywall-success',
+          source_url: 'https://doi.org/10.5555/unpaywall-success',
+          rights_class: 'OA',
+        }],
+      },
+    });
+    assert.equal(importRes.statusCode, 200);
+    const literatureId = importRes.json().results[0]?.literature_id;
+    assert.equal(typeof literatureId, 'string');
+
+    const pdfUrl = 'https://oa.example.test/unpaywall-success.pdf';
+    const payload = Buffer.from('%PDF-1.4 unpaywall route body');
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      if (url.startsWith('https://api.unpaywall.org/v2/')) {
+        return new Response(JSON.stringify({
+          best_oa_location: {
+            url_for_pdf: pdfUrl,
+          },
+          oa_locations: [],
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      assert.equal(url, pdfUrl);
+      return new Response(payload, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Length': String(payload.length),
+        },
+      });
+    }) as typeof fetch;
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/literature/fulltext-acquisition/jobs',
+      payload: {
+        workset: {
+          literature_ids: [literatureId],
+        },
+      },
+    });
+    assert.equal(createRes.statusCode, 201);
+    const job = await waitForFulltextAcquisitionJob(app, createRes.json().job.job_id);
+    assert.equal(job.status, 'SUCCEEDED');
+    assert.equal(job.items[0]?.selected_source_kind, 'unpaywall');
+    assert.equal(job.items[0]?.source_url, pdfUrl);
+    assert.equal(job.items[0]?.final_url, pdfUrl);
+    assert.equal(job.totals.succeeded, 1);
+    const sourceHealth = new Map(
+      (job.source_health as SourceHealthSummary[]).map((item) => [item.source_kind, item]),
+    );
+    assert.equal(sourceHealth.get('unpaywall')?.planned_count, 1);
+    assert.equal(sourceHealth.get('unpaywall')?.succeeded_count, 1);
+    assert.equal(sourceHealth.get('unpaywall')?.runtime_status, 'READY');
+    assert.equal(sourceHealth.get('download')?.planned_count, 1);
+    assert.equal(sourceHealth.get('download')?.succeeded_count, 1);
+  } finally {
+    globalThis.fetch = previousFetch;
+    restoreDnsLookup();
+    await app.close();
+  }
+});
+
+test('literature fulltext acquisition job records Unpaywall no-OA and rate-limit failures', async () => {
+  const app = buildApp();
+  const previousFetch = globalThis.fetch;
+
+  try {
+    const settingsRes = await app.inject({
+      method: 'PATCH',
+      url: '/settings/literature-acquisition',
+      payload: {
+        unpaywall: {
+          enabled: true,
+          email: 'oa@example.com',
+        },
+        source_throttle: {
+          unpaywall: { min_interval_ms: 0, concurrency: 1 },
+        },
+      },
+    });
+    assert.equal(settingsRes.statusCode, 200);
+
+    const importRes = await app.inject({
+      method: 'POST',
+      url: '/literature/collections/import',
+      payload: {
+        items: [
+          {
+            provider: 'crossref',
+            external_id: '10.5555/unpaywall-no-oa',
+            title: 'Unpaywall No OA Paper',
+            abstract: 'No OA abstract.',
+            authors: ['No OA Author'],
+            year: 2026,
+            doi: '10.5555/unpaywall-no-oa',
+            source_url: 'https://doi.org/10.5555/unpaywall-no-oa',
+            rights_class: 'OA',
+          },
+          {
+            provider: 'crossref',
+            external_id: '10.5555/unpaywall-rate-limit',
+            title: 'Unpaywall Rate Limit Paper',
+            abstract: 'Rate limit abstract.',
+            authors: ['Rate Limit Author'],
+            year: 2026,
+            doi: '10.5555/unpaywall-rate-limit',
+            source_url: 'https://doi.org/10.5555/unpaywall-rate-limit',
+            rights_class: 'OA',
+          },
+        ],
+      },
+    });
+    assert.equal(importRes.statusCode, 200);
+    const literatureIds = importRes.json().results.map((item: { literature_id: string }) => item.literature_id);
+
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      if (url.includes('unpaywall-no-oa')) {
+        return new Response(JSON.stringify({
+          best_oa_location: null,
+          oa_locations: [],
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('unpaywall-rate-limit')) {
+        return new Response('{}', {
+          status: 429,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 404 });
+    }) as typeof fetch;
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/literature/fulltext-acquisition/jobs',
+      payload: {
+        workset: {
+          literature_ids: literatureIds,
+        },
+      },
+    });
+    assert.equal(createRes.statusCode, 201);
+    const job = await waitForFulltextAcquisitionJob(app, createRes.json().job.job_id);
+    assert.equal(job.status, 'FAILED');
+    assert.equal(job.totals.failed, 2);
+    type AcquisitionFailureItem = {
+      error_code: string;
+      retryable: boolean;
+      blocker_code: string | null;
+    };
+    const failureItems = job.items as AcquisitionFailureItem[];
+    const itemByCode = new Map<string, AcquisitionFailureItem>(
+      failureItems.map((item) => [item.error_code, item]),
+    );
+    assert.equal(itemByCode.get('UNPAYWALL_NO_OA_PDF')?.retryable, false);
+    assert.equal(itemByCode.get('UNPAYWALL_NO_OA_PDF')?.blocker_code, 'UNPAYWALL_NO_OA_PDF');
+    assert.equal(itemByCode.get('SOURCE_RATE_LIMIT')?.retryable, true);
+    assert.equal(itemByCode.get('SOURCE_RATE_LIMIT')?.blocker_code, null);
+    const sourceHealth = new Map(
+      (job.source_health as SourceHealthSummary[]).map((item) => [item.source_kind, item]),
+    );
+    assert.equal(sourceHealth.get('unpaywall')?.planned_count, 2);
+    assert.equal(sourceHealth.get('unpaywall')?.failed_count, 2);
+    assert.equal(sourceHealth.get('unpaywall')?.retryable_failure_count, 1);
+    assert.equal(sourceHealth.get('unpaywall')?.non_retryable_failure_count, 1);
+    assert.equal(sourceHealth.get('unpaywall')?.error_counts_by_code.UNPAYWALL_NO_OA_PDF, 1);
+    assert.equal(sourceHealth.get('unpaywall')?.error_counts_by_code.SOURCE_RATE_LIMIT, 1);
+    assert.equal(sourceHealth.get('unpaywall')?.runtime_status, 'COOLDOWN');
+    assert.equal(sourceHealth.get('download')?.planned_count, 0);
+  } finally {
+    globalThis.fetch = previousFetch;
     await app.close();
   }
 });
@@ -1379,4 +1966,122 @@ test('literature workflow routes support import, topic scope, paper link sync an
     restoreFetch();
     await app.close();
   }
+});
+
+test('literature cluster routes generate and confirm structured duplicate candidates', async () => {
+  const app = buildApp();
+  const importRes = await app.inject({
+    method: 'POST',
+    url: '/literature/collections/import',
+    payload: {
+      items: [
+        {
+          provider: 'manual',
+          external_id: 'cluster-route-a',
+          title: 'Route Cluster Paper A',
+          authors: ['Ada Lovelace'],
+          year: 2026,
+          doi: '10.2000/cluster-route-a',
+          source_url: 'manual:cluster-route-a',
+        },
+        {
+          provider: 'manual',
+          external_id: 'cluster-route-b',
+          title: 'Route Cluster Paper B',
+          authors: ['A. Lovelace'],
+          year: 2026,
+          source_url: 'manual:cluster-route-b',
+        },
+      ],
+    },
+  });
+  assert.equal(importRes.statusCode, 200);
+  const importBody = importRes.json();
+  const literatureA = importBody.results[0]?.literature_id;
+  const literatureB = importBody.results[1]?.literature_id;
+  assert.equal(typeof literatureA, 'string');
+  assert.equal(typeof literatureB, 'string');
+
+  const assetDir = await fs.mkdtemp(path.join(os.tmpdir(), 'literature-cluster-route-'));
+  tempDirs.add(assetDir);
+  const assetPaths = [
+    path.join(assetDir, 'cluster-a.pdf'),
+    path.join(assetDir, 'cluster-b.pdf'),
+  ];
+  await Promise.all(assetPaths.map((assetPath) => fs.writeFile(assetPath, '%PDF-1.4\nshared cluster route pdf\n')));
+
+  for (const [index, literatureId] of [literatureA, literatureB].entries()) {
+    const assetRes = await app.inject({
+      method: 'POST',
+      url: `/literature/${literatureId}/content-assets`,
+      payload: {
+        local_path: assetPaths[index],
+        mime_type: 'application/pdf',
+      },
+    });
+    assert.equal(assetRes.statusCode, 200);
+  }
+
+  const generateRes = await app.inject({
+    method: 'POST',
+    url: '/literature/clusters/candidates',
+    payload: {
+      cluster_types: ['same_work'],
+    },
+  });
+  assert.equal(generateRes.statusCode, 200);
+  const generateBody = generateRes.json();
+  assert.equal(generateBody.summary.same_pdf_count, 1);
+  assert.equal(generateBody.clusters[0]?.status, 'candidate');
+  assert.equal(generateBody.clusters[0]?.review.outcome, 'pending_review');
+  assert.equal(generateBody.clusters[0]?.review.retrieval_dedup_active, false);
+  const clusterId = generateBody.clusters[0]?.cluster_id;
+  assert.equal(typeof clusterId, 'string');
+
+  const invalidReviewRes = await app.inject({
+    method: 'PATCH',
+    url: `/literature/clusters/${clusterId}`,
+    payload: {
+      status: 'confirmed',
+      review_outcome: 'related_topic_confirmed',
+      representative_literature_id: literatureA,
+    },
+  });
+  assert.equal(invalidReviewRes.statusCode, 400);
+
+  const emptyMemberDecisionRes = await app.inject({
+    method: 'PATCH',
+    url: `/literature/clusters/${clusterId}`,
+    payload: {
+      member_decisions: [],
+    },
+  });
+  assert.equal(emptyMemberDecisionRes.statusCode, 400);
+
+  const updateRes = await app.inject({
+    method: 'PATCH',
+    url: `/literature/clusters/${clusterId}`,
+    payload: {
+      status: 'confirmed',
+      review_outcome: 'same_work_confirmed',
+      representative_literature_id: literatureA,
+    },
+  });
+  assert.equal(updateRes.statusCode, 200);
+  const updateBody = updateRes.json();
+  assert.equal(updateBody.item.status, 'confirmed');
+  assert.equal(updateBody.item.review.outcome, 'same_work_confirmed');
+  assert.equal(updateBody.item.review.consumption_scope, 'retrieval_dedup');
+  assert.equal(updateBody.item.review.retrieval_dedup_active, true);
+  assert.equal(updateBody.item.members.every((member: { decision_status: string }) => member.decision_status === 'accepted'), true);
+
+  const listRes = await app.inject({
+    method: 'GET',
+    url: `/literature/clusters?status=confirmed&literature_id=${literatureB}`,
+  });
+  assert.equal(listRes.statusCode, 200);
+  const listBody = listRes.json();
+  assert.equal(listBody.items.length, 1);
+
+  await app.close();
 });
