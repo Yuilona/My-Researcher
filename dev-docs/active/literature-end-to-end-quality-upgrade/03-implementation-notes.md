@@ -39,3 +39,155 @@
   - Fulltext acquisition jobs now requeue interrupted `RUNNING` items on resume and close running items if the worker fails, avoiding job/item status drift.
   - Desktop OpenAI-key IPC now requires an explicit string or `null`; omitted payloads no longer clear the local key accidentally.
   - Local desktop secret writes now chmod the encrypted secrets file to `0600` after write.
+- 2026-05-09: Key-content quality and LLM gateway optimization pass:
+  - Added `BackendLlmGateway` as the single backend OpenAI calling surface for Responses structured output and embeddings.
+  - Migrated key-content extraction/consolidation, content-processing chunk embeddings, retrieval query embeddings, and auto-pull internal quality scoring through the gateway.
+  - Registered real OpenAI provider, model profiles, prompt templates, and `OPENAI_API_KEY` fallback metadata under `.ai/llm-config/registry/`; strict registry validation passes.
+  - Extended content-processing extraction settings with runtime policy stored in `ApplicationSetting` JSON: section concurrency, request timeout, retry count, prompt profile id, and diagnostic policy.
+  - Hardened key-content prompts to render valid source refs as compact JSON records and require exact `ref_type` plus bare `ref_id`.
+  - Added deterministic source-ref repair for prefixed ids, colon anchor forms, anchor labels/text, and bare id inference; unresolved refs only warn when no actionable evidence remains.
+  - Downgraded noisy limited-source diagnostics under `actionable_v1` while preserving actionable warnings.
+  - Changed section extraction to bounded concurrency with deterministic output ordering and added per-section failure tolerance so transient provider failures do not block an otherwise usable dossier.
+  - Compacted paper-level consolidation inputs and added deterministic source-preserving consolidation fallback when paper-level LLM consolidation times out or is rate-limited.
+  - Gateway retry behavior now honors `Retry-After`/provider “try again in” hints, allows `maxRetries: 0`, and treats empty-body 404 provider responses as retryable transient failures while preserving normal invalid-request fail-fast behavior.
+  - Updated OpenAPI/context schemas for `extraction.runtime`.
+- 2026-05-10: DashScope/Qwen token-plan experiment support:
+  - Added DashScope as an experimental `LiteratureContentProcessingProviderId` for key-content extraction profiles only; embeddings remain OpenAI-only.
+  - Added DashScope OpenAI-compatible Chat Completions handling in `BackendLlmGateway`, including configurable `DASHSCOPE_API_KEY` and `DASHSCOPE_BASE_URL` fallbacks, while preserving persisted desktop-secret behavior.
+  - Registered the DashScope provider and `literature-key-content-qwen-token-plan` model profile in `.ai/llm-config/registry/`.
+  - Synchronized shared, desktop, OpenAPI, and generated API/context contracts so `openai | dashscope` is explicit and not an implicit side path.
+  - Status: provider wiring is verified, but Qwen key-content output quality is not acceptable for cutover without a provider-specific schema repair/retry strategy.
+- 2026-05-10: Codex/manual curated KEY_CONTENT_READY path:
+  - Added a first-class curation import/export path instead of pretending the backend can directly call the Codex desktop agent.
+  - Added `GET /literature/:literatureId/content-processing/key-content-curation-bundle` to export literature metadata, abstract profile, active fulltext document metadata, sections, paragraphs, anchors, and valid source-ref inventory after `FULLTEXT_PREPROCESSED`.
+  - Added `POST /literature/:literatureId/content-processing/key-content-dossier` to import a curated `key_content.v1` dossier from `codex_curated` or `manual_curated` sources.
+  - Import validation requires `ABSTRACT_READY` and `FULLTEXT_PREPROCESSED`, rejects `FAILED` dossiers and non-empty blockers, checks active fulltext checksum when supplied, enforces non-empty core categories, and verifies every source ref resolves against the active abstract/section/paragraph/anchor inventory.
+  - Successful import writes the canonical `KEY_CONTENT_READY` / `KEY_CONTENT_DOSSIER` artifact, marks the stage `SUCCEEDED`, refreshes pipeline state, fills `keyContentDigest` only when it is currently empty, and marks downstream `CHUNKED`, `EMBEDDED`, and `INDEXED` stale when the dossier checksum changes.
+  - The curated path records `KEY_CONTENT_CURATED_IMPORT` and zero-call telemetry diagnostics so evaluator reports can distinguish it from provider-generated key-content.
+  - OpenAPI/API index/context contracts were updated; no Prisma migration was needed because the existing pipeline artifact/state tables store the curated dossier.
+- 2026-05-10: Preferred KEY_CONTENT_READY method configuration:
+  - Added `extraction.runtime.preferred_key_content_method` with explicit values `llm_gateway`, `codex_curated`, and `manual_curated`.
+  - The desktop content-processing settings panel now lets the user choose the preferred KEY_CONTENT_READY method alongside embedding/extraction profile settings.
+  - The setting is persisted through the existing `/settings/literature-content-processing` JSON payload in `ApplicationSetting`; no schema migration was needed.
+  - `KEY_CONTENT_READY` execution now honors the setting: `llm_gateway` invokes the gateway extraction path, while `codex_curated` and `manual_curated` reuse a current imported dossier or block with `KEY_CONTENT_CURATION_REQUIRED`.
+  - Existing curated dossiers are only reused when their fulltext checksum matches the active `FULLTEXT_PREPROCESSED` artifact and their source is `codex_curated` or `manual_curated`.
+  - Backfill dry-run provider-call estimates also honor this setting so curated KEY_CONTENT_READY does not appear as an extraction provider call in budgets.
+  - This prevents a hidden dual-track path where UI says Codex/manual but the backend silently calls an external extraction provider.
+- 2026-05-10: Non-UI hardening after the Codex curated E2E:
+  - Kept Codex productized interaction out of scope and tightened the remaining execution semantics around the existing API and evaluator surfaces.
+  - Added explicit shared contract enums for item-level key-content provenance and backfill curation status so `curation_source` and item `provenance` cannot drift semantically.
+  - Curated dossier import now deterministically repairs common source-ref variants before validation: typed `paragraph_id`/`section_id`/`anchor_id` fields, `type:id` and `type:id:text` forms, exact anchor labels, and `abstract` aliasing.
+  - Invalid item provenance now returns an actionable validation message that points callers to `model_generated | user_edited` and reserves `codex_curated | manual_curated` for request-level `curation_source`.
+  - Backfill dry-runs and job items now expose `key_content_curation_status`; jobs waiting on curated dossiers settle as `PARTIAL` with item-level `BLOCKED/WAITING_FOR_DOSSIER`.
+  - Added `.ai/scripts/literature-e2e-report-audit.mjs` to audit formal reports for query stratification, lexical leakage, sample coverage, timing gaps, cost attribution gaps, and local PDF retention.
+  - `BackendLlmGateway` telemetry now parses provider `usage` token counts and propagates aggregate token fields through key-content diagnostics, leaving `cost_usd` explicit until model pricing is registered.
+  - No new desktop/Codex productized UI was added in this pass.
+- 2026-05-10: Five-point evaluator/cutover hardening pass:
+  - Added evaluator-v2 fixture metadata under `artifacts/evaluator/` with reusable sample groups and stratified baseline/holdout/paraphrase/adversarial query labels.
+  - Extended `literature-e2e-report-audit.mjs` with `--fixture` support, fixture coverage warnings, source-group reporting, and cost-audit behavior that distinguishes zero key-content LLM calls from missing embedding/query-embedding telemetry.
+  - Added `literature-e2e-cutover-gate.mjs` with explicit `current-scope` and `broad-cutover` modes so arXiv-only evidence cannot silently become broad cutover evidence.
+  - Added `POST /literature/:literatureId/content-processing/key-content-dossier/dry-run` to validate curated dossiers, repaired source refs, checksums, and downstream stale impact without writing `KEY_CONTENT_READY`.
+  - Propagated embedding telemetry into `EMBEDDINGS` artifacts and retrieval query-embedding telemetry into `LiteratureRetrieveResponse.meta.query_embedding_telemetry`.
+  - Added source acquisition mock coverage for explicit URL priority, Unpaywall OA success, Unpaywall no-OA, and Unpaywall 429/rate-limit behavior.
+  - Fixed source-health semantics so per-literature Unpaywall no-OA results and other non-retryable item blockers do not put the whole source into cooldown; source cooldown is reserved for retryable source/download failures.
+- 2026-05-10: Durable evaluator-v2 runner and telemetry closure:
+  - Added `.ai/scripts/literature-e2e-v2-runner.mjs` as the shared real-dependency runner for `light`, `current-arxiv`, `v2-smoke`, and `full` modes.
+  - The runner uses a caller-provided temporary Postgres schema, Docker GROBID, persisted OpenAI secret/env fallback for embeddings, and the evaluator-v2 fixture inventory.
+  - Reports now distinguish `sample_count` from `processable_sample_count`, so rights-gated/no-OA/OCR-required rows can be counted as expected blockers instead of failed indexed samples.
+  - Reports include per-literature stage timings for download, citation, abstract, parser, key-content dry-run/import, chunk, embedding, and index.
+  - Reports include gateway telemetry for embedding and retrieval query embeddings, plus aggregate request/retry/timeout/rate-limit counts, token counts, and estimated embedding cost.
+  - The runner keeps Codex/manual curated KEY_CONTENT_READY as a curation import path with zero key-content external calls; embedding and retrieval query embeddings remain the only OpenAI calls in curated runs.
+  - `literature-e2e-report-audit.mjs` now accepts the new timing and telemetry fields and treats estimated embedding cost as sufficient cost attribution when provider billing cost is not directly emitted.
+  - `literature-e2e-cutover-gate.mjs` now gates processable rows separately from expected blockers and can verify negative retrieval queries when fixture/report data includes them.
+  - The parser-edge expected-blocker check now accepts both the normalized `OCR_REQUIRED` category and the backend's concrete `FULLTEXT_OCR_REQUIRED` reason code, while preserving the concrete blocker code in report rows.
+- 2026-05-10: Full evaluator fixture finalization:
+  - Verified the provided Unpaywall email works against the live API.
+  - Replaced the original DOI OA fixture DOI because the arXiv DOI path returned 404 from Unpaywall.
+  - The DOI/Unpaywall fixture now uses a PLOS OA DOI with a real `url_for_pdf`, and the runner has matching curated facts so `codex_curated` content is not semantically copied from the Attention fixture.
+  - `literature-e2e-report-audit.mjs` now reports `PASS` when only informational findings are present; warnings/errors still control cutover blocking.
+- 2026-05-10: Reliability follow-up after consecutive full runs:
+  - Ran a second full evaluator pass against a fresh temporary schema; it passed the same broad-cutover gates with identical success counts.
+  - Observed retrieval rank instability for ResNet queries because the explicit-PDF fixture reused the ResNet PDF and curated facts.
+  - Replaced the explicit-PDF fixture with an independent Vision Transformer PDF and added matching curated facts to the runner.
+  - Reran full after the fixture correction; broad-cutover gate passed again and ResNet query ranks returned to `1`.
+- 2026-05-10: Expanded DOI/Unpaywall and blind-query reliability pass:
+  - Added `--raw-files-root` support to `literature-e2e-v2-runner.mjs`; local real E2E now stores raw PDFs under `/Volumes/DataDisk/Paper/Auto/<run-id>` by default.
+  - Added report environment storage-root telemetry and extended report audit to count external raw PDF storage, not only PDFs under `.ai/.tmp`.
+  - Expanded DOI/Unpaywall coverage from 1 to 5 real OA DOI samples with live Unpaywall `url_for_pdf` support.
+  - Added 6 `blind` retrieval queries covering DOI/Unpaywall and explicit-PDF samples.
+  - Confirmed collection-level dedup exists for DOI, arXiv ID, and title-authors-year; PDF file storage remains per registered content asset rather than global checksum coalescing.
+- 2026-05-10: Low-risk dedup hardening pass:
+  - Added `literature-work-identity.ts` as the shared backend identity helper for DOI/arXiv/title-author-year normalization, canonical work-key selection, and alias generation.
+  - Collection import now refreshes `normalizedTitle` and `titleAuthorsYearHash` when a duplicate DOI/arXiv/source merge fills missing authors/year metadata.
+  - Duplicate import merges remain conservative: existing non-empty title/authors/year/abstract/user-facing metadata are preserved, missing DOI/arXiv fields are filled, rights class only upgrades from `UNKNOWN`, tags are unioned, and each source raw payload records `canonical_work_key` plus `matched_by`.
+  - Repository source upsert now moves an existing provider/source item to the selected canonical literature when a later merge resolves the source to that record.
+  - Retrieval now builds work groups from identity aliases and deduplicates hits by canonical work before applying `top_k`; within a work group it prefers records that directly own the canonical identity key so historical split clones cannot replace the DOI/arXiv canonical record only because a cloned chunk scores slightly higher.
+  - Import, overview, metadata, and retrieval DTOs now expose `canonical_work_key`; shared contracts, desktop normalizers, OpenAPI, and API index were updated.
+  - Fulltext acquisition job items now receive deterministic per-plan-order `createdAt` timestamps so equal-time rows cannot be reordered by random UUID and accidentally let a rate-limit item set cooldown before a non-retryable no-OA item runs.
+  - Added `duplicate-stress` mode to `.ai/scripts/literature-e2e-v2-runner.mjs`; it imports DOI/title-author-year/arXiv duplicates, injects a historical split clone after indexing, and asserts retrieval top5 contains neither duplicate canonical-work hits nor the clone record.
+  - Fuzzy near-duplicate clustering and PDF asset checksum coalescing were intentionally left for later passes.
+- 2026-05-10: Structured cluster relation pass:
+  - Added additive Prisma persistence for `LiteratureCluster`, `LiteratureClusterMember`, and `LiteratureClusterEvidence`; no existing tables or columns are modified.
+  - Added shared DTOs and OpenAPI/API-index coverage for:
+    - `POST /literature/clusters/candidates`
+    - `GET /literature/clusters`
+    - `PATCH /literature/clusters/:clusterId`
+  - Added `LiteratureClusterService` to generate candidate same-work clusters from exact PDF checksum, exact normalized-text checksum, title-author-year hash, and conservative fuzzy title/author/year/abstract evidence.
+  - Candidate generation is intentionally non-destructive: clusters start as `candidate`, member decisions start as `pending`, and no literature rows or content assets are merged or deleted.
+  - Confirming a cluster without explicit member decisions now defaults current members to `accepted`, making the common review operation deterministic.
+  - Retrieval now consumes only confirmed same-work clusters with accepted members, and ignores candidate/rejected/split clusters.
+  - In-memory and Prisma repositories both preserve existing cluster decisions across repeated candidate generation.
+  - Fixed in-memory patch semantics so `undefined` fields do not overwrite stored cluster/member values; this matches Prisma's skip-undefined update behavior and prevents route-only drift in tests.
+  - DB SSOT context was refreshed and DB evidence was recorded under `artifacts/db/2026-05-10-literature-clusters/`.
+- 2026-05-10: Post-implementation quality closure:
+  - Candidate generation now treats existing clusters as read-only response items instead of upserting them again, so repeated scans no longer refresh `updatedAt` or churn review queues.
+  - Candidate summaries now describe returned clusters after `cluster_types`, confidence, and `include_existing` filters, preventing mismatch between `generated_count` and summary counts.
+  - Representative changes now realign member roles and reject duplicate/conflicting member decisions, keeping `representative_literature_id` and member `role` semantics consistent.
+  - Retrieval now filters confirmed same-work clusters by the candidate literature ids for the current query corpus instead of loading every confirmed cluster in the database.
+  - OpenAI provider settings now report env fallback availability consistently with actual gateway/config resolution, while still redacting raw keys.
+  - No repo-tracked debug logs, backup files, leaked temporary API keys, or disposable test artifacts were found. Existing `.ai/.tmp` and evaluator reports were retained because they are historical/formal evidence and are not tracked as product artifacts.
+- 2026-05-10: Optimization points 2-6 backend-first pass:
+  - Added repository support to query content assets by checksum and record `metadata.storage_coalescing` on later duplicate raw-fulltext registrations.
+  - Storage coalescing remains non-destructive: it records canonical candidate asset/literature/path and `destructive_cleanup_allowed=false`; no file deletion, hardlinking, or path replacement is performed.
+  - Added embedding-similarity candidate generation for `cluster_types: ["related_topic"]`; it uses active non-stale indexed embedding centroids, emits `embedding_similarity` evidence, and keeps candidates review-only.
+  - Extended cluster candidate summaries with `embedding_similarity_count` so semantic candidate volume is visible in API responses.
+  - Expanded evaluator-v2 retrieval reporting with MRR@5, nDCG@5, blind-query recall@5, canonical top5 diversity, and duplicate-work counts.
+  - Content processing now reuses an existing `EMBEDDINGS` artifact and matching READY/INDEXED embedding version when the current CHUNKED artifact checksum, profile, model, provider, dimensions, and vectors still match.
+  - Retrieval query embeddings now have an in-process cache keyed by query/profile/model/dimensions; cached hits report zero additional request/cost telemetry.
+  - GROBID success diagnostics now include text/section/paragraph/anchor counts and actionable warnings for low text volume or weak section structure, plus info when no visual anchors are extracted.
+  - This pass intentionally did not add automatic PDF cleanup, OCR, desktop cluster-review UI, or automatic semantic-cluster confirmation.
+- 2026-05-11: Post-cutover-readiness optimization batches and Batch 1 parser-quality gate:
+  - Split remaining high-value work into five batches: quality gates/diagnostics, retrieval robustness, acquisition/storage operations, cluster review consumption, and cutover operations.
+  - Added a deterministic parser-quality assessment to the GROBID success path with `parser_quality_score`, `parser_quality_bucket`, and metric inputs recorded in the `GROBID_TEI_PARSED` diagnostic.
+  - Added `FULLTEXT_PARSER_QUALITY_LOW` as a warning and `FULLTEXT_PARSER_QUALITY_MEDIUM` as an informational diagnostic; parser quality does not change `FULLTEXT_PREPROCESSED` success/failure semantics.
+  - Extended evaluator-v2 reports with per-literature parser quality, `parser_quality_score_avg`, and `parser_quality_low_count`.
+  - Extended report audit to warn on low parser-quality rows while keeping lightweight sample-coverage warnings separate.
+  - Lightweight real E2E confirmed the three arXiv samples all parse at `1/high`, so this batch adds observability without creating new false blockers for the current sample.
+- 2026-05-11: Batch 2 retrieval robustness pass:
+  - Replaced simple lexical token overlap with a query match context that filters retrieval stopwords, weights distinctive tokens, and scores exact phrase matches.
+  - Metadata scoring now includes literature title, authors, year, DOI, arXiv id, chunk type, chunk metadata, and source refs instead of only chunk metadata.
+  - Hybrid scoring now records weighted vector, lexical, and metadata contributions per evidence chunk.
+  - Evidence chunk `score_breakdown` now exposes matched tokens, missing tokens, exact phrases, and metadata matched tokens so retrieval results can be audited without re-running the scorer.
+  - Added deterministic service coverage for exact phrase boosting and metadata-only title/identifier matching.
+  - Kept retrieval storage, active embedding profile filtering, stale-index exclusion, and confirmed same-work cluster dedup semantics unchanged.
+- 2026-05-11: Batch 3 acquisition reliability and storage operations pass:
+  - Added additive `source_health` summaries to fulltext acquisition job DTOs for `explicit_url`, `arxiv`, `unpaywall`, and the concrete `download` runtime path.
+  - Source-health rows report planned/succeeded/failed/blocked counts, retryable vs non-retryable failures, error-code histograms, runtime status, cooldown, last request/success/failure timestamps, and fallback item errors.
+  - Evaluator-v2 reports now persist the acquisition job `source_health`, and report audit derives a source-health section that also includes observed Crossref metadata coverage.
+  - Extended report audit with a raw-PDF manifest for `/Volumes/DataDisk/Paper/Auto/<run-id>` and local evidence storage, including SHA-256, byte size, modified time, retention status, duplicate checksum count, and `destructive_cleanup_allowed=false`.
+  - Retention remains review-only: stale raw PDFs produce an audit warning, but no file deletion, coalescing, hardlinking, or path replacement is performed.
+  - Fixed the audit query-set count double increment while touching the evaluator audit path.
+- 2026-05-11: Batch 4 cluster consumption and review pass:
+  - Added explicit cluster review DTOs with `outcome`, `consumption_scope`, `retrieval_dedup_active`, member decision counts, and blocking reasons.
+  - `PATCH /literature/clusters/:clusterId` now accepts optional `review_outcome` and rejects mismatches between the requested review outcome and the computed cluster state.
+  - Candidate clusters remain inert; confirmed same-work clusters with at least two accepted members are the only `retrieval_dedup` consumers.
+  - Confirmed related-topic clusters are represented as `related_topic_reference` and keep `retrieval_dedup_active=false`, preventing semantic candidates from being interpreted as duplicates.
+  - Representative updates now realign non-representative roles even when a stale patch tries to mark another member as representative.
+  - Added desktop content-processing `聚类` subtab with candidate generation, list filters, review summary display, and confirm/reject/split actions that send explicit review outcomes.
+  - OpenAPI/API index/context and renderer types were updated so the structured review contract is visible across backend, shared DTOs, and desktop UI.
+- 2026-05-11: Batch 4 post-review quality closure:
+  - Tightened terminal cluster semantics after code review: `confirmed` clusters now require all member decisions resolved, at least two accepted members, and an accepted representative.
+  - `rejected` and `split` clusters now require all member decisions to be rejected, avoiding a terminal cluster status with accepted or pending members.
+  - `review.retrieval_dedup_active` and `related_topic_reference` are now computed conservatively from the same completion/representative constraints, so stale or corrupted persisted rows cannot become active consumers only because status is `confirmed`.
+  - Empty `member_decisions` arrays are rejected at the shared/OpenAPI schema layer instead of acting as a no-op update.
+  - Removed intermediate/failed UI gate evidence directories from `.ai/.tmp/ui`, retaining only the documented final PASS evidence.

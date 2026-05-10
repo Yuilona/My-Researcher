@@ -57,6 +57,37 @@
 - Split remaining non-blocking work into explicit follow-on tasks.
 - Mark this task complete only after the roadmap's release gate passes.
 
+## Post-Cutover-Readiness Optimization Batches
+
+### Batch 1 - Quality Gates And Diagnostics
+- Status: completed.
+- Add parser-quality scoring to GROBID success diagnostics and evaluator reports.
+- Make report audit flag low parser-quality rows separately from parser hard failures.
+- Keep this batch additive: no schema migration and no change to parser success/failure semantics.
+
+### Batch 2 - Retrieval Robustness
+- Status: completed for backend scoring/explanation baseline.
+- Add hybrid retrieval signals for lexical/BM25-style exact term support alongside embeddings.
+- Add optional rerank/score explanations after the baseline remains stable.
+- Keep stale/index-version isolation intact and make active-version lineage easier to inspect.
+
+### Batch 3 - Acquisition Reliability And Storage Operations
+- Status: completed for backend/API/evaluator observability baseline.
+- Add provider health summaries for arXiv, Crossref, Unpaywall, and explicit PDF downloads.
+- Add raw-PDF manifest/retention checks under `/Volumes/DataDisk/Paper/Auto`.
+- Keep storage coalescing non-destructive until review/retention policy is explicit.
+
+### Batch 4 - Cluster Consumption And Review
+- Status: completed for additive backend contract, validation, retrieval consumption semantics, and desktop operator review baseline.
+- Add an operator-consumable review surface for candidate same-work and related-topic clusters.
+- Keep candidate clusters inert until confirmed; confirmed same-work clusters remain the only retrieval dedup signal.
+- Add structured review outcomes so future clustering work cannot drift into implicit merges.
+
+### Batch 5 - Cutover Operations
+- Add a preflight/cutover/rollback playbook and automate evidence checks around the existing cutover gate.
+- Keep lightweight, smoke, duplicate-stress, and full E2E modes explicitly separated.
+- Treat broad cutover as blocked unless full real E2E and CI mock suites both pass.
+
 ## Initial Acceptance Gates
 - Gate A: roadmap accepted.
 - Gate B: local E2E harness accepted.

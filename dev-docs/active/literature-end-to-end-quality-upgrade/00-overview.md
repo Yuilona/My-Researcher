@@ -4,7 +4,7 @@
 - State: in-progress
 - Parent: `T-030 literature-content-processing-landing-roadmap`
 - Related: `T-011 literature-management-flow`, `T-029 literature-collection-content-processing-boundary`, `T-037 literature-backfill-operations-workbench`, `T-040 literature-content-processing-closure-fixes`
-- Next step: apply the new Prisma migration to a temporary Postgres schema and run the local real-dependency E2E suite.
+- Next step: proceed with Batch 5 cutover operations after Batch 4 cluster review consumption landed and passed backend/UI/API verification.
 
 ## Goal
 - Upgrade the literature module from "functionally complete" to "reliable full-chain operation" across web discovery, metadata import, fulltext acquisition, parsing, semantic extraction, chunking, embedding, indexing, retrieval, stale handling, backfill, and cutover verification.
@@ -47,11 +47,26 @@
 
 ## Acceptance Criteria
 - [x] Roadmap is aligned with explicit milestone gates.
-- [ ] Local E2E harness can run from discovery/import through retrieval using real dependencies where configured.
-- [ ] Temporary Postgres E2E suite can run without contaminating default schemas.
-- [ ] Source rate limits are handled with retry/backoff and source-specific pacing.
+- [x] Local E2E harness can run from discovery/import through retrieval using real dependencies where configured.
+- [x] Temporary Postgres E2E suite can run without contaminating default schemas.
+- [x] Source rate limits are handled with retry/backoff and source-specific pacing.
 - [x] Remote download has SSRF/redirect/size/type safety gates and repeatable tests.
 - [x] Fulltext acquisition can resolve arXiv PDF URLs and has a documented DOI/fulltext strategy.
-- [ ] Real quality scorer and real OpenAI content-processing paths are tested separately from mocks.
-- [ ] Retrieval quality is measured with a seeded evaluation set and pass/fail thresholds.
-- [ ] Backfill/cutover verification covers multi-literature batches, stale states, partial failures, and cleanup protection.
+- [x] Real quality scorer and real OpenAI content-processing paths are tested separately from mocks.
+- [x] Retrieval quality is measured with a seeded evaluation set and pass/fail thresholds.
+- [x] Backfill/cutover verification covers multi-literature batches, stale states, partial failures, and cleanup protection for the current arXiv OA evaluator scope.
+- [x] Evaluator-v2 fixture, report audit, and mode-specific cutover gate exist so current-scope evidence and broad-cutover evidence cannot be conflated.
+- [x] Evaluator runner can emit stratified query evidence, source-group coverage, expected blocker results, stage timings, and embedding/query cost telemetry.
+- [x] Evaluator-v2 smoke covers explicit PDF, parser-edge/OCR blocker, rights-gated blocker, negative retrieval, and processable-vs-blocked cutover denominators.
+- [x] Broad cutover evidence includes DOI/Unpaywall/parser-edge samples in a full real run.
+- [x] Consecutive full real runs pass broad-cutover gate, and fixture semantic overlap discovered during reliability testing has been corrected.
+- [x] DOI/Unpaywall coverage is expanded to 5 real OA DOI samples, blind retrieval queries are included, and raw PDF files are stored under `/Volumes/DataDisk/Paper/Auto/<run-id>` during local E2E.
+- [x] Low-risk dedup hardening exposes canonical work keys, refreshes derived identity keys on source merges, and deduplicates retrieval hits by work before `top_k`.
+- [x] Duplicate-stress E2E verifies DOI/title-author-year/arXiv import merges and suppresses a historical split clone from retrieval top5.
+- [x] Structured duplicate/cluster candidates persist PDF checksum, normalized-text checksum, title-author-year, and conservative fuzzy evidence without auto-confirming merges.
+- [x] Confirmed same-work clusters are consumed by retrieval work grouping while unconfirmed candidate clusters remain inert.
+- [x] Optimization points 2-6 have backend-first implementations: non-destructive PDF checksum coalescing metadata, embedding-similarity related-topic candidates, expanded retrieval evaluator metrics, unchanged-chunk embedding reuse/query embedding cache, and stronger GROBID extraction diagnostics.
+- [x] Batch 1 parser-quality diagnostics are emitted by GROBID success paths and summarized by evaluator reports/audits without changing parser success semantics.
+- [x] Batch 2 retrieval robustness adds exact-phrase lexical scoring, metadata term scoring, and evidence-level score explanations while preserving active-version and stale-index behavior.
+- [x] Batch 3 acquisition/storage observability adds fulltext source-health summaries and local raw-PDF manifest/retention audit without destructive cleanup.
+- [x] Batch 4 cluster consumption/review adds explicit review outcomes, inert candidate semantics, same-work-only retrieval dedup, and a desktop operator review surface.
