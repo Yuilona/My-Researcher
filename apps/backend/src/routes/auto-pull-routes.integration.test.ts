@@ -8,13 +8,15 @@ async function waitForTerminalRun(
   app: ReturnType<typeof buildApp>,
   runId: string,
 ): Promise<Record<string, unknown>> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  let lastRun: Record<string, unknown> | null = null;
+  for (let attempt = 0; attempt < 250; attempt += 1) {
     const res = await app.inject({
       method: 'GET',
       url: `/auto-pull/runs/${encodeURIComponent(runId)}`,
     });
     if (res.statusCode === 200) {
       const run = res.json() as Record<string, unknown>;
+      lastRun = run;
       const status = typeof run.status === 'string' ? run.status : '';
       if (TERMINAL_RUN_STATUSES.has(status)) {
         return run;
@@ -24,11 +26,29 @@ async function waitForTerminalRun(
       setTimeout(resolve, 20);
     });
   }
-  throw new Error(`Timed out waiting run ${runId} to complete.`);
+  throw new Error(`Timed out waiting run ${runId} to complete. Last run: ${JSON.stringify(lastRun)}`);
+}
+
+async function disableSourceThrottleForRouteTest(app: ReturnType<typeof buildApp>): Promise<void> {
+  const res = await app.inject({
+    method: 'PATCH',
+    url: '/settings/literature-acquisition',
+    payload: {
+      source_throttle: {
+        arxiv: { min_interval_ms: 0, concurrency: 1 },
+        crossref: { min_interval_ms: 0, concurrency: 1 },
+        zotero: { min_interval_ms: 0, concurrency: 1 },
+        unpaywall: { min_interval_ms: 0, concurrency: 1 },
+        download: { min_interval_ms: 0, concurrency: 1 },
+      },
+    },
+  });
+  assert.equal(res.statusCode, 200);
 }
 
 test('auto-pull and topic-settings routes support CRUD, run, retry and alert ack', async () => {
   const app = buildApp();
+  await disableSourceThrottleForRouteTest(app);
 
   const createTopicRes = await app.inject({
     method: 'POST',

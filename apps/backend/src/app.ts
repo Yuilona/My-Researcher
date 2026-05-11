@@ -176,9 +176,12 @@ export function buildApp(): FastifyInstance {
   const autoPullService = new AutoPullService(
     autoPullRepository,
     literatureService,
-    literatureContentProcessingSettingsService,
-    literatureAcquisitionSettingsService,
-    llmGateway,
+    {
+      contentProcessingSettingsService: literatureContentProcessingSettingsService,
+      acquisitionSettingsService: literatureAcquisitionSettingsService,
+      llmGateway,
+      sourceRuntimeStore: literatureRepository,
+    },
   );
   const autoPullController = new AutoPullController(autoPullService);
   const topicSettingsController = new TopicSettingsController(autoPullService);

@@ -84,9 +84,30 @@
 - Add structured review outcomes so future clustering work cannot drift into implicit merges.
 
 ### Batch 5 - Cutover Operations
+- Status: completed for local operational tooling and evidence gates; pending next real E2E evidence attachment.
 - Add a preflight/cutover/rollback playbook and automate evidence checks around the existing cutover gate.
 - Keep lightweight, smoke, duplicate-stress, and full E2E modes explicitly separated.
-- Treat broad cutover as blocked unless full real E2E and CI mock suites both pass.
+- Treat broad cutover as blocked unless consecutive full real E2E and CI mock suites both pass.
+- Gate retrieval quality on recall@5, MRR@5, nDCG@5, blind recall@5, degraded retrieval count, and duplicate-work top5 count.
+- Require explicit `--confirm <latest-run-id>` plus CI/mock evidence for cutover operation artifacts.
+
+### Batch 6 - Auto-Pull Source Pacing
+- Status: completed for Crossref, arXiv, and Zotero fetch surfaces.
+- Reuse `/settings/literature-acquisition.source_throttle` for collection-source request pacing.
+- Reuse `LiteratureSourceRuntimeState` for source cooldown and request/success/failure health instead of creating a second auto-pull runtime table.
+- Keep invalid source config and auth-style 4xx failures non-retryable; only rate-limit/unreachable source failures enter cooldown.
+
+### Batch 7 - Raw PDF Lifecycle
+- Status: completed for non-destructive local storage workflow.
+- Add a raw PDF lifecycle script with dry-run/apply modes.
+- Protect active-manifest paths from quarantine.
+- Only quarantine stale duplicate PDFs when another checksum-identical retained copy exists; stale single-copy PDFs remain review-only.
+
+### Batch 8 - Retrieval Generalization Fixture Expansion
+- Status: completed for fixture/audit/gate expansion.
+- Require `blind` query-set coverage in the evaluator-v2 fixture.
+- Add additional blind/paraphrase/adversarial queries for DOI/Unpaywall and explicit-PDF samples.
+- Keep formal broad cutover blocked when fixture query coverage or blind recall is incomplete.
 
 ## Initial Acceptance Gates
 - Gate A: roadmap accepted.

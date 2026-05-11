@@ -36,6 +36,10 @@ import type {
   AutoPullTimeSpec,
   TopicProfileRecord,
 } from '../repositories/auto-pull-repository.js';
+import type {
+  LiteratureRepository,
+  LiteratureSourceRuntimeStateRecord,
+} from '../repositories/literature-repository.js';
 import { AUTOPULL_ALERT_CODES } from './auto-pull/auto-pull-alert-codes.js';
 import {
   buildAutoPullRuleDTO,
@@ -75,16 +79,84 @@ import type { LiteratureContentProcessingSettingsService } from './literature-co
 import { LiteratureService } from './literature-service.js';
 import type { BackendLlmGateway } from './llm-gateway.js';
 
+type AutoPullThrottleSource = 'arxiv' | 'crossref' | 'zotero';
+type AutoPullSourceRuntimeStore = Pick<
+  LiteratureRepository,
+  'findSourceRuntimeState' | 'upsertSourceRuntimeState'
+>;
+type SourceLimiterState = {
+  active: number;
+  queue: Array<() => void>;
+};
+type AutoPullServiceDependencies = {
+  contentProcessingSettingsService?: LiteratureContentProcessingSettingsService;
+  acquisitionSettingsService?: LiteratureAcquisitionSettingsService;
+  llmGateway?: BackendLlmGateway;
+  sourceRuntimeStore?: AutoPullSourceRuntimeStore;
+  sleepMs?: (milliseconds: number) => Promise<void>;
+};
+
 export class AutoPullService {
   private readonly runJobs = new Map<string, Promise<void>>();
+  private readonly contentProcessingSettingsService?: LiteratureContentProcessingSettingsService;
+  private readonly acquisitionSettingsService?: LiteratureAcquisitionSettingsService;
+  private readonly llmGateway?: BackendLlmGateway;
+  private readonly sourceRuntimeStore?: AutoPullSourceRuntimeStore;
+  private readonly sleepMs: (milliseconds: number) => Promise<void>;
+  private readonly sourceLimiters = new Map<AutoPullThrottleSource, SourceLimiterState>();
+  private readonly sourcePacingQueues = new Map<AutoPullThrottleSource, Promise<void>>();
 
+  constructor(
+    repository: AutoPullRepository,
+    literatureService: LiteratureService,
+    dependencies?: AutoPullServiceDependencies,
+  );
+  constructor(
+    repository: AutoPullRepository,
+    literatureService: LiteratureService,
+    contentProcessingSettingsService?: LiteratureContentProcessingSettingsService,
+    acquisitionSettingsService?: LiteratureAcquisitionSettingsService,
+    llmGateway?: BackendLlmGateway,
+  );
   constructor(
     private readonly repository: AutoPullRepository,
     private readonly literatureService: LiteratureService,
-    private readonly contentProcessingSettingsService?: LiteratureContentProcessingSettingsService,
-    private readonly acquisitionSettingsService?: LiteratureAcquisitionSettingsService,
-    private readonly llmGateway?: BackendLlmGateway,
-  ) {}
+    dependenciesOrContentSettings?: AutoPullServiceDependencies | LiteratureContentProcessingSettingsService,
+    acquisitionSettingsService?: LiteratureAcquisitionSettingsService,
+    llmGateway?: BackendLlmGateway,
+  ) {
+    const dependencies = this.isAutoPullServiceDependencies(dependenciesOrContentSettings)
+      ? dependenciesOrContentSettings
+      : {
+        contentProcessingSettingsService: dependenciesOrContentSettings,
+        acquisitionSettingsService,
+        llmGateway,
+      };
+    this.contentProcessingSettingsService = dependencies.contentProcessingSettingsService;
+    this.acquisitionSettingsService = dependencies.acquisitionSettingsService;
+    this.llmGateway = dependencies.llmGateway;
+    this.sourceRuntimeStore = dependencies.sourceRuntimeStore;
+    this.sleepMs = dependencies.sleepMs ?? ((milliseconds) =>
+      new Promise((resolve) => {
+        setTimeout(resolve, milliseconds);
+      }));
+  }
+
+  private isAutoPullServiceDependencies(
+    value?: AutoPullServiceDependencies | LiteratureContentProcessingSettingsService,
+  ): value is AutoPullServiceDependencies {
+    return Boolean(
+      value
+      && typeof value === 'object'
+      && (
+        'contentProcessingSettingsService' in value
+        || 'acquisitionSettingsService' in value
+        || 'llmGateway' in value
+        || 'sourceRuntimeStore' in value
+        || 'sleepMs' in value
+      ),
+    );
+  }
 
   async createTopicProfile(request: CreateTopicProfileRequest): Promise<TopicProfileDTO> {
     const topicId = request.topic_id.trim();
@@ -890,14 +962,20 @@ export class AutoPullService {
     seenRunDedupKeys: Set<string>,
     fetchLimit: number,
   ): Promise<SourceExecutionResult> {
+    let sourceRuntimeState: LiteratureSourceRuntimeStateRecord | null = null;
     try {
-      const fetchedCandidates = await this.fetchSourceItems(
-        source,
-        context.querySpec,
-        context.timeSpec,
-        timeWindowMode,
-        fetchLimit,
+      const throttleSource = this.toThrottleSource(source.source);
+      const fetchedCandidates = await this.runWithSourceSlot(
+        throttleSource,
+        async () => this.fetchSourceItems(
+          source,
+          context.querySpec,
+          context.timeSpec,
+          timeWindowMode,
+          fetchLimit,
+        ),
       );
+      sourceRuntimeState = await this.readSourceRuntimeState(throttleSource);
       const fetchedItems = fetchedCandidates.map((candidate) => candidate.item);
       const rankingMode = this.readRankingMode(source.config);
       const threshold = rule.qualitySpec.minQualityScore;
@@ -1024,10 +1102,13 @@ export class AutoPullService {
           llm_score_avg: llmScoreAvg,
           imported_count: 0,
           failed_count: failedCount,
+          source_runtime: this.toSourceRuntimeMeta(sourceRuntimeState),
         },
       };
     } catch (error) {
       const { alertCode, level } = this.resolveSourceError(error);
+      const throttleSource = this.toThrottleSource(source.source);
+      sourceRuntimeState = await this.readSourceRuntimeState(throttleSource);
       await this.repository.createAlert({
         id: crypto.randomUUID(),
         ruleId: rule.id,
@@ -1059,9 +1140,237 @@ export class AutoPullService {
           fetched_count: 0,
           imported_count: 0,
           failed_count: 1,
+          source_runtime: this.toSourceRuntimeMeta(sourceRuntimeState),
         },
       };
     }
+  }
+
+  private async runWithSourceSlot<T>(
+    source: AutoPullThrottleSource,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const throttle = await this.resolveAutoPullSourceThrottle(source);
+    const release = await this.acquireSourceSlot(source, throttle.concurrency);
+    try {
+      await this.waitForAutoPullSourcePacingQueued(source, throttle.min_interval_ms);
+      const result = await operation();
+      await this.recordAutoPullSourceSuccess(source);
+      return result;
+    } catch (error) {
+      const { alertCode } = this.resolveSourceError(error);
+      await this.recordAutoPullSourceFailure(
+        source,
+        alertCode,
+        error instanceof Error ? error.message : 'Unknown source error.',
+        this.isRetryableSourceRuntimeError(error, alertCode),
+      );
+      throw error;
+    } finally {
+      release();
+    }
+  }
+
+  private async resolveAutoPullSourceThrottle(source: AutoPullThrottleSource): Promise<{
+    min_interval_ms: number;
+    concurrency: number;
+  }> {
+    if (!this.acquisitionSettingsService) {
+      return {
+        min_interval_ms: 0,
+        concurrency: 1,
+      };
+    }
+    return this.acquisitionSettingsService.resolveSourceThrottle(source);
+  }
+
+  private async acquireSourceSlot(source: AutoPullThrottleSource, concurrency: number): Promise<() => void> {
+    const normalizedConcurrency = Math.max(1, Math.floor(concurrency));
+    const state = this.sourceLimiters.get(source) ?? { active: 0, queue: [] };
+    this.sourceLimiters.set(source, state);
+    if (state.active < normalizedConcurrency) {
+      state.active += 1;
+      return () => this.releaseSourceSlot(source, state);
+    }
+    await new Promise<void>((resolve) => {
+      state.queue.push(resolve);
+    });
+    return () => this.releaseSourceSlot(source, state);
+  }
+
+  private releaseSourceSlot(source: AutoPullThrottleSource, state: SourceLimiterState): void {
+    const next = state.queue.shift();
+    if (next) {
+      next();
+      return;
+    }
+    state.active = Math.max(0, state.active - 1);
+    if (state.active === 0) {
+      this.sourceLimiters.delete(source);
+    }
+  }
+
+  private async waitForAutoPullSourcePacingQueued(
+    source: AutoPullThrottleSource,
+    minIntervalMs: number,
+  ): Promise<void> {
+    const previous = this.sourcePacingQueues.get(source) ?? Promise.resolve();
+    const current = previous
+      .catch(() => undefined)
+      .then(() => this.waitForAutoPullSourcePacing(source, minIntervalMs));
+    this.sourcePacingQueues.set(source, current);
+    try {
+      await current;
+    } finally {
+      if (this.sourcePacingQueues.get(source) === current) {
+        this.sourcePacingQueues.delete(source);
+      }
+    }
+  }
+
+  private async waitForAutoPullSourcePacing(
+    source: AutoPullThrottleSource,
+    minIntervalMs: number,
+  ): Promise<void> {
+    const existing = await this.readSourceRuntimeState(source);
+    const now = Date.now();
+    const cooldownWaitMs = existing?.cooldownUntil
+      ? Math.max(0, Date.parse(existing.cooldownUntil) - now)
+      : 0;
+    const intervalWaitMs = existing?.lastRequestAt
+      ? Math.max(0, Date.parse(existing.lastRequestAt) + minIntervalMs - now)
+      : 0;
+    const waitMs = Math.max(cooldownWaitMs, intervalWaitMs);
+    if (waitMs > 0) {
+      await this.sleepMs(waitMs);
+    }
+    await this.recordAutoPullSourceRequest(source);
+  }
+
+  private async recordAutoPullSourceRequest(source: AutoPullThrottleSource): Promise<void> {
+    const existing = await this.readSourceRuntimeState(source);
+    const now = new Date().toISOString();
+    await this.writeSourceRuntimeState({
+      id: existing?.id ?? crypto.randomUUID(),
+      source,
+      status: existing?.status ?? 'READY',
+      cooldownUntil: existing?.cooldownUntil ?? null,
+      failureCount: existing?.failureCount ?? 0,
+      lastErrorCode: existing?.lastErrorCode ?? null,
+      lastErrorMessage: existing?.lastErrorMessage ?? null,
+      lastRequestAt: now,
+      lastSuccessAt: existing?.lastSuccessAt ?? null,
+      lastFailureAt: existing?.lastFailureAt ?? null,
+      metadata: {
+        ...(existing?.metadata ?? {}),
+        consumer: 'auto_pull',
+      },
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    });
+  }
+
+  private async recordAutoPullSourceSuccess(source: AutoPullThrottleSource): Promise<void> {
+    const existing = await this.readSourceRuntimeState(source);
+    const now = new Date().toISOString();
+    await this.writeSourceRuntimeState({
+      id: existing?.id ?? crypto.randomUUID(),
+      source,
+      status: 'READY',
+      cooldownUntil: null,
+      failureCount: 0,
+      lastErrorCode: null,
+      lastErrorMessage: null,
+      lastRequestAt: existing?.lastRequestAt ?? now,
+      lastSuccessAt: now,
+      lastFailureAt: existing?.lastFailureAt ?? null,
+      metadata: {
+        ...(existing?.metadata ?? {}),
+        consumer: 'auto_pull',
+      },
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    });
+  }
+
+  private async recordAutoPullSourceFailure(
+    source: AutoPullThrottleSource,
+    errorCode: string,
+    errorMessage: string | null,
+    retryable: boolean,
+  ): Promise<void> {
+    const existing = await this.readSourceRuntimeState(source);
+    const now = new Date().toISOString();
+    const failureCount = (existing?.failureCount ?? 0) + 1;
+    const cooldownUntil = retryable
+      ? new Date(Date.now() + Math.min(60_000 * failureCount, 900_000)).toISOString()
+      : null;
+    await this.writeSourceRuntimeState({
+      id: existing?.id ?? crypto.randomUUID(),
+      source,
+      status: retryable ? 'COOLDOWN' : 'FAILED',
+      cooldownUntil,
+      failureCount,
+      lastErrorCode: errorCode,
+      lastErrorMessage: errorMessage,
+      lastRequestAt: existing?.lastRequestAt ?? now,
+      lastSuccessAt: existing?.lastSuccessAt ?? null,
+      lastFailureAt: now,
+      metadata: {
+        ...(existing?.metadata ?? {}),
+        consumer: 'auto_pull',
+        retryable,
+      },
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    });
+  }
+
+  private isRetryableSourceRuntimeError(error: unknown, errorCode: string): boolean {
+    if (error instanceof AppError && error.statusCode < 500) {
+      return false;
+    }
+    return errorCode === AUTOPULL_ALERT_CODES.SOURCE_RATE_LIMIT
+      || errorCode === AUTOPULL_ALERT_CODES.SOURCE_UNREACHABLE;
+  }
+
+  private async readSourceRuntimeState(
+    source: AutoPullThrottleSource,
+  ): Promise<LiteratureSourceRuntimeStateRecord | null> {
+    if (!this.sourceRuntimeStore) {
+      return null;
+    }
+    return this.sourceRuntimeStore.findSourceRuntimeState(source);
+  }
+
+  private async writeSourceRuntimeState(record: LiteratureSourceRuntimeStateRecord): Promise<void> {
+    await this.sourceRuntimeStore?.upsertSourceRuntimeState(record);
+  }
+
+  private toSourceRuntimeMeta(record: LiteratureSourceRuntimeStateRecord | null): Record<string, unknown> | null {
+    if (!record) {
+      return null;
+    }
+    return {
+      source: record.source,
+      status: record.status,
+      cooldown_until: record.cooldownUntil,
+      failure_count: record.failureCount,
+      last_error_code: record.lastErrorCode,
+      last_request_at: record.lastRequestAt,
+      last_success_at: record.lastSuccessAt,
+      last_failure_at: record.lastFailureAt,
+    };
+  }
+
+  private toThrottleSource(source: AutoPullSource): AutoPullThrottleSource {
+    if (source === 'ARXIV') {
+      return 'arxiv';
+    }
+    if (source === 'ZOTERO') {
+      return 'zotero';
+    }
+    return 'crossref';
   }
 
   private resolveSourceError(error: unknown): {
@@ -1636,6 +1945,10 @@ export class AutoPullService {
     const llmScoreAvg = scoredCount > 0 ? Number((llmScoreWeightedSum / scoredCount).toFixed(2)) : null;
     const rankingMode = this.readMetaText(results, 'ranking_mode') ?? 'llm_score';
     const threshold = this.readMetaFloatFromResults(results, 'threshold');
+    const sourceRuntime = results
+      .map((item) => item.meta?.source_runtime)
+      .find((value): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value)))
+      ?? null;
     const mergedTimeWindowModes = [...new Set(
       results
         .map((item) => this.readString(item.meta?.time_window_mode))
@@ -1685,6 +1998,7 @@ export class AutoPullService {
         llm_score_avg: llmScoreAvg,
         imported_count: importedCount,
         failed_count: failedCount,
+        source_runtime: sourceRuntime,
       },
     };
   }

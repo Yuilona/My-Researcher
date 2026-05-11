@@ -4002,11 +4002,13 @@ components:
 
     LiteratureAcquisitionSourceThrottleSettings:
       type: object
-      required: [arxiv, crossref, unpaywall, download]
+      required: [arxiv, crossref, zotero, unpaywall, download]
       properties:
         arxiv:
           $ref: '#/components/schemas/LiteratureAcquisitionThrottleSettings'
         crossref:
+          $ref: '#/components/schemas/LiteratureAcquisitionThrottleSettings'
+        zotero:
           $ref: '#/components/schemas/LiteratureAcquisitionThrottleSettings'
         unpaywall:
           $ref: '#/components/schemas/LiteratureAcquisitionThrottleSettings'
@@ -4080,6 +4082,8 @@ components:
             arxiv:
               $ref: '#/components/schemas/UpdateLiteratureAcquisitionThrottleSettings'
             crossref:
+              $ref: '#/components/schemas/UpdateLiteratureAcquisitionThrottleSettings'
+            zotero:
               $ref: '#/components/schemas/UpdateLiteratureAcquisitionThrottleSettings'
             unpaywall:
               $ref: '#/components/schemas/UpdateLiteratureAcquisitionThrottleSettings'

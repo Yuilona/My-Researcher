@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const DEFAULT_MIN_RECALL_AT_5 = 0.75;
+const DEFAULT_MIN_MRR_AT_5 = 0.75;
+const DEFAULT_MIN_NDCG_AT_5 = 0.75;
 const DEFAULT_MAX_WARNING_RATE = 0.25;
 
 function parseArgs(argv) {
@@ -11,6 +13,8 @@ function parseArgs(argv) {
     audit: null,
     mode: 'current-scope',
     minRecallAt5: DEFAULT_MIN_RECALL_AT_5,
+    minMrrAt5: DEFAULT_MIN_MRR_AT_5,
+    minNdcgAt5: DEFAULT_MIN_NDCG_AT_5,
     maxWarningRate: DEFAULT_MAX_WARNING_RATE,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -27,6 +31,12 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg === '--min-recall-at-5' && next) {
       args.minRecallAt5 = Number(next);
+      index += 1;
+    } else if (arg === '--min-mrr-at-5' && next) {
+      args.minMrrAt5 = Number(next);
+      index += 1;
+    } else if (arg === '--min-ndcg-at-5' && next) {
+      args.minNdcgAt5 = Number(next);
       index += 1;
     } else if (arg === '--max-warning-rate' && next) {
       args.maxWarningRate = Number(next);
@@ -52,6 +62,8 @@ function printHelp() {
     'Options:',
     '  --mode <current-scope|broad-cutover>  Default: current-scope',
     '  --min-recall-at-5 <number>            Default: 0.75',
+    '  --min-mrr-at-5 <number>               Default: 0.75',
+    '  --min-ndcg-at-5 <number>              Default: 0.75',
     '  --max-warning-rate <number>           Default: 0.25',
   ].join('\n'));
 }
@@ -104,6 +116,15 @@ function evaluateCutover(report, audit, args) {
   if (readNumber(metrics.recall_at_5) < args.minRecallAt5) {
     blockers.push(`recall@5 ${readNumber(metrics.recall_at_5)} is below ${args.minRecallAt5}`);
   }
+  if (readNumber(metrics.positive_query_count) > 0 && readNumber(metrics.mrr_at_5) < args.minMrrAt5) {
+    blockers.push(`mrr@5 ${readNumber(metrics.mrr_at_5)} is below ${args.minMrrAt5}`);
+  }
+  if (readNumber(metrics.positive_query_count) > 0 && readNumber(metrics.ndcg_at_5) < args.minNdcgAt5) {
+    blockers.push(`ndcg@5 ${readNumber(metrics.ndcg_at_5)} is below ${args.minNdcgAt5}`);
+  }
+  if (readNumber(metrics.blind_query_count) > 0 && readNumber(metrics.blind_recall_at_5) < args.minRecallAt5) {
+    blockers.push(`blind recall@5 ${readNumber(metrics.blind_recall_at_5)} is below ${args.minRecallAt5}`);
+  }
   if (readNumber(metrics.negative_query_success_count) < readNumber(metrics.negative_query_count)) {
     blockers.push('not every negative retrieval query excluded the expected gated sample');
   }
@@ -112,6 +133,9 @@ function evaluateCutover(report, audit, args) {
   }
   if (readNumber(metrics.degraded_retrieval_count) > 0) {
     blockers.push('retrieval used degraded mode for at least one query');
+  }
+  if (readNumber(metrics.top5_duplicate_work_count) > 0) {
+    blockers.push('retrieval top5 contains duplicate work hits');
   }
 
   if (audit) {
@@ -143,6 +167,11 @@ function evaluateCutover(report, audit, args) {
       positive_query_count: readNumber(metrics.positive_query_count),
       negative_query_count: readNumber(metrics.negative_query_count),
       recall_at_5: readNumber(metrics.recall_at_5),
+      mrr_at_5: readNumber(metrics.mrr_at_5),
+      ndcg_at_5: readNumber(metrics.ndcg_at_5),
+      blind_query_count: readNumber(metrics.blind_query_count),
+      blind_recall_at_5: readNumber(metrics.blind_recall_at_5),
+      top5_duplicate_work_count: readNumber(metrics.top5_duplicate_work_count),
       key_content_warning_rate: readNumber(metrics.key_content_warning_rate),
       degraded_retrieval_count: readNumber(metrics.degraded_retrieval_count),
     },

@@ -2,7 +2,7 @@
   "fixture_id": "t041-evaluator-v2",
   "version": 1,
   "description": "Formal evaluator fixture metadata for T-041 cutover evidence. Reports may use a subset during smoke runs, but broad cutover requires all declared source groups and query sets.",
-  "required_query_sets": ["baseline", "holdout", "paraphrase", "adversarial"],
+  "required_query_sets": ["baseline", "holdout", "paraphrase", "adversarial", "blind"],
   "required_source_groups": ["arxiv", "doi_unpaywall", "explicit_pdf", "parser_edge", "rights_gated"],
   "samples": [
     {
@@ -218,6 +218,12 @@
     { "id": "q29", "expected": "doi-unpaywall-quantum-supremacy", "query_set": "blind", "query": "random circuit sampling on superconducting quantum processor beyond classical simulation" },
     { "id": "q30", "expected": "doi-unpaywall-git-github", "query_set": "blind", "query": "research workflow tracks commits branches remotes for reproducible collaboration" },
     { "id": "q31", "expected": "doi-unpaywall-financial-deep-learning", "query_set": "blind", "query": "forecast noisy market sequences with stacked autoencoder representations and LSTM temporal model" },
-    { "id": "q32", "expected": "explicit-pdf", "query_set": "blind", "query": "image classification using transformer encoder over fixed size visual patches" }
+    { "id": "q32", "expected": "explicit-pdf", "query_set": "blind", "query": "image classification using transformer encoder over fixed size visual patches" },
+    { "id": "q33", "expected": "doi-unpaywall-alphafold", "query_set": "blind", "query": "deep network predicts atomic coordinates for proteins from evolutionary sequence alignments" },
+    { "id": "q34", "expected": "doi-unpaywall-quantum-supremacy", "query_set": "blind", "query": "superconducting Sycamore processor performs random quantum circuit sampling task" },
+    { "id": "q35", "expected": "doi-unpaywall-git-github", "query_set": "blind", "query": "collaborative reproducible research workflow using repositories commits branching and remotes" },
+    { "id": "q36", "expected": "doi-unpaywall-oa", "query_set": "paraphrase", "query": "making detailed datasets publicly available correlates with higher article citation impact" },
+    { "id": "q37", "expected": "explicit-pdf", "query_set": "adversarial", "query": "visual recognition transformer using patch embeddings rather than convolutional residual shortcuts" },
+    { "id": "q38", "expected": "doi-unpaywall-financial-deep-learning", "query_set": "adversarial", "query": "market forecasting sequence model with LSTM not reinforcement learning from game pixels" }
   ]
 }

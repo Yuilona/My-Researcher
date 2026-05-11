@@ -1,7 +1,7 @@
 # API Index
 
-> Auto-generated at 2026-05-10T23:31:29.454Z — do NOT hand-edit.
-> Source: `docs/context/api/openapi.yaml` (SHA-256: `d48e72073a0a...`)
+> Auto-generated at 2026-05-11T00:08:26.284Z — do NOT hand-edit.
+> Source: `docs/context/api/openapi.yaml` (SHA-256: `b1be3ed03930...`)
 
 Total endpoints: **98**
 

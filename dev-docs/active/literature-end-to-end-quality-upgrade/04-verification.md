@@ -1031,3 +1031,76 @@
   - Rejected/split clusters now reject accepted or pending member decisions.
   - Empty `member_decisions` arrays are rejected by request schema.
   - Consumption scope is derived from completed review state, not status alone.
+
+## 2026-05-11 - Cutover Ops, Auto-Pull Pacing, Raw PDF Lifecycle, Retrieval Fixture Expansion
+
+- Scope:
+  - Implemented the selected high-value points 1, 2, 3, and 5: cutover operations, auto-pull source pacing, raw PDF lifecycle, and retrieval evaluator generalization.
+  - No Prisma migration was needed; auto-pull reuses `LiteratureSourceRuntimeState` and settings remain in `ApplicationSetting` JSON.
+- Deterministic verification:
+  - `pnpm --filter @paper-engineering-assistant/shared typecheck`: PASS.
+  - `pnpm --filter @paper-engineering-assistant/backend typecheck`: PASS.
+  - `pnpm --filter @paper-engineering-assistant/desktop typecheck`: PASS.
+  - `pnpm --filter @paper-engineering-assistant/shared test`: PASS, `19/19`.
+  - `node --loader ts-node/esm src/services/auto-pull-service.unit.test.ts`: PASS, `24/24`.
+  - `node --loader ts-node/esm src/routes/auto-pull-routes.integration.test.ts`: PASS, `6/6`.
+  - `node --loader ts-node/esm src/routes/research-lifecycle-routes.integration.test.ts`: PASS, `21/21`.
+  - `node .ai/scripts/ctl-openapi-quality.mjs verify --source docs/context/api/openapi.yaml --strict`: PASS.
+  - `node .ai/scripts/ctl-api-index.mjs generate --touch`: PASS, refreshed API index/context registry timestamps.
+  - `node .ai/scripts/ctl-api-index.mjs verify --strict`: PASS.
+  - `node .ai/skills/features/context-awareness/scripts/ctl-context.mjs verify --strict`: PASS.
+- Script smoke:
+  - `node .ai/scripts/literature-raw-pdf-lifecycle.mjs --mode dry-run ...`: PASS against a temporary duplicate-PDF fixture; planned one stale-duplicate quarantine action.
+  - `node .ai/scripts/literature-raw-pdf-lifecycle.mjs --mode apply --confirm-apply ...`: PASS against a temporary duplicate-PDF fixture; moved only the stale duplicate into quarantine.
+  - `node .ai/scripts/literature-e2e-cutover-ops.mjs --operation preflight ...`: PASS against a synthetic report/audit/CI evidence fixture.
+  - `node .ai/scripts/literature-e2e-cutover-gate.mjs --mode broad-cutover ...`: PASS against a synthetic report/audit fixture with recall/MRR/nDCG/blind recall all at `1.0`.
+  - `node .ai/scripts/literature-e2e-report-audit.mjs --report ... --fixture ...`: completed successfully and emitted WARN, as expected for a synthetic report missing full storage/cost evidence.
+- Known verification note:
+  - `pnpm --filter @paper-engineering-assistant/backend test -- <file>` was tried, but the repository runner expands to the full backend suite rather than only the requested file. Two overlapping full-suite runs were terminated after exposing the auto-pull retry cooldown issue; targeted direct `node --loader ts-node/esm ...` checks above are the recorded deterministic evidence for this pass.
+
+## 2026-05-11 - Final Lightweight/Full E2E And Cleanup Before Commit
+
+- Lightweight real E2E:
+  - Run: `20260511T002822Z-t041-light-final`.
+  - Temporary Postgres schema: `lit_light_20260511_002822`; created, pushed with Prisma, and dropped after the run.
+  - Raw PDF root: `/Volumes/DataDisk/Paper/Auto/20260511T002822Z-t041-light-final`.
+  - Status: `PASS`; current-scope gate `PASS`.
+  - Download success: `3/3`; parser success: `3/3`; key-content success: `3/3`; indexed success: `3/3`.
+  - Recall@5: `9/9` (`1.0000`); MRR@5 `1.0000`; nDCG@5 `1.0000`.
+  - Key-content warning rate: `0`; external key-content calls: `0`; estimated embedding cost: `$0.00639847`.
+  - Report: `.ai/.tmp/literature-e2e/20260511T002822Z-t041-light-final/report.json`.
+  - Audit: `.ai/.tmp/literature-e2e/20260511T002822Z-t041-light-final/report-audit.json`; status `WARN` only because light mode does not cover broad-cutover query/source coverage.
+- Full real E2E:
+  - Run: `20260511T002948Z-t041-full-final`.
+  - Temporary Postgres schema: `lit_full_20260511_002948`; created, pushed with Prisma, and dropped after the run.
+  - Raw PDF root: `/Volumes/DataDisk/Paper/Auto/20260511T002948Z-t041-full-final`.
+  - Status: `PASS`; broad-cutover gate `PASS`; cutover preflight with CI/mock evidence `PASS`.
+  - Samples: `18` total, `16` processable fulltext samples, `2` expected blockers.
+  - Download success: `16/16`; parser success: `16/16`; key-content success: `16/16`; indexed success: `16/16`.
+  - Retrieval: `38` queries, `37/37` positive recall@5, `1/1` negative rights-gated exclusion, `9/9` blind recall@5, degraded retrieval `0`, duplicate-work top5 hits `0`.
+  - Ranking metrics: recall@5 `1.0000`, MRR@5 `0.9347`, nDCG@5 `0.9511`.
+  - Key-content warning rate: `0`; external key-content calls: `0`; estimated embedding cost: `$0.03082183`.
+  - Report: `.ai/.tmp/literature-e2e/20260511T002948Z-t041-full-final/report.json`.
+  - Audit: `.ai/.tmp/literature-e2e/20260511T002948Z-t041-full-final/report-audit.json`; status `PASS` with one informational local-PDF retention finding.
+  - Cutover preflight: `.ai/.tmp/literature-e2e/20260511T002948Z-t041-full-final/cutover-preflight.json`.
+- Cleanup and code-review fixes:
+  - Removed old ignored `.ai/.tmp/literature-e2e/**/decrypt-openai-and-run*.mjs` helper scripts; no temporary Postgres schemas or `/tmp/read-openai-key*` files remain.
+  - Fixed `AutoPullService` optional dependency constructor typing so legacy two-argument construction remains semantically clean.
+  - Aligned `.ai/scripts/literature-e2e-cutover-ops.mjs` with the cutover gate by enforcing MRR@5 and nDCG@5 thresholds.
+- Deterministic verification after cleanup:
+  - `pnpm --filter @paper-engineering-assistant/shared typecheck`: PASS.
+  - `pnpm --filter @paper-engineering-assistant/backend typecheck`: PASS.
+  - `pnpm --filter @paper-engineering-assistant/desktop typecheck`: PASS.
+  - `pnpm --filter @paper-engineering-assistant/shared test`: PASS, `19/19`.
+  - `pnpm --filter @paper-engineering-assistant/backend exec node --loader ts-node/esm src/services/auto-pull-service.unit.test.ts`: PASS, `24/24`.
+  - `pnpm --filter @paper-engineering-assistant/backend exec node --loader ts-node/esm src/routes/auto-pull-routes.integration.test.ts`: PASS, `6/6`.
+  - `pnpm --filter @paper-engineering-assistant/backend exec node --loader ts-node/esm src/routes/research-lifecycle-routes.integration.test.ts`: PASS, `21/21`.
+  - `node --check .ai/scripts/literature-e2e-cutover-ops.mjs`: PASS.
+  - `node --check .ai/scripts/literature-raw-pdf-lifecycle.mjs`: PASS.
+  - `node --check .ai/scripts/literature-e2e-cutover-gate.mjs`: PASS.
+  - `node --check .ai/scripts/literature-e2e-report-audit.mjs`: PASS.
+  - `node .ai/scripts/ctl-openapi-quality.mjs verify --source docs/context/api/openapi.yaml --strict`: PASS.
+  - `node .ai/scripts/ctl-api-index.mjs generate --touch`: PASS.
+  - `node .ai/scripts/ctl-api-index.mjs verify --strict`: PASS.
+  - `node .ai/skills/features/context-awareness/scripts/ctl-context.mjs verify --strict`: PASS.
+  - `git diff --check`: PASS.

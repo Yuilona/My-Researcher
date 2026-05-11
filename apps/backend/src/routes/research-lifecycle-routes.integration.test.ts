@@ -303,6 +303,7 @@ test('literature acquisition settings routes persist OA and downloader settings'
   assert.equal(initialBody.unpaywall.enabled, false);
   assert.equal(initialBody.downloader.require_pdf_signature, true);
   assert.equal(initialBody.source_throttle.arxiv.min_interval_ms, 3000);
+  assert.equal(initialBody.source_throttle.zotero.concurrency, 1);
   assert.equal(initialBody.quality_scorer.provider, 'openai');
 
   const patchRes = await app.inject({

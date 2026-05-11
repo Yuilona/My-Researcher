@@ -106,12 +106,24 @@ flowchart LR
 - The evaluator-v2 fixture under `artifacts/evaluator/` is the reusable sample/query dossier for the next formal run; reports that omit fixture samples or queries should remain audit warnings.
 - `.ai/scripts/literature-e2e-v2-runner.mjs` is the durable runner for that fixture. It supports `light`, `current-arxiv`, `v2-smoke`, and `full` modes so smoke runs and broad-cutover runs share one report shape.
 - Formal reports should carry query-set labels: `baseline`, `holdout`, `paraphrase`, and `adversarial`.
+- Broad-cutover reports should also carry `blind` query-set labels; blind recall@5 is a gate when blind queries are present.
 - Formal reports should include DOI/Unpaywall samples, parser-edge or `OCR_REQUIRED` samples, and rights-gated/no-OA samples before source acquisition quality is considered broadly covered.
 - Per-literature timing and LLM token/cost telemetry are required for budget decisions. Missing telemetry is an audit warning even when the functional chain passes.
 - Cutover gates are mode-specific: `current-scope` may pass with audit warnings documented; `broad-cutover` requires the functional report to pass and the report audit to have zero warnings/errors.
+- Cutover operations are artifact-driven:
+  - `preflight` checks report/audit quality and can warn when CI/mock evidence is missing.
+  - `cutover` requires the latest run id to be confirmed and requires attached CI/mock evidence.
+  - `rollback` produces a conservative operator plan without mutating product data.
 - Embedding and retrieval query embedding telemetry are emitted through the backend LLM gateway surfaces so the formal evaluator can attribute request count, retry count, token count, elapsed time, and estimated embedding cost by phase.
 - Reports distinguish `sample_count` from `processable_sample_count`; rights-gated and OCR-required fixtures are expected blockers rather than failed indexed samples.
 - Local real E2E raw PDFs are stored outside the repo under `/Volumes/DataDisk/Paper/Auto/<run-id>`; normalized text, artifacts, indexes, reports, and audit files remain under `.ai/.tmp/literature-e2e/<run-id>/`.
+- Raw PDF lifecycle cleanup is non-destructive by default. The local lifecycle script can quarantine stale duplicate PDFs only when another checksum-identical copy remains retained and protected paths from active manifests are excluded from actions.
+
+## Auto-Pull Source Runtime Policy
+- Auto-pull collection source fetches use the same source runtime state table as fulltext acquisition so source health does not split into two incompatible cooldown models.
+- Source throttle settings now cover `arxiv`, `crossref`, `zotero`, `unpaywall`, and `download`.
+- Crossref/arXiv/Zotero source fetches record request/success/failure state before importing or scoring candidates.
+- Retryable source failures (`SOURCE_RATE_LIMIT`, transient `SOURCE_UNREACHABLE`) can enter cooldown; invalid source config and other client-side `AppError` failures stay non-retryable so retry jobs do not sleep behind a false cooldown.
 
 ## Possible DB Changes
 - Source cooldown/rate-limit state has additive persistence in `LiteratureSourceRuntimeState`.

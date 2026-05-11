@@ -28,7 +28,7 @@ const STOP_WORDS = new Set([
   'with',
 ]);
 
-const REQUIRED_QUERY_SETS = ['baseline', 'holdout', 'paraphrase', 'adversarial'];
+const DEFAULT_REQUIRED_QUERY_SETS = ['baseline', 'holdout', 'paraphrase', 'adversarial'];
 
 function parseArgs(argv) {
   const args = {
@@ -129,8 +129,12 @@ function auditQueries(report, fixture, findings) {
   const fixtureQueryById = new Map(fixtureQueries.map((query) => [readString(query.id), query]));
   const retrievalResults = Array.isArray(report.retrieval_results) ? report.retrieval_results : [];
   const sampleByKey = buildMergedSampleMap(report, fixture);
+  const requiredQuerySets = readStringArray(fixture.required_query_sets);
+  const expectedQuerySets = requiredQuerySets.length > 0 ? requiredQuerySets : DEFAULT_REQUIRED_QUERY_SETS;
   const querySets = new Map();
   let unclassifiedCount = 0;
+  let blindCount = 0;
+  let blindHitCount = 0;
   let highLexicalLeakageCount = 0;
   const rows = queries.map((query) => {
     const fixtureQuery = fixtureQueryById.get(readString(query.id)) ?? {};
@@ -139,6 +143,7 @@ function auditQueries(report, fixture, findings) {
       || readString(fixtureQuery.query_set)
       || readString(fixtureQuery.set)
       || 'unclassified';
+    querySets.set(querySet, (querySets.get(querySet) ?? 0) + 1);
     if (querySet === 'unclassified') {
       unclassifiedCount += 1;
     }
@@ -152,6 +157,12 @@ function auditQueries(report, fixture, findings) {
       highLexicalLeakageCount += 1;
     }
     const retrieval = retrievalResults.find((item) => item.id === query.id);
+    if (querySet === 'blind') {
+      blindCount += 1;
+      if (Boolean(retrieval?.hit_at_5)) {
+        blindHitCount += 1;
+      }
+    }
     return {
       id: readString(query.id),
       expected: readString(query.expected),
@@ -162,7 +173,7 @@ function auditQueries(report, fixture, findings) {
     };
   });
 
-  const missingQuerySets = REQUIRED_QUERY_SETS.filter((set) => !querySets.has(set));
+  const missingQuerySets = expectedQuerySets.filter((set) => !querySets.has(set));
   const missingFixtureQueryIds = fixtureQueries
     .map((query) => readString(query.id))
     .filter(Boolean)
@@ -198,6 +209,9 @@ function auditQueries(report, fixture, findings) {
     query_count: queries.length,
     query_set_counts: Object.fromEntries([...querySets.entries()].sort()),
     unclassified_count: unclassifiedCount,
+    blind_query_count: blindCount,
+    blind_hit_at_5_count: blindHitCount,
+    blind_recall_at_5: blindCount > 0 ? blindHitCount / blindCount : null,
     high_lexical_leakage_count: highLexicalLeakageCount,
     fixture_query_count: fixtureQueries.length,
     missing_fixture_query_count: missingFixtureQueryIds.length,
@@ -817,6 +831,8 @@ function renderMarkdown(audit) {
     `- query_count: \`${audit.query_audit.query_count}\``,
     `- query_set_counts: \`${JSON.stringify(audit.query_audit.query_set_counts)}\``,
     `- unclassified_count: \`${audit.query_audit.unclassified_count}\``,
+    `- blind_query_count: \`${audit.query_audit.blind_query_count}\``,
+    `- blind_recall@5: \`${metric(audit.query_audit.blind_recall_at_5 ?? 'n/a')}\``,
     `- high_lexical_leakage_count: \`${audit.query_audit.high_lexical_leakage_count}\``,
     '',
     '## Sample Audit',
@@ -859,6 +875,12 @@ function renderMarkdown(audit) {
 
 function readString(value) {
   return typeof value === 'string' ? value : '';
+}
+
+function readStringArray(value) {
+  return Array.isArray(value)
+    ? value.map(readString).filter(Boolean)
+    : [];
 }
 
 function readNumber(value) {

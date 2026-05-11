@@ -484,6 +484,10 @@ export interface LiteratureAcquisitionSettingsDTO {
       min_interval_ms: number;
       concurrency: number;
     };
+    zotero: {
+      min_interval_ms: number;
+      concurrency: number;
+    };
     unpaywall: {
       min_interval_ms: number;
       concurrency: number;
@@ -563,6 +567,10 @@ export interface UpdateLiteratureAcquisitionSettingsRequest {
       concurrency?: number;
     };
     crossref?: {
+      min_interval_ms?: number;
+      concurrency?: number;
+    };
+    zotero?: {
       min_interval_ms?: number;
       concurrency?: number;
     };
@@ -1863,6 +1871,7 @@ export const updateLiteratureAcquisitionSettingsRequestSchema = {
       properties: {
         arxiv: literatureAcquisitionThrottleSchema,
         crossref: literatureAcquisitionThrottleSchema,
+        zotero: literatureAcquisitionThrottleSchema,
         unpaywall: literatureAcquisitionThrottleSchema,
         download: literatureAcquisitionThrottleSchema,
       },

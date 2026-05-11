@@ -4,7 +4,7 @@
 - State: in-progress
 - Parent: `T-030 literature-content-processing-landing-roadmap`
 - Related: `T-011 literature-management-flow`, `T-029 literature-collection-content-processing-boundary`, `T-037 literature-backfill-operations-workbench`, `T-040 literature-content-processing-closure-fixes`
-- Next step: proceed with Batch 5 cutover operations after Batch 4 cluster review consumption landed and passed backend/UI/API verification.
+- Next step: review the pushed Batch 5/6/7/8 closure commit and decide whether to proceed with a default cutover artifact or hold for additional production-like soak runs.
 
 ## Goal
 - Upgrade the literature module from "functionally complete" to "reliable full-chain operation" across web discovery, metadata import, fulltext acquisition, parsing, semantic extraction, chunking, embedding, indexing, retrieval, stale handling, backfill, and cutover verification.
@@ -70,3 +70,7 @@
 - [x] Batch 2 retrieval robustness adds exact-phrase lexical scoring, metadata term scoring, and evidence-level score explanations while preserving active-version and stale-index behavior.
 - [x] Batch 3 acquisition/storage observability adds fulltext source-health summaries and local raw-PDF manifest/retention audit without destructive cleanup.
 - [x] Batch 4 cluster consumption/review adds explicit review outcomes, inert candidate semantics, same-work-only retrieval dedup, and a desktop operator review surface.
+- [x] Batch 5 cutover operations now have a preflight/cutover/rollback evidence script that checks consecutive E2E reports, report audits, CI/mock evidence, recall/MRR/nDCG, blind retrieval quality, and duplicate-work retrieval guards.
+- [x] Auto-pull source fetches now reuse the shared source runtime state and acquisition source throttle settings for Crossref, arXiv, and Zotero pacing/cooldown.
+- [x] Raw PDF lifecycle management has a non-destructive dry-run/apply quarantine workflow for stale duplicate PDFs with active-manifest protection.
+- [x] Retrieval evaluator v2 requires blind query coverage and expands blind/adversarial DOI/Unpaywall and explicit-PDF queries.

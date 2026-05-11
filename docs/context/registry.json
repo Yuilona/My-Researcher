@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-10T23:31:29.485Z",
+  "updatedAt": "2026-05-11T00:08:26.315Z",
   "artifacts": [
     {
       "id": "api-openapi",
@@ -11,8 +11,8 @@
       "tags": [
         "api"
       ],
-      "checksumSha256": "d48e72073a0a289b7ddcb369fa3a383f627e5110b644d9ac5a36821c93929144",
-      "lastUpdated": "2026-05-10T23:31:29.482Z",
+      "checksumSha256": "b1be3ed039309e3c908b1b9b3014a35f0a4bc21c1ace6490b148c466b2cd1f3f",
+      "lastUpdated": "2026-05-11T00:08:26.312Z",
       "source": {
         "kind": "manual",
         "notes": "Edit the contract file; then run ctl-context touch."
@@ -29,8 +29,8 @@
         "index",
         "llm"
       ],
-      "checksumSha256": "8780910a59ce5939310d2986a6eec8045d74ddddef6fea751af5a0e01ec25f61",
-      "lastUpdated": "2026-05-10T23:31:29.483Z",
+      "checksumSha256": "473b8742d826c06a0ef067d2c4a8f867bbfd96d72590af03aee3c6e6a6f0fac9",
+      "lastUpdated": "2026-05-11T00:08:26.313Z",
       "source": {
         "kind": "command",
         "command": "node .ai/scripts/ctl-api-index.mjs generate --touch",

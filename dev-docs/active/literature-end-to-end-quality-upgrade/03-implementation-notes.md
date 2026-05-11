@@ -191,3 +191,13 @@
   - `review.retrieval_dedup_active` and `related_topic_reference` are now computed conservatively from the same completion/representative constraints, so stale or corrupted persisted rows cannot become active consumers only because status is `confirmed`.
   - Empty `member_decisions` arrays are rejected at the shared/OpenAPI schema layer instead of acting as a no-op update.
   - Removed intermediate/failed UI gate evidence directories from `.ai/.tmp/ui`, retaining only the documented final PASS evidence.
+- 2026-05-11: Batch 5/6/7/8 operations, source pacing, storage lifecycle, and evaluator expansion:
+  - Added `.ai/scripts/literature-e2e-cutover-ops.mjs` to produce preflight/cutover/rollback operation artifacts from consecutive report/audit evidence and optional CI/mock evidence; operation artifacts use the same recall/MRR/nDCG, blind-recall, degraded-retrieval, and duplicate-work gates as the cutover gate.
+  - Extended `.ai/scripts/literature-e2e-cutover-gate.mjs` to gate MRR@5, nDCG@5, blind recall@5, degraded retrieval, and duplicate-work top5 hits in addition to the existing functional and key-content quality gates.
+  - Fixed `.ai/scripts/literature-e2e-report-audit.mjs` query-set counting and made required query sets fixture-driven; evaluator-v2 now requires `blind` coverage.
+  - Added `.ai/scripts/literature-raw-pdf-lifecycle.mjs` with dry-run/apply modes. Apply only quarantines stale duplicate PDFs with a retained checksum-identical copy; protected active-manifest paths are never moved and no file is deleted.
+  - Expanded evaluator-v2 queries from 32 to 38 with additional blind/paraphrase/adversarial DOI/Unpaywall and explicit-PDF queries.
+  - Added `zotero` to acquisition `source_throttle` settings and synchronized shared contracts/OpenAPI/API index.
+  - Refactored `AutoPullService` dependency wiring to a named dependency object and passed the literature repository as the shared source-runtime store from `buildApp`.
+  - Auto-pull source fetches now use shared source runtime state and acquisition throttles for Crossref, arXiv, and Zotero. Request/success/failure state is written before candidate ranking/import so source health reflects fetch behavior rather than downstream filters.
+  - Invalid Zotero/source config remains a non-retryable client-side failure and no longer sets a cooldown; retryable source rate-limit/unreachable failures still enter cooldown.

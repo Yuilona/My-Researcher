@@ -26,6 +26,7 @@
 - Do not treat cluster candidates as merges. `candidate` clusters are review artifacts only; retrieval consumes only `confirmed` same-work clusters whose members are `accepted`.
 - Do not let cluster status outrun member decisions. `confirmed`, `rejected`, and `split` are terminal review states and must not leave pending/conflicting member decisions behind.
 - Do not let repository patch semantics diverge between in-memory and Prisma implementations. `undefined` patch fields must mean "leave unchanged"; otherwise route tests can pass/fail differently from Prisma-backed runs.
+- Do not put invalid source configuration behind source cooldown. Client-side config failures are retryable only after configuration changes, not after sleeping.
 
 ## Known Lessons From Pre-Task Testing
 - arXiv can rate-limit immediately in local test loops; source-specific pacing is required.
@@ -166,3 +167,11 @@
 - Root cause: The local OpenAI secret is encrypted by the desktop Electron app. Reading it with root-level `pnpm exec electron` failed and injected the command-error text into `OPENAI_API_KEY`, so the backend saw a non-empty but invalid key.
 - Fix/workaround: Read the local encrypted secret through `pnpm --filter @paper-engineering-assistant/desktop exec electron <script>` or provide a real `OPENAI_API_KEY` directly in the shell environment.
 - Prevention: E2E wrappers should smoke-test embeddings after secret readback and before starting a long evaluator run; non-empty key checks are not sufficient.
+
+## 2026-05-11 - Invalid Auto-Pull Config Must Not Cool Down A Source
+
+- Symptom: After source-runtime pacing was added to auto-pull, the route retry test could leave a retry run stuck in `RUNNING` because the first invalid Zotero config attempt set a 60 second `zotero` cooldown.
+- Root cause: Generic `SOURCE_UNREACHABLE` was treated as retryable without checking whether the thrown error was a client-side `AppError` such as missing Zotero `library_type`/`library_id`.
+- What was tried: The route test initially disabled source throttle and increased polling, but the retry still waited behind cooldown because the persisted runtime state was wrong.
+- Fix/workaround: Auto-pull source runtime failure recording now treats `AppError` failures with status `<500` as non-retryable. Rate-limit/transient source failures still enter cooldown; invalid config records `FAILED` without cooldown.
+- Prevention: Future source-health changes should decide retryability from both the normalized alert code and the original error class/status, not from alert code alone.

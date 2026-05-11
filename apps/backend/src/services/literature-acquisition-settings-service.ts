@@ -30,6 +30,10 @@ const DEFAULT_SETTINGS: Omit<LiteratureAcquisitionSettingsDTO, 'updated_at'> = {
       min_interval_ms: 350,
       concurrency: 3,
     },
+    zotero: {
+      min_interval_ms: 1_000,
+      concurrency: 1,
+    },
     unpaywall: {
       min_interval_ms: 250,
       concurrency: 2,
@@ -89,6 +93,7 @@ export class LiteratureAcquisitionSettingsService {
       source_throttle: {
         arxiv: this.mergeThrottle(current.source_throttle.arxiv, patch.source_throttle?.arxiv),
         crossref: this.mergeThrottle(current.source_throttle.crossref, patch.source_throttle?.crossref),
+        zotero: this.mergeThrottle(current.source_throttle.zotero, patch.source_throttle?.zotero),
         unpaywall: this.mergeThrottle(current.source_throttle.unpaywall, patch.source_throttle?.unpaywall),
         download: this.mergeThrottle(current.source_throttle.download, patch.source_throttle?.download),
       },
@@ -176,6 +181,7 @@ export class LiteratureAcquisitionSettingsService {
       source_throttle: {
         arxiv: this.readThrottle(sourceThrottle.arxiv, DEFAULT_SETTINGS.source_throttle.arxiv),
         crossref: this.readThrottle(sourceThrottle.crossref, DEFAULT_SETTINGS.source_throttle.crossref),
+        zotero: this.readThrottle(sourceThrottle.zotero, DEFAULT_SETTINGS.source_throttle.zotero),
         unpaywall: this.readThrottle(sourceThrottle.unpaywall, DEFAULT_SETTINGS.source_throttle.unpaywall),
         download: this.readThrottle(sourceThrottle.download, DEFAULT_SETTINGS.source_throttle.download),
       },

@@ -10,10 +10,12 @@ function buildService(): {
   service: AutoPullService;
   repository: InMemoryAutoPullRepository;
   literatureService: LiteratureService;
+  literatureRepository: InMemoryLiteratureRepository;
 } {
   const repository = new InMemoryAutoPullRepository();
+  const literatureRepository = new InMemoryLiteratureRepository();
   const literatureService = new LiteratureService(
-    new InMemoryLiteratureRepository(),
+    literatureRepository,
     new InMemoryResearchLifecycleRepository(),
   );
 
@@ -21,6 +23,7 @@ function buildService(): {
     service: new AutoPullService(repository, literatureService),
     repository,
     literatureService,
+    literatureRepository,
   };
 }
 
@@ -339,6 +342,126 @@ test('retry-failed-sources creates a follow-up run', async () => {
   assert.equal(retried.rule_id, rule.rule_id);
   assert.equal(retriedDone.status, 'FAILED');
   assert.equal(retriedDone.source_attempts?.[0]?.source, 'ZOTERO');
+});
+
+test('auto-pull source pacing records source runtime success in shared runtime state', async () => {
+  const repository = new InMemoryAutoPullRepository();
+  const literatureRepository = new InMemoryLiteratureRepository();
+  const literatureService = new LiteratureService(
+    literatureRepository,
+    new InMemoryResearchLifecycleRepository(),
+  );
+  const service = new AutoPullService(repository, literatureService, {
+    sourceRuntimeStore: literatureRepository,
+    acquisitionSettingsService: {
+      resolveSourceThrottle: async () => ({ min_interval_ms: 0, concurrency: 1 }),
+    } as never,
+  });
+
+  await withEnv({
+    AUTO_PULL_LLM_SCORER_URL: 'https://mock-llm.local/score',
+    AUTO_PULL_LLM_SCORER_MODEL: 'mock-quality-model',
+  }, async () => {
+    await withMockedFetch((async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      if (url.startsWith('https://api.crossref.org/works')) {
+        return new Response(JSON.stringify(crossrefPayload([
+          buildCrossrefItem({
+            title: 'Runtime Success Candidate',
+            doi: '10.1000/runtime-success',
+            year: 2025,
+          }),
+        ])), { status: 200 });
+      }
+      if (url === 'https://mock-llm.local/score') {
+        return new Response(JSON.stringify({ quality_score: 91 }), { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    }) as typeof fetch, async () => {
+      const rule = await service.createRule({
+        scope: 'GLOBAL',
+        name: 'runtime-success-rule',
+        sources: [{ source: 'CROSSREF', enabled: true, priority: 1 }],
+        schedules: [{ frequency: 'DAILY', hour: 9, minute: 0, timezone: 'UTC' }],
+      });
+
+      const queued = await service.triggerRuleRun(rule.rule_id, { trigger_type: 'MANUAL' });
+      const run = await waitForTerminalRun(service, queued.run_id);
+      const runtime = await literatureRepository.findSourceRuntimeState('crossref');
+      const meta = run.source_attempts?.[0]?.meta as Record<string, unknown>;
+      const sourceRuntime = meta.source_runtime as Record<string, unknown>;
+
+      assert.equal(run.status, 'SUCCESS');
+      assert.equal(runtime?.status, 'READY');
+      assert.equal(runtime?.failureCount, 0);
+      assert.equal(sourceRuntime.status, 'READY');
+      assert.equal(sourceRuntime.source, 'crossref');
+    });
+  });
+});
+
+test('auto-pull source pacing honors shared cooldown and records retryable rate limit', async () => {
+  const repository = new InMemoryAutoPullRepository();
+  const literatureRepository = new InMemoryLiteratureRepository();
+  const literatureService = new LiteratureService(
+    literatureRepository,
+    new InMemoryResearchLifecycleRepository(),
+  );
+  const slept: number[] = [];
+  const service = new AutoPullService(repository, literatureService, {
+    sourceRuntimeStore: literatureRepository,
+    acquisitionSettingsService: {
+      resolveSourceThrottle: async () => ({ min_interval_ms: 1000, concurrency: 1 }),
+    } as never,
+    sleepMs: async (milliseconds) => {
+      slept.push(milliseconds);
+    },
+  });
+  const now = new Date().toISOString();
+  await literatureRepository.upsertSourceRuntimeState({
+    id: 'runtime-crossref',
+    source: 'crossref',
+    status: 'COOLDOWN',
+    cooldownUntil: new Date(Date.now() + 60_000).toISOString(),
+    failureCount: 1,
+    lastErrorCode: 'SOURCE_RATE_LIMIT',
+    lastErrorMessage: 'Previous rate limit.',
+    lastRequestAt: now,
+    lastSuccessAt: null,
+    lastFailureAt: now,
+    metadata: {},
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await withMockedFetch((async (input: Parameters<typeof fetch>[0]) => {
+    const url = String(input);
+    if (url.startsWith('https://api.crossref.org/works')) {
+      return new Response('rate limited', { status: 429 });
+    }
+    return new Response('not found', { status: 404 });
+  }) as typeof fetch, async () => {
+    const rule = await service.createRule({
+      scope: 'GLOBAL',
+      name: 'runtime-rate-limit-rule',
+      sources: [{ source: 'CROSSREF', enabled: true, priority: 1 }],
+      schedules: [{ frequency: 'DAILY', hour: 9, minute: 0, timezone: 'UTC' }],
+    });
+
+    const queued = await service.triggerRuleRun(rule.rule_id, { trigger_type: 'MANUAL' });
+    const run = await waitForTerminalRun(service, queued.run_id);
+    const runtime = await literatureRepository.findSourceRuntimeState('crossref');
+    const meta = run.source_attempts?.[0]?.meta as Record<string, unknown>;
+    const sourceRuntime = meta.source_runtime as Record<string, unknown>;
+
+    assert.equal(run.status, 'FAILED');
+    assert.equal(run.source_attempts?.[0]?.error_code, 'SOURCE_RATE_LIMIT');
+    assert.equal(slept.length > 0, true);
+    assert.equal(runtime?.status, 'COOLDOWN');
+    assert.equal(runtime?.failureCount, 2);
+    assert.equal(runtime?.lastErrorCode, 'SOURCE_RATE_LIMIT');
+    assert.equal(sourceRuntime.status, 'COOLDOWN');
+  });
 });
 
 test('time window mode switches to incremental after cursor is present', async () => {
