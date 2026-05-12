@@ -1,0 +1,287 @@
+# 03 Implementation Notes
+
+## Initial planning notes - 2026-05-12
+- Task package created to plan `experiment-foundation-v1`.
+- User intent:
+  - 新增“实验基座”模块。
+  - UI 位置放到“文献管理”下方。
+  - 目标是管理数据、benchmark、baseline、evaluation protocol，使论文实施阶段可检索、引用、复用。
+  - 先基于 roadmap 对齐决策点，再进入实现。
+- Governance decision:
+  - This is a complex, cross-cutting task and requires dev-docs context preservation.
+  - Task id: `T-043`.
+  - Slug: `experiment-foundation-v1`.
+  - Proposed mapping: `M-001 > F-001 > R-012`.
+- Semantic decision:
+  - `experiment-foundation` is independent from `literature`.
+  - Literature can discover candidates; experiment foundation owns reusable implementation assets.
+  - Existing `research-argument.baseline_set` should not be duplicated. It should consume reusable `BaselineAsset` refs.
+
+## Decision alignment state
+- `DP-01`: UI label. [confirmed]
+- `DP-02`: storage scope. [confirmed]
+- `DP-03`: candidate promotion policy. [confirmed]
+- `DP-04`: baseline/benchmark usage and verification bar. [confirmed]
+- `DP-05`: run recipe depth. [confirmed]
+- `DP-06`: paper-project integration style. [confirmed]
+- `DP-07`: first training platform adapter. [confirmed]
+- `DP-08`: result collection contract. [confirmed]
+- `DP-09`: method recipe V1 scope. [confirmed]
+- `DP-10`: evaluation layer V1 scope. [confirmed]
+- `DP-11`: LLM fine-tuning support. [confirmed]
+
+## Discussion sync - 2026-05-12
+- User confirmed the four-layer capability model:
+  - reusable asset layer
+  - method recipe layer
+  - evaluation layer
+  - external execution control layer
+- User confirmed reusable fixed assets should include data, baselines, and reproduction mechanisms that can be directly referenced or used.
+- User confirmed method recipe scope should cover common training/inference strategies, optimizers, experiment hypotheses, model structures, and other tunable implementation choices.
+- User confirmed evaluation scope should cover metrics and test protocols.
+- User confirmed training may involve LLM fine-tuning.
+- User confirmed the execution-engineering boundary:
+  - The project should not build its own training platform.
+  - Existing training platforms or infrastructure should execute training/inference jobs.
+  - `experiment-foundation` should provide a fixed control pipeline for task creation, process monitoring, result collection, and evidence conversion.
+- Architecture decision:
+  - Treat `experiment-foundation` as the control plane.
+  - Treat external training platforms as the compute/runtime plane.
+  - Use adapter contracts to keep platform details out of core domain contracts.
+- Fixed pipeline now recorded:
+  - `Resolve`
+  - `Validate`
+  - `Mirror`
+  - `Materialize`
+  - `Submit`
+  - `Monitor`
+  - `Collect`
+  - `Validate Result`
+- New proposed objects:
+  - `BaseModelAsset`
+  - `FineTuningDatasetAsset`
+  - `TrainingStrategy`
+  - `InferenceStrategy`
+  - `OptimizerPreset`
+  - `ArchitectureTemplate`
+  - `ExperimentHypothesis`
+  - `HyperparameterSpace`
+  - `AblationPlan`
+  - `FineTuningStrategy`
+  - `MetricDefinition`
+  - `TestSuite`
+  - `StatisticalProtocol`
+  - `ReportingProtocol`
+  - `ComparisonPolicy`
+  - `ExecutionPlatform`
+  - `TrainingTaskSpec`
+  - `FineTuningTaskSpec`
+  - `ExternalTrainingJob`
+  - `ExperimentResult`
+  - `FineTuningResult`
+  - `EvidenceCandidate`
+
+## UI label decision sync - 2026-05-12
+- User confirmed `DP-01`.
+- Decision:
+  - Desktop user-facing UI label is `实验基座`.
+  - UI entry should be placed below “文献管理”.
+  - Canonical backend/shared domain remains `experiment-foundation`.
+  - UI placement does not make the module a `literature` submodule.
+
+## Storage decision sync - 2026-05-12
+- User accepted the storage solution for `DP-02`.
+- Decision:
+  - Local experiment registry is canonical.
+  - Local file refs are first-class dataset locations.
+  - Cloud locations such as Aliyun OSS / PAI Dataset are optional execution mirrors.
+  - Raw data must not be stored in git or database blobs.
+  - Cloud mirrors must not overwrite local canonical metadata without review.
+- New proposed storage objects:
+  - `DatasetVersion`
+  - `DatasetLocation`
+  - `DatasetMirror`
+  - `ChecksumManifest`
+  - `SplitProtocol`
+  - `DataProcessingRecipe`
+  - `DataPolicy`
+- Aliyun implication:
+  - `AliyunPaiDlcAdapter` should consume OSS / PAI Dataset refs from `DatasetMirror`.
+  - Before submit, the control pipeline should validate checksum, data policy, split protocol, and mirror freshness.
+  - Outputs should return through OSS/platform artifacts into `ExperimentResult`, then `EvidenceCandidate`.
+
+## Adapter decision sync - 2026-05-12
+- User accepted the recommendation for `DP-07`.
+- Decision:
+  - V1 includes `LocalScriptAdapter` for local smoke and pipeline validation.
+  - V1 includes `AliyunPaiDlcAdapter` as the first real cloud execution adapter.
+  - V1 does not include `CustomHttpAdapter`.
+- Implementation implication:
+  - Core services must depend on `TrainingPlatformAdapter`.
+  - PAI-DLC private fields stay in adapter metadata.
+  - `AliyunPaiDlcAdapter` consumes `DatasetMirror` refs for OSS / PAI Dataset inputs.
+  - `LocalScriptAdapter` should not require cloud credentials.
+
+## Result collection decision sync - 2026-05-12
+- User accepted the recommendation for `DP-08`.
+- Decision:
+  - Result collection contract is fixed as metrics + artifacts + logs + config snapshot + validation report.
+- Implementation implication:
+  - `ExperimentResult` and `FineTuningResult` must carry a structured result packet, not loose file refs only.
+  - `metrics` should bind to `MetricDefinition` where possible.
+  - `config snapshot` must capture effective runtime config.
+  - `validation report` must check `EvaluationProtocol`.
+  - Evidence candidates should only be created from valid or explicitly accepted partial results.
+
+## Candidate promotion decision sync - 2026-05-12
+- User rejected making human review a default blocking gate for `DP-03`.
+- Decision:
+  - Low-risk complete candidates can be auto-promoted by deterministic checks.
+  - Manual review is reserved for high-risk, incomplete, conflicting, restricted, low-confidence, or policy-sensitive candidates.
+  - Human review should be minimized and should not block the common low-risk path.
+- Implementation implication:
+  - Candidate triage must produce explicit state and reasons.
+  - Auto-promotion requires source refs, metadata completeness, policy fields, duplicate check, and confidence/risk thresholds.
+  - Ungrounded candidates must be rejected or marked `needs_info`.
+  - Manual review state should be `manual_review_required`, not a global gate.
+
+## Baseline and benchmark decision sync - 2026-05-12
+- User accepted the `DP-04` distinction between baseline and benchmark.
+- Decision:
+  - `BaselineAsset` answers “和谁比”: reusable method/model/implementation/reproduction recipe.
+  - `BenchmarkAsset` answers “怎么比”: task, dataset/split, metrics, evaluator, reporting protocol, and comparison policy.
+  - Full benchmark reproduction is not required for baseline catalog entry.
+  - Baseline and benchmark have separate verification ladders.
+- Baseline verification ladder:
+  - `metadata_complete`
+  - `reachable`
+  - `smoke_verified`
+  - `protocol_compatible`
+  - `benchmark_verified`
+- Benchmark verification ladder:
+  - `protocol_complete`
+  - `assets_reachable`
+  - `evaluator_smoke_verified`
+  - `reproducible_protocol`
+  - `comparison_certified`
+- Default gate policy:
+  - catalog entry: baseline `metadata_complete + reachable`, benchmark `protocol_complete + assets_reachable`
+  - executable run recipe: baseline `smoke_verified`, benchmark `evaluator_smoke_verified`
+  - formal comparison: baseline `protocol_compatible`, benchmark `reproducible_protocol`
+  - paper-grade strong evidence: baseline `benchmark_verified`, benchmark `comparison_certified`, valid result packet
+
+## RunRecipe depth decision sync - 2026-05-12
+- User accepted the recommendation for `DP-05`.
+- Decision:
+  - V1 should use a materializable recipe model.
+  - Do not make `RunRecipe` a loose static config.
+  - Do not make `RunRecipe` a platform-specific executable script or adapter request body.
+  - Use three layers: `RecipeDraft -> RunRecipe -> TrainingTaskSpec`.
+- Object semantics:
+  - `RecipeDraft` is editable and may be incomplete; it is for interactive selection and planning.
+  - `RunRecipe` locks asset refs, versions, protocol hashes, method params, readiness result, and traceability refs.
+  - `RunRecipe` remains platform-neutral and deterministic from locked inputs.
+  - `TrainingTaskSpec` is materialized from a valid `RunRecipe` plus a selected `ExecutionPlatform`.
+  - Adapter-private fields such as PAI-DLC-specific request shape stay in adapter metadata.
+- Implementation implication:
+  - Readiness checks should block direct submission of `RecipeDraft`.
+  - `GenerateRunRecipeRequest` should validate that required refs, versions, params, and protocol hashes are present.
+  - `MaterializeTrainingTaskSpecRequest` should be the execution boundary, not `GenerateRunRecipeRequest`.
+
+## PaperProject integration decision sync - 2026-05-12
+- User accepted the traceability sidecar approach for `DP-06`.
+- Decision:
+  - `paper-project` consumes experiment-foundation outputs through `PaperExperimentSidecar`.
+  - V1 should not expand core `PaperProject` DTOs with full dataset/baseline/benchmark/result structures.
+  - `PaperExperimentSidecar` must preserve traceability through frozen refs, version locks, hashes, provenance refs, event log entries, and status snapshots.
+- Required trace chain:
+  - `PaperProject`
+  - `PaperExperimentSidecar`
+  - `EvidenceCandidate`
+  - `ExperimentResult` / `FineTuningResult`
+  - `ExternalTrainingJob`
+  - `TrainingTaskSpec`
+  - `RunRecipe`
+  - `DatasetVersion` / `BaselineAsset` / `BenchmarkAsset` / `EvaluationProtocol`
+  - `LiteratureRecord` / source refs
+- Implementation implication:
+  - Sidecar should record `runRecipeIds`, `experimentResultIds`, `evidenceCandidateIds`, `readinessReportIds`, `trainingTaskSpecIds`, and `externalTrainingJobIds`.
+  - Sidecar should record dataset/baseline/benchmark/protocol version locks and hashes such as `datasetProtocolHash`, `evaluationProtocolHash`, `configSnapshotHash`, and `checksumManifestHash`.
+  - Sidecar should record binding/refresh/accept/invalidated/superseded events.
+  - If a canonical asset later changes, the sidecar remains a historical binding snapshot rather than silently following the latest asset state.
+
+## Method recipe and tuning decision sync - 2026-05-12
+- User clarified `DP-09`: experiment foundation should not implement automatic hyperparameter tuning, but it must support human-in-the-loop and LLM-in-the-loop tuning linked with paper implementation.
+- Decision:
+  - V1 supports reusable method recipe records: `TrainingStrategy`, `InferenceStrategy`, `OptimizerPreset`, `HyperparameterSpace`, `AblationPlan`, and `FineTuningStrategy`.
+  - V1 supports controlled tuning workflow records: `TuningSession`, `TuningProposal`, `TuningDecision`, and `TuningTrial`.
+  - V1 does not provide automatic hyperparameter optimization, background search loops, or unattended multi-run tuning.
+  - Human/LLM-in-the-loop means proposals and analysis are recorded, decisions are auditable, and accepted changes flow through `RecipeDraft -> RunRecipe -> TrainingTaskSpec`.
+- Implementation implication:
+  - A tuning proposal may be authored by human, LLM, or system rule.
+  - Proposal records must include changed params, rationale, source/result refs, expected effect, risk, budget/resource estimate, constraints, and rollback notes.
+  - A proposal cannot submit a job directly.
+  - A `TuningDecision` must be recorded before a proposal can create/update a recipe path that reaches execution.
+  - `TuningTrial` must link the accepted decision to recipe draft, run recipe, task spec, result, and evidence candidate.
+  - Paper implementation workflow should link to tuning sessions via implementation stage refs and sidecar trace refs.
+
+## Evaluation fact-layer decision sync - 2026-05-12
+- User clarified `DP-10`: evaluation must preserve enough structured data to support later paper tables and implementation decisions, but does not need a complete leaderboard.
+- Decision:
+  - V1 includes `MetricDefinition`, `EvaluationProtocol`, `ComparisonPolicy`, and `ResultValidationReport` for validity/comparability.
+  - V1 also includes a structured fact layer: `EvaluationFact`, `MetricObservation`, `ComparisonObservation`, `ImplementationDecisionSignal`, and `PaperTableFactSet`.
+  - Evaluation facts support later paper table generation and implementation judgement.
+  - V1 does not implement a full leaderboard, ranking service, or final paper-table renderer.
+- Implementation implication:
+  - Metric observations should include result refs, recipe refs, asset/protocol versions, metric id, split/subset, seed/repeat, value, unit/direction, validation status, and provenance.
+  - Comparison observations should include subject/baseline refs, deltas, statistical protocol output where available, fairness status, and interpretation tags.
+  - Implementation decision signals should support `continue`, `adjust`, `rerun`, `abandon`, and `needs_more_data`, each with source facts and rationale.
+  - Paper table fact sets should group eligible facts and expose missing-cell warnings, not render final manuscript tables.
+  - Evaluation facts remain evidence inputs and must not bypass claim-evidence review.
+
+## LLM fine-tuning sync - 2026-05-12
+- Decision:
+  - LLM fine-tuning is a first-class scenario in experiment foundation.
+  - It is not a separate training platform and does not imply building an LLMOps platform in this repo.
+  - It should be modeled as a specialized `TrainingTaskSpec` profile submitted through the same external platform adapter boundary.
+- Minimum V1 support:
+  - `BaseModelAsset`
+  - `FineTuningDatasetAsset`
+  - `FineTuningStrategy`
+  - `FineTuningTaskSpec`
+  - `FineTuningResult`
+  - readiness gate
+  - artifact collection for adapter/checkpoint/metrics/logs/model card
+- Out of scope for V1:
+  - automatic RLHF pipeline
+  - automatic hyperparameter search
+  - multi-node topology optimization
+  - automatic model merge/release/deployment
+  - automatic claim creation from fine-tuning result
+- `DP-11` is confirmed as specialized `TrainingTaskSpec` profile.
+
+## Deviations from plan
+- None yet.
+
+## Open implementation TODOs
+- Execute slices in order unless a later slice is explicitly split behind feature flags.
+- Start with `S1` shared contracts + schema tests.
+- In `S1`, create `packages/shared/src/research-lifecycle/experiment-foundation-contracts.ts`.
+- In `S1`, update `packages/shared/src/research-lifecycle/index.ts` and `packages/shared/package.json` exports.
+- In `S1`, add `packages/shared/src/research-lifecycle/experiment-foundation-contracts.schema.test.ts`.
+- In `S1`, do not change Prisma, backend routes, desktop UI, platform adapters, or execution logic.
+- After `S1`, proceed through `S2` persistence/repository skeleton, `S3` asset API/readiness, `S4` literature candidate flow, `S5` recipe/tuning/evaluation facts, `S6` paper sidecar bridge, `S7` LocalScript pipeline, `S8` Aliyun adapter, and `S9` desktop workbench.
+- After decisions, inspect exact desktop route/nav structure before adding UI.
+- If persistence is required, route through DB SSOT workflow before changing Prisma schema.
+- Implement adapter scope according to confirmed `DP-07`: LocalScriptAdapter + AliyunPaiDlcAdapter only.
+- Keep platform credentials as refs only; do not store secret values in task specs or docs.
+- Keep storage semantics aligned with confirmed `DP-02` before implementing dataset contracts.
+- Keep result collection semantics aligned with confirmed `DP-08` before implementing adapter result parsing.
+- Keep candidate promotion semantics aligned with confirmed `DP-03`: auto-promote low-risk, escalate only risky/incomplete cases.
+- Keep baseline/benchmark semantics aligned with confirmed `DP-04`: baseline is comparison implementation, benchmark is comparison protocol, and full benchmark is not a catalog-entry blocker.
+- Keep RunRecipe semantics aligned with confirmed `DP-05`: `RecipeDraft -> RunRecipe -> TrainingTaskSpec`, with RunRecipe locked and platform-neutral.
+- Keep PaperProject integration aligned with confirmed `DP-06`: use `PaperExperimentSidecar` frozen trace refs and do not copy reusable asset DTOs into core paper-project contracts.
+- Keep method recipe/tuning semantics aligned with confirmed `DP-09`: allow human/LLM-in-loop tuning with explicit proposals, decisions, trials, and result links, but do not build automatic hyperparameter search.
+- Keep evaluation semantics aligned with confirmed `DP-10`: structured fact layer supports paper tables and implementation decisions, but not full leaderboard or paper table rendering.
+- Keep UI naming aligned with confirmed `DP-01`: desktop label is `实验基座`; canonical domain remains `experiment-foundation`.
+- Keep project hub sync/lint current after task registration.

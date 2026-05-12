@@ -1,0 +1,211 @@
+# 04 Verification
+
+## Planned verification
+### Governance
+- `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+  - Expected: `T-043 experiment-foundation-v1` registered and derived views updated.
+- `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+  - Expected: no project governance errors.
+
+### Slice verification policy
+- Every slice `S1` through `S9` MUST append commands, expected results, and actual results to this file before handoff.
+- A later slice MUST NOT silently expand an earlier slice's non-goals; record scope changes in `03-implementation-notes.md`.
+
+### Contract and typecheck (after implementation begins)
+- `pnpm --filter @paper-engineering-assistant/shared typecheck`
+  - Expected: shared contracts compile.
+- `pnpm --filter @paper-engineering-assistant/shared test`
+  - Expected: existing schema tests and `experiment-foundation-contracts.schema.test.ts` pass.
+- `S1` negative contract tests:
+  - Expected: reject direct `RecipeDraft` execution, adapter-private fields in `RunRecipe`, tuning without decision, incomplete `PaperExperimentSidecar`, and loose metric-only facts.
+
+### Backend (after implementation begins)
+- `pnpm --filter @paper-engineering-assistant/backend typecheck`
+  - Expected: backend compiles.
+- Backend service/route tests selected after routes are created.
+  - Expected: CRUD/search/readiness/candidate promotion/run recipe paths pass.
+
+### Database (if persistence changes)
+- Use repo Prisma SSOT workflow before applying schema changes.
+- Refresh `docs/context/db/schema.json` when required by context awareness.
+
+### Desktop UI (after implementation begins)
+- Run existing desktop typecheck/test/governance commands after inspecting package scripts.
+- Verify “实验基座” appears below “文献管理”.
+- Verify no new dependency on `apps/desktop/src/renderer/styles/**`.
+
+## Verification log
+- 2026-05-12:
+  - Created initial task package files.
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+    - Result: registered `T-043 experiment-foundation-v1` and regenerated project derived views.
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed.
+- 2026-05-12:
+  - Synced discussion result: experiment foundation should not build a training platform; it should provide a fixed control-plane pipeline over external training platforms.
+  - Updated docs:
+    - `00-overview.md`
+    - `01-plan.md`
+    - `02-architecture.md`
+    - `03-implementation-notes.md`
+    - `05-pitfalls.md`
+    - `roadmap.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed after documentation updates.
+- 2026-05-12:
+  - Synced prior consensus: experiment foundation has four layers: reusable assets, method recipes, evaluation, and external execution control.
+  - Updated docs:
+    - `00-overview.md`
+    - `01-plan.md`
+    - `02-architecture.md`
+    - `03-implementation-notes.md`
+    - `roadmap.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed after consensus sync.
+- 2026-05-12:
+  - Synced discussion result: LLM fine-tuning is a first-class experiment-foundation scenario, modeled as a specialized `TrainingTaskSpec` profile submitted through external platform adapters.
+  - Updated docs:
+    - `00-overview.md`
+    - `01-plan.md`
+    - `02-architecture.md`
+    - `03-implementation-notes.md`
+    - `05-pitfalls.md`
+    - `roadmap.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed after LLM fine-tuning sync.
+- 2026-05-12:
+  - Synced confirmed `DP-02` storage decision: local canonical registry + local file refs + optional cloud execution mirror.
+  - Updated docs:
+    - `00-overview.md`
+    - `01-plan.md`
+    - `02-architecture.md`
+    - `03-implementation-notes.md`
+    - `05-pitfalls.md`
+    - `roadmap.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed after storage decision sync.
+- 2026-05-12:
+  - Synced confirmed `DP-07` adapter decision: V1 includes `LocalScriptAdapter` and `AliyunPaiDlcAdapter`; `CustomHttpAdapter` is out of V1 scope.
+  - Updated docs:
+    - `01-plan.md`
+    - `02-architecture.md`
+    - `03-implementation-notes.md`
+    - `05-pitfalls.md`
+    - `roadmap.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed after adapter decision sync.
+- 2026-05-12:
+  - Synced confirmed `DP-08` result collection contract: metrics + artifacts + logs + config snapshot + validation report.
+  - Updated docs:
+    - `01-plan.md`
+    - `02-architecture.md`
+    - `03-implementation-notes.md`
+    - `05-pitfalls.md`
+    - `roadmap.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed after result collection decision sync.
+- 2026-05-12:
+  - Synced confirmed `DP-03` candidate promotion policy: auto-promote low-risk complete candidates; manual review is escalation only, not a default blocking gate.
+  - Updated docs:
+    - `00-overview.md`
+    - `01-plan.md`
+    - `02-architecture.md`
+    - `03-implementation-notes.md`
+    - `05-pitfalls.md`
+    - `roadmap.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed after candidate promotion decision sync.
+- 2026-05-12:
+  - Synced confirmed `DP-04` baseline/benchmark usage split and tiered verification policy.
+  - Updated docs:
+    - `00-overview.md`
+    - `01-plan.md`
+    - `02-architecture.md`
+    - `03-implementation-notes.md`
+    - `05-pitfalls.md`
+    - `roadmap.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed after baseline/benchmark decision sync.
+- 2026-05-12:
+  - Synced confirmed `DP-05` RunRecipe depth decision: `RecipeDraft -> RunRecipe -> TrainingTaskSpec`, with `RunRecipe` locked and platform-neutral.
+  - Updated docs:
+    - `00-overview.md`
+    - `01-plan.md`
+    - `02-architecture.md`
+    - `03-implementation-notes.md`
+    - `05-pitfalls.md`
+    - `roadmap.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed after RunRecipe depth decision sync.
+- 2026-05-12:
+  - Synced confirmed `DP-06` PaperProject integration decision: `PaperExperimentSidecar` with frozen trace refs, no reusable asset DTO expansion in core paper-project contracts.
+  - Updated docs:
+    - `00-overview.md`
+    - `01-plan.md`
+    - `02-architecture.md`
+    - `03-implementation-notes.md`
+    - `05-pitfalls.md`
+    - `roadmap.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed after PaperProject integration decision sync.
+- 2026-05-12:
+  - Synced confirmed `DP-09` method recipe/tuning scope: reusable method recipes plus human/LLM-in-loop tuning sessions; no automatic hyperparameter optimization.
+  - Updated docs:
+    - `00-overview.md`
+    - `01-plan.md`
+    - `02-architecture.md`
+    - `03-implementation-notes.md`
+    - `05-pitfalls.md`
+    - `roadmap.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed after method recipe/tuning decision sync.
+- 2026-05-12:
+  - Synced confirmed `DP-10` evaluation fact-layer scope: structured facts support paper tables and implementation decisions; no full leaderboard.
+  - Updated docs:
+    - `00-overview.md`
+    - `01-plan.md`
+    - `02-architecture.md`
+    - `03-implementation-notes.md`
+    - `05-pitfalls.md`
+    - `roadmap.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed after evaluation fact-layer decision sync.
+- 2026-05-12:
+  - Synced confirmed `DP-01` UI label decision: desktop label is `实验基座`, placed below “文献管理”, while canonical domain remains `experiment-foundation`.
+  - Updated docs:
+    - `00-overview.md`
+    - `01-plan.md`
+    - `02-architecture.md`
+    - `03-implementation-notes.md`
+    - `roadmap.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed after UI label decision sync.
+- 2026-05-12:
+  - Synced first implementation slice `S1`: shared contracts + schema tests only.
+  - Updated docs:
+    - `00-overview.md`
+    - `01-plan.md`
+    - `03-implementation-notes.md`
+    - `04-verification.md`
+    - `05-pitfalls.md`
+    - `roadmap.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed after S1 slice sync.
+- 2026-05-12:
+  - Expanded execution plan into `S1` through `S9` slices:
+    - `S1` shared contracts + schema tests
+    - `S2` persistence + repository/service skeleton
+    - `S3` asset CRUD/search/readiness API
+    - `S4` literature-to-asset candidate flow
+    - `S5` recipe/tuning/evaluation fact services
+    - `S6` `PaperExperimentSidecar` bridge
+    - `S7` `LocalScriptAdapter` execution control pipeline
+    - `S8` Aliyun PAI-DLC adapter + cloud mirror
+    - `S9` desktop “实验基座” workbench
+  - Updated docs:
+    - `01-plan.md`
+    - `03-implementation-notes.md`
+    - `04-verification.md`
+    - `roadmap.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+    - Result: project governance lint passed after S1-S9 execution plan sync.
