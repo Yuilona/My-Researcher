@@ -51,4 +51,6 @@ Project: `main`
 | T-039 literature-citation-abstract-readiness | done | F-000 | dev-docs/active/literature-citation-abstract-readiness |
 | T-040 literature-content-processing-closure-fixes | done | F-000 | dev-docs/active/literature-content-processing-closure-fixes |
 | T-041 literature-end-to-end-quality-upgrade | in-progress | F-000 | dev-docs/active/literature-end-to-end-quality-upgrade |
+| T-042 topic-selection-decision-chain-redesign | in-progress | F-001 | dev-docs/active/topic-selection-decision-chain-redesign |
+| T-043 experiment-foundation-v1 | planned | F-001 | dev-docs/active/experiment-foundation-v1 |
 <!-- AUTO-GENERATED:END task-index -->

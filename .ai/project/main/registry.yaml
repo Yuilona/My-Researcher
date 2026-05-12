@@ -90,6 +90,11 @@ requirements:
     status: in-progress
     description: "Define and stage the pre-writing research-argument workspace, readiness state, bridge flow, control plane, and phased planner/critic enhancement between title-cards and paper-projects."
     feature_id: F-001
+  - id: R-012
+    title: "Experiment foundation reusable assets baseline"
+    status: planned
+    description: "Define and stage a reusable experiment foundation for dataset, benchmark, baseline, evaluation protocol, and run recipe assets that support implementation-stage reuse."
+    feature_id: F-001
 
 tasks:
   - id: T-001
@@ -413,3 +418,21 @@ tasks:
     feature_id: F-000
     dev_docs_path: dev-docs/active/literature-end-to-end-quality-upgrade
     updated: 2026-05-08
+  - id: T-042
+    slug: topic-selection-decision-chain-redesign
+    status: in-progress
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-decision-chain-redesign
+    updated: 2026-05-11
+  - id: T-043
+    slug: experiment-foundation-v1
+    status: planned
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-012
+    dev_docs_path: dev-docs/active/experiment-foundation-v1
+    updated: 2026-05-12

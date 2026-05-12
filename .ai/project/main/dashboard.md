@@ -8,12 +8,14 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 41 (planned: 3, in-progress: 8, blocked: 0, done: 20, archived: 10)
+- Tasks: 43 (planned: 4, in-progress: 9, blocked: 0, done: 20, archived: 10)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
+| T-043 experiment-foundation-v1 | planned | F-001 | dev-docs/active/experiment-foundation-v1 |
+| T-042 topic-selection-decision-chain-redesign | in-progress | F-001 | dev-docs/active/topic-selection-decision-chain-redesign |
 | T-040 literature-content-processing-closure-fixes | done | F-000 | dev-docs/active/literature-content-processing-closure-fixes |
 | T-041 literature-end-to-end-quality-upgrade | in-progress | F-000 | dev-docs/active/literature-end-to-end-quality-upgrade |
 | T-030 literature-content-processing-landing-roadmap | done | F-000 | dev-docs/active/literature-content-processing-landing-roadmap |
@@ -32,6 +34,4 @@ Project: `main`
 | T-025 research-argument-graph-and-state-v1 | in-progress | F-001 | dev-docs/active/research-argument-graph-and-state-v1 |
 | T-026 research-argument-titlecard-paper-bridge | planned | F-001 | dev-docs/active/research-argument-titlecard-paper-bridge |
 | T-027 research-argument-control-plane-ui-v1 | planned | F-001 | dev-docs/active/research-argument-control-plane-ui-v1 |
-| T-028 research-argument-planner-critic-v15 | planned | F-001 | dev-docs/active/research-argument-planner-critic-v15 |
-| T-021 topic-management-workbench-ui | in-progress | F-001 | dev-docs/active/topic-management-workbench-ui |
 <!-- AUTO-GENERATED:END dashboard -->

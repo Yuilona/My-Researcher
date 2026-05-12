@@ -55,6 +55,8 @@ Project: `main`
 | T-026 research-argument-titlecard-paper-bridge | planned | dev-docs/active/research-argument-titlecard-paper-bridge |
 | T-027 research-argument-control-plane-ui-v1 | planned | dev-docs/active/research-argument-control-plane-ui-v1 |
 | T-028 research-argument-planner-critic-v15 | planned | dev-docs/active/research-argument-planner-critic-v15 |
+| T-042 topic-selection-decision-chain-redesign | in-progress | dev-docs/active/topic-selection-decision-chain-redesign |
+| T-043 experiment-foundation-v1 | planned | dev-docs/active/experiment-foundation-v1 |
 
 ### F-002 Desktop Frontend Foundation
 
