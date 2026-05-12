@@ -73,6 +73,30 @@ Define domain terms used across requirements and implementation.
 - Non-examples: 每次检索临时返回结果但不持久化。
 - Notes: 去重优先级为 DOI、arXiv ID、标题规范化加作者和年份组合。
 
+### Title Card
+- Definition: 题目卡是进入 paper-project 的 canonical origin surface，承载 idea shaping、证据篮、need/question/value/package 与 promotion decision。
+- Synonyms: title-card, 题目卡。
+- Non-examples: topic profile、auto-pull rule、文献检索主题。
+- Notes: 创建 paper-project 时使用 `title_card_id`，不是 `topic_id`。
+
+### Research Argument Control Plane
+- Definition: 位于 title-card 与 paper-project 之间的写作前控制面，用结构化论证对象、readiness、decision、risk report 与 writing handoff packet 管理研究收敛。
+- Synonyms: research-argument, 研究论证控制面。
+- Non-examples: 论文文件管理器、任务看板、paper-project 持久化内部表。
+- Notes: 旧“论文管理”中关于论证控制的语义应落到该术语。
+
+### Paper Project
+- Definition: 论文项目容器，负责 paper id、生命周期、version spine、stage/release gates、artifact bundle、writing package 与 paper literature links。
+- Synonyms: paper-project, 论文项目容器。
+- Non-examples: pre-writing branch reasoning、readiness synthesis、title-card promotion decision。
+- Notes: 旧“论文管理”中关于生命周期容器的语义应落到该术语。
+
+### Paper Literature Collection
+- Definition: 某个 paper-project 下的文献链接集合，用于从 topic scope 同步候选文献并维护 seeded/selected/used/cited/dropped 等 citation status。
+- Synonyms: paper literature links, 论文文献集合。
+- Non-examples: 全局文献注册表、research-argument readiness。
+- Notes: 桌面端当前 `论文管理` 导航主要展示该视图；该 UI label 不等同于 canonical bounded context。
+
 ### Abstract-level RAG
 - Definition: 基于文献标题、摘要和结构化元数据进行检索增强生成，不直接依赖全文语料。
 - Synonyms: 摘要级检索增强。

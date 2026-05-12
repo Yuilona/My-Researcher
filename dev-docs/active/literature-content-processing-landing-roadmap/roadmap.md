@@ -152,11 +152,11 @@
   - 人工修正采用字段级 provenance 和 override policy，默认保护 `user_edited` 内容。
   - LLM 提取采用 section-level extraction + paper-level consolidation，不默认整篇一次性提取。
 - D10 retrieve profile contract:
-  - 采用统一底层索引 + 场景化 retrieve profile，不为选题、论文管理、写作分别建立三套物理索引。
+  - 采用统一底层索引 + 场景化 retrieve profile，不为选题、paper-project workflow、写作分别建立三套物理索引。
   - 底层统一维护 vector index、token/BM25 index、metadata/filter index 和 provenance store。
   - 第一版 profile：`general`、`topic_exploration`、`paper_management`、`writing_evidence`。
   - profile 控制 chunk/category/source 权重、metadata filter、hybrid weights、diversity、provenance 要求、limit 和 rerank policy。
-  - 排序公式和 rerank policy 先保持可调，后续按选题、论文管理、写作的真实需求迭代。
+  - 排序公式和 rerank policy 先保持可调，后续按选题、paper-project workflow、写作的真实需求迭代。
 - D11 trigger and stale propagation:
   - 触发范围仅限 collection 之后的 content-processing 链路；collection 完成不自动 enqueue 内容处理。
   - stale 传播只标记状态、原因和推荐动作，不自动创建 run。

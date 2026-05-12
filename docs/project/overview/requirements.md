@@ -50,6 +50,13 @@
   - `docs/project/product/research-argument-control-plane-ui.md`
 - `research-varify/` remains an intake directory only and is not the long-term SSOT for runtime, context, or shared contracts.
 
+## Canonical Terminology Boundaries
+- `title-card` owns idea shaping, evidence basket, need/question/value/package, and promotion origin identity.
+- `paper-project` owns the downstream paper lifecycle container: paper id, version spine, stage/release gates, artifact bundle, writing package, and paper literature links.
+- `research-argument` owns the pre-writing control plane: argument object graph, readiness, decision log, submission risk report, and writing handoff packet.
+- `topic_id` remains valid for literature topic scope, retrieval, topic settings, and auto-pull contexts. It is not the origin field for `POST /paper-projects`; use `title_card_id` there.
+- `论文管理` / `paper management` is a legacy product bucket or desktop navigation label. Current implementation docs must use one of the canonical names above.
+
 ## Non-goals (OUT)
 - 自动替代研究工作本身。
 - 用堆砌文本替代证据建设。
@@ -124,36 +131,41 @@ Use explicit requirement strength.
 - SHOULD: 支持检索来源白名单和时效性过滤（按主题/时间窗）。
 - SHOULD: M1 可选接入 Qdrant 作为云端向量库，M0 保持本地索引可用。
 
-## Architecture idea: sub-functions (discussion draft, not finalized)
+## Architecture model: bounded contexts
 
-1. 文献管理（待讨论）
+The original eight sub-functions remain historical requirement input. Current implementation work must use the bounded-context names below to avoid semantic drift.
+
+1. 文献管理 / literature
    - Internal: 文献注册表、去重规则、标签体系、引用状态、可追溯来源记录。
    - Integrations: arXiv/Crossref/Semantic Scholar/DBLP 检索接口，用户本地 PDF 导入。
-2. 研究方向（备选池，待讨论）
-   - Internal: 方向候选池、优先级打分（价值/可行性/风险/资源）、淘汰与保留历史。
+2. 题目卡 / title-card
+   - Internal: 方向候选、证据篮、need/question/value/package、promotion decision。
    - Integrations: 外部文献检索与趋势摘要接口（用于候选方向补充证据）。
-3. 理论框架与研究设计（待讨论）
+3. 研究论证控制面 / research-argument
+   - Internal: 论证对象图、readiness、decision log、submission risk report、writing entry packet。
+   - Integrations: LLM 辅助结构化生成与审阅接口。
+4. 理论框架与研究设计
    - Internal: 假设与边界管理、问题定义模板、机制到证据映射。
    - Integrations: LLM 辅助结构化生成与审阅接口。
-4. 实验设计（待讨论）
+5. 实验设计
    - Internal: 实验矩阵、对照与消融模板、公平对标协议、复现清单联动。
    - Integrations: 训练/评测任务编排接口（本地脚本或外部执行器）。
-5. 模型与训练（待讨论）
+6. 模型与训练
    - Internal: 训练配置版本化、运行记录、模型产物登记、失败重试与恢复。
    - Integrations: 计算资源或训练框架接口（本地优先，可选远程执行）。
-6. 数据分析与讨论（待讨论）
+7. 数据分析与讨论
    - Internal: 指标聚合、统计稳健性检查、误差分析与失败案例归档。
    - Integrations: 可视化与分析工具接口（本地分析脚本或外部分析服务）。
-7. 写作、投稿、修稿（待讨论）
+8. 写作、投稿、修稿
    - Internal: Claims-Evidence 追溯、投稿前检查、审稿意见映射与修稿任务管理。
    - Integrations: Prism/Overleaf/本地 LaTeX 工作流接口，投稿平台信息管理接口。
-8. 论文管理（待讨论）
-   - Internal: 项目生命周期、版本快照、里程碑、任务与状态追踪。
-  - Integrations: Git 工作流与同一用户多设备同步控制面。
+9. 论文项目容器 / paper-project
+   - Internal: paper id、项目生命周期、version spine、stage/release gates、artifact bundle、writing package、paper literature links。
+   - Integrations: Git 工作流、同一用户多设备同步控制面、downstream writing lane。
 
 Note:
-- The eight sub-functions above are architecture ideas for follow-up discussion.
-- Implementation boundaries (internal vs API integration) are not finalized in Stage A.
+- Do not reintroduce `论文管理` as a catch-all module in current implementation plans.
+- Use `paper-project` when referring to lifecycle container behavior, `research-argument` when referring to pre-writing readiness/control behavior, and `paper literature collection` when referring to the current desktop view.
 
 ## Data and integrations (high level)
 - Core entities: Project、Document、Section、Claim、Evidence、ClaimEvidence、Baseline、Protocol、ReproItem、Issue、Report。

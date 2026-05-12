@@ -403,7 +403,7 @@ flowchart LR
 
 ## Accepted Decision - D10 Retrieve Profile Contract
 - Indexing and retrieval should use a unified foundation with scenario-specific retrieve profiles.
-- Do not create separate physical indexes for topic exploration, paper management, and writing evidence in the first version.
+- Do not create separate physical indexes for topic exploration, paper-project workflow, and writing evidence in the first version.
 - Unified index foundation:
   - Local vector index for semantic similarity over active embedding versions.
   - Local token/BM25 index for exact terms, formulas, method names, dataset names, acronyms, and identifiers.

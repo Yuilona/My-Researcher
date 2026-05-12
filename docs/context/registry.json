@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-11T00:08:26.315Z",
+  "updatedAt": "2026-05-11T11:02:04.583Z",
   "artifacts": [
     {
       "id": "api-openapi",
@@ -47,8 +47,8 @@
         "glossary",
         "llm"
       ],
-      "checksumSha256": "0e3bbbdfaa33b37d9af5020ed5dd09e6d17fd184151be0aaf28fc298edfc699f",
-      "lastUpdated": "2026-03-31T08:43:16.538Z",
+      "checksumSha256": "ebf3747f3ea9fc4706a4da4caaafa208fbc0476068c92e47f4e17c6e8905cde5",
+      "lastUpdated": "2026-05-11T11:02:04.581Z",
       "source": {
         "kind": "manual",
         "notes": "Edit via ctl-context add-term/remove-term; then run ctl-context touch."
@@ -64,8 +64,8 @@
         "architecture",
         "llm"
       ],
-      "checksumSha256": "6cc617057c651f0bfbd1eb8e4b8e224c38d5b1bc1a302266bc5d0b0d3f120f9e",
-      "lastUpdated": "2026-02-21T05:41:41.377Z",
+      "checksumSha256": "6f58f930c724944894145fc3d9bf52fba0c5e88e90f747cd8cedc5456970a0fe",
+      "lastUpdated": "2026-05-11T11:02:04.582Z",
       "source": {
         "kind": "manual",
         "notes": "Edit the Markdown file directly; then run ctl-context touch."
@@ -153,8 +153,8 @@
         "llm",
         "research-argument"
       ],
-      "checksumSha256": "8655d811f65cd277de86a6a3a49c6a98d1211ea6eaf51a90c5c001584a6f3b92",
-      "lastUpdated": "2026-03-31T08:43:16.189Z",
+      "checksumSha256": "57334851d7a23e05020531708f15b0d67bfbb3352d7fa9b048b87ea73d140edc",
+      "lastUpdated": "2026-05-11T11:02:04.583Z",
       "source": {
         "kind": "command",
         "command": "ctl-context add-artifact",

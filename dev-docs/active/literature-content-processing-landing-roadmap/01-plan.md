@@ -31,7 +31,7 @@
 - OpenAI embedding 配置缺失时 `EMBEDDED` 必须 `BLOCKED`；retrieve 可显式降级为 lexical/token retrieval，但不得生成假向量。
 - retrieve 查询时使用 active embedding profile 生成 query vector，不同时执行 small/large 双空间查询。
 - 已对齐 retrieve 底座：统一底层索引 + 场景化 retrieve profile，先支持 `general`、`topic_exploration`、`paper_management`、`writing_evidence`。
-- profile 先作为可调契约，排序权重和 rerank policy 后续按选题、论文管理、写作实际需求迭代。
+- profile 先作为可调契约，排序权重和 rerank policy 后续按选题、paper-project workflow、写作实际需求迭代。
 - 后续实现仍需确定 token budget、overlap、chunking profile version、本地 vector index engine、ANN 参数和版本清理策略。
 
 ## Phase E - UX/API Decision

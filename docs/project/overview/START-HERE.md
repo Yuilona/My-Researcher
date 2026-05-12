@@ -4,7 +4,7 @@
 
 ## Current focus
 - 初始化流程已完成（Stage A/B/C 均已审批通过）。
-- 下一步转入产品实现阶段，继续细化 8 个子功能的实现边界。
+- 下一步转入产品实现阶段，继续细化当前 canonical bounded contexts 的实现边界。
 
 ## Current conclusions
 - 项目名称确定为“论文工程助手（Paper Engineering Assistant）”。
@@ -18,7 +18,7 @@
 - 已决策：默认本地化优先部署，首发以个人单用户为主，并与 Git 工作流深度结合。
 - 已决策：Git 集成采用方案 B（本地优先 + 安全远程），M0 聚焦安全可用边界。
 - 已决策：同一用户多设备通过云数据库控制面同步，M1 启用受控全文 RAG 并可选使用 Qdrant 向量层。
-- 架构设想：核心能力按 8 个子功能组织（文献管理、方向池、理论设计、实验设计、模型训练、数据分析、写作投稿修稿、论文管理），实现细节待讨论。
+- 术语收口：历史“8 个子功能”仍可作为需求来源，但旧“论文管理”不再作为当前 canonical 模块名；其语义已拆为 `paper-project` lifecycle、`research-argument` control plane 与桌面端 paper literature collection。
 
 ## Key inputs (keep small)
 
@@ -40,7 +40,7 @@
 | Platform rollout | M0(macOS) -> M1(Windows) -> M2(Linux) | confirmed |
 | Multi-device sync | 同一用户多设备同步（云数据库控制面 + 本地主存储） | confirmed |
 | Vector layer | M1 可选 Qdrant（仅授权可同步内容） | confirmed |
-| Core modules | 8 个子功能作为架构设想已列出，内部实现/接口边界待讨论 | tbd |
+| Core modules | 当前按 bounded context 收口：literature、title-card、research-argument、paper-project、writing/governance 等；旧“论文管理”仅作历史/导航标签 | confirmed |
 | CI strategy | M0 开启 CI（github-actions，lint/test/build） | confirmed |
 | Packaging strategy | 暂不启用，后续阶段再评估 | confirmed |
 | Timeline / deadline | 里程碑 M0-M3，先落地 MVP（M0） | tbd |

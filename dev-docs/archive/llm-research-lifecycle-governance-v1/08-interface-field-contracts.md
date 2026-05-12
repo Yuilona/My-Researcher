@@ -1,5 +1,7 @@
 # 08 Interface Field Contracts (v1 draft)
 
+> Archived supersession note (2026-05-11): this file records the historical `T-003` draft. Current `POST /paper-projects` contracts use `title_card_id` as the paper-project origin field, not the `topic_id` shown in the archived example below. Use `docs/context/api/openapi.yaml` and `packages/shared/src/research-lifecycle/paper-project-contracts.ts` for current runtime contracts.
+
 ## Purpose
 - 将治理语义落到“接口字段级”输入输出契约，作为后续 API/事件实现的统一基线。
 - 保证 M4 到 M7 的版本链路、快照冻结和 M8 消费约束在接口层可强校验。

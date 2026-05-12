@@ -1,19 +1,62 @@
 {
   "version": 1,
-  "updatedAt": "2025-01-01T00:00:00Z",
+  "updatedAt": "2026-05-11T00:00:00Z",
   "terms": [
     {
       "term": "Research Argument Control Plane",
-      "definition": "位于 title-card 与 paper-project 之间的 pre-writing 中间层，用结构化对象图、readiness、decision 与 handoff artifact 管理研究论证收敛。",
+      "definition": "位于 title-card 与 paper-project 之间的 pre-writing 中间层，用结构化对象图、readiness、decision 与 handoff artifact 管理研究论证收敛。它是旧“论文管理”粗粒度说法中关于论证控制面的当前 canonical name。",
       "scope": "research-argument",
       "aliases": [
         "research-argument",
-        "研究论证控制面"
+        "研究论证控制面",
+        "pre-writing control plane"
       ],
       "see_also": [
         "ResearchArgumentWorkspace",
         "AbstractState",
+        "WritingEntryPacket",
+        "PaperProject"
+      ]
+    },
+    {
+      "term": "PaperProject",
+      "definition": "paper-project 是 downstream paper lifecycle container，拥有论文主键、version spine、stage/release gates、artifact bundle、writing package 和 paper literature links。它不拥有 pre-writing branch reasoning 或 readiness synthesis。",
+      "scope": "research-lifecycle",
+      "aliases": [
+        "paper-project",
+        "paper project",
+        "论文项目容器"
+      ],
+      "see_also": [
+        "TitleCard",
+        "Research Argument Control Plane",
         "WritingEntryPacket"
+      ]
+    },
+    {
+      "term": "TitleCard",
+      "definition": "title-card 是 paper-project 的 canonical origin surface，拥有 idea shaping、evidence basket、need/question/value/package 和 promotion decision。创建 paper-project 时使用 title_card_id，而不是 topic_id。",
+      "scope": "title-card",
+      "aliases": [
+        "title-card",
+        "题目卡"
+      ],
+      "see_also": [
+        "PaperProject",
+        "ResearchArgumentWorkspace"
+      ]
+    },
+    {
+      "term": "Paper Management Label",
+      "definition": "“论文管理”是历史产品分组和当前桌面导航标签，不是当前实现的 canonical bounded-context name。当前设计中应明确写作 paper-project lifecycle、research-argument control plane 或 paper literature collection。",
+      "scope": "terminology",
+      "aliases": [
+        "论文管理",
+        "paper management"
+      ],
+      "see_also": [
+        "PaperProject",
+        "Research Argument Control Plane"
       ]
     },
     {

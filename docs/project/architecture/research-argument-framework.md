@@ -4,6 +4,7 @@
 - This document is the canonical framework contract for the pre-writing `Research Argument Control Plane`.
 - It defines the middle layer between `title-card` and `paper-project`.
 - It does not define runtime persistence, route paths, or planner execution logic.
+- Terminology boundary: legacy `论文管理` / `paper management` wording must be translated into either `research-argument` control-plane semantics or `paper-project` lifecycle semantics before it is used in current implementation docs.
 
 ## Owned Requirement/Journey Slice
 - Owns the canonical framing for:
