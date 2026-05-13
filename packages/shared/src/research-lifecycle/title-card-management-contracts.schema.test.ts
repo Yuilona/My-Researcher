@@ -14,6 +14,9 @@ import * as researchArgumentContracts from './research-argument-contracts.js';
 import * as researchLifecycleContracts from './index.js';
 import * as researchLifecycleCoreContracts from './research-lifecycle-core-contracts.js';
 import * as titleCardManagementContracts from './title-card-management-contracts.js';
+import * as topicSelectionControlPlaneContracts from './topic-selection-control-plane-contracts.js';
+import * as topicSelectionEvidenceMapContracts from './topic-selection-evidence-map-contracts.js';
+import * as topicSelectionSearchResourceContracts from './topic-selection-search-resource-contracts.js';
 import type {
   ReleaseGateReviewResponse,
   StageGateVerifyRequest,
@@ -50,6 +53,13 @@ const directModuleTypeSmoke:
 
 void directModuleTypeSmoke;
 
+function functionalRefForSchema(refType: string, refId: string) {
+  return {
+    ref_type: refType,
+    ref_id: refId,
+  };
+}
+
 test('title-card management schemas load', () => {
   assert.ok(createTitleCardRequestSchema);
   assert.ok(createResearchQuestionRequestSchema);
@@ -63,6 +73,86 @@ test('research-argument bridge schemas load', () => {
   assert.ok(researchArgumentContracts.promoteToPaperProjectRequestSchema);
   assert.ok(researchArgumentContracts.writingEntryPacketSchema);
   assert.ok(researchArgumentContracts.submissionRiskReportSchema);
+});
+
+test('topic-selection control-plane schemas load through direct and aggregate exports', () => {
+  assert.ok(topicSelectionControlPlaneContracts.topicSelectionContextPolicyVersionRecordSchema);
+  assert.ok(topicSelectionControlPlaneContracts.topicSelectionWorkflowProfilePolicyRecordSchema);
+  assert.ok(topicSelectionControlPlaneContracts.topicSelectionTransitionPolicyVersionRecordSchema);
+  assert.ok(topicSelectionControlPlaneContracts.topicSelectionInputSnapshotRecordSchema);
+  assert.ok(topicSelectionControlPlaneContracts.topicSelectionArtifactRefRecordSchema);
+  assert.ok(topicSelectionControlPlaneContracts.topicSelectionLlmWorkflowRunRecordSchema);
+  assert.ok(topicSelectionControlPlaneContracts.topicSelectionQualitySignalRecordSchema);
+  assert.ok(topicSelectionControlPlaneContracts.topicSelectionReadinessGateResultRecordSchema);
+  assert.ok(topicSelectionControlPlaneContracts.topicSelectionChainTransitionAttemptRecordSchema);
+  assert.ok(topicSelectionControlPlaneContracts.topicSelectionFunctionalLineageLinkRecordSchema);
+  assert.ok(topicSelectionControlPlaneContracts.topicSelectionTraceSnapshotRecordSchema);
+  assert.ok(topicSelectionControlPlaneContracts.topicSelectionHumanConfirmedDecisionRecordSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionInputSnapshotRecordSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionHumanConfirmedDecisionRecordSchema);
+});
+
+test('topic-selection search/resource schemas load through direct and aggregate exports', () => {
+  assert.ok(topicSelectionSearchResourceContracts.topicSelectionTopicSeedRecordSchema);
+  assert.ok(topicSelectionSearchResourceContracts.topicSelectionLiteratureResourcePoolSnapshotRecordSchema);
+  assert.ok(topicSelectionSearchResourceContracts.topicSelectionSearchPlanRecordSchema);
+  assert.ok(topicSelectionSearchResourceContracts.topicSelectionCoverageRowIntentRecordSchema);
+  assert.ok(topicSelectionSearchResourceContracts.topicSelectionCoverageExecutionObservationRecordSchema);
+  assert.ok(topicSelectionSearchResourceContracts.topicSelectionCoverageEvidenceBindingRecordSchema);
+  assert.ok(topicSelectionSearchResourceContracts.topicSelectionCoverageAssessmentRecordSchema);
+  assert.ok(topicSelectionSearchResourceContracts.topicSelectionCoverageRiskAcceptanceRecordSchema);
+  assert.ok(topicSelectionSearchResourceContracts.topicSelectionSearchRunRecordSchema);
+  assert.ok(topicSelectionSearchResourceContracts.topicSelectionSearchPlanRecheckRequestRecordSchema);
+  assert.ok(topicSelectionSearchResourceContracts.topicSelectionSearchPlanCoverageMatrixSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionSearchRunRecordSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionSearchPlanCoverageMatrixSchema);
+});
+
+test('topic-selection evidence-map schemas load through direct and aggregate exports', () => {
+  assert.ok(topicSelectionEvidenceMapContracts.topicSelectionEvidenceMapRecordSchema);
+  assert.ok(topicSelectionEvidenceMapContracts.topicSelectionEvidenceUnitRecordSchema);
+  assert.ok(topicSelectionEvidenceMapContracts.topicSelectionEvidenceSourceLocatorSchema);
+  assert.ok(topicSelectionEvidenceMapContracts.topicSelectionEvidenceTypedLinkRecordSchema);
+  assert.ok(topicSelectionEvidenceMapContracts.topicSelectionEvidenceClusterRecordSchema);
+  assert.ok(topicSelectionEvidenceMapContracts.topicSelectionEvidencePatternRecordSchema);
+  assert.ok(topicSelectionEvidenceMapContracts.topicSelectionEvidenceConflictSetRecordSchema);
+  assert.ok(topicSelectionEvidenceMapContracts.topicSelectionEvidenceStrengthAssessmentRecordSchema);
+  assert.ok(topicSelectionEvidenceMapContracts.topicSelectionNeedValidationEvidenceBundleSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionEvidenceMapRecordSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionEvidenceStrengthAssessmentRecordSchema);
+});
+
+test('topic-selection evidence locator schema requires source_ref provenance', async () => {
+  const app = Fastify();
+  app.post(
+    '/v',
+    { schema: { body: topicSelectionEvidenceMapContracts.topicSelectionEvidenceSourceLocatorSchema } },
+    async () => ({ ok: true }),
+  );
+  await app.ready();
+  const valid = await app.inject({
+    method: 'POST',
+    url: '/v',
+    payload: {
+      locator_type: 'abstract',
+      locator_ref: functionalRefForSchema('literature_abstract', 'lit_001'),
+      literature_ref: functionalRefForSchema('literature_record', 'lit_001'),
+      source_ref: functionalRefForSchema('literature_source', 'source_001'),
+    },
+  });
+  const invalid = await app.inject({
+    method: 'POST',
+    url: '/v',
+    payload: {
+      locator_type: 'abstract',
+      locator_ref: functionalRefForSchema('literature_abstract', 'lit_001'),
+      literature_ref: functionalRefForSchema('literature_record', 'lit_001'),
+    },
+  });
+  await app.close();
+
+  assert.equal(valid.statusCode, 200);
+  assert.equal(invalid.statusCode, 400);
 });
 
 test('validate with trivial schema', async () => {
@@ -555,6 +645,9 @@ test('research-lifecycle barrel re-exports the runtime value surface of split mo
     ...Object.keys(autoPullContracts),
     ...Object.keys(titleCardManagementContracts),
     ...Object.keys(researchArgumentContracts),
+    ...Object.keys(topicSelectionControlPlaneContracts),
+    ...Object.keys(topicSelectionSearchResourceContracts),
+    ...Object.keys(topicSelectionEvidenceMapContracts),
   ]);
 
   assert.deepEqual(Object.keys(researchLifecycleContracts).sort(), [...expectedKeys].sort());
@@ -610,6 +703,7 @@ test('research-lifecycle barrel keeps key contract helpers and schemas reachable
   assert.ok(researchLifecycleContracts.createAutoPullRuleRequestSchema);
   assert.ok(researchLifecycleContracts.createResearchQuestionRequestSchema);
   assert.ok(researchLifecycleContracts.readinessVerifyRequestSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionChainTransitionAttemptRecordSchema);
   assert.ok(researchLifecycleContracts.writingEntryPacketSchema);
   assert.ok(researchLifecycleContracts.submissionRiskReportSchema);
 });

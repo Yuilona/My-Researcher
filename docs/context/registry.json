@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-11T11:02:04.583Z",
+  "updatedAt": "2026-05-13T06:26:43.529Z",
   "artifacts": [
     {
       "id": "api-openapi",
@@ -80,8 +80,8 @@
       "tags": [
         "db"
       ],
-      "checksumSha256": "cb5e4585e369e16209aeb951069b22738d71f4a946e64538f38e38d533d98434",
-      "lastUpdated": "2026-05-10T14:04:50.139Z",
+      "checksumSha256": "8a2c829e92a27f452e50e7cd529c82833a944078ae923619a962d4269cba5132",
+      "lastUpdated": "2026-05-13T06:26:43.528Z",
       "source": {
         "kind": "command",
         "command": "node .ai/scripts/ctl-db-ssot.mjs sync-to-context",
@@ -116,8 +116,8 @@
         "llm",
         "contract"
       ],
-      "checksumSha256": "11425abfa4b740340017f6576062205f1d704601b9349c8aced4ddde5427f8c7",
-      "lastUpdated": "2026-03-25T03:29:23.711Z",
+      "checksumSha256": "78c09ce27419b9b5a7fc2120e59c8e3875df4ca6b5947814b68ccb21d99dac90",
+      "lastUpdated": "2026-05-13T01:44:04.087Z",
       "source": {
         "kind": "command",
         "command": "ctl-context add-artifact",
@@ -135,8 +135,8 @@
         "llm",
         "governance"
       ],
-      "checksumSha256": "58329ba5f22f95319a509f910d4ff243168d76f8aa3c8ca5e095be8d4b47f29a",
-      "lastUpdated": "2026-03-25T03:29:23.711Z",
+      "checksumSha256": "7008cb29e2a65574438f917e67a45231d8bfbdf86fe130422c0b4cd3f698e5fa",
+      "lastUpdated": "2026-05-13T01:44:04.087Z",
       "source": {
         "kind": "command",
         "command": "ctl-context add-artifact",

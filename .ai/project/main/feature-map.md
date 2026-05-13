@@ -60,12 +60,12 @@ Project: `main`
 | T-044 topic-selection-v1a-evidence-to-need | planned | dev-docs/active/topic-selection-v1a-evidence-to-need |
 | T-045 topic-selection-v1b-need-to-draft-topic | planned | dev-docs/active/topic-selection-v1b-need-to-draft-topic |
 | T-046 topic-selection-v1c-promotion-bridge | planned | dev-docs/active/topic-selection-v1c-promotion-bridge |
-| T-047 topic-selection-v1a-evidence-map-strength | planned | dev-docs/active/topic-selection-v1a-evidence-map-strength |
-| T-048 topic-selection-v1a-foundation-control-plane | planned | dev-docs/active/topic-selection-v1a-foundation-control-plane |
+| T-047 topic-selection-v1a-evidence-map-strength | in-progress | dev-docs/active/topic-selection-v1a-evidence-map-strength |
+| T-048 topic-selection-v1a-foundation-control-plane | in-progress | dev-docs/active/topic-selection-v1a-foundation-control-plane |
 | T-049 topic-selection-v1a-need-validation | planned | dev-docs/active/topic-selection-v1a-need-validation |
 | T-050 topic-selection-v1a-offline-evaluation-replay | planned | dev-docs/active/topic-selection-v1a-offline-evaluation-replay |
 | T-051 topic-selection-v1a-recheck-risk-memory | planned | dev-docs/active/topic-selection-v1a-recheck-risk-memory |
-| T-052 topic-selection-v1a-search-resource-evidence-inputs | planned | dev-docs/active/topic-selection-v1a-search-resource-evidence-inputs |
+| T-052 topic-selection-v1a-search-resource-evidence-inputs | in-progress | dev-docs/active/topic-selection-v1a-search-resource-evidence-inputs |
 
 ### F-002 Desktop Frontend Foundation
 

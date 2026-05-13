@@ -1,9 +1,9 @@
 # 00 Overview
 
 ## Status
-- State: planned
-- Next step: Start implementation with shared contracts and repository/schema shape from `06-pre-implementation-review.md`.
-- Review: implementation-prep survey completed on 2026-05-13; product code has not started.
+- State: in-progress
+- Next step: Keep T-048 as the shared v1a control-plane foundation for T-049/T-051/T-050; apply the generated migration to a target DB only after an explicit environment approval.
+- Review: implementation-prep survey completed on 2026-05-13; shared contracts, persistence schema, repositories, service, fake harness verification, and control-plane hardening fixes are implemented. T-052 and T-047 now consume these contracts rather than redefining workflow/gate/transition records.
 
 ## Parent Package
 - Stage parent: `dev-docs/active/topic-selection-v1a-evidence-to-need/`
@@ -42,8 +42,8 @@
 - Boundary with need validation: this package defines generic `HumanConfirmedDecision`; `topic-selection-v1a-need-validation` uses it as required confirmation for `ValidatedNeed`.
 
 ## Acceptance Criteria
-- [ ] Critical workflow runs can persist input snapshot, workflow run, artifact refs, and gate result.
-- [ ] `attemptTransition(...)` records policy version, gate result, workflow run, actor, result, and required actions.
-- [ ] State-axis writes are separated into lifecycle, decision, review, freshness, execution, and permission semantics.
-- [ ] `QualitySignal`, `FunctionalLineageLink`, `TraceSnapshot`, and generic `HumanConfirmedDecision` can be referenced by downstream v1a packages without redefining local equivalents.
-- [ ] Downstream v1a packages can use the shared control-plane contracts without redefining them.
+- [x] Critical workflow runs can persist input snapshot, workflow run, artifact refs, and gate result.
+- [x] `attemptTransition(...)` records policy version, gate result, workflow run, actor, result, and required actions.
+- [x] State-axis writes are separated into lifecycle, decision, review, freshness, execution, and permission semantics.
+- [x] `QualitySignal`, `FunctionalLineageLink`, `TraceSnapshot`, and generic `HumanConfirmedDecision` can be referenced by downstream v1a packages without redefining local equivalents.
+- [x] Downstream v1a packages can use the shared control-plane contracts without redefining them.

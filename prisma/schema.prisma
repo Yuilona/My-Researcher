@@ -1046,6 +1046,766 @@ model TitleCardPromotionDecision {
   @@map("TopicPromotionDecision")
 }
 
+// ---------------------------------------------------------------------------
+// Topic-selection v1a control plane authority records. These records are
+// intentionally decoupled from title-card authority tables: titleCardId is a
+// queryable ref, not a foreign key or business-state coupling point.
+// ---------------------------------------------------------------------------
+model TopicSelectionContextPolicyVersion {
+  id        String    @id
+  policyKey String
+  version   String
+  status    String
+  config    Json      @default("{}")
+  createdBy String
+  createdAt DateTime  @db.Timestamptz(6)
+  retiredAt DateTime? @db.Timestamptz(6)
+
+  @@unique([policyKey, version])
+  @@index([policyKey, status])
+}
+
+model TopicSelectionWorkflowProfilePolicy {
+  id              String    @id
+  profileKey      String
+  workflowKey     String
+  policyVersionId String?
+  status          String
+  config          Json      @default("{}")
+  createdBy       String
+  createdAt       DateTime  @db.Timestamptz(6)
+  retiredAt       DateTime? @db.Timestamptz(6)
+
+  @@unique([profileKey, workflowKey, policyVersionId])
+  @@index([workflowKey, status])
+  @@index([policyVersionId])
+}
+
+model TopicSelectionTransitionPolicyVersion {
+  id            String    @id
+  transitionKey String
+  version       String
+  status        String
+  config        Json      @default("{}")
+  createdBy     String
+  createdAt     DateTime  @db.Timestamptz(6)
+  retiredAt     DateTime? @db.Timestamptz(6)
+
+  @@unique([transitionKey, version])
+  @@index([transitionKey, status])
+}
+
+model TopicSelectionInputSnapshot {
+  id                     String   @id
+  workspaceId            String?
+  titleCardId            String?
+  targetRefType          String
+  targetRefId            String
+  targetVersionId        String?
+  contextPolicyVersionId String?
+  policyVersion          String?
+  snapshotHash           String
+  sourceRefs             Json     @default("[]")
+  permissionRefs         Json     @default("[]")
+  payload                Json     @default("{}")
+  createdBy              String
+  createdAt              DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([targetRefType, targetRefId])
+  @@index([contextPolicyVersionId])
+  @@index([snapshotHash])
+}
+
+model TopicSelectionArtifactRef {
+  id              String   @id
+  workspaceId     String?
+  titleCardId     String?
+  artifactKind    String
+  storageKind     String
+  uri             String?
+  payload         Json?
+  checksum        String?
+  byteSize        Int?
+  mimeType        String?
+  workflowRunId   String?
+  inputSnapshotId String?
+  createdBy       String
+  createdAt       DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([artifactKind])
+  @@index([workflowRunId])
+  @@index([inputSnapshotId])
+  @@index([checksum])
+}
+
+model TopicSelectionLlmWorkflowRun {
+  id                     String    @id
+  workspaceId            String?
+  titleCardId            String?
+  workflowKey            String
+  workflowProfileKey     String
+  workflowProfileVersion String?
+  inputSnapshotId        String?
+  status                 String
+  providerId             String?
+  modelId                String?
+  promptTemplateId       String?
+  promptTemplateVersion  String?
+  startedAt              DateTime  @db.Timestamptz(6)
+  finishedAt             DateTime? @db.Timestamptz(6)
+  telemetry              Json      @default("{}")
+  outputSummary          Json      @default("{}")
+  errorCode              String?
+  errorMessage           String?
+  createdBy              String
+
+  @@index([titleCardId, startedAt(sort: Desc)])
+  @@index([workflowKey, status])
+  @@index([inputSnapshotId])
+  @@index([status])
+}
+
+model TopicSelectionQualitySignal {
+  id                     String   @id
+  workspaceId            String?
+  titleCardId            String?
+  targetRefType          String
+  targetRefId            String
+  targetVersionId        String?
+  stage                  String
+  checkType              String
+  verdict                String
+  issueCodes             String[] @default([])
+  recommendedAction      String?
+  blockingTransitionKeys String[] @default([])
+  refs                   Json     @default("[]")
+  confidence             Float?
+  workflowRunId          String?
+  artifactRefs           Json     @default("[]")
+  emittedBy              String
+  createdAt              DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([targetRefType, targetRefId])
+  @@index([stage, verdict])
+  @@index([workflowRunId])
+}
+
+model TopicSelectionReadinessGateResult {
+  id                String   @id
+  workspaceId       String?
+  titleCardId       String?
+  gateKey           String
+  targetRefType     String
+  targetRefId       String
+  targetVersionId   String?
+  inputSnapshotId   String?
+  workflowRunId     String?
+  policyVersionId   String?
+  verdict           String
+  blockers          Json     @default("[]")
+  warnings          Json     @default("[]")
+  requiredActions   Json     @default("[]")
+  loopbackTarget    Json?
+  acceptedRiskRefs  Json     @default("[]")
+  qualitySignalRefs Json     @default("[]")
+  createdBy         String
+  createdAt         DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([gateKey, verdict])
+  @@index([targetRefType, targetRefId])
+  @@index([workflowRunId])
+}
+
+model TopicSelectionChainTransitionAttempt {
+  id                   String   @id
+  workspaceId          String?
+  titleCardId          String?
+  transitionKey        String
+  sourceRefType        String
+  sourceRefId          String
+  sourceVersionId      String?
+  targetRefType        String?
+  targetRefId          String?
+  targetVersionId      String?
+  gateResultId         String?
+  workflowRunId        String?
+  inputSnapshotId      String?
+  policyVersionId      String?
+  actorType            String
+  actorId              String?
+  result               String
+  reason               String
+  requiredActions      Json     @default("[]")
+  blockers             Json     @default("[]")
+  acceptedRiskRefs     Json     @default("[]")
+  stateWriteIntents    Json     @default("[]")
+  createdAuthorityRefs Json     @default("[]")
+  createdAt            DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([transitionKey, result])
+  @@index([sourceRefType, sourceRefId])
+  @@index([targetRefType, targetRefId])
+  @@index([gateResultId])
+}
+
+model TopicSelectionFunctionalLineageLink {
+  id              String   @id
+  workspaceId     String?
+  titleCardId     String?
+  sourceRefType   String
+  sourceRefId     String
+  sourceVersionId String?
+  targetRefType   String
+  targetRefId     String
+  targetVersionId String?
+  relationType    String
+  artifactRefs    Json     @default("[]")
+  createdBy       String
+  createdAt       DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([sourceRefType, sourceRefId])
+  @@index([targetRefType, targetRefId])
+  @@index([relationType])
+}
+
+model TopicSelectionTraceSnapshot {
+  id                    String   @id
+  workspaceId           String?
+  titleCardId           String?
+  targetRefType         String
+  targetRefId           String
+  targetVersionId       String?
+  snapshotHash          String
+  objectRefs            Json     @default("[]")
+  lineageLinkRefs       Json     @default("[]")
+  artifactRefs          Json     @default("[]")
+  qualitySignalRefs     Json     @default("[]")
+  transitionAttemptRefs Json     @default("[]")
+  payload               Json     @default("{}")
+  createdBy             String
+  createdAt             DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([targetRefType, targetRefId])
+  @@index([snapshotHash])
+}
+
+model TopicSelectionHumanConfirmedDecision {
+  id                     String   @id
+  workspaceId            String?
+  titleCardId            String?
+  targetRefType          String
+  targetRefId            String
+  targetVersionId        String?
+  decisionType           String
+  actorType              String
+  actorId                String?
+  rationale              String?
+  artifactRefs           Json     @default("[]")
+  policyVersionId        String?
+  resultingAuthorityRefs Json     @default("[]")
+  createdAt              DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([targetRefType, targetRefId])
+  @@index([decisionType])
+  @@index([policyVersionId])
+}
+
+model TopicSelectionTopicSeed {
+  id                  String   @id
+  workspaceId         String?
+  titleCardId         String
+  seedVersion         String
+  seedKind            String
+  workingTitle        String
+  intentSummary       String
+  scopeNotes          String?
+  sourceTitleCardRef  Json     @default("{}")
+  sourceRefs          Json     @default("[]")
+  inputSnapshotId     String?
+  gateResultId        String?
+  transitionAttemptId String?
+  traceSnapshotId     String?
+  createdBy           String
+  createdAt           DateTime @db.Timestamptz(6)
+
+  @@unique([titleCardId, seedVersion])
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([seedKind])
+  @@index([inputSnapshotId])
+}
+
+model TopicSelectionLiteratureResourcePoolSnapshot {
+  id                     String   @id
+  workspaceId            String?
+  titleCardId            String
+  snapshotVersion        String
+  sourceScope            String
+  topicSeedId            String
+  topicSeedRef           Json     @default("{}")
+  literatureRefs         Json     @default("[]")
+  contentSourceRefs      Json     @default("[]")
+  sourceHealthSummary    Json     @default("{}")
+  totalLiteratureCount   Int      @default(0)
+  missingLiteratureCount Int      @default(0)
+  sourceCount            Int      @default(0)
+  fulltextReadyCount     Int      @default(0)
+  fulltextMissingCount   Int      @default(0)
+  blockedCount           Int      @default(0)
+  warningCodes           String[] @default([])
+  snapshotHash           String
+  inputSnapshotId        String?
+  gateResultId           String?
+  transitionAttemptId    String?
+  createdBy              String
+  createdAt              DateTime @db.Timestamptz(6)
+
+  @@unique([titleCardId, snapshotVersion])
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([topicSeedId])
+  @@index([sourceScope])
+  @@index([snapshotHash])
+  @@index([blockedCount])
+}
+
+model TopicSelectionSearchPlan {
+  id                    String   @id
+  workspaceId           String?
+  titleCardId           String
+  planVersion           String
+  status                String
+  topicSeedId           String
+  literatureSnapshotId  String
+  parentSearchPlanId    String?
+  recheckRequestId      String?
+  topicSeedRef          Json     @default("{}")
+  literatureSnapshotRef Json     @default("{}")
+  parentSearchPlanRef   Json?
+  recheckRequestRef     Json?
+  queryIntents          String[] @default([])
+  mustCheckConstraints  String[] @default([])
+  exclusionRules        String[] @default([])
+  coverageStrategy      Json     @default("{}")
+  inputSnapshotId       String?
+  workflowRunId         String?
+  gateResultId          String?
+  transitionAttemptId   String?
+  artifactRefs          Json     @default("[]")
+  createdBy             String
+  createdAt             DateTime @db.Timestamptz(6)
+
+  @@unique([titleCardId, planVersion])
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([topicSeedId])
+  @@index([literatureSnapshotId])
+  @@index([parentSearchPlanId])
+  @@index([recheckRequestId])
+  @@index([inputSnapshotId])
+  @@index([workflowRunId])
+}
+
+model TopicSelectionCoverageRowIntent {
+  id                   String   @id
+  searchPlanId         String
+  workspaceId          String?
+  titleCardId          String?
+  coverageKey          String
+  intentType           String
+  query                String
+  rationale            String
+  required             Boolean  @default(true)
+  priority             Int      @default(0)
+  targetSourceTypes    String[] @default([])
+  expectedEvidenceRole String
+  refs                 Json     @default("[]")
+  createdAt            DateTime @db.Timestamptz(6)
+
+  @@unique([searchPlanId, coverageKey])
+  @@index([searchPlanId])
+  @@index([titleCardId])
+  @@index([intentType])
+}
+
+model TopicSelectionCoverageExecutionObservation {
+  id                  String   @id
+  searchPlanId        String
+  coverageRowIntentId String
+  searchRunId         String?
+  status              String
+  resultCount         Int      @default(0)
+  sourceCount         Int      @default(0)
+  missingReasonCodes  String[] @default([])
+  notes               String?
+  createdAt           DateTime @db.Timestamptz(6)
+
+  @@index([searchPlanId, createdAt(sort: Desc)])
+  @@index([coverageRowIntentId, createdAt(sort: Desc)])
+  @@index([searchRunId])
+  @@index([status])
+}
+
+model TopicSelectionCoverageEvidenceBinding {
+  id                  String   @id
+  searchPlanId        String
+  coverageRowIntentId String
+  searchRunId         String
+  literatureRef       Json     @default("{}")
+  sourceRefs          Json     @default("[]")
+  bindingKind         String
+  resultRank          Int?
+  createdAt           DateTime @db.Timestamptz(6)
+
+  @@index([searchPlanId])
+  @@index([coverageRowIntentId])
+  @@index([searchRunId])
+  @@index([bindingKind])
+}
+
+model TopicSelectionCoverageAssessment {
+  id                  String   @id
+  searchPlanId        String
+  coverageRowIntentId String
+  verdict             String
+  issueCodes          String[] @default([])
+  confidence          Float?
+  assessedBy          String
+  createdAt           DateTime @db.Timestamptz(6)
+
+  @@index([searchPlanId, createdAt(sort: Desc)])
+  @@index([coverageRowIntentId, createdAt(sort: Desc)])
+  @@index([verdict])
+}
+
+model TopicSelectionCoverageRiskAcceptance {
+  id                  String    @id
+  searchPlanId        String
+  coverageRowIntentId String
+  acceptedRiskRef     Json      @default("{}")
+  acceptedBy          Json      @default("{}")
+  rationale           String
+  expiresAt           DateTime? @db.Timestamptz(6)
+  createdAt           DateTime  @db.Timestamptz(6)
+
+  @@index([searchPlanId, createdAt(sort: Desc)])
+  @@index([coverageRowIntentId])
+}
+
+model TopicSelectionSearchRun {
+  id                               String    @id
+  workspaceId                      String?
+  titleCardId                      String
+  searchPlanId                     String
+  literatureSnapshotId             String
+  searchPlanRef                    Json      @default("{}")
+  literatureSnapshotRef            Json      @default("{}")
+  runKind                          String
+  runStatus                        String
+  queryProvenance                  Json      @default("[]")
+  resultAccounting                 Json      @default("{}")
+  totalResultCount                 Int       @default(0)
+  uniqueLiteratureCount            Int       @default(0)
+  duplicateResultCount             Int       @default(0)
+  failedSourceCount                Int       @default(0)
+  skippedSourceCount               Int       @default(0)
+  sourceHealthSummary              Json      @default("{}")
+  sourceHealthSourceCount          Int       @default(0)
+  sourceHealthBlockedCount         Int       @default(0)
+  sourceHealthFulltextReadyCount   Int       @default(0)
+  sourceHealthFulltextMissingCount Int       @default(0)
+  sourceHealthWarningCodes         String[]  @default([])
+  dedupSummary                     Json      @default("{}")
+  evidenceMapInputRefs             Json      @default("[]")
+  artifactRefs                     Json      @default("[]")
+  inputSnapshotId                  String?
+  workflowRunId                    String?
+  gateResultId                     String?
+  transitionAttemptId              String?
+  startedAt                        DateTime  @db.Timestamptz(6)
+  finishedAt                       DateTime? @db.Timestamptz(6)
+  createdBy                        String
+  createdAt                        DateTime  @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([searchPlanId, createdAt(sort: Desc)])
+  @@index([literatureSnapshotId])
+  @@index([runKind, runStatus])
+  @@index([failedSourceCount])
+  @@index([sourceHealthBlockedCount])
+  @@index([inputSnapshotId])
+  @@index([workflowRunId])
+}
+
+model TopicSelectionSearchPlanRecheckRequest {
+  id                          String    @id
+  workspaceId                 String?
+  titleCardId                 String
+  sourceRefType               String
+  sourceRefId                 String
+  targetSearchPlanId          String
+  targetLiteratureSnapshotId  String?
+  resultingSearchPlanId       String?
+  resultingSearchRunId        String?
+  sourceRef                   Json      @default("{}")
+  targetSearchPlanRef         Json      @default("{}")
+  targetLiteratureSnapshotRef Json?
+  reason                      String
+  gapCodes                    String[]  @default([])
+  requestedBy                 String
+  status                      String
+  decisionSummary             String?
+  policyVersionId             String?
+  acceptedRiskRefs            Json      @default("[]")
+  resultingSearchPlanRef      Json?
+  resultingSearchRunRef       Json?
+  createdAt                   DateTime  @db.Timestamptz(6)
+  resolvedAt                  DateTime? @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([sourceRefType, sourceRefId])
+  @@index([targetSearchPlanId])
+  @@index([targetLiteratureSnapshotId])
+  @@index([resultingSearchPlanId])
+  @@index([resultingSearchRunId])
+  @@index([status])
+  @@index([policyVersionId])
+}
+
+model TopicSelectionEvidenceMap {
+  id                    String   @id
+  workspaceId           String?
+  titleCardId           String
+  evidenceMapVersion    String
+  status                String
+  reviewStatus          String
+  freshnessStatus       String
+  searchRunId           String
+  searchPlanId          String
+  literatureSnapshotId  String
+  searchRunRef          Json     @default("{}")
+  searchPlanRef         Json     @default("{}")
+  literatureSnapshotRef Json     @default("{}")
+  unitCount             Int      @default(0)
+  supportUnitCount      Int      @default(0)
+  challengeUnitCount    Int      @default(0)
+  baselineUnitCount     Int      @default(0)
+  contextUnitCount      Int      @default(0)
+  digestPayload         Json     @default("{}")
+  staleReasonCodes      String[] @default([])
+  inputSnapshotId       String?
+  workflowRunId         String?
+  gateResultId          String?
+  transitionAttemptId   String?
+  traceSnapshotId       String?
+  artifactRefs          Json     @default("[]")
+  createdBy             String
+  createdAt             DateTime @db.Timestamptz(6)
+
+  @@unique([searchRunId, evidenceMapVersion])
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([searchRunId])
+  @@index([searchPlanId])
+  @@index([literatureSnapshotId])
+  @@index([reviewStatus])
+  @@index([freshnessStatus])
+  @@index([inputSnapshotId])
+  @@index([workflowRunId])
+}
+
+model TopicSelectionEvidenceUnit {
+  id                    String   @id
+  workspaceId           String?
+  titleCardId           String
+  evidenceMapId         String
+  evidenceMapVersion    String
+  searchRunId           String
+  searchPlanId          String
+  literatureSnapshotId  String
+  coverageRowIntentId   String?
+  literatureId          String
+  evidenceRole          String
+  locatorType           String
+  locatorRefType        String
+  locatorRefId          String
+  abstractOnly          Boolean  @default(false)
+  reviewStatus          String
+  freshnessStatus       String
+  sourceAttributionKind String
+  searchRunRef          Json     @default("{}")
+  searchPlanRef         Json     @default("{}")
+  literatureSnapshotRef Json     @default("{}")
+  coverageRowIntentRef  Json?
+  literatureRef         Json     @default("{}")
+  sourceRefs            Json     @default("[]")
+  locator               Json     @default("{}")
+  sourceStatement       String
+  normalizedStatement   String?
+  interpretationPayload Json     @default("{}")
+  extractionConfidence  Float?
+  issueCodes            String[] @default([])
+  createdBy             String
+  createdAt             DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([evidenceMapId])
+  @@index([searchRunId])
+  @@index([searchPlanId])
+  @@index([literatureSnapshotId])
+  @@index([literatureId])
+  @@index([coverageRowIntentId])
+  @@index([evidenceRole])
+  @@index([locatorRefType, locatorRefId])
+  @@index([abstractOnly])
+  @@index([reviewStatus])
+  @@index([freshnessStatus])
+}
+
+model TopicSelectionEvidenceTypedLink {
+  id                 String   @id
+  workspaceId        String?
+  titleCardId        String?
+  evidenceMapId      String
+  evidenceMapVersion String
+  linkType           String
+  sourceUnitId       String
+  targetUnitId       String
+  sourceUnitRef      Json     @default("{}")
+  targetUnitRef      Json     @default("{}")
+  rationale          String?
+  confidence         Float?
+  createdAt          DateTime @db.Timestamptz(6)
+
+  @@index([evidenceMapId])
+  @@index([titleCardId])
+  @@index([linkType])
+  @@index([sourceUnitId])
+  @@index([targetUnitId])
+}
+
+model TopicSelectionEvidenceCluster {
+  id                 String   @id
+  workspaceId        String?
+  titleCardId        String?
+  evidenceMapId      String
+  evidenceMapVersion String
+  clusterType        String
+  clusterKey         String
+  unitIds            String[] @default([])
+  unitRefs           Json     @default("[]")
+  label              String
+  rationale          String?
+  confidence         Float?
+  createdAt          DateTime @db.Timestamptz(6)
+
+  @@unique([evidenceMapId, clusterKey])
+  @@index([evidenceMapId])
+  @@index([titleCardId])
+  @@index([clusterType])
+}
+
+model TopicSelectionEvidencePattern {
+  id                 String   @id
+  workspaceId        String?
+  titleCardId        String?
+  evidenceMapId      String
+  evidenceMapVersion String
+  patternType        String
+  evidenceRole       String
+  unitIds            String[] @default([])
+  unitRefs           Json     @default("[]")
+  patternStatement   String
+  confidence         Float?
+  createdAt          DateTime @db.Timestamptz(6)
+
+  @@index([evidenceMapId])
+  @@index([titleCardId])
+  @@index([patternType])
+  @@index([evidenceRole])
+}
+
+model TopicSelectionEvidenceConflictSet {
+  id                 String   @id
+  workspaceId        String?
+  titleCardId        String?
+  evidenceMapId      String
+  evidenceMapVersion String
+  conflictType       String
+  severity           String
+  supportUnitIds     String[] @default([])
+  challengeUnitIds   String[] @default([])
+  baselineUnitIds    String[] @default([])
+  contextUnitIds     String[] @default([])
+  supportUnitRefs    Json     @default("[]")
+  challengeUnitRefs  Json     @default("[]")
+  baselineUnitRefs   Json     @default("[]")
+  contextUnitRefs    Json     @default("[]")
+  issueCodes         String[] @default([])
+  createdAt          DateTime @db.Timestamptz(6)
+
+  @@index([evidenceMapId])
+  @@index([titleCardId])
+  @@index([conflictType])
+  @@index([severity])
+}
+
+model TopicSelectionEvidenceStrengthAssessment {
+  id                        String   @id
+  workspaceId               String?
+  titleCardId               String
+  evidenceMapId             String
+  evidenceMapVersion        String
+  searchRunId               String
+  searchPlanId              String
+  literatureSnapshotId      String
+  targetRefType             String
+  targetRefId               String
+  targetRef                 Json     @default("{}")
+  searchRunRef              Json     @default("{}")
+  searchPlanRef             Json     @default("{}")
+  literatureSnapshotRef     Json     @default("{}")
+  purpose                   String
+  granularity               String
+  roleBundle                Json     @default("{}")
+  unitIds                   String[] @default([])
+  unitRefs                  Json     @default("[]")
+  conflictRefs              Json     @default("[]")
+  cacheKey                  String   @unique
+  strengthVerdict           String
+  confidence                Float?
+  gapCodes                  String[] @default([])
+  qualitySignalRefs         Json     @default("[]")
+  staleReasonCodes          String[] @default([])
+  freshnessStatus           String
+  inputSnapshotId           String?
+  workflowRunId             String?
+  gateResultId              String?
+  transitionAttemptId       String?
+  policyVersionId           String?
+  assessmentWorkflowVersion String
+  createdBy                 String
+  createdAt                 DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([evidenceMapId])
+  @@index([evidenceMapVersion])
+  @@index([searchRunId])
+  @@index([searchPlanId])
+  @@index([literatureSnapshotId])
+  @@index([targetRefType, targetRefId])
+  @@index([purpose])
+  @@index([granularity])
+  @@index([strengthVerdict])
+  @@index([freshnessStatus])
+  @@index([workflowRunId])
+}
+
 model ResearchArgumentWorkspace {
   id                    String                             @id
   titleCardId           String

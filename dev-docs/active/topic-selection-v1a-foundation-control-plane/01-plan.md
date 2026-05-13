@@ -16,10 +16,10 @@ Acceptance:
 - Implement shared contracts before product/business-object repositories depend on them.
 
 Acceptance:
-- [ ] Contracts persist with stable ids and queryable refs.
-- [ ] Gate output can block, pass, pass with risk, or request human review.
-- [ ] Raw `QualitySignal` and raw workflow output cannot directly create authority state writes.
-- [ ] Prisma schema changes are followed by DB context refresh.
+- [x] Contracts persist with stable ids and queryable refs.
+- [x] Gate output can block, pass, pass with risk, or request human review.
+- [x] Raw `QualitySignal` and raw workflow output cannot directly create authority state writes.
+- [x] Prisma schema changes are followed by DB context refresh.
 
 ## Phase 3 - Integration Harness
 - Expose helper APIs for downstream v1a workflows.
@@ -27,13 +27,13 @@ Acceptance:
 - Prove one passing transition, one blocked transition, and one pass-with-risk transition.
 
 Acceptance:
-- [ ] Search/evidence and need-validation packages can call the same harness.
-- [ ] Verification proves audit trace from transition to workflow run and artifacts.
-- [ ] Verification proves trace from transition to input snapshot, quality signals, and human-gate/accepted-risk refs where applicable.
+- [x] Search/evidence and need-validation packages can call the same harness.
+- [x] Verification proves audit trace from transition to workflow run and artifacts.
+- [x] Verification proves trace from transition to input snapshot, quality signals, and human-gate/accepted-risk refs where applicable.
 
 ## Phase 4 - Handoff
 - Publish implementation notes for downstream child packages.
 - Record any parent design adjustments.
 
 Acceptance:
-- [ ] Downstream packages have clear integration instructions.
+- [x] Downstream packages have clear integration instructions.

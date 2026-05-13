@@ -2,7 +2,7 @@ version: 1
 task_id: T-047
 project: main
 slug: topic-selection-v1a-evidence-map-strength
-status: planned
+status: in-progress
 updated: "2026-05-13"
 keywords:
   - topic-selection
