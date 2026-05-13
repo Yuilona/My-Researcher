@@ -2128,6 +2128,149 @@ model TopicSelectionV1aToV1bInputBundle {
   @@index([literatureSnapshotId])
 }
 
+model TopicSelectionV1bIntakeSnapshot {
+  id                         String   @id
+  workspaceId                String?
+  titleCardId                String
+  v1bInputBundleId           String
+  validatedNeedId            String
+  snapshotVersion            String
+  v1bInputBundleRef          Json     @default("{}")
+  validatedNeedRef           Json     @default("{}")
+  sourceNeedCandidateRef     Json     @default("{}")
+  adjudicationResultRef      Json     @default("{}")
+  supportPacketRef           Json     @default("{}")
+  humanDecisionRef           Json     @default("{}")
+  evidenceMapId              String
+  searchRunId                String
+  searchPlanId               String
+  literatureSnapshotId       String
+  evidenceMapRef             Json     @default("{}")
+  searchRunRef               Json     @default("{}")
+  searchPlanRef              Json     @default("{}")
+  literatureSnapshotRef      Json     @default("{}")
+  evidenceRoleBundle         Json     @default("{}")
+  traceRefs                  Json     @default("[]")
+  riskRefs                   Json     @default("[]")
+  gapCodes                   String[] @default([])
+  memorySuggestionRefs       Json     @default("[]")
+  recheckRequestRefs         Json     @default("[]")
+  handoffPayload             Json     @default("{}")
+  traceStatus                String
+  traceIssues                Json     @default("[]")
+  evidenceMapFreshnessStatus String?
+  inputSnapshotId            String?
+  workflowRunId              String?
+  gateResultId               String?
+  transitionAttemptId        String?
+  traceSnapshotId            String?
+  artifactRefs               Json     @default("[]")
+  createdBy                  String
+  createdAt                  DateTime @db.Timestamptz(6)
+
+  @@unique([v1bInputBundleId, snapshotVersion])
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([v1bInputBundleId])
+  @@index([validatedNeedId])
+  @@index([traceStatus])
+  @@index([evidenceMapId])
+  @@index([searchRunId])
+  @@index([searchPlanId])
+  @@index([literatureSnapshotId])
+  @@index([gateResultId])
+  @@index([workflowRunId])
+}
+
+model TopicSelectionResearchConstraintProfile {
+  id                        String   @id
+  workspaceId               String?
+  titleCardId               String
+  v1bIntakeSnapshotId       String
+  v1bInputBundleId          String
+  validatedNeedId           String
+  profileVersion            String
+  v1bIntakeSnapshotRef      Json     @default("{}")
+  v1bInputBundleRef         Json     @default("{}")
+  validatedNeedRef          Json     @default("{}")
+  supersedesProfileId       String?
+  supersedesProfileRef      Json?
+  targetCommunity           String
+  targetVenueClass          String?
+  intendedContributionStyle String?
+  methodConstraints         String[] @default([])
+  resourceConstraints       String[] @default([])
+  availableAssets           String[] @default([])
+  feasibilityBudget         Json     @default("{}")
+  nonGoals                  String[] @default([])
+  claimCeiling              String
+  humanConstraintNotes      String?
+  constraintPayload         Json     @default("{}")
+  inputSnapshotId           String?
+  workflowRunId             String?
+  gateResultId              String?
+  transitionAttemptId       String?
+  traceSnapshotId           String?
+  artifactRefs              Json     @default("[]")
+  createdBy                 String
+  createdAt                 DateTime @db.Timestamptz(6)
+
+  @@unique([v1bInputBundleId, profileVersion])
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([v1bIntakeSnapshotId])
+  @@index([v1bInputBundleId])
+  @@index([validatedNeedId])
+  @@index([supersedesProfileId])
+  @@index([targetCommunity])
+  @@index([gateResultId])
+  @@index([workflowRunId])
+}
+
+model TopicSelectionV1bIntakeReadinessAssessment {
+  id                           String   @id
+  workspaceId                  String?
+  titleCardId                  String
+  v1bIntakeSnapshotId          String
+  researchConstraintProfileId  String
+  v1bInputBundleId             String
+  validatedNeedId              String
+  profileVersion               String
+  recommendation               String
+  blockers                     Json     @default("[]")
+  warnings                     Json     @default("[]")
+  requiredActions              String[] @default([])
+  v1bIntakeSnapshotRef         Json     @default("{}")
+  researchConstraintProfileRef Json     @default("{}")
+  v1bInputBundleRef            Json     @default("{}")
+  validatedNeedRef             Json     @default("{}")
+  evidenceMapRef               Json     @default("{}")
+  searchRunRef                 Json     @default("{}")
+  searchPlanRef                Json     @default("{}")
+  literatureSnapshotRef        Json     @default("{}")
+  openRecheckRequestRefs       Json     @default("[]")
+  acceptedRiskRefs             Json     @default("[]")
+  uncoveredRecheckRequestRefs  Json     @default("[]")
+  staleRefCodes                String[] @default([])
+  missingConstraintCodes       String[] @default([])
+  inputSnapshotId              String?
+  workflowRunId                String?
+  gateResultId                 String?
+  transitionAttemptId          String?
+  policyVersionId              String?
+  assessedBy                   String
+  createdAt                    DateTime @db.Timestamptz(6)
+
+  @@unique([v1bIntakeSnapshotId, researchConstraintProfileId, profileVersion])
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([v1bIntakeSnapshotId])
+  @@index([researchConstraintProfileId])
+  @@index([v1bInputBundleId])
+  @@index([validatedNeedId])
+  @@index([recommendation])
+  @@index([gateResultId])
+  @@index([workflowRunId])
+  @@index([policyVersionId])
+}
+
 model TopicSelectionRecheckEvent {
   id                String    @id
   workspaceId       String?

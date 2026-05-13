@@ -339,6 +339,16 @@ export class TopicSelectionControlPlaneService {
     return this.repository.findWorkflowRunById(workflowRunId);
   }
 
+  async getTraceSnapshot(traceSnapshotId: string): Promise<TopicSelectionTraceSnapshotRecord | null> {
+    return this.repository.findTraceSnapshotById(traceSnapshotId);
+  }
+
+  async getHumanDecision(
+    humanConfirmedDecisionId: string,
+  ): Promise<TopicSelectionHumanConfirmedDecisionRecord | null> {
+    return this.repository.findHumanConfirmedDecisionById(humanConfirmedDecisionId);
+  }
+
   async recordHumanDecision(input: HumanDecisionInput): Promise<TopicSelectionHumanConfirmedDecisionRecord> {
     return this.repository.createHumanConfirmedDecision({
       human_confirmed_decision_id: this.idFactory('human_decision'),

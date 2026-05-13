@@ -92,6 +92,47 @@ const MEMORY_EFFECT_POLICIES: TopicSelectionDecisionMemoryEffectPolicy[] = [
 ];
 const SEVERITIES: TopicSelectionSeverity[] = ['info', 'warning', 'blocking', 'critical'];
 
+export function assertTopicSelectionAcceptedRiskUsableForTarget(
+  risk: TopicSelectionAcceptedRiskRecord,
+  targetRef: TopicSelectionFunctionalRef,
+  context: {
+    now: string;
+    workspace_id?: string | null;
+    title_card_id?: string | null;
+  },
+): void {
+  if (risk.status !== 'active') {
+    throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'AcceptedRisk must be active.');
+  }
+  if (risk.expires_at && risk.expires_at <= context.now) {
+    throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'AcceptedRisk is expired.');
+  }
+  if (!topicSelectionFunctionalRefsMatch(risk.target_ref, targetRef)) {
+    throw new AppError(409, 'VERSION_CONFLICT', 'AcceptedRisk target_ref does not match the protected target.');
+  }
+  if (risk.scope_refs.length === 0) {
+    throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'AcceptedRisk has no scope refs.');
+  }
+  const expectedWorkspaceId = context.workspace_id ?? null;
+  if (expectedWorkspaceId && risk.workspace_id && risk.workspace_id !== expectedWorkspaceId) {
+    throw new AppError(409, 'VERSION_CONFLICT', 'AcceptedRisk belongs to a different workspace.');
+  }
+  const expectedTitleCardId = context.title_card_id ?? targetRef.title_card_id ?? null;
+  if (expectedTitleCardId && risk.title_card_id && risk.title_card_id !== expectedTitleCardId) {
+    throw new AppError(409, 'VERSION_CONFLICT', 'AcceptedRisk belongs to a different title card.');
+  }
+}
+
+function topicSelectionFunctionalRefsMatch(
+  left: TopicSelectionFunctionalRef,
+  right: TopicSelectionFunctionalRef,
+): boolean {
+  return left.ref_type === right.ref_type
+    && left.ref_id === right.ref_id
+    && (left.version_id ?? null) === (right.version_id ?? null)
+    && (!left.title_card_id || !right.title_card_id || left.title_card_id === right.title_card_id);
+}
+
 export class TopicSelectionRecheckRiskMemoryService {
   private readonly idFactory: IdFactory;
   private readonly now: () => string;
@@ -738,26 +779,10 @@ export class TopicSelectionRecheckRiskMemoryService {
     targetRef: TopicSelectionFunctionalRef,
     context: { workspace_id?: string | null; title_card_id?: string | null },
   ): void {
-    if (risk.status !== 'active') {
-      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'AcceptedRisk must be active.');
-    }
-    if (risk.expires_at && risk.expires_at <= this.now()) {
-      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'AcceptedRisk is expired.');
-    }
-    if (!this.isSameFunctionalRef(risk.target_ref, targetRef)) {
-      throw new AppError(409, 'VERSION_CONFLICT', 'AcceptedRisk target_ref does not match the protected target.');
-    }
-    if (risk.scope_refs.length === 0) {
-      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'AcceptedRisk has no scope refs.');
-    }
-    const expectedWorkspaceId = context.workspace_id ?? null;
-    if (expectedWorkspaceId && risk.workspace_id && risk.workspace_id !== expectedWorkspaceId) {
-      throw new AppError(409, 'VERSION_CONFLICT', 'AcceptedRisk belongs to a different workspace.');
-    }
-    const expectedTitleCardId = context.title_card_id ?? targetRef.title_card_id ?? null;
-    if (expectedTitleCardId && risk.title_card_id && risk.title_card_id !== expectedTitleCardId) {
-      throw new AppError(409, 'VERSION_CONFLICT', 'AcceptedRisk belongs to a different title card.');
-    }
+    assertTopicSelectionAcceptedRiskUsableForTarget(risk, targetRef, {
+      ...context,
+      now: this.now(),
+    });
   }
 
   private gateReasonCodes(gate: TopicSelectionReadinessGateResultRecord): string[] {

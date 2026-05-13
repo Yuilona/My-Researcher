@@ -20,6 +20,7 @@ import * as topicSelectionNeedValidationContracts from './topic-selection-need-v
 import * as topicSelectionOfflineEvaluationReplayContracts from './topic-selection-offline-evaluation-replay-contracts.js';
 import * as topicSelectionRecheckRiskMemoryContracts from './topic-selection-recheck-risk-memory-contracts.js';
 import * as topicSelectionSearchResourceContracts from './topic-selection-search-resource-contracts.js';
+import * as topicSelectionV1bIntakeContracts from './topic-selection-v1b-intake-contracts.js';
 import type {
   ReleaseGateReviewResponse,
   StageGateVerifyRequest,
@@ -193,6 +194,60 @@ test('topic-selection offline-evaluation/replay schemas load through direct and 
   ]);
   assert.ok(researchLifecycleContracts.topicSelectionOfflineEvaluationDatasetRecordSchema);
   assert.ok(researchLifecycleContracts.topicSelectionReplayDiffRecordSchema);
+});
+
+test('topic-selection v1b intake schemas load through direct and aggregate exports', () => {
+  assert.ok(topicSelectionV1bIntakeContracts.topicSelectionV1bIntakeSnapshotRecordSchema);
+  assert.ok(topicSelectionV1bIntakeContracts.topicSelectionResearchConstraintProfileRecordSchema);
+  assert.ok(topicSelectionV1bIntakeContracts.topicSelectionV1bIntakeReadinessAssessmentRecordSchema);
+  assert.ok(topicSelectionV1bIntakeContracts.topicSelectionV1bResearchSlicePlanningInputSchema);
+  assert.deepEqual([...topicSelectionV1bIntakeContracts.TOPIC_SELECTION_V1B_INTAKE_READINESS_RECOMMENDATIONS], [
+    'ready_for_slice',
+    'blocked_by_recheck',
+    'blocked_by_stale_trace',
+    'needs_constraint_clarification',
+    'park',
+  ]);
+  assert.ok(researchLifecycleContracts.topicSelectionV1bIntakeSnapshotRecordSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionV1bResearchSlicePlanningInputSchema);
+});
+
+test('topic-selection v1b constraint profile schema accepts draft constraint gaps', async () => {
+  const app = Fastify();
+  app.post('/v', {
+    schema: {
+      body: topicSelectionV1bIntakeContracts.topicSelectionResearchConstraintProfileRecordSchema,
+    },
+  }, async () => ({ ok: true }));
+  await app.ready();
+  const res = await app.inject({
+    method: 'POST',
+    url: '/v',
+    payload: {
+      research_constraint_profile_id: 'research_constraint_profile_001',
+      title_card_id: 'title_card_001',
+      v1b_intake_snapshot_id: 'v1b_intake_snapshot_001',
+      v1b_input_bundle_id: 'v1b_input_bundle_001',
+      validated_need_id: 'validated_need_001',
+      profile_version: 'v1',
+      v1b_intake_snapshot_ref: functionalRefForSchema('v1b_intake_snapshot', 'v1b_intake_snapshot_001'),
+      v1b_input_bundle_ref: functionalRefForSchema('v1a_to_v1b_input_bundle', 'v1b_input_bundle_001'),
+      validated_need_ref: functionalRefForSchema('validated_need', 'validated_need_001'),
+      target_community: '',
+      method_constraints: [],
+      resource_constraints: [],
+      available_assets: [],
+      feasibility_budget: {},
+      non_goals: [],
+      claim_ceiling: '',
+      constraint_payload: {},
+      artifact_refs: [],
+      created_by: 'human',
+      created_at: '2026-05-14T00:00:00.000Z',
+    },
+  });
+  await app.close();
+  assert.equal(res.statusCode, 200);
 });
 
 test('topic-selection offline-evaluation observed output rejects drifted final decision vocabulary', async () => {
@@ -778,6 +833,7 @@ test('research-lifecycle barrel re-exports the runtime value surface of split mo
     ...Object.keys(topicSelectionNeedValidationContracts),
     ...Object.keys(topicSelectionRecheckRiskMemoryContracts),
     ...Object.keys(topicSelectionOfflineEvaluationReplayContracts),
+    ...Object.keys(topicSelectionV1bIntakeContracts),
   ]);
 
   assert.deepEqual(Object.keys(researchLifecycleContracts).sort(), [...expectedKeys].sort());

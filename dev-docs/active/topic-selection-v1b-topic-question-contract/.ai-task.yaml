@@ -1,0 +1,12 @@
+version: 1
+task_id: T-059
+project: main
+slug: topic-selection-v1b-topic-question-contract
+status: planned
+updated: "2026-05-14"
+keywords:
+  - topic-selection
+  - v1b
+  - topic-question
+  - question-contract
+  - answerability

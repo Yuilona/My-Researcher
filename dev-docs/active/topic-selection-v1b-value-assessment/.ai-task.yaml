@@ -1,0 +1,12 @@
+version: 1
+task_id: T-060
+project: main
+slug: topic-selection-v1b-value-assessment
+status: planned
+updated: "2026-05-14"
+keywords:
+  - topic-selection
+  - v1b
+  - value-assessment
+  - value-disposition
+  - reasoning-memo

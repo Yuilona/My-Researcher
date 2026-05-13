@@ -1,5 +1,10 @@
 # 03 Implementation Notes
 
+## 2026-05-14 - V1B Split
+- v1a backend/service/API status is closed and represented as `done`; v1b split can proceed.
+- Expanded the original four-package split with two missing boundaries: intake/constraint readiness before ResearchSlice, and offline evaluation/replay before API closure.
+- Execution order is intake -> slice -> question contract -> value assessment -> draft package -> offline replay -> HTTP/API closure.
+
 ## Current Position
 - This package is intentionally stage-level only.
 - Detailed implementation split is deferred until v1a contracts are verified.
