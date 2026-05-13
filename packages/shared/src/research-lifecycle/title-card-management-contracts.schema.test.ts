@@ -16,6 +16,7 @@ import * as researchLifecycleCoreContracts from './research-lifecycle-core-contr
 import * as titleCardManagementContracts from './title-card-management-contracts.js';
 import * as topicSelectionControlPlaneContracts from './topic-selection-control-plane-contracts.js';
 import * as topicSelectionEvidenceMapContracts from './topic-selection-evidence-map-contracts.js';
+import * as topicSelectionNeedValidationContracts from './topic-selection-need-validation-contracts.js';
 import * as topicSelectionSearchResourceContracts from './topic-selection-search-resource-contracts.js';
 import type {
   ReleaseGateReviewResponse,
@@ -120,6 +121,21 @@ test('topic-selection evidence-map schemas load through direct and aggregate exp
   assert.ok(topicSelectionEvidenceMapContracts.topicSelectionNeedValidationEvidenceBundleSchema);
   assert.ok(researchLifecycleContracts.topicSelectionEvidenceMapRecordSchema);
   assert.ok(researchLifecycleContracts.topicSelectionEvidenceStrengthAssessmentRecordSchema);
+});
+
+test('topic-selection need-validation schemas load through direct and aggregate exports', () => {
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionNeedCandidateRecordSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionNeedCandidateReadinessAssessmentRecordSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionValidationDecisionSupportPacketRecordSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionValidateNeedAdjudicationResultRecordSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionValidatedNeedRecordSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionCandidateDecisionMemorySuggestionRecordSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionV1aToV1bInputBundleRecordSchema);
+  assert.deepEqual([...topicSelectionNeedValidationContracts.TOPIC_SELECTION_CANDIDATE_MEMORY_SUGGESTION_STATUSES], [
+    'suggested',
+  ]);
+  assert.ok(researchLifecycleContracts.topicSelectionNeedCandidateRecordSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionV1aToV1bInputBundleRecordSchema);
 });
 
 test('topic-selection evidence locator schema requires source_ref provenance', async () => {
@@ -648,6 +664,7 @@ test('research-lifecycle barrel re-exports the runtime value surface of split mo
     ...Object.keys(topicSelectionControlPlaneContracts),
     ...Object.keys(topicSelectionSearchResourceContracts),
     ...Object.keys(topicSelectionEvidenceMapContracts),
+    ...Object.keys(topicSelectionNeedValidationContracts),
   ]);
 
   assert.deepEqual(Object.keys(researchLifecycleContracts).sort(), [...expectedKeys].sort());

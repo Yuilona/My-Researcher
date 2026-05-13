@@ -1,8 +1,8 @@
 # 00 Overview
 
 ## Status
-- State: planned
-- Next step: Confirm existing NeedReview/title-card semantics that can evolve into NeedCandidate and ValidatedNeed.
+- State: in-progress
+- Current slice: internal shared/backend implementation landed for the v1a `EvidenceMap -> ValidatedNeed -> v1b input bundle` path. No UI, REST/OpenAPI, target DB apply, v1b implementation, or T-051 durable memory writes are included.
 
 ## Parent Package
 - Stage parent: `dev-docs/active/topic-selection-v1a-evidence-to-need/`
@@ -28,10 +28,10 @@
 - v1a->v1b input bundle publication
 
 ## Acceptance Criteria
-- [ ] NeedCandidate is persisted as hypothesis, not accepted need.
-- [ ] readiness gate checks support, challenge, coverage, scope, pseudo-gap, already-solved, and recheck blockers.
-- [ ] `ValidateNeedAdjudicationResult` is always persisted for adjudication.
-- [ ] `ValidatedNeed` is created only for `final_decision=validate` with human confirmation.
-- [ ] non-validate outcomes record loopback, required actions, output refs, and `output_validated_need_id=null`.
-- [ ] v1b input bundle is published from validated outputs and includes adjudication result, support packet, evidence/search snapshots, trace, risks, gaps, memory refs, and recheck status.
-- [ ] Durable decision memory is not written directly by this package; candidate memory suggestions are handed to recheck/risk/memory policy.
+- [x] NeedCandidate is persisted as hypothesis, not accepted need.
+- [x] readiness gate checks support, challenge, coverage, scope, pseudo-gap, already-solved, and recheck blockers.
+- [x] `ValidateNeedAdjudicationResult` is always persisted for adjudication.
+- [x] `ValidatedNeed` is created only for `final_decision=validate` with human confirmation.
+- [x] non-validate outcomes record loopback, required actions, output refs, and `output_validated_need_id=null`.
+- [x] v1b input bundle is published from validated outputs and includes adjudication result, support packet, evidence/search snapshots, trace, risks, gaps, memory refs, and recheck status.
+- [x] Durable decision memory is not written directly by this package; candidate memory suggestions are handed to recheck/risk/memory policy.
