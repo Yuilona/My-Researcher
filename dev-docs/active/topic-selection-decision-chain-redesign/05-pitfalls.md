@@ -6,7 +6,8 @@
 - Do not erase rejected needs; they are useful negative evidence for future decisions.
 - Do not treat decision memory as evidence. It is scoped historical objection context and must remain recheckable.
 - Do not let LLM-created negative memory directly block future ideas without gate checks, scope, refs, and high-impact review.
-- Do not turn system evaluation into human-facing reports or broad dashboards in v1. Use lightweight machine-readable `QualitySignal` records.
+- Do not turn runtime quality telemetry into human-facing reports or broad dashboards in v1. Use lightweight machine-readable `QualitySignal` records.
+- Do not treat runtime `QualitySignal` as a substitute for offline evaluation or replay-based workflow calibration.
 - Do not let schedulers interpret raw `QualitySignal`; only control-plane-derived queue/action/recheck/transition records are scheduler inputs.
 - Do not implement the full target architecture as v1. Prove the evidence-to-need quality loop before expanding to the complete topic-to-paper bridge.
 - Do not present v1a as automatic topic generation. v1a is a title-card reviewer workbench whose successful exit is human-confirmed ValidatedNeed.

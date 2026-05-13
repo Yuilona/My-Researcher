@@ -62,6 +62,21 @@ Acceptance:
 - [ ] Roadmap has phased implementation tasks.
 - [ ] Each phase has a clear verification story.
 
+## Phase 6 - Stage Package Split
+- Treat this package as the parent architecture package.
+- Create stage child packages:
+  - `topic-selection-v1a-evidence-to-need`
+  - `topic-selection-v1b-need-to-draft-topic`
+  - `topic-selection-v1c-promotion-bridge`
+- Keep v1b/v1c at stage-package level until upstream contracts are verified.
+- Split only v1a into implementation child packages next.
+
+Acceptance:
+- [x] v1a stage package exists.
+- [x] v1b stage package exists.
+- [x] v1c stage package exists.
+- [ ] v1a implementation child packages are created.
+
 ## Working Protocol
 - Keep this task package current while discussing.
 - Prefer updating `06-design-spec.md` over adding scattered ad hoc notes.

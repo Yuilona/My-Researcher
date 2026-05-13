@@ -85,13 +85,14 @@ v1a authority tables：
 - `TopicSeed`
 - `LiteratureResourcePoolSnapshot`
 - `SearchPlan`
-- `SearchPlanCoverageMatrix` 或其分层 child records
+- coverage child records: `CoverageRowIntent`、`CoverageExecutionObservation`、`CoverageEvidenceBinding`、`CoverageAssessment`、`CoverageRiskAcceptance`
 - `SearchRun`
 - `EvidenceMap`
 - `EvidenceUnit`
 - `NeedCandidate`
 - `CandidateDecisionMemory`
 - `ValidationDecisionSupportPacket`
+- `ValidateNeedAdjudicationResult`
 - `ValidatedNeed`
 - `ContextPolicyVersion`
 - `InputSnapshot`
@@ -105,6 +106,17 @@ v1a authority tables：
 - `AcceptedRisk` 的最小版本
 
 这些对象需要支撑正式 gate、状态轴、版本引用、UI 查询、上下文准入、防语义污染和审计。
+`SearchPlanCoverageMatrix` 是这些 child records 的 reviewer-facing 聚合视图，不是独立 authority table。
+
+v1a offline evaluation / replay support records：
+- `OfflineEvaluationDataset`
+- `OfflineEvaluationCase`
+- `OfflineEvaluationRun`
+- `OfflineEvaluationCaseResult`
+- `OfflineEvaluationMetricResult`
+- `ReplayDiff`
+
+这些对象不参与生产链路状态转移，不替代 `QualitySignal`，也不直接改写 `ValidatedNeed` 或 runtime gate。它们用于固定快照回放、prompt/model/workflow/policy 校准和质量基线跟踪。
 
 v1a thin persisted records：
 - `SeedDiscoveryRun`
@@ -233,6 +245,8 @@ ValidatedNeed:
   unresolved_gaps: string[]
   recheck_policy_ref: string
   validation_decision_support_packet_ref: FunctionalRef
+  validate_need_adjudication_result_ref: FunctionalRef
+  human_decision_ref: FunctionalRef
 ```
 
 v1a 完成后，v1b 消费的是这个 human-confirmed `ValidatedNeed` 及其 refs、snapshot、risk、gap 和 trace；v1b 不重新证明 need 是否存在。
@@ -315,7 +329,7 @@ v1c 入口：
 - `AcceptedRisk`、unresolved blockers、promotion conditions 对人类 reviewer 可见。
 - open `RecheckImpact` 已关闭、降级、明确阻断，或通过 `AcceptedRisk` 带条件进入 promotion review。
 - current `ResearchConstraintProfile` 与 package evaluation plan stub 不冲突。
-- 必要时通过 `ArgumentReadinessMiniCheck`；它是 `PromotionGateCheck` 子检查，不是新的主链节点。
+- 必须运行 `ArgumentReadinessMiniCheck`；它是 `PromotionGateCheck` 的必跑子检查，不是新的主链节点，也不替代完整 research-argument workspace readiness。
 
 v1c 主链：
 ```text
@@ -393,7 +407,7 @@ v1a/v1b/v1c 综合起来覆盖当前选题管理的主需求：
 
 它不覆盖完整论文项目执行、写作 agent、实验自动化或全自动 runtime。这些属于 PaperProject / writing / research-argument 模块，应通过 bridge、refs、working copy 和 feedback/recheck events 与选题模块衔接。
 
-因此，三段切分足以覆盖当前“选题链路”和“论文管理回溯选题管理”的功能目标；但在进入实现前，仍需要继续收口若干横向合同，例如 CoverageMatrix 分层、AcceptedRisk、LiteratureResourcePoolSnapshot、EvidenceStrengthAssessment 触发策略、recheck storm 防护、人审 UI 防 rubber-stamp、negative memory 复用和系统级评估。
+因此，三段切分足以覆盖当前“选题链路”和“论文管理回溯选题管理”的功能目标；但在进入实现前，仍需要继续收口若干横向合同，例如 CoverageMatrix 分层、AcceptedRisk、LiteratureResourcePoolSnapshot、EvidenceStrengthAssessment 触发策略、recheck storm 防护、人审 UI 防 rubber-stamp、negative memory 复用和 offline evaluation / replay harness。
 
 ### 现有 TitleCard 模型兼容迁移
 
@@ -703,7 +717,10 @@ EvidenceMap:
     contamination_flags: string[]
 
   lifecycle:
-    status: draft | needs_review | reviewed | stale | recheck_required | frozen
+    lifecycle_status: draft | active | archived
+    review_status: unreviewed | needs_review | reviewed
+    freshness_status: fresh | stale | recheck_required
+    freeze_status: mutable | frozen
     created_at: string
     updated_at: string
     artifact_refs: string[]
@@ -747,7 +764,7 @@ EvidenceStrengthAssessment:
   assessment_id: string
   evidence_map_id: string
   target_ref:
-    object_type: NeedCandidate | ValidatedNeed | ResearchSlice | TopicQuestion | TopicValueAssessment
+    object_type: NeedCandidate | ValidationDecisionSupportPacket | ValidatedNeed | ResearchSlice | TopicQuestion | TopicQuestionContract | TopicValueAssessment | ValueDispositionDecision | TopicPackage | PromotionDecision | PromotionGateCheck
     object_id: string
     object_version: string | null
   evidence_unit_refs: string[]
@@ -771,8 +788,12 @@ EvidenceStrengthAssessment:
   assessment_granularity: unit | cluster | bundle | contract_bundle | package_focus
   assessment_purpose: readiness | validation | boundary | answerability | claim_strength | value_sanity | promotion_check | human_review
   evidence_bundle_ref: string | null
+  evidence_bundle_hash: string | null
   target_contract_ref: string | null
+  assessment_cache_key: string
+  policy_version_id: string
   stale_status: fresh | stale | recheck_required
+  superseded_by_assessment_id: string | null
 ```
 
 触发与赋值：
@@ -780,6 +801,35 @@ EvidenceStrengthAssessment:
 - `AssessEvidenceStrength` reviewer workflow 负责生成正式 `EvidenceStrengthAssessment`，输入必须包含 target object snapshot、EvidenceUnit refs、locator/source provenance、TypedLink/conflict context 和 CoverageMatrix 摘要。
 - human reviewer 可以确认、修正或覆盖 strength assessment，但覆盖必须保留 override / rationale / refs。
 - 当 EvidenceUnit 被 challenged、superseded、source locator 失效、CoverageMatrix high-priority row 变化或 target object version 变化时，相关 assessment 进入 stale 或 recheck_required。
+
+触发策略：
+- `readiness_trigger`：`NeedCandidate.ready_for_validation` 前，必须对 candidate 的 support、challenge、baseline/already-solved bundle 做 bundle-level assessment。
+- `adjudication_trigger`：`ValidateNeedAdjudication` 前，必须复用或生成 `ValidationDecisionSupportPacket` 目标的 support/challenge/baseline assessment。
+- `challenge_trigger`：出现 strong challenge、material conflict、strong baseline、abstract-only support、same-team/same-dataset independence risk 或 source-health blocker 时触发 focused assessment。
+- `contract_trigger`：v1b 只对 selected/admitted `ResearchSlice`、`TopicQuestionContract` 或 `TopicValueAssessment` input snapshot 触发 contract-level bundle assessment。
+- `promotion_trigger`：v1c 默认复用已有 assessment；只有 promotion blocker、人审质疑、package narrative 冲突、assessment stale/recheck_required 或 accepted-risk expiry 才做 package-focus reassessment。
+- `human_review_trigger`：人类 reviewer 可请求 targeted reassessment，但请求必须绑定 target、purpose、evidence bundle 和 expected decision use。
+- `recheck_trigger`：上游 recheck impact 命中 evidence bundle、target version、locator/source health、coverage boundary 或 baseline/counter-evidence 时，相关 assessment 进入 stale/recheck_required，再由 gate 决定是否重跑。
+
+非触发：
+- `SearchRun.completed` 本身不触发全量 strength assessment；只有新增结果影响 candidate、coverage blocker、baseline/counter-evidence 或 selected bundle 时才触发。
+- 新增普通 EvidenceUnit 不触发对所有 target 的重算；必须先进入 selected bundle、conflict set、baseline cluster 或 gate-critical refs。
+- 未准入候选、低优先级 coverage row、非关键 context evidence 和仅用于 UI browsing 的相关论文不触发正式 assessment。
+
+复用与缓存：
+- `assessment_cache_key` 应由 target object type/id/version、assessment purpose、granularity、evidence bundle hash、EvidenceMap version、SearchPlan/SearchRun refs、policy version 和 assessment workflow version 共同决定。
+- key 相同且 `stale_status=fresh` 时可以复用；key 变化、target version 变化、bundle membership 变化或 policy/workflow 语义变化时必须新建 assessment 或标记旧 assessment superseded。
+- bundle-level assessment 优先复用 cluster/bundle summaries；只有 blocker、人审质疑、claim strength 冲突或 locator 风险需要解释时，才下钻到 unit-level。
+- 缓存不能跨 target 语义复用。例如同一 evidence bundle 对 `NeedCandidate` 的 support strength，不能自动复用为 `TopicValueAssessment` 的 claim strength。
+- 复用结果必须保留 `assessed_by_workflow_run_id`、policy version、bundle hash 和 artifact refs，便于 replay 和 recheck 解释。
+
+失效规则：
+- EvidenceUnit claim、locator、source health、rights class、dedup/canonical mapping 或 extraction version 变化。
+- target object version、QuestionContract、ResearchSlice boundary、ValueAssessment input snapshot 或 package narrative 的关键 claim 变化。
+- 新 strong baseline、counter-evidence、conflict set、same-team duplicate claim 或 terminology coverage gap 出现。
+- `CoverageAssessment` high-priority row 或 `CoverageRiskAcceptance` 变化影响当前 target。
+- assessment workflow/prompt/model bug 被确认会影响历史输出。
+- human reviewer 明确 challenge assessment rationale、strength、scope fit 或 independence 判断。
 
 跨阶段策略：
 
@@ -1515,12 +1565,13 @@ ProposeSearchPlanRevision 成效判断：
 - 产出：validated need、边界条件、unmet reason、rebuttal summary。
 - 关键判断：这是第一个强研究判断节点。
 
-从 `ready_for_validation` 到 `validated`：
-- `ready_for_validation` 表示 candidate 已经可裁决；`validated` 表示系统形成了可被 ResearchSlice 继承的需求判断。
+从 `ready_for_validation` 到 `ValidateNeedAdjudicationResult`：
+- `ready_for_validation` 表示 candidate 已经可裁决；`final_decision=validate` 表示系统形成了可被 ResearchSlice 继承的需求判断。
 - 转移必须经过 `ValidateNeedAdjudication` workflow，不应由 NeedCandidate 自己原地改名完成。
 - workflow 输出 validation recommendation，但创建 `ValidatedNeed` 需要人确认；这是选题链路中的第一个强研究判断。
-- 成功后创建新的 `ValidatedNeed` 对象，并回写 `NeedCandidate.result_validated_need_id` 与 `decision_status = resulted_in_validated_need`。
-- 失败时不创建 `ValidatedNeed`，而是把 candidate 转回 `scope_revision`、`evidence_gap`、`searchplan_recheck`、`rejected`、`parked` 或 `merged`。
+- workflow 必须先落 `ValidateNeedAdjudicationResult`，记录最终裁决、证据包、人类确认和输出对象 refs。
+- 只有 `ValidateNeedAdjudicationResult.final_decision = validate` 时，才创建新的 `ValidatedNeed` 对象，并回写 `NeedCandidate.result_validated_need_id` 与 `decision_status = resulted_in_validated_need`。
+- `final_decision != validate` 时不创建 `ValidatedNeed`，而是把 candidate 转回 `scope_revision`、`evidence_gap`、`searchplan_recheck`、`rejected`、`parked` 或 `merged`。
 
 Validation adjudication 输入：
 - source NeedCandidate 与 readiness assessment。
@@ -1530,7 +1581,7 @@ Validation adjudication 输入：
 - 人的研究兴趣、资源约束、目标社区和禁区。
 
 人类决策支撑证据包：
-- `ValidateNeedAdjudication` 必须产出 `ValidationDecisionSupportPacket`，供人确认 `validated / return / recheck / reject / park / merge`。
+- `ValidateNeedAdjudication` 必须产出 `ValidationDecisionSupportPacket`，供人确认 `validate / return / recheck / reject / park / merge`。
 - 证据包不是新的事实来源，也不替代 EvidenceUnit；它是面向人的审查视图，所有关键判断必须引用 EvidenceUnit、SearchRun、SearchPlan 或 reviewer artifact。
 - 证据包应先展示 strongest support、strongest challenge 和 blocking risks，再给 recommendation，避免 LLM 结论先入为主。
 - 证据包必须区分 `source_claim`、`llm_inference`、`human_judgment` 和 `counter_evidence`，不能把 LLM 综合写成论文事实。
@@ -1575,6 +1626,35 @@ Validation adjudication 最低判断：
 - scope 是否可继承：需求边界是否足以让 ResearchSlice 继续收束。
 - residual risks 是否可接受：剩余不确定性是否明确记录，且不会阻断下一步研究切口设计。
 
+`ValidateNeedAdjudicationResult` 最低结构：
+```yaml
+ValidateNeedAdjudicationResult:
+  adjudication_result_id: string
+  source_need_candidate_id: string
+  source_need_candidate_version: string | null
+  final_decision: validate | return_to_candidate | request_searchplan_recheck | reject | park | merge
+  decision_support_packet_id: string
+  adjudication_workflow_run_id: string | null
+  human_decision_id: string | null
+  output_validated_need_id: string | null
+  output_refs:
+    searchplan_recheck_request_ids: string[]
+    revised_need_candidate_id: string | null
+    merged_into_need_candidate_id: string | null
+    decision_memory_id: string | null
+  rationale: string
+  required_actions: string[]
+  loopback_target: candidate | search_plan | evidence_map | none
+  created_at: string
+```
+
+`ValidateNeedAdjudicationResult` 规则：
+- `final_decision = validate` 时，`human_decision_id` 和 `output_validated_need_id` 必须非空。
+- `final_decision != validate` 时，`output_validated_need_id` 必须为 `null`。
+- `request_searchplan_recheck` 必须创建或引用 `SearchPlanRecheckRequest`。
+- `merge` 必须给出 `merged_into_need_candidate_id` 或等价 merge target，不能只记录自然语言合并说明。
+- `reject`、`park` 和 `merge` 应按需生成 `CandidateDecisionMemory` 或通用 `DecisionMemoryEntry`，供后续 generation / readiness / adjudication 使用。
+
 ValidatedNeed 最低结构：
 ```yaml
 ValidatedNeed:
@@ -1582,6 +1662,9 @@ ValidatedNeed:
     validated_need_id
     title_card_id
     source_need_candidate_id
+    source_adjudication_result_id
+    decision_support_packet_id
+    human_decision_id
   source_snapshot:
     evidence_map_id
     evidence_map_version
@@ -1599,16 +1682,16 @@ ValidatedNeed:
     challenge_unit_ids: []
     baseline_refs: []
     conflict_set_ids: []
-  adjudication:
-    decision: validated | return_to_candidate | request_searchplan_recheck | rejected | parked | merged
-    decision_support_packet_id
-    decision_reason
+  decision_trace:
+    accepted_decision_reason
     rebuttal_summary
     residual_risks: []
     reviewer_artifact_refs: []
-    confirmed_by
-  lifecycle:
-    status: active | recheck_required | challenged | superseded | retracted
+  state:
+    lifecycle_status: active | closed | archived
+    decision_status: accepted | superseded | retracted
+    review_status: human_confirmed | challenged
+    freshness_status: fresh | stale | recheck_required | invalidated
     created_at
     updated_at
 ```
@@ -1617,6 +1700,7 @@ ValidatedNeed:
 - `ValidatedNeed` 是 evidence-version-bound 的结论，不是永久事实；EvidenceMap 或 SearchPlan 的关键更新可以使其进入 `recheck_required`。
 - `ValidatedNeed` 不等于 topic value，也不等于可发表性；它只说明“这个需求在当前证据下足以作为研究切口输入”。
 - LLM 可以生成 validation memo、反证总结和 recommendation，但不应单独完成最终 validation。
+- `return_to_candidate`、`request_searchplan_recheck`、`reject`、`park`、`merge` 是 `ValidateNeedAdjudicationResult.final_decision` 的失败/回流处置结果；这些结果不应 materialize 为 `ValidatedNeed` 对象。
 
 ### 6. ResearchSlice
 - 职责：把一个或多个 validated needs 收束成可执行研究切口。
@@ -2856,7 +2940,7 @@ ValueReasoningMemo:
     ceiling_claim: string
     base_claim: string
     fallback_claim: string
-    weakest_still_publishable_claim: string
+    minimum_defensible_contribution_claim: string
     risk_note: string
   reviewer_risks:
     - objection: string
@@ -2997,6 +3081,19 @@ Trace and boundary check：
 - package 中每个核心 claim、title candidate、evaluation plan 项都必须能追溯到 TopicQuestion、ValueReasoningMemo、ResearchSlice 或 EvidenceUnit refs。
 - package 不能新增 unmet need、扩大 excluded boundaries、提升 claim strength 到 ValueAssessment 未支持的范围。
 - 如果 package narrative 需要修改 question、claim、boundary 或 evaluation route，应退回为 package draft issue，而不是直接改上游对象。
+
+Package readiness：
+```yaml
+TopicPackage:
+  package_readiness_status: draft | trace_ready | promotion_review_ready | blocked | needs_revision | stale
+  readiness_gate_result_ref: string | null
+  blocking_issue_refs: string[]
+```
+
+规则：
+- 新建 `TopicPackage` 默认是 `draft`，即使来源是 `advance_to_package`。
+- `TraceAndBoundaryCheck` 通过后可以进入 `trace_ready`；promotion review 准入必须显式进入 `promotion_review_ready`。
+- `blocked/needs_revision/stale` 必须带 blocker、required action 或 recheck ref；不得用 draft package 直接创建 `PaperProjectBridge`。
 
 持久化建议：
 - 现有 `TitleCardPackage` 已映射为 `TopicPackage`，可继续作为正式 package 对象演进。
@@ -3236,6 +3333,32 @@ Node Workflow / Agent
 - `no_impact` 也应记录 resolution，用于解释为什么某个对象没有被刷新或阻断。
 - `AcceptedRisk` 不会因为任意新事件自动失效；只有 expiry/recheck condition 命中、新证据超出原 scope、severity 升级或 human/gate 明确要求时，才重新打开。
 - 同一对象的同类 unresolved impact 应合并，除非新事件改变 impact level、required action 或 blocker policy。
+
+### Recheck storm control
+recheck storm control 是控制面策略，不是单个 workflow prompt。目标是让 recheck 可解释、可关闭、可排序，而不是把每个 upstream 变化扩散成全链自动重跑。
+
+事件准入：
+- 只有跨对象影响、关键 transition 阻断、人审/override 需求、长期 memory 价值或 downstream feedback 需要追踪时，才创建 `RecheckEvent`。
+- 纯本地 workflow warning、低置信草稿、无 downstream ref 的搜索噪声和已被现有 open event 覆盖的重复 signal 不创建新 event。
+- 批量 source/import/extraction/model 变化应优先创建 batch event；batch event 再由 impact assessment 按 lineage/ref 拆分，而不是逐 paper 或逐 EvidenceUnit 入队。
+
+传播预算：
+- v1a 只允许 direct lineage propagation：`SearchPlan/SearchRun/EvidenceMap/EvidenceUnit -> NeedCandidate -> ValidateNeedAdjudicationResult/ValidatedNeed`。
+- 二级传播必须由新的 impact assessment、关键 gate 或人类操作显式触发；不得在后台自动把一个 source health 变化扩散到所有 v1b/v1c 目标。
+- 每个 event 必须有 affected scope hint；scope 无法界定时进入 human review 或 batch diagnostic，不做自动传播。
+- 每个 TopicSeed / workspace 应有 open recheck cap；超过 cap 时，低优先级 stale impact 保持 open/audit，不主动入 focused queue。
+
+重跑限流：
+- 自动或半自动 rerun 需要满足至少一个新信息条件：新 evidence/source、SearchPlan version、EvidenceMap version、target version、policy/workflow version、accepted risk condition 或 human instruction。
+- 如果连续 retry 没有产生新 evidence、不同 blocker、resolution 或更高质量 trace，必须停止自动重试并转为 human review、park、dismiss with rationale 或 revision request。
+- `retry_budget` 按 impact 计，不按 workflow run 计；同一 impact 下的 failed workflow、rerun instability 和 recheck attempt 共享预算。
+- `cooldown_until` 到期只允许重新评估是否仍需处理，不代表自动重跑。
+
+合并与关闭：
+- 相同 `event_fingerprint` 或 `impact_dedup_key` 的事项必须合并 observations、artifact refs、severity 和 required actions。
+- 新版本对象、confirmed no impact、supersession、accepted risk、human dismiss 或 successful revision 必须关闭或 supersede 旧 impact；不能无限保留多个等价 open blockers。
+- `invalidated` 不允许自动 dismiss；必须转入 retract/supersede/drop/revise 或 human-confirmed exceptional handling。
+- storm-control decision 本身应记录 artifact/ref：为什么合并、降级、延迟、停止重跑或要求人审。
 
 ### Workflow 输入/输出协议
 所有关键 workflow 的 input snapshot 都应包含：
@@ -4043,10 +4166,10 @@ Decision Memory 必须进入关键 workflow 的 input state context 或 adjacent
 - v1b：扩展到 slice/question/value memory，覆盖不可回答、scope 太宽、resource infeasible、claim overreach、novelty too weak。
 - v1c：接入 promotion / downstream feedback memory；不得反向覆盖历史 decision，只能触发 recheck、新版本或 human-confirmed follow-up。
 
-## 横向 QualitySignal / 轻量系统评估机制
+## 横向 QualitySignal / 运行时质量信号
 
 ### 定位
-系统级评估不做面向人的审查报告，也不做复杂 rubric。v1 只保留机器可读的 `QualitySignal`，用于让 gate、workflow、recheck 和 decision memory 共享轻量质量判断。
+`QualitySignal` 是运行时质量信号，不是离线系统评估。v1 只保留机器可读的 `QualitySignal`，用于让 gate、workflow、recheck 和 decision memory 共享轻量质量判断。
 
 人类介入仍然是结果导向的：UI 展示 gate result、blocker、required action、accepted risk 和可推进/不可推进结论，而不是展示完整评估过程。
 
@@ -4056,6 +4179,7 @@ Decision Memory 必须进入关键 workflow 的 input state context 或 adjacent
 - `QualitySignal` 不直接改状态；必须由 `DecisionChainControlPlane` / gate / policy 解释。
 - `QualitySignal` 不直接驱动整体调度器；scheduler 只能消费控制面派生出的 queue item、required action、recheck impact 或 transition attempt。
 - v1a 只覆盖 evidence-to-need 质量闭环，不试图预测完整论文成功率。
+- `QualitySignal` 是运行时 gate/routing 信号，不替代离线系统评估；workflow/prompt/model 的质量校准应由后续独立 `OfflineEvaluationRun` / benchmark 回放机制承担。
 
 ### 推荐结构
 ```yaml
@@ -4152,6 +4276,170 @@ v1a 不做：
 - critical workflow 完成后生成少量 signal。
 - gate 失败或高风险 pass_with_risk 时生成 signal。
 - recheck invalidation、human reject、workflow instability、downstream feedback 可生成 signal。
+
+## 横向 OfflineEvaluation / Replay
+
+### 定位
+Offline evaluation / replay 是独立于生产链路的校准机制，用于回答“当前 workflow/prompt/model/search/policy 在固定样本上的表现如何”。它不替代 runtime `QualitySignal`，也不直接改变任何生产对象状态。
+
+核心原则：
+- 离线评估必须基于 frozen input snapshots、frozen resource snapshots、明确的 prompt/model/workflow/search/policy 版本。
+- replay 不写生产 authority tables，不创建生产 `ValidatedNeed`，也不修改 production `NeedCandidate` / `SearchPlan` / `EvidenceMap`。
+- 评估结果可以生成 prompt、workflow、TransitionPolicy、WorkflowProfilePolicy、SearchPlan policy 或 test dataset 的修改建议，但这些建议必须走正常变更流程。
+- v1a 先建立 curated benchmark 和指标基线，再逐步 ratchet threshold；不要在首版用未经校准的数字阈值伪装成熟评估。
+- trace/readiness 类硬性不变量仍应作为 production gate：trace 不完整时不得创建 `ValidatedNeed`。
+
+### 最小对象
+```yaml
+OfflineEvaluationDataset:
+  dataset_id: string
+  name: string
+  version: string
+  scope: v1a_evidence_to_need | v1b_need_to_package | v1c_promotion
+  case_ids: string[]
+  frozen_resource_snapshot_refs: FunctionalRef[]
+  gold_label_policy_version: string
+  metric_profile_id: string
+  created_at: string
+
+OfflineEvaluationCase:
+  case_id: string
+  dataset_id: string
+  case_type:
+    true_unmet_need
+    pseudo_gap
+    strong_baseline_solved
+    author_future_work_misleading
+    abstract_overclaim_body_unsupported
+    terminology_shift_same_task
+    same_team_duplicate_claim
+    source_health_or_missing_fulltext
+    downstream_failure_feedback
+  input_bundle_refs:
+    title_card_ref: FunctionalRef | null
+    topic_seed_ref: FunctionalRef | null
+    literature_snapshot_ref: FunctionalRef
+    search_plan_ref: FunctionalRef | null
+    evidence_map_ref: FunctionalRef | null
+    downstream_feedback_ref: FunctionalRef | null
+  gold_expectation:
+    expected_outcome: validate | any_non_validate | request_searchplan_recheck | reject | park | merge
+    required_counter_evidence_refs: EvidenceRef[]
+    required_baseline_refs: EvidenceRef[]
+    required_trace_refs: FunctionalRef[]
+    expected_blocker_codes: string[]
+    expected_recheck_target: candidate | search_plan | evidence_map | none
+    expected_downstream_rework_cause: string | null
+  notes: string
+```
+
+```yaml
+OfflineEvaluationRun:
+  eval_run_id: string
+  dataset_id: string
+  dataset_version: string
+  workflow_profile_policy_version: string
+  transition_policy_version: string
+  prompt_template_versions: string[]
+  model_profile_ids: string[]
+  search_policy_version: string
+  frozen_snapshot_refs: FunctionalRef[]
+  case_result_ids: string[]
+  aggregate_metric_result_ids: string[]
+  artifact_refs: string[]
+  created_at: string
+
+OfflineEvaluationCaseResult:
+  case_result_id: string
+  eval_run_id: string
+  case_id: string
+  observed_final_decision: validate | return_to_candidate | request_searchplan_recheck | reject | park | merge
+  observed_validated_need_created: boolean
+  observed_key_evidence_refs: EvidenceRef[]
+  observed_counter_evidence_refs: EvidenceRef[]
+  observed_baseline_refs: EvidenceRef[]
+  observed_blocker_codes: string[]
+  observed_recheck_request_ids: string[]
+  trace_completeness_verdict: pass | warn | fail
+  readiness_verdict: pass | warn | fail
+  human_override_used: boolean
+  downstream_rework_cause: string | null
+  replay_diff_id: string | null
+  artifact_refs: string[]
+
+OfflineEvaluationMetricResult:
+  metric_result_id: string
+  eval_run_id: string
+  metric_name: string
+  numerator: number
+  denominator: number
+  value: number | null
+  verdict: baseline_only | pass | warn | fail
+  threshold_policy: string | null
+  contributing_case_ids: string[]
+  notes: string
+
+ReplayDiff:
+  replay_diff_id: string
+  case_id: string
+  compared_eval_run_ids: string[]
+  changed_fields:
+    final_decision_changed: boolean
+    key_evidence_changed: boolean
+    blocker_set_changed: boolean
+    trace_verdict_changed: boolean
+  instability_severity: none | low | medium | high
+  likely_causes: string[]
+  artifact_refs: string[]
+```
+
+### v1a 最小 case 类型
+v1a evaluation dataset 必须覆盖以下 case 类型；首版建议每类 `3-5` 个 curated cases，形成约 `27-45` 个案例的 baseline，再根据真实失败模式扩充。
+
+| Case 类型 | 目的 |
+|---|---|
+| `true_unmet_need` | 看系统是否能把真实 unmet need 推进到 validate。 |
+| `pseudo_gap` | 看系统是否能挡住伪 gap。 |
+| `strong_baseline_solved` | 看系统是否漏掉强 baseline 或已解决模式。 |
+| `author_future_work_misleading` | 看系统是否把作者 future work 误读为真实 gap。 |
+| `abstract_overclaim_body_unsupported` | 看 EvidenceUnit locator 和正文 grounding 是否足够。 |
+| `terminology_shift_same_task` | 看 SearchPlan coverage 是否能跨术语覆盖同一任务。 |
+| `same_team_duplicate_claim` | 看 independence / duplicate claim 判断是否有效。 |
+| `source_health_or_missing_fulltext` | 看 trace、source health 和 missing fulltext 风险处理。 |
+| `downstream_failure_feedback` | 看 recheck 和 negative memory 是否能从下游失败中工作。 |
+
+### v1a 最低指标
+```yaml
+minimum_metrics:
+  - false-gap rate
+  - baseline miss rate
+  - counter-evidence recall
+  - trace completeness
+  - readiness false-pass rate
+  - human override rate
+  - rerun instability
+  - recheck precision
+  - negative memory usefulness
+  - downstream rework cause
+```
+
+指标定义：
+- `false-gap rate`：伪 gap、future-work 误导、abstract overclaim 等应被阻断 case 被错误推进的比例。
+- `baseline miss rate`：strong baseline 已解决 case 中，系统未检索、未绑定或未用于挑战的比例。
+- `counter-evidence recall`：gold counter-evidence 被找到、定位并进入 decision support packet / gate context 的召回率。
+- `trace completeness`：关键 claim 是否具备 EvidenceUnit、ContentRef locator、SearchRun/SearchPlan provenance、source health 和 artifact refs。
+- `readiness false-pass rate`：gold blocker 存在但 readiness 或 adjudication 仍通过的比例。
+- `human override rate`：人类 override / pass_with_risk 的频率；该指标用于校准 gate 松紧和 evidence packet 可用性，不应简单追求越低越好。
+- `rerun instability`：同一 frozen snapshot 在 replay 后 final decision、关键 evidence、blocker set 或 trace verdict 发生实质漂移的比例。
+- `recheck precision`：recheck request 中真正导致补证、修正、阻断或有效降级的比例。
+- `negative memory usefulness`：negative memory 成功阻断重复伪 gap / 已解决方向，且未误伤真实新需求的有效性。
+- `downstream rework cause`：下游返工原因分布，至少区分 `missing_baseline`、`unsupported_claim`、`trace_gap`、`boundary_creep`、`source_unavailable`、`evaluation_infeasible`、`workflow_instability`。
+
+### 阈值策略
+- v1a 第一轮只记录 baseline 数字和失败样例，不强行设成熟阈值。
+- 第二轮开始按指标 ratchet threshold，优先收紧 `false-gap rate`、`baseline miss rate`、`counter-evidence recall`、`trace completeness`、`readiness false-pass rate`。
+- `trace completeness` 和 `readiness false-pass rate` 是生产 gate 的硬风险指标；评估失败必须回到 gate/policy/prompt/search coverage 修正，而不是用 runtime override 掩盖。
+- `human override rate`、`downstream rework cause` 更适合做诊断分布；高值说明 gate、证据包、UI 或上游检索策略需要重校准。
 
 ## 横向人机职责 / Gate 权限模型
 
@@ -4336,7 +4624,7 @@ blocker 不能只用“是否 hard”描述；必须先经过 `BlockerPolicy` �
 - `missing_required_source`：核心判断没有任何可追溯来源。
 - `unauthorized_source_use`：未经授权保存或使用外部全文、受限数据或不允许持久化的材料。
 - `schema_or_version_invalid`：对象版本、snapshot hash、contract hash 或 ref integrity 不一致。
-- `new_unvalidated_need`：TopicQuestion、TopicPackage 或 downstream bridge 引入未经过 NeedCandidate -> ValidatedNeed 的新需求。
+- `new_unvalidated_need`：TopicQuestion、TopicPackage 或 downstream bridge 引入未经过 NeedCandidate -> ValidateNeedAdjudicationResult -> ValidatedNeed 的新需求。
 - `boundary_violation_unacknowledgeable`：问题或 package 明显越过 ResearchSlice / QuestionContract 的 non-negotiable boundary。
 - `promotion_without_human_decision`：试图绕过 `PromotionDecision.promote` 的人类授权创建 PaperProject。
 
@@ -4507,7 +4795,7 @@ v1a 的最小责任：
 - `GenerateNeedCandidates`、`AssessCandidateReadiness` 和 `ValidateNeedAdjudication` 必须通过 `ContextCompiler` 获得 `InputSnapshot`。
 - `EvidenceUnit` 可作为证据，`NeedCandidate` 只能作为 hypothesis，`CandidateDecisionMemory` 只能作为 constraint，LLM transcript 只能 audit。
 - `ValidatedNeed` 的支持理由必须回溯到 current EvidenceUnit / SearchRun / SearchPlan / LiteratureResourcePoolSnapshot 版本；不能引用 transcript 或 long memo 作为支持证据。
-- v1a 验收不只是产出 `ValidatedNeed`，还要证明 `ContextPolicyVersion`、`InputSnapshot`、`WorkflowHarness`、`ReadinessGateResult`、`QualitySignal`、`ArtifactRef`、`RecheckEvent` 和 `ChainTransitionAttempt` 能形成最小闭环。
+- v1a 验收不只是产出 `ValidatedNeed`，还要证明 `ContextPolicyVersion`、`InputSnapshot`、`WorkflowHarness`、`ReadinessGateResult`、`QualitySignal`、`ArtifactRef`、`RecheckEvent` 和 `ChainTransitionAttempt` 能形成最小闭环，并能用 offline evaluation / replay 跑出首版质量 baseline。
 
 v1b 的扩展方式：
 - v1b 不重新定义上下文准入，只新增 workflow policy：`PlanResearchSlice`、`FormTopicQuestion`、`AssessTopicValue`、`BuildTopicPackage`。
@@ -4867,7 +5155,8 @@ ReadinessGateResult:
 | `SearchRun -> EvidenceMap` | run completed 或 partial accepted，result accounting/source health/dedup ready。 |
 | `EvidenceMap -> NeedCandidate` | claim-level EvidenceUnit、pollution checks、support/challenge/context refs ready。 |
 | `NeedCandidate -> ready_for_validation` | support/challenge/coverage/scope/pseudo-gap checks ready，且无 open high-priority SearchPlan recheck。 |
-| `NeedCandidate -> ValidatedNeed` | readiness gate 通过，validation support packet 完成，human confirmed。 |
+| `NeedCandidate -> ValidateNeedAdjudicationResult` | readiness gate 通过，validation support packet 完成，裁决处置可审计。 |
+| `ValidateNeedAdjudicationResult -> ValidatedNeed` | `final_decision=validate`，human confirmed，且 `output_validated_need_id` 非空。 |
 | `ValidatedNeed -> ResearchSlice` | validated need evidence-version-bound，constraint profile 和 evidence context ready。 |
 | `ResearchSlice -> TopicQuestion` | boundaries、resource trace、claim shape、evaluation path、constraint snapshot ready。 |
 | `TopicQuestion -> TopicValueAssessment` | answerability plan、need trace、evidence refs、boundary check ready。 |
@@ -4898,10 +5187,10 @@ flowchart TD
   F -->|coverage gap| B
   F -->|yes| G["NeedCandidate<br/>候选需求池"]
 
-  G --> H["Need Validation<br/>支持 + 反证 + 已解决检查"]
-  H -->|rejected / weak| I["RejectedNeedRecord<br/>负例记录"]
+  G --> H["ValidateNeedAdjudicationResult<br/>裁决处置 + 输出 refs"]
+  H -->|return / recheck / reject / park / merge| I["CandidateDecisionMemory / RecheckRequest<br/>负例、回流与重查记录"]
   H -->|needs more evidence| B
-  H -->|approved| J["ValidatedNeed<br/>成立需求"]
+  H -->|final_decision = validate| J["ValidatedNeed<br/>成立需求"]
 
   J --> K["ResearchSlice<br/>研究切口 + 排除边界"]
   K --> L["TopicQuestion<br/>主问题 + 贡献假设"]
@@ -4932,12 +5221,13 @@ flowchart TD
 
 P0 Core Identity / Version / Trace：
 - 目标：先保证链路可审计、可追溯、可挂接 LLM workflow。
-- 独立表优先：`TopicSeed`、`LiteratureResourcePoolSnapshot`、`SearchPlan`、`SearchPlanCoverageMatrixView`、`CoverageRowIntent`、`CoverageExecutionObservation`、`CoverageEvidenceBinding`、`CoverageAssessment`、`CoverageRiskAcceptance`、`SearchRun`、`EvidenceMap`、`EvidenceUnit`、`FunctionalLineageLink`、`TraceSnapshot`、`ArtifactRef`、`LLMWorkflowRun`。
+- 独立表优先：`TopicSeed`、`LiteratureResourcePoolSnapshot`、`SearchPlan`、`CoverageRowIntent`、`CoverageExecutionObservation`、`CoverageEvidenceBinding`、`CoverageAssessment`、`CoverageRiskAcceptance`、`SearchRun`、`EvidenceMap`、`EvidenceUnit`、`FunctionalLineageLink`、`TraceSnapshot`、`ArtifactRef`、`LLMWorkflowRun`。
+- `SearchPlanCoverageMatrix` 可以作为 DB view、materialized view 或 API read model 生成，但不作为 authority table。
 - 必要原因：没有这些对象，后续 `ValidatedNeed`、`ResearchSlice`、`TopicQuestion` 或 `PaperProjectBridge` 都无法解释来源和版本。
 
 P1 Decision Objects：
 - 目标：承载正式研究判断和下游交接。
-- 独立表优先：`NeedCandidate`、`ValidatedNeed`、`ResearchSlice`、`TopicQuestion`、`TopicValueAssessment`、`ValueDispositionDecision`、`TopicPackage`、`PromotionDecision`、`PaperProjectBridge`。
+- 独立表优先：`NeedCandidate`、`ValidateNeedAdjudicationResult`、`ValidatedNeed`、`ResearchSlice`、`TopicQuestion`、`TopicValueAssessment`、`ValueDispositionDecision`、`TopicPackage`、`PromotionDecision`、`PaperProjectBridge`。
 - 必要原因：这些对象是选题链路的核心状态和 UI 主视图，不能只作为 LLM 输出 artifact 存在。
 
 P2 Cross-cutting Control：
@@ -4949,6 +5239,11 @@ P3 Expansion / Optimization：
 - 目标：根据 UI 查询、recheck 触发和分析需要逐步拆表。
 - 可先 thin DB record + JSON payload + artifact refs：`SeedDiscoveryRun`、`SeedCandidateSet`、`SeedCandidate`、`NormalizeAndReviewSeedRun`、`EvidenceStrengthAssessment`、`ResearchSliceOptionSet`、`TopicQuestionCandidateSet`、`TypedLink`、`Cluster`、`Pattern`、`ConflictSet`、`PromptTemplateVersion`、`ModelProfile`、`LLMWorkflowOutputRef`。
 - 说明：P3 不是低价值对象；只是 v1 可先保存稳定身份、状态、关键 refs 和 payload，等查询/索引/recheck 需求稳定后提升为更细独立表。
+
+Evaluation / Replay Records：
+- 目标：离线校准 workflow/prompt/model/search/policy，不参与 runtime authority 写入。
+- 可先 thin DB record + artifact refs：`OfflineEvaluationDataset`、`OfflineEvaluationCase`、`OfflineEvaluationRun`、`OfflineEvaluationCaseResult`、`OfflineEvaluationMetricResult`、`ReplayDiff`。
+- 必要原因：`QualitySignal` 只能说明一次运行中的质量风险，不能证明系统对伪 gap、baseline miss、反证召回、trace 完整性和 rerun stability 的整体表现。
 
 ### 字段列化规则
 以下字段不能只藏在 JSON payload：
@@ -4976,7 +5271,6 @@ P3 Expansion / Optimization：
 - `LiteratureResourcePoolSnapshot`
 - `NormalizeAndReviewSeedRun`
 - `SearchPlan`
-- `SearchPlanCoverageMatrixView`
 - `CoverageRowIntent`
 - `CoverageExecutionObservation`
 - `CoverageEvidenceBinding`
@@ -4992,6 +5286,7 @@ P3 Expansion / Optimization：
 - `ConflictSet`
 - `NeedCandidate`
 - `CandidateDecisionMemory`
+- `ValidateNeedAdjudicationResult`
 - `ValidatedNeed`
 - `ValidationDecisionSupportPacket`
 - `ResearchConstraintProfile`
@@ -5434,6 +5729,7 @@ LiteratureResourcePoolSnapshot:
 持久化策略：
 - v1a 作为 authority snapshot table 入库，至少保存 snapshot identity、source_pool_version、library_index_version、filter policy、included/excluded source refs、batch refs、dedup/canonical map versions、source health summary、fulltext availability summary 和 snapshot_hash。
 - 大体量列表、cluster summary、diagnostic report、rerun diff 和长篇 provenance report 可放 artifact store；DB 保存 artifact refs 和 checksum。
+- 大文献库场景下，`included_source_refs` / `excluded_source_refs` 不应强制塞进单个大 JSON；可实现为 paged membership table、delta manifest 或 artifact manifest。snapshot header 必须保留 counts、hash、membership manifest ref 和可查询 source health summary。
 - snapshot 不原地修改；资源池、索引、dedup、source health、filter policy 或 extraction 版本变化时创建新 snapshot。
 - `SearchPlan`、`SeedDiscoveryRun`、`SearchRun` 必须保存 snapshot ref；`EvidenceMap` 至少能通过 SearchRun 追溯到 snapshot。
 - 如果 snapshot 只作为临时 read model 生成，也必须在被正式 workflow 消费前持久化或保存 hash + materialized refs，避免历史不可复现。
@@ -6030,7 +6326,7 @@ SearchPlan:
 - suspected counter-evidence refs
 - 为什么它可能是真需求
 - 为什么它可能是伪 gap
-- status: `draft | challenged | rejected | validated`
+- state axes，例如 `lifecycle_status`、`decision_status`、`review_status`、`freshness_status`
 
 为什么需要它：
 - 系统需要一个地方表达弱需求、重复需求、边缘需求、已解决需求，而不是过早称为 `ValidatedNeed`。
