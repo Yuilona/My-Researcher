@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-05-13T07:48:02.753Z",
+  "updatedAt": "2026-05-13T10:14:02.735Z",
   "ssot": {
     "mode": "repo-prisma",
     "source": {
@@ -8931,6 +8931,147 @@
       "indexes": []
     },
     {
+      "name": "TopicSelectionAcceptedRisk",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "riskType",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "sourceRef",
+          "type": "Json",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "sourceRefId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "sourceRefType",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "sourceType",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "targetRef",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "targetRefId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "targetRefType",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "targetVersionId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "titleCardId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workspaceId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": []
+    },
+    {
       "name": "TopicSelectionArtifactRef",
       "dbName": null,
       "schema": null,
@@ -9134,6 +9275,197 @@
           "map": null
         }
       ]
+    },
+    {
+      "name": "TopicSelectionBlockerPolicy",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "allowedHandlerKeys",
+          "type": "String",
+          "nullable": false,
+          "list": true,
+          "dbName": null,
+          "dbType": null,
+          "default": "[]",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "blockerCode",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "category",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": "Timestamptz",
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "defaultAction",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "id",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "policyVersionId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "retiredAt",
+          "type": "DateTime",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": "Timestamptz",
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "status",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": [
+        {
+          "type": "index",
+          "fields": [
+            "category",
+            "status"
+          ],
+          "name": null,
+          "map": null
+        },
+        {
+          "type": "unique",
+          "fields": [
+            "blockerCode",
+            "policyVersionId"
+          ],
+          "name": null,
+          "map": null
+        }
+      ]
+    },
+    {
+      "name": "TopicSelectionCandidateDecisionMemory",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "decisionMemoryEntryId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "decisionMemoryEntryRef",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "id",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "titleCardId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workspaceId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": []
     },
     {
       "name": "TopicSelectionCandidateDecisionMemorySuggestion",
@@ -10227,6 +10559,200 @@
           "map": null
         }
       ]
+    },
+    {
+      "name": "TopicSelectionDecisionMemoryEntry",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "sourceRef",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "sourceRefId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "sourceRefType",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "sourceStage",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "titleCardId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workspaceId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": []
+    },
+    {
+      "name": "TopicSelectionDecisionWorkQueueItem",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "handlerKey",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "id",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "queueItemType",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "targetRef",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "targetRefId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "targetRefType",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "targetVersionId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "titleCardId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workspaceId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": []
     },
     {
       "name": "TopicSelectionEvidenceCluster",
@@ -11790,6 +12316,92 @@
       ]
     },
     {
+      "name": "TopicSelectionHumanOverride",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "targetRef",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "targetRefId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "targetRefType",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "targetVersionId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "titleCardId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workspaceId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": []
+    },
+    {
       "name": "TopicSelectionInputSnapshot",
       "dbName": null,
       "schema": null,
@@ -12495,6 +13107,623 @@
       "indexes": []
     },
     {
+      "name": "TopicSelectionOfflineEvaluationCase",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "caseKey",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "caseType",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "datasetId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "frozenInputBundle",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "id",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "status",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "titleCardId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workspaceId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": []
+    },
+    {
+      "name": "TopicSelectionOfflineEvaluationCaseResult",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "caseId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "caseType",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "datasetId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "id",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "observedOutput",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "runId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "status",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workspaceId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": []
+    },
+    {
+      "name": "TopicSelectionOfflineEvaluationDataset",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "caseCount",
+          "type": "Int",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": "0",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "caseTypeCoverage",
+          "type": "String",
+          "nullable": false,
+          "list": true,
+          "dbName": null,
+          "dbType": null,
+          "default": "[]",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "datasetKey",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "datasetVersion",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "id",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "payload",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "source",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "stage",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "status",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workspaceId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": []
+    },
+    {
+      "name": "TopicSelectionOfflineEvaluationMetricResult",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "contributingCaseRefs",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": "\"[]\"",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "datasetId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "denominator",
+          "type": "Float",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "failureCaseRefs",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": "\"[]\"",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "id",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "metricKey",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "metricPayload",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "notes",
+          "type": "String",
+          "nullable": false,
+          "list": true,
+          "dbName": null,
+          "dbType": null,
+          "default": "[]",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "numerator",
+          "type": "Float",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "runId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "value",
+          "type": "Float",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workspaceId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": []
+    },
+    {
+      "name": "TopicSelectionOfflineEvaluationRun",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "caseCount",
+          "type": "Int",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": "0",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "datasetId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "id",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "metricKeys",
+          "type": "String",
+          "nullable": false,
+          "list": true,
+          "dbName": null,
+          "dbType": null,
+          "default": "[]",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "modelProfileKey",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "policyVersionId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "runKey",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "runPayload",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "searchProfileKey",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "status",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workflowProfileKey",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workflowProfileVersion",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workspaceId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": []
+    },
+    {
       "name": "TopicSelectionQualitySignal",
       "dbName": null,
       "schema": null,
@@ -12990,6 +14219,383 @@
           "map": null
         }
       ]
+    },
+    {
+      "name": "TopicSelectionRecheckEvent",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "eventType",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "id",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "originStage",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "sourceRef",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "sourceRefId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "sourceRefType",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "sourceVersionId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "titleCardId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workspaceId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": []
+    },
+    {
+      "name": "TopicSelectionRecheckImpact",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "recheckEventId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "recheckEventRef",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "titleCardId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workspaceId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": []
+    },
+    {
+      "name": "TopicSelectionRecheckResolution",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "recheckImpactId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "recheckImpactRef",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "titleCardId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workspaceId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": []
+    },
+    {
+      "name": "TopicSelectionReplayDiff",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "blockerSetChanged",
+          "type": "Boolean",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": "false",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "caseId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "changedDimensions",
+          "type": "String",
+          "nullable": false,
+          "list": true,
+          "dbName": null,
+          "dbType": null,
+          "default": "[]",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "datasetId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "expectedSnapshot",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "finalDecisionChanged",
+          "type": "Boolean",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": "false",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "id",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "keyEvidenceSetChanged",
+          "type": "Boolean",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": "false",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "runId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "status",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "traceVerdictChanged",
+          "type": "Boolean",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": "false",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "workspaceId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": []
     },
     {
       "name": "TopicSelectionSearchPlan",

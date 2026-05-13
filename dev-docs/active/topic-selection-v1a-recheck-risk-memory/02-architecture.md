@@ -7,7 +7,7 @@ This package owns cross-cutting response to stale inputs, blockers, accepted ris
 ```text
 Workflow/Gate state signals
   -> QualitySignal interpretation policy
-  -> RecheckCoordinator
+  -> TopicSelectionRecheckRiskMemoryService
   -> RecheckEvent
   -> RecheckImpact
   -> DecisionWorkQueueItem
@@ -36,3 +36,9 @@ Workflow/Gate state signals
 
 ## Downstream Contract
 All v1a business packages can emit state signals and candidate memory suggestions. This package decides whether they become durable recheck/memory/queue/risk records.
+
+## Implemented Slice
+- Shared contract module: `topic-selection-recheck-risk-memory-contracts`.
+- Backend service: `TopicSelectionRecheckRiskMemoryService`.
+- Backend repositories: in-memory and Prisma implementations behind `TopicSelectionRecheckRiskMemoryRepository`.
+- No UI, REST/OpenAPI, scheduler, v1b/v1c implementation, or target DB apply is included in this slice.

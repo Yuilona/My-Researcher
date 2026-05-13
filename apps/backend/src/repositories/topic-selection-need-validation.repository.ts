@@ -94,6 +94,9 @@ export interface TopicSelectionNeedValidationRepository {
   createCandidateDecisionMemorySuggestion(
     record: TopicSelectionCandidateDecisionMemorySuggestionRecord,
   ): Promise<TopicSelectionCandidateDecisionMemorySuggestionRecord>;
+  findCandidateDecisionMemorySuggestionById(
+    memorySuggestionId: string,
+  ): Promise<TopicSelectionCandidateDecisionMemorySuggestionRecord | null>;
   listCandidateDecisionMemorySuggestionsByNeedCandidateId(
     needCandidateId: string,
   ): Promise<TopicSelectionCandidateDecisionMemorySuggestionRecord[]>;

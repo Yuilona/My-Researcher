@@ -492,7 +492,7 @@ tasks:
     updated: 2026-05-13
   - id: T-050
     slug: topic-selection-v1a-offline-evaluation-replay
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
@@ -501,7 +501,7 @@ tasks:
     updated: 2026-05-13
   - id: T-051
     slug: topic-selection-v1a-recheck-risk-memory
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:

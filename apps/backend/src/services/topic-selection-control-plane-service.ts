@@ -325,6 +325,20 @@ export class TopicSelectionControlPlaneService {
     });
   }
 
+  async getQualitySignal(qualitySignalId: string): Promise<TopicSelectionQualitySignalRecord | null> {
+    return this.repository.findQualitySignalById(qualitySignalId);
+  }
+
+  async getReadinessGateResult(
+    readinessGateResultId: string,
+  ): Promise<TopicSelectionReadinessGateResultRecord | null> {
+    return this.repository.findReadinessGateResultById(readinessGateResultId);
+  }
+
+  async getWorkflowRun(workflowRunId: string): Promise<TopicSelectionLlmWorkflowRunRecord | null> {
+    return this.repository.findWorkflowRunById(workflowRunId);
+  }
+
   async recordHumanDecision(input: HumanDecisionInput): Promise<TopicSelectionHumanConfirmedDecisionRecord> {
     return this.repository.createHumanConfirmedDecision({
       human_confirmed_decision_id: this.idFactory('human_decision'),

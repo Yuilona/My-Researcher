@@ -156,6 +156,12 @@ export class InMemoryTopicSelectionNeedValidationRepository implements TopicSele
     return record;
   }
 
+  async findCandidateDecisionMemorySuggestionById(
+    memorySuggestionId: string,
+  ): Promise<TopicSelectionCandidateDecisionMemorySuggestionRecord | null> {
+    return this.memorySuggestions.get(memorySuggestionId) ?? null;
+  }
+
   async listCandidateDecisionMemorySuggestionsByNeedCandidateId(
     needCandidateId: string,
   ): Promise<TopicSelectionCandidateDecisionMemorySuggestionRecord[]> {

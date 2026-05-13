@@ -684,6 +684,15 @@ export class PrismaTopicSelectionNeedValidationRepository implements TopicSelect
     return toMemorySuggestionRecord(row);
   }
 
+  async findCandidateDecisionMemorySuggestionById(
+    memorySuggestionId: string,
+  ): Promise<TopicSelectionCandidateDecisionMemorySuggestionRecord | null> {
+    const row = await this.prisma.topicSelectionCandidateDecisionMemorySuggestion.findUnique({
+      where: { id: memorySuggestionId },
+    });
+    return row ? toMemorySuggestionRecord(row) : null;
+  }
+
   async listCandidateDecisionMemorySuggestionsByNeedCandidateId(
     needCandidateId: string,
   ): Promise<TopicSelectionCandidateDecisionMemorySuggestionRecord[]> {

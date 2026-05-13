@@ -2128,6 +2128,394 @@ model TopicSelectionV1aToV1bInputBundle {
   @@index([literatureSnapshotId])
 }
 
+model TopicSelectionRecheckEvent {
+  id                String    @id
+  workspaceId       String?
+  titleCardId       String?
+  originStage       String
+  eventType         String
+  sourceRefType     String
+  sourceRefId       String
+  sourceVersionId   String?
+  sourceRef         Json      @default("{}")
+  affectedScopeType String?
+  affectedScopeId   String?
+  affectedScopeRef  Json?
+  eventFingerprint  String
+  severity          String
+  reasonCodes       String[]  @default([])
+  summary           String
+  stateSignalRefs   Json      @default("[]")
+  evidenceRefs      Json      @default("[]")
+  artifactRefs      Json      @default("[]")
+  policyVersionId   String?
+  status            String
+  observationCount  Int       @default(1)
+  firstSeenAt       DateTime  @db.Timestamptz(6)
+  lastSeenAt        DateTime  @db.Timestamptz(6)
+  cooldownUntil     DateTime? @db.Timestamptz(6)
+  payload           Json      @default("{}")
+
+  @@index([eventFingerprint, status])
+  @@index([titleCardId, lastSeenAt(sort: Desc)])
+  @@index([eventType, status])
+  @@index([sourceRefType, sourceRefId])
+  @@index([affectedScopeType, affectedScopeId])
+  @@index([severity, status])
+  @@index([cooldownUntil])
+}
+
+model TopicSelectionRecheckImpact {
+  id                String    @id
+  workspaceId       String?
+  titleCardId       String?
+  recheckEventId    String
+  recheckEventRef   Json      @default("{}")
+  affectedRefType   String
+  affectedRefId     String
+  affectedVersionId String?
+  affectedRef       Json      @default("{}")
+  affectedStage     String
+  impactLevel       String
+  impactDedupKey    String
+  requiredActions   String[]  @default([])
+  status            String
+  retryCount        Int       @default(0)
+  retryBudget       Int       @default(3)
+  cooldownUntil     DateTime? @db.Timestamptz(6)
+  acceptedRiskRefs  Json      @default("[]")
+  queueItemRefs     Json      @default("[]")
+  assessmentPayload Json      @default("{}")
+  createdAt         DateTime  @db.Timestamptz(6)
+  updatedAt         DateTime  @db.Timestamptz(6)
+
+  @@index([impactDedupKey, status])
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([recheckEventId])
+  @@index([affectedRefType, affectedRefId])
+  @@index([impactLevel, status])
+  @@index([cooldownUntil])
+}
+
+model TopicSelectionRecheckResolution {
+  id               String   @id
+  workspaceId      String?
+  titleCardId      String?
+  recheckImpactId  String
+  recheckImpactRef Json     @default("{}")
+  resolutionType   String
+  resolvedBy       Json     @default("{}")
+  rationale        String
+  outputRefs       Json     @default("[]")
+  acceptedRiskId   String?
+  acceptedRiskRef  Json?
+  createdAt        DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([recheckImpactId])
+  @@index([resolutionType])
+  @@index([acceptedRiskId])
+}
+
+model TopicSelectionAcceptedRisk {
+  id                 String    @id
+  workspaceId        String?
+  titleCardId        String?
+  riskType           String
+  sourceType         String
+  sourceRefType      String?
+  sourceRefId        String?
+  sourceRef          Json?
+  targetRefType      String
+  targetRefId        String
+  targetVersionId    String?
+  targetRef          Json      @default("{}")
+  scopeRefs          Json      @default("[]")
+  affectedObjectRefs Json      @default("[]")
+  severity           String
+  status             String
+  rationale          String
+  acceptedBy         Json      @default("{}")
+  policyVersionId    String?
+  expiryCondition    String?
+  recheckCondition   String?
+  expiresAt          DateTime? @db.Timestamptz(6)
+  createdAt          DateTime  @db.Timestamptz(6)
+  updatedAt          DateTime  @db.Timestamptz(6)
+  resolvedAt         DateTime? @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([targetRefType, targetRefId])
+  @@index([sourceRefType, sourceRefId])
+  @@index([riskType, status])
+  @@index([expiresAt, status])
+}
+
+model TopicSelectionHumanOverride {
+  id              String   @id
+  workspaceId     String?
+  titleCardId     String?
+  targetRefType   String
+  targetRefId     String
+  targetVersionId String?
+  targetRef       Json     @default("{}")
+  overriddenRef   Json?
+  blockerType     String
+  acceptedRiskId  String
+  acceptedRiskRef Json     @default("{}")
+  actor           Json     @default("{}")
+  rationale       String
+  policyVersionId String?
+  scope           Json     @default("{}")
+  status          String
+  createdAt       DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([targetRefType, targetRefId])
+  @@index([acceptedRiskId])
+  @@index([blockerType, status])
+}
+
+model TopicSelectionBlockerPolicy {
+  id                 String    @id
+  blockerCode        String
+  category           String
+  defaultAction      String
+  allowedHandlerKeys String[]  @default([])
+  policyVersionId    String?
+  status             String
+  createdAt          DateTime  @db.Timestamptz(6)
+  retiredAt          DateTime? @db.Timestamptz(6)
+
+  @@unique([blockerCode, policyVersionId])
+  @@index([category, status])
+}
+
+model TopicSelectionDecisionMemoryEntry {
+  id                 String    @id
+  workspaceId        String?
+  titleCardId        String?
+  sourceStage        String
+  sourceRefType      String
+  sourceRefId        String
+  sourceRef          Json      @default("{}")
+  targetScopeRefType String?
+  targetScopeRefId   String?
+  targetScopeRef     Json?
+  memoryType         String
+  effectPolicy       String
+  severity           String
+  confidence         Float?
+  status             String
+  rationale          String
+  applicabilityScope Json      @default("{}")
+  payload            Json      @default("{}")
+  evidencePolicy     String
+  createdBy          String
+  createdAt          DateTime  @db.Timestamptz(6)
+  expiresAt          DateTime? @db.Timestamptz(6)
+  recheckCondition   String?
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([sourceRefType, sourceRefId])
+  @@index([targetScopeRefType, targetScopeRefId])
+  @@index([memoryType, status])
+  @@index([effectPolicy, status])
+  @@index([expiresAt])
+}
+
+model TopicSelectionCandidateDecisionMemory {
+  id                     String   @id
+  workspaceId            String?
+  titleCardId            String
+  decisionMemoryEntryId  String
+  decisionMemoryEntryRef Json     @default("{}")
+  sourceSuggestionId     String?  @unique
+  sourceSuggestionRef    Json?
+  needCandidateId        String
+  needCandidateRef       Json     @default("{}")
+  status                 String
+  reasonCodes            String[] @default([])
+  evidencePolicy         String
+  createdAt              DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([decisionMemoryEntryId])
+  @@index([needCandidateId])
+  @@index([status])
+}
+
+model TopicSelectionDecisionWorkQueueItem {
+  id                    String    @id
+  workspaceId           String?
+  titleCardId           String?
+  queueItemType         String
+  handlerKey            String
+  targetRefType         String
+  targetRefId           String
+  targetVersionId       String?
+  targetRef             Json      @default("{}")
+  sourceRefType         String
+  sourceRefId           String
+  sourceRef             Json      @default("{}")
+  queueDedupKey         String
+  priority              Int       @default(0)
+  status                String
+  requiredActions       String[]  @default([])
+  reasonCodes           String[]  @default([])
+  blockedTransitionKeys String[]  @default([])
+  retryCount            Int       @default(0)
+  retryBudget           Int       @default(3)
+  cooldownUntil         DateTime? @db.Timestamptz(6)
+  policyVersionId       String?
+  payload               Json      @default("{}")
+  createdAt             DateTime  @db.Timestamptz(6)
+  updatedAt             DateTime  @db.Timestamptz(6)
+  resolvedAt            DateTime? @db.Timestamptz(6)
+
+  @@index([queueDedupKey, status])
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([queueItemType, status])
+  @@index([handlerKey, status])
+  @@index([targetRefType, targetRefId])
+  @@index([sourceRefType, sourceRefId])
+  @@index([priority, status])
+  @@index([cooldownUntil])
+}
+
+model TopicSelectionOfflineEvaluationDataset {
+  id               String   @id
+  workspaceId      String?
+  datasetKey       String
+  datasetVersion   String
+  stage            String
+  source           String
+  status           String
+  description      String?
+  caseCount        Int      @default(0)
+  caseTypeCoverage String[] @default([])
+  payload          Json     @default("{}")
+  createdBy        String
+  createdAt        DateTime @db.Timestamptz(6)
+  updatedAt        DateTime @db.Timestamptz(6)
+
+  @@index([datasetKey, datasetVersion])
+  @@index([stage, status])
+  @@index([source, status])
+  @@index([createdAt(sort: Desc)])
+}
+
+model TopicSelectionOfflineEvaluationCase {
+  id                String   @id
+  workspaceId       String?
+  datasetId         String
+  titleCardId       String?
+  caseKey           String
+  caseType          String
+  status            String
+  frozenInputBundle Json     @default("{}")
+  goldExpectation   Json     @default("{}")
+  tags              String[] @default([])
+  createdAt         DateTime @db.Timestamptz(6)
+  updatedAt         DateTime @db.Timestamptz(6)
+
+  @@unique([datasetId, caseKey])
+  @@index([datasetId, caseType])
+  @@index([titleCardId])
+  @@index([caseType, status])
+  @@index([createdAt(sort: Desc)])
+}
+
+model TopicSelectionOfflineEvaluationRun {
+  id                     String    @id
+  workspaceId            String?
+  datasetId              String
+  runKey                 String
+  status                 String
+  workflowProfileKey     String
+  workflowProfileVersion String?
+  modelProfileKey        String?
+  searchProfileKey       String?
+  policyVersionId        String?
+  metricKeys             String[]  @default([])
+  caseCount              Int       @default(0)
+  runPayload             Json      @default("{}")
+  createdBy              String
+  startedAt              DateTime  @db.Timestamptz(6)
+  finishedAt             DateTime? @db.Timestamptz(6)
+
+  @@index([datasetId, startedAt(sort: Desc)])
+  @@index([runKey])
+  @@index([status, startedAt(sort: Desc)])
+  @@index([workflowProfileKey])
+  @@index([policyVersionId])
+}
+
+model TopicSelectionOfflineEvaluationCaseResult {
+  id                        String   @id
+  workspaceId               String?
+  runId                     String
+  datasetId                 String
+  caseId                    String
+  caseType                  String
+  status                    String
+  observedOutput            Json     @default("{}")
+  replayDiffRef             Json?
+  metricContributionPayload Json     @default("{}")
+  failureExamples           String[] @default([])
+  createdAt                 DateTime @db.Timestamptz(6)
+
+  @@unique([runId, caseId])
+  @@index([runId, createdAt])
+  @@index([datasetId, caseType])
+  @@index([caseId])
+  @@index([status])
+}
+
+model TopicSelectionOfflineEvaluationMetricResult {
+  id                   String   @id
+  workspaceId          String?
+  runId                String
+  datasetId            String
+  metricKey            String
+  numerator            Float
+  denominator          Float
+  value                Float?
+  contributingCaseRefs Json     @default("[]")
+  failureCaseRefs      Json     @default("[]")
+  notes                String[] @default([])
+  metricPayload        Json     @default("{}")
+  createdAt            DateTime @db.Timestamptz(6)
+
+  @@unique([runId, metricKey])
+  @@index([datasetId, metricKey])
+  @@index([createdAt(sort: Desc)])
+}
+
+model TopicSelectionReplayDiff {
+  id                    String   @id
+  workspaceId           String?
+  runId                 String
+  datasetId             String
+  caseId                String
+  status                String
+  changedDimensions     String[] @default([])
+  finalDecisionChanged  Boolean  @default(false)
+  keyEvidenceSetChanged Boolean  @default(false)
+  blockerSetChanged     Boolean  @default(false)
+  traceVerdictChanged   Boolean  @default(false)
+  expectedSnapshot      Json     @default("{}")
+  observedSnapshot      Json     @default("{}")
+  baselineSnapshot      Json?
+  diffPayload           Json     @default("{}")
+  createdAt             DateTime @db.Timestamptz(6)
+
+  @@index([runId, createdAt])
+  @@index([datasetId, status])
+  @@index([caseId])
+  @@index([status])
+}
+
 model ResearchArgumentWorkspace {
   id                    String                             @id
   titleCardId           String

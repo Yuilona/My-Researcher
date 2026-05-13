@@ -8,3 +8,5 @@ export * from './topic-selection-control-plane-contracts.js';
 export * from './topic-selection-search-resource-contracts.js';
 export * from './topic-selection-evidence-map-contracts.js';
 export * from './topic-selection-need-validation-contracts.js';
+export * from './topic-selection-recheck-risk-memory-contracts.js';
+export * from './topic-selection-offline-evaluation-replay-contracts.js';

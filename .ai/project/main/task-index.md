@@ -59,7 +59,7 @@ Project: `main`
 | T-047 topic-selection-v1a-evidence-map-strength | in-progress | F-001 | dev-docs/active/topic-selection-v1a-evidence-map-strength |
 | T-048 topic-selection-v1a-foundation-control-plane | in-progress | F-001 | dev-docs/active/topic-selection-v1a-foundation-control-plane |
 | T-049 topic-selection-v1a-need-validation | in-progress | F-001 | dev-docs/active/topic-selection-v1a-need-validation |
-| T-050 topic-selection-v1a-offline-evaluation-replay | planned | F-001 | dev-docs/active/topic-selection-v1a-offline-evaluation-replay |
-| T-051 topic-selection-v1a-recheck-risk-memory | planned | F-001 | dev-docs/active/topic-selection-v1a-recheck-risk-memory |
+| T-050 topic-selection-v1a-offline-evaluation-replay | done | F-001 | dev-docs/active/topic-selection-v1a-offline-evaluation-replay |
+| T-051 topic-selection-v1a-recheck-risk-memory | done | F-001 | dev-docs/active/topic-selection-v1a-recheck-risk-memory |
 | T-052 topic-selection-v1a-search-resource-evidence-inputs | in-progress | F-001 | dev-docs/active/topic-selection-v1a-search-resource-evidence-inputs |
 <!-- AUTO-GENERATED:END task-index -->

@@ -17,6 +17,8 @@ import * as titleCardManagementContracts from './title-card-management-contracts
 import * as topicSelectionControlPlaneContracts from './topic-selection-control-plane-contracts.js';
 import * as topicSelectionEvidenceMapContracts from './topic-selection-evidence-map-contracts.js';
 import * as topicSelectionNeedValidationContracts from './topic-selection-need-validation-contracts.js';
+import * as topicSelectionOfflineEvaluationReplayContracts from './topic-selection-offline-evaluation-replay-contracts.js';
+import * as topicSelectionRecheckRiskMemoryContracts from './topic-selection-recheck-risk-memory-contracts.js';
 import * as topicSelectionSearchResourceContracts from './topic-selection-search-resource-contracts.js';
 import type {
   ReleaseGateReviewResponse,
@@ -136,6 +138,115 @@ test('topic-selection need-validation schemas load through direct and aggregate 
   ]);
   assert.ok(researchLifecycleContracts.topicSelectionNeedCandidateRecordSchema);
   assert.ok(researchLifecycleContracts.topicSelectionV1aToV1bInputBundleRecordSchema);
+});
+
+test('topic-selection recheck/risk/memory schemas load through direct and aggregate exports', () => {
+  assert.ok(topicSelectionRecheckRiskMemoryContracts.topicSelectionRecheckEventRecordSchema);
+  assert.ok(topicSelectionRecheckRiskMemoryContracts.topicSelectionRecheckImpactRecordSchema);
+  assert.ok(topicSelectionRecheckRiskMemoryContracts.topicSelectionRecheckResolutionRecordSchema);
+  assert.ok(topicSelectionRecheckRiskMemoryContracts.topicSelectionAcceptedRiskRecordSchema);
+  assert.ok(topicSelectionRecheckRiskMemoryContracts.topicSelectionHumanOverrideRecordSchema);
+  assert.ok(topicSelectionRecheckRiskMemoryContracts.topicSelectionBlockerPolicyRecordSchema);
+  assert.ok(topicSelectionRecheckRiskMemoryContracts.topicSelectionDecisionMemoryEntryRecordSchema);
+  assert.ok(topicSelectionRecheckRiskMemoryContracts.topicSelectionCandidateDecisionMemoryRecordSchema);
+  assert.ok(topicSelectionRecheckRiskMemoryContracts.topicSelectionDecisionWorkQueueItemRecordSchema);
+  assert.deepEqual(topicSelectionRecheckRiskMemoryContracts.TOPIC_SELECTION_IMPACT_LEVELS, [
+    'no_impact',
+    'stale',
+    'recheck_required',
+    'invalidated',
+  ]);
+  assert.ok(researchLifecycleContracts.topicSelectionDecisionWorkQueueItemRecordSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionAcceptedRiskRecordSchema);
+});
+
+test('topic-selection offline-evaluation/replay schemas load through direct and aggregate exports', () => {
+  assert.ok(topicSelectionOfflineEvaluationReplayContracts.topicSelectionOfflineEvaluationDatasetRecordSchema);
+  assert.ok(topicSelectionOfflineEvaluationReplayContracts.topicSelectionOfflineEvaluationCaseRecordSchema);
+  assert.ok(topicSelectionOfflineEvaluationReplayContracts.topicSelectionOfflineEvaluationRunRecordSchema);
+  assert.ok(topicSelectionOfflineEvaluationReplayContracts.topicSelectionOfflineEvaluationCaseResultRecordSchema);
+  assert.ok(topicSelectionOfflineEvaluationReplayContracts.topicSelectionOfflineEvaluationMetricResultRecordSchema);
+  assert.ok(topicSelectionOfflineEvaluationReplayContracts.topicSelectionReplayDiffRecordSchema);
+  assert.ok(topicSelectionOfflineEvaluationReplayContracts.topicSelectionOfflineEvaluationObservedSnapshotSchema);
+  assert.deepEqual(topicSelectionOfflineEvaluationReplayContracts.TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_TYPES, [
+    'true_unmet_need',
+    'pseudo_gap',
+    'strong_baseline_solved',
+    'author_future_work_misleading',
+    'abstract_overclaim_body_unsupported',
+    'terminology_shift_same_task',
+    'same_team_duplicate_claim',
+    'source_health_or_missing_fulltext',
+    'downstream_failure_feedback',
+  ]);
+  assert.deepEqual(topicSelectionOfflineEvaluationReplayContracts.TOPIC_SELECTION_OFFLINE_EVALUATION_METRIC_KEYS, [
+    'false_gap_rate',
+    'baseline_miss_rate',
+    'counter_evidence_recall',
+    'trace_completeness',
+    'readiness_false_pass_rate',
+    'human_override_rate',
+    'rerun_instability',
+    'recheck_precision',
+    'negative_memory_usefulness',
+    'downstream_rework_cause',
+  ]);
+  assert.ok(researchLifecycleContracts.topicSelectionOfflineEvaluationDatasetRecordSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionReplayDiffRecordSchema);
+});
+
+test('topic-selection offline-evaluation observed output rejects drifted final decision vocabulary', async () => {
+  const app = Fastify();
+  app.post(
+    '/v',
+    { schema: { body: topicSelectionOfflineEvaluationReplayContracts.topicSelectionOfflineEvaluationObservedOutputSchema } },
+    async () => ({ ok: true }),
+  );
+  await app.ready();
+  const validObservedOutput = {
+    final_decision: 'validate',
+    readiness_recommendation: 'ready_for_validation',
+    key_evidence_refs: [],
+    counter_evidence_refs: [],
+    evidence_refs: [],
+    blocker_codes: [],
+    trace_refs: [],
+    human_override_refs: [],
+    recheck_action_refs: [],
+    memory_refs: [],
+    memory_used_as_evidence_refs: [],
+    downstream_rework_causes: [],
+    payload: {},
+  };
+  const valid = await app.inject({
+    method: 'POST',
+    url: '/v',
+    payload: validObservedOutput,
+  });
+  const invalid = await app.inject({
+    method: 'POST',
+    url: '/v',
+    payload: {
+      ...validObservedOutput,
+      final_decision: 'promote_to_v1b',
+    },
+  });
+  const invalidBaseline = await app.inject({
+    method: 'POST',
+    url: '/v',
+    payload: {
+      ...validObservedOutput,
+      baseline_observed_output: {
+        ...validObservedOutput,
+        final_decision: 'promote_to_v1b',
+      },
+    },
+  });
+  await app.close();
+
+  assert.equal(valid.statusCode, 200);
+  assert.equal(invalid.statusCode, 400);
+  assert.equal(invalidBaseline.statusCode, 400);
 });
 
 test('topic-selection evidence locator schema requires source_ref provenance', async () => {
@@ -665,6 +776,8 @@ test('research-lifecycle barrel re-exports the runtime value surface of split mo
     ...Object.keys(topicSelectionSearchResourceContracts),
     ...Object.keys(topicSelectionEvidenceMapContracts),
     ...Object.keys(topicSelectionNeedValidationContracts),
+    ...Object.keys(topicSelectionRecheckRiskMemoryContracts),
+    ...Object.keys(topicSelectionOfflineEvaluationReplayContracts),
   ]);
 
   assert.deepEqual(Object.keys(researchLifecycleContracts).sort(), [...expectedKeys].sort());
@@ -721,6 +834,7 @@ test('research-lifecycle barrel keeps key contract helpers and schemas reachable
   assert.ok(researchLifecycleContracts.createResearchQuestionRequestSchema);
   assert.ok(researchLifecycleContracts.readinessVerifyRequestSchema);
   assert.ok(researchLifecycleContracts.topicSelectionChainTransitionAttemptRecordSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionOfflineEvaluationMetricResultRecordSchema);
   assert.ok(researchLifecycleContracts.writingEntryPacketSchema);
   assert.ok(researchLifecycleContracts.submissionRiskReportSchema);
 });

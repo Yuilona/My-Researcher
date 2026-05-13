@@ -1,8 +1,8 @@
 # 00 Overview
 
 ## Status
-- State: planned
-- Next step: Confirm current queue/risk/override patterns and how they map to v1a.
+- State: done
+- Next step: Consume `DecisionWorkQueueItem` and T-051 read helpers from later UI/scheduler work; do not consume raw `QualitySignal` directly.
 
 ## Parent Package
 - Stage parent: `dev-docs/active/topic-selection-v1a-evidence-to-need/`
@@ -29,9 +29,9 @@
 - `QualitySignal` interpretation policy for recheck, memory, queue, risk, and required-action routing
 
 ## Acceptance Criteria
-- [ ] Recheck is event/impact/resolution ledger plus focused queue.
-- [ ] LLM state signals cannot directly write `freshness_status`.
-- [ ] AcceptedRisk and HumanOverride are scoped, auditable, and recheckable.
-- [ ] CandidateDecisionMemory can warn or block only according to effect policy and scope.
-- [ ] Queue items are control-plane-derived, deduplicated, and have allowed handlers.
-- [ ] Raw `QualitySignal`, gate results, workflow failures, accepted-risk expiry, and downstream feedback become durable queue/recheck/memory records only through explicit policy interpretation.
+- [x] Recheck is event/impact/resolution ledger plus focused queue.
+- [x] LLM state signals cannot directly write `freshness_status`.
+- [x] AcceptedRisk and HumanOverride are scoped, auditable, and recheckable.
+- [x] CandidateDecisionMemory can warn or block only according to effect policy and scope.
+- [x] Queue items are control-plane-derived, deduplicated, and have allowed handlers.
+- [x] Raw `QualitySignal`, gate results, workflow failures, accepted-risk expiry, and downstream feedback become durable queue/recheck/memory records only through explicit policy interpretation.

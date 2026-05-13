@@ -63,8 +63,8 @@ Project: `main`
 | T-047 topic-selection-v1a-evidence-map-strength | in-progress | dev-docs/active/topic-selection-v1a-evidence-map-strength |
 | T-048 topic-selection-v1a-foundation-control-plane | in-progress | dev-docs/active/topic-selection-v1a-foundation-control-plane |
 | T-049 topic-selection-v1a-need-validation | in-progress | dev-docs/active/topic-selection-v1a-need-validation |
-| T-050 topic-selection-v1a-offline-evaluation-replay | planned | dev-docs/active/topic-selection-v1a-offline-evaluation-replay |
-| T-051 topic-selection-v1a-recheck-risk-memory | planned | dev-docs/active/topic-selection-v1a-recheck-risk-memory |
+| T-050 topic-selection-v1a-offline-evaluation-replay | done | dev-docs/active/topic-selection-v1a-offline-evaluation-replay |
+| T-051 topic-selection-v1a-recheck-risk-memory | done | dev-docs/active/topic-selection-v1a-recheck-risk-memory |
 | T-052 topic-selection-v1a-search-resource-evidence-inputs | in-progress | dev-docs/active/topic-selection-v1a-search-resource-evidence-inputs |
 
 ### F-002 Desktop Frontend Foundation
