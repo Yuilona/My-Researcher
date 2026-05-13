@@ -14,27 +14,27 @@ Project: `main`
 | --- | --- | --- |
 | T-001 unify-ci-verify-entrypoint | archived | dev-docs/archive/unify-ci-verify-entrypoint |
 | T-002 paper-assistant-core-modules | archived | dev-docs/archive/paper-assistant-core-modules |
-| T-011 literature-management-flow | in-progress | dev-docs/active/literature-management-flow |
-| T-012 app-tsx-layout-split | done | dev-docs/active/app-tsx-layout-split |
-| T-013 topic-initial-pull-and-rule-preview | in-progress | dev-docs/active/topic-initial-pull-and-rule-preview |
-| T-015 maintainability-file-split-governance | done | dev-docs/active/maintainability-file-split-governance |
-| T-016 backend-service-boundary-split-wave3 | done | dev-docs/active/backend-service-boundary-split-wave3 |
-| T-017 frontend-normalizers-and-css-split-wave2 | done | dev-docs/active/frontend-normalizers-and-css-split-wave2 |
-| T-018 literature-container-controller-split-wave1 | done | dev-docs/active/literature-container-controller-split-wave1 |
-| T-019 shared-contract-decomposition-wave4 | done | dev-docs/active/shared-contract-decomposition-wave4 |
-| T-020 shared-contract-compat-cleanup-and-consumer-migration | done | dev-docs/active/shared-contract-compat-cleanup-and-consumer-migration |
-| T-029 literature-collection-content-processing-boundary | done | dev-docs/active/literature-collection-content-processing-boundary |
-| T-030 literature-content-processing-landing-roadmap | done | dev-docs/active/literature-content-processing-landing-roadmap |
-| T-031 literature-content-processing-contracts-stage-state | done | dev-docs/active/literature-content-processing-contracts-stage-state |
-| T-032 literature-settings-provider-storage-roots | done | dev-docs/active/literature-settings-provider-storage-roots |
-| T-033 literature-content-assets-fulltext-preprocessing | done | dev-docs/active/literature-content-assets-fulltext-preprocessing |
-| T-034 literature-key-content-extraction-v1 | done | dev-docs/active/literature-key-content-extraction-v1 |
-| T-035 literature-chunk-embedding-index-pipeline | done | dev-docs/active/literature-chunk-embedding-index-pipeline |
-| T-036 literature-retrieve-stale-trigger-ui | done | dev-docs/active/literature-retrieve-stale-trigger-ui |
-| T-037 literature-backfill-operations-workbench | done | dev-docs/active/literature-backfill-operations-workbench |
-| T-038 literature-content-processing-cutover-verification | done | dev-docs/active/literature-content-processing-cutover-verification |
-| T-039 literature-citation-abstract-readiness | done | dev-docs/active/literature-citation-abstract-readiness |
-| T-040 literature-content-processing-closure-fixes | done | dev-docs/active/literature-content-processing-closure-fixes |
+| T-011 literature-management-flow | archived | dev-docs/archive/literature-management-flow |
+| T-012 app-tsx-layout-split | archived | dev-docs/archive/app-tsx-layout-split |
+| T-013 topic-initial-pull-and-rule-preview | archived | dev-docs/archive/topic-initial-pull-and-rule-preview |
+| T-015 maintainability-file-split-governance | archived | dev-docs/archive/maintainability-file-split-governance |
+| T-016 backend-service-boundary-split-wave3 | archived | dev-docs/archive/backend-service-boundary-split-wave3 |
+| T-017 frontend-normalizers-and-css-split-wave2 | archived | dev-docs/archive/frontend-normalizers-and-css-split-wave2 |
+| T-018 literature-container-controller-split-wave1 | archived | dev-docs/archive/literature-container-controller-split-wave1 |
+| T-019 shared-contract-decomposition-wave4 | archived | dev-docs/archive/shared-contract-decomposition-wave4 |
+| T-020 shared-contract-compat-cleanup-and-consumer-migration | archived | dev-docs/archive/shared-contract-compat-cleanup-and-consumer-migration |
+| T-029 literature-collection-content-processing-boundary | archived | dev-docs/archive/literature-collection-content-processing-boundary |
+| T-030 literature-content-processing-landing-roadmap | archived | dev-docs/archive/literature-content-processing-landing-roadmap |
+| T-031 literature-content-processing-contracts-stage-state | archived | dev-docs/archive/literature-content-processing-contracts-stage-state |
+| T-032 literature-settings-provider-storage-roots | archived | dev-docs/archive/literature-settings-provider-storage-roots |
+| T-033 literature-content-assets-fulltext-preprocessing | archived | dev-docs/archive/literature-content-assets-fulltext-preprocessing |
+| T-034 literature-key-content-extraction-v1 | archived | dev-docs/archive/literature-key-content-extraction-v1 |
+| T-035 literature-chunk-embedding-index-pipeline | archived | dev-docs/archive/literature-chunk-embedding-index-pipeline |
+| T-036 literature-retrieve-stale-trigger-ui | archived | dev-docs/archive/literature-retrieve-stale-trigger-ui |
+| T-037 literature-backfill-operations-workbench | archived | dev-docs/archive/literature-backfill-operations-workbench |
+| T-038 literature-content-processing-cutover-verification | archived | dev-docs/archive/literature-content-processing-cutover-verification |
+| T-039 literature-citation-abstract-readiness | archived | dev-docs/archive/literature-citation-abstract-readiness |
+| T-040 literature-content-processing-closure-fixes | archived | dev-docs/archive/literature-content-processing-closure-fixes |
 | T-041 literature-end-to-end-quality-upgrade | in-progress | dev-docs/active/literature-end-to-end-quality-upgrade |
 
 ### F-001 Research Lifecycle Governance Core
@@ -47,16 +47,25 @@ Project: `main`
 | T-008 governance-event-delivery-mechanism-v1 | archived | dev-docs/archive/governance-event-delivery-mechanism-v1 |
 | T-009 governance-event-delivery-backend-implementation-v1 | archived | dev-docs/archive/governance-event-delivery-backend-implementation-v1 |
 | T-010 governance-event-delivery-observability-ops-v1 | archived | dev-docs/archive/governance-event-delivery-observability-ops-v1 |
-| T-014 automated-topic-management | in-progress | dev-docs/active/automated-topic-management |
-| T-021 topic-management-workbench-ui | in-progress | dev-docs/active/topic-management-workbench-ui |
+| T-014 automated-topic-management | archived | dev-docs/archive/automated-topic-management |
+| T-021 topic-management-workbench-ui | archived | dev-docs/archive/topic-management-workbench-ui |
 | T-023 research-argument-control-plane-v1 | in-progress | dev-docs/active/research-argument-control-plane-v1 |
-| T-024 research-argument-contracts-and-ssot | done | dev-docs/active/research-argument-contracts-and-ssot |
-| T-025 research-argument-graph-and-state-v1 | in-progress | dev-docs/active/research-argument-graph-and-state-v1 |
-| T-026 research-argument-titlecard-paper-bridge | planned | dev-docs/active/research-argument-titlecard-paper-bridge |
-| T-027 research-argument-control-plane-ui-v1 | planned | dev-docs/active/research-argument-control-plane-ui-v1 |
-| T-028 research-argument-planner-critic-v15 | planned | dev-docs/active/research-argument-planner-critic-v15 |
+| T-024 research-argument-contracts-and-ssot | archived | dev-docs/archive/research-argument-contracts-and-ssot |
+| T-025 research-argument-graph-and-state-v1 | archived | dev-docs/archive/research-argument-graph-and-state-v1 |
+| T-026 research-argument-titlecard-paper-bridge | archived | dev-docs/archive/research-argument-titlecard-paper-bridge |
+| T-027 research-argument-control-plane-ui-v1 | archived | dev-docs/archive/research-argument-control-plane-ui-v1 |
+| T-028 research-argument-planner-critic-v15 | archived | dev-docs/archive/research-argument-planner-critic-v15 |
 | T-042 topic-selection-decision-chain-redesign | in-progress | dev-docs/active/topic-selection-decision-chain-redesign |
 | T-043 experiment-foundation-v1 | planned | dev-docs/active/experiment-foundation-v1 |
+| T-044 topic-selection-v1a-evidence-to-need | planned | dev-docs/active/topic-selection-v1a-evidence-to-need |
+| T-045 topic-selection-v1b-need-to-draft-topic | planned | dev-docs/active/topic-selection-v1b-need-to-draft-topic |
+| T-046 topic-selection-v1c-promotion-bridge | planned | dev-docs/active/topic-selection-v1c-promotion-bridge |
+| T-047 topic-selection-v1a-evidence-map-strength | planned | dev-docs/active/topic-selection-v1a-evidence-map-strength |
+| T-048 topic-selection-v1a-foundation-control-plane | planned | dev-docs/active/topic-selection-v1a-foundation-control-plane |
+| T-049 topic-selection-v1a-need-validation | planned | dev-docs/active/topic-selection-v1a-need-validation |
+| T-050 topic-selection-v1a-offline-evaluation-replay | planned | dev-docs/active/topic-selection-v1a-offline-evaluation-replay |
+| T-051 topic-selection-v1a-recheck-risk-memory | planned | dev-docs/active/topic-selection-v1a-recheck-risk-memory |
+| T-052 topic-selection-v1a-search-resource-evidence-inputs | planned | dev-docs/active/topic-selection-v1a-search-resource-evidence-inputs |
 
 ### F-002 Desktop Frontend Foundation
 
@@ -64,5 +73,5 @@ Project: `main`
 | --- | --- | --- |
 | T-004 desktop-app-electron-ui-v1 | archived | dev-docs/archive/desktop-app-electron-ui-v1 |
 | T-006 desktop-governance-observability-panels | archived | dev-docs/archive/desktop-governance-observability-panels |
-| T-022 desktop-legacy-css-retirement | in-progress | dev-docs/active/desktop-legacy-css-retirement |
+| T-022 desktop-legacy-css-retirement | archived | dev-docs/archive/desktop-legacy-css-retirement |
 <!-- AUTO-GENERATED:END feature-map -->

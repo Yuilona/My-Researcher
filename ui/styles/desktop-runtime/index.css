@@ -1,0 +1,9 @@
+/* Desktop renderer runtime styles migrated from the former renderer legacy
+ * compatibility directory. Import this bundle through ui/styles/ui.css only.
+ */
+@import './shell.css';
+@import './literature-base.css';
+@import './literature-auto-import.css';
+@import './literature-manual-import.css';
+@import './literature-overview.css';
+@import './modules-paper-writing.css';

@@ -11,7 +11,7 @@
     },
     "style_sources": [
       "ui/styles/ui.css",
-      "apps/desktop/src/renderer/app-layout.css"
+      "ui/styles/desktop-runtime/index.css"
     ],
     "theme_runtime": {
       "modes": [
@@ -29,8 +29,8 @@
       "governance_panels": "VITE_ENABLE_GOVERNANCE_PANELS"
     },
     "known_realities": [
-      "Desktop runtime currently combines ui/styles token-contract CSS with a legacy compatibility layer aggregated through apps/desktop/src/renderer/app-layout.css.",
-      "apps/desktop/src/renderer/styles/** remains a runtime dependency for pre-existing shell, literature, and paper-writing surfaces, but it is now frozen as a compatibility-only layer owned by T-022."
+      "Desktop runtime styles are imported through ui/styles/ui.css.",
+      "The former apps/desktop/src/renderer/app-layout.css and apps/desktop/src/renderer/styles/** legacy entrypoints were retired by T-022; remaining compatibility selectors live under ui/styles/desktop-runtime/** until their owning surfaces are rewritten to data-ui."
     ]
   },
   "target_profile": {
@@ -114,25 +114,13 @@
       "id": "D-001",
       "title": "Legacy desktop feature CSS remains a compatibility-only runtime layer",
       "severity": "high",
-      "effective_scope": "apps/desktop renderer legacy surfaces",
+      "effective_scope": "ui/styles/desktop-runtime compatibility selectors",
       "evidence": [
-        "apps/desktop/src/renderer/app-layout.css",
-        "apps/desktop/src/renderer/styles/README.md"
+        "ui/styles/desktop-runtime/index.css",
+        "ui/styles/desktop-runtime/README.md"
       ],
-      "impact": "Current desktop UI remains executable, but pre-data-ui surfaces still depend on a frozen compatibility layer that sits outside the target token/contract path.",
-      "follow_up_entrypoint": "Continue the retirement plan in T-022 by migrating legacy interface clusters off app-layout.css and deleting their feature CSS imports.",
-      "status": "accepted-current-state"
-    },
-    {
-      "id": "D-002",
-      "title": "UI governance excludes legacy desktop styles as a temporary containment measure",
-      "severity": "medium",
-      "effective_scope": "ui-governance-gate coverage policy",
-      "evidence": [
-        "ui/config/governance.json"
-      ],
-      "impact": "The gate is green for current renderer code, but legacy CSS is still out of scan scope until retirement waves complete.",
-      "follow_up_entrypoint": "Retain the exclusion only until T-022 migration waves remove the dependency on apps/desktop/src/renderer/styles.",
+      "impact": "Current desktop UI remains executable without changing UI/UX, but pre-data-ui surfaces still rely on compatibility selectors until each surface is rewritten.",
+      "follow_up_entrypoint": "Handle remaining selector deletion in the owning UI surface migration tasks; do not restore renderer-local legacy CSS entrypoints.",
       "status": "accepted-current-state"
     }
   ],

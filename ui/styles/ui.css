@@ -5,6 +5,7 @@
 
 @import "./tokens.css";
 @import "./contract.css";
+@import "./desktop-runtime/index.css" layer(feature);
 
 @layer reset {
   *, *::before, *::after { box-sizing: border-box; }

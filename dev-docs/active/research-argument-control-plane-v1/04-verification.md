@@ -28,3 +28,9 @@
 - [ ] `T-024` 到 `T-028` 的 entry / exit review 都已执行并记录。
 - [ ] 端到端 walkthrough 已验证 `title-card -> workspace -> readiness -> risk report / writing packet -> paper-project`。
 - [ ] 所有 external dependency 都已在 coverage matrix 或 task docs 中显式标注 owner。
+
+## Backlog consolidation review
+- [x] `T-024` and `T-025` are complete and archived.
+- [x] `T-026` / `T-027` / `T-028` were planned-only stubs with pending verification.
+- [x] Planned-only stubs were archived as unimplemented placeholders and consolidated into the `T-023` backlog.
+- [ ] A new implementation plan is required before resuming bridge / UI / planner work.

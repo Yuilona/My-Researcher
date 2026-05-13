@@ -157,7 +157,7 @@ async function main() {
     await waitForHttp(`${backendBaseUrl}/health`, timeoutMs);
 
     const paper = await postJson(`${backendBaseUrl}/paper-projects`, {
-      topic_id: 'TOPIC-DESKTOP-SMOKE',
+      title_card_id: 'TITLE-CARD-DESKTOP-SMOKE',
       title: 'Desktop Smoke Paper',
       created_by: 'human',
       initial_context: {

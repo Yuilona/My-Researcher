@@ -1,7 +1,0 @@
-/* Legacy compatibility layer aggregation entry. Do not add new module-level styling here outside T-022 retirement work. */
-@import './styles/shell.css';
-@import './styles/literature-base.css';
-@import './styles/literature-auto-import.css';
-@import './styles/literature-manual-import.css';
-@import './styles/literature-overview.css';
-@import './styles/modules-paper-writing.css';

@@ -2,7 +2,7 @@
 
 ## Status
 - State: in-progress
-- Next step: 从 `T-024 research-argument-contracts-and-ssot` 开始，把 `research-varify` 设计输入规范化为 canonical docs、glossary/context 和 shared contracts。
+- Next step: 作为唯一 active research-argument 后续入口，重新评估是否继续实现 bridge / UI / planner；原 `T-026`、`T-027`、`T-028` planned stubs 已归档为未实施占位，不再作为独立 active backlog 挂起。
 
 ## Goal
 - 为仓库建立一条新的 pre-writing research argument control plane 主线，协调 `title-card` 上游证据链与 `paper-project` 下游写作容器之间的 research convergence。
@@ -33,20 +33,19 @@
 - [x] `dev-docs/active/research-argument-control-plane-v1/` 包含 `roadmap + 00~05 + .ai-task.yaml`。
 - [x] `T-024` 到 `T-028` 的 child task bundle 已创建。
 - [x] 项目治理映射已预留到 `R-011`。
-- [ ] `T-024` 完成 canonical docs、glossary/context 与 shared contracts。
-- [ ] `T-025` 完成 graph/state V1 基座。
-- [ ] `T-026` 完成 title-card seed/init 与 paper-project bridge。
-- [ ] `T-027` 完成 desktop control plane V1。
-- [ ] `T-028` 完成 planner / critic V1.5。
-- [ ] `requirements coverage matrix` 已把 relevant MUST / journeys 标为 `owned / handoff / external dependency` 三类，且无未归属项。
-- [ ] Journey 1 `idea -> claims` 在本组内有明确 owner 和验收。
-- [ ] Journey 2 `claims -> evaluation evidence chain` 在本组内有明确 owner 和验收。
-- [ ] Journey 3 `submission risk review output` 在本组内有明确 owner 和验收。
-- [ ] Journey 4 `rebuttal` 明确只提供 upstream packet，不在本组内完成。
+- [x] `T-024` 完成 canonical docs、glossary/context 与 shared contracts，并已归档。
+- [x] `T-025` 完成 graph/state V1 基座，并已归档。
+- [x] `T-026` / `T-027` / `T-028` 已从 active pending stub 收束到本 umbrella backlog；它们未实施、未验证，不再被视为独立 active work。
+- [ ] 需要一次新的 product/engineering 决策：继续实现 bridge / UI / planner，还是将 research-argument 后续路线整体切出当前 scope。
+- [ ] 若继续实现，必须先生成新的单一 implementation plan，覆盖 requirements matrix、journey ownership、bridge、UI、planner/critic 的取舍与验收。
 
 ## Child-task ownership
-- `T-024`: docs / context / shared domain contracts
-- `T-025`: persistence / repository / synthesizer / read models
-- `T-026`: title-card seed/init, readiness verify, risk/handoff sidecar, promote bridge
-- `T-027`: desktop control plane, risk report review, handoff packet preview
-- `T-028`: planner / critic / rule engine / risk-report assembly / async execution enhancement
+- Completed:
+  - `T-024`: docs / context / shared domain contracts
+  - `T-025`: persistence / repository / synthesizer / read models
+- Consolidated pending backlog:
+  - `T-026`: title-card seed/init, readiness verify, risk/handoff sidecar, promote bridge
+  - `T-027`: desktop control plane, risk report review, handoff packet preview
+  - `T-028`: planner / critic / rule engine / risk-report assembly / async execution enhancement
+- Current rule:
+  - Do not reopen `T-026` / `T-027` / `T-028` as independent active tasks. If this work resumes, create one fresh, scoped implementation task from this umbrella.

@@ -185,94 +185,94 @@ tasks:
     updated: 2026-02-23
   - id: T-011
     slug: literature-management-flow
-    status: in-progress
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/literature-management-flow
-    updated: 2026-02-26
+    dev_docs_path: dev-docs/archive/literature-management-flow
+    updated: 2026-05-13
   - id: T-012
     slug: app-tsx-layout-split
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/app-tsx-layout-split
-    updated: 2026-03-19
+    dev_docs_path: dev-docs/archive/app-tsx-layout-split
+    updated: 2026-05-13
   - id: T-013
     slug: topic-initial-pull-and-rule-preview
-    status: in-progress
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/topic-initial-pull-and-rule-preview
-    updated: 2026-03-19
+    dev_docs_path: dev-docs/archive/topic-initial-pull-and-rule-preview
+    updated: 2026-05-13
   - id: T-014
     slug: automated-topic-management
-    status: in-progress
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/automated-topic-management
-    updated: 2026-03-19
+    dev_docs_path: dev-docs/archive/automated-topic-management
+    updated: 2026-05-13
   - id: T-015
     slug: maintainability-file-split-governance
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/maintainability-file-split-governance
-    updated: 2026-03-19
+    dev_docs_path: dev-docs/archive/maintainability-file-split-governance
+    updated: 2026-05-13
   - id: T-016
     slug: backend-service-boundary-split-wave3
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/backend-service-boundary-split-wave3
-    updated: 2026-03-19
+    dev_docs_path: dev-docs/archive/backend-service-boundary-split-wave3
+    updated: 2026-05-13
   - id: T-017
     slug: frontend-normalizers-and-css-split-wave2
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/frontend-normalizers-and-css-split-wave2
-    updated: 2026-03-19
+    dev_docs_path: dev-docs/archive/frontend-normalizers-and-css-split-wave2
+    updated: 2026-05-13
   - id: T-018
     slug: literature-container-controller-split-wave1
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/literature-container-controller-split-wave1
-    updated: 2026-03-19
+    dev_docs_path: dev-docs/archive/literature-container-controller-split-wave1
+    updated: 2026-05-13
   - id: T-019
     slug: shared-contract-decomposition-wave4
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/shared-contract-decomposition-wave4
-    updated: 2026-03-19
+    dev_docs_path: dev-docs/archive/shared-contract-decomposition-wave4
+    updated: 2026-05-13
   - id: T-020
     slug: shared-contract-compat-cleanup-and-consumer-migration
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/shared-contract-compat-cleanup-and-consumer-migration
-    updated: 2026-03-22
+    dev_docs_path: dev-docs/archive/shared-contract-compat-cleanup-and-consumer-migration
+    updated: 2026-05-13
   - id: T-021
     slug: topic-management-workbench-ui
-    status: in-progress
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-management-workbench-ui
-    updated: 2026-03-23
+    dev_docs_path: dev-docs/archive/topic-management-workbench-ui
+    updated: 2026-05-13
   - id: T-022
     slug: desktop-legacy-css-retirement
-    status: in-progress
+    status: archived
     milestone_id: M-001
     feature_id: F-002
     requirement_ids:
       - R-010
-    dev_docs_path: dev-docs/active/desktop-legacy-css-retirement
-    updated: 2026-03-23
+    dev_docs_path: dev-docs/archive/desktop-legacy-css-retirement
+    updated: 2026-05-13
   - id: T-023
     slug: research-argument-control-plane-v1
     status: in-progress
@@ -284,133 +284,133 @@ tasks:
     updated: 2026-03-31
   - id: T-024
     slug: research-argument-contracts-and-ssot
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-011
-    dev_docs_path: dev-docs/active/research-argument-contracts-and-ssot
-    updated: 2026-03-31
+    dev_docs_path: dev-docs/archive/research-argument-contracts-and-ssot
+    updated: 2026-05-13
   - id: T-025
     slug: research-argument-graph-and-state-v1
-    status: in-progress
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-011
-    dev_docs_path: dev-docs/active/research-argument-graph-and-state-v1
-    updated: 2026-03-31
+    dev_docs_path: dev-docs/archive/research-argument-graph-and-state-v1
+    updated: 2026-05-13
   - id: T-026
     slug: research-argument-titlecard-paper-bridge
-    status: planned
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-011
-    dev_docs_path: dev-docs/active/research-argument-titlecard-paper-bridge
-    updated: 2026-03-31
+    dev_docs_path: dev-docs/archive/research-argument-titlecard-paper-bridge
+    updated: 2026-05-13
   - id: T-027
     slug: research-argument-control-plane-ui-v1
-    status: planned
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-011
-    dev_docs_path: dev-docs/active/research-argument-control-plane-ui-v1
-    updated: 2026-03-31
+    dev_docs_path: dev-docs/archive/research-argument-control-plane-ui-v1
+    updated: 2026-05-13
   - id: T-028
     slug: research-argument-planner-critic-v15
-    status: planned
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-011
-    dev_docs_path: dev-docs/active/research-argument-planner-critic-v15
-    updated: 2026-03-31
+    dev_docs_path: dev-docs/archive/research-argument-planner-critic-v15
+    updated: 2026-05-13
   - id: T-029
     slug: literature-collection-content-processing-boundary
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/literature-collection-content-processing-boundary
-    updated: 2026-05-04
+    dev_docs_path: dev-docs/archive/literature-collection-content-processing-boundary
+    updated: 2026-05-13
   - id: T-030
     slug: literature-content-processing-landing-roadmap
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/literature-content-processing-landing-roadmap
-    updated: 2026-05-05
+    dev_docs_path: dev-docs/archive/literature-content-processing-landing-roadmap
+    updated: 2026-05-13
   - id: T-031
     slug: literature-content-processing-contracts-stage-state
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/literature-content-processing-contracts-stage-state
-    updated: 2026-05-05
+    dev_docs_path: dev-docs/archive/literature-content-processing-contracts-stage-state
+    updated: 2026-05-13
   - id: T-032
     slug: literature-settings-provider-storage-roots
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/literature-settings-provider-storage-roots
-    updated: 2026-05-05
+    dev_docs_path: dev-docs/archive/literature-settings-provider-storage-roots
+    updated: 2026-05-13
   - id: T-033
     slug: literature-content-assets-fulltext-preprocessing
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/literature-content-assets-fulltext-preprocessing
-    updated: 2026-05-05
+    dev_docs_path: dev-docs/archive/literature-content-assets-fulltext-preprocessing
+    updated: 2026-05-13
   - id: T-034
     slug: literature-key-content-extraction-v1
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/literature-key-content-extraction-v1
-    updated: 2026-05-05
+    dev_docs_path: dev-docs/archive/literature-key-content-extraction-v1
+    updated: 2026-05-13
   - id: T-035
     slug: literature-chunk-embedding-index-pipeline
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/literature-chunk-embedding-index-pipeline
-    updated: 2026-05-05
+    dev_docs_path: dev-docs/archive/literature-chunk-embedding-index-pipeline
+    updated: 2026-05-13
   - id: T-036
     slug: literature-retrieve-stale-trigger-ui
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/literature-retrieve-stale-trigger-ui
-    updated: 2026-05-05
+    dev_docs_path: dev-docs/archive/literature-retrieve-stale-trigger-ui
+    updated: 2026-05-13
   - id: T-037
     slug: literature-backfill-operations-workbench
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/literature-backfill-operations-workbench
-    updated: 2026-05-05
+    dev_docs_path: dev-docs/archive/literature-backfill-operations-workbench
+    updated: 2026-05-13
   - id: T-038
     slug: literature-content-processing-cutover-verification
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/literature-content-processing-cutover-verification
-    updated: 2026-05-05
+    dev_docs_path: dev-docs/archive/literature-content-processing-cutover-verification
+    updated: 2026-05-13
   - id: T-039
     slug: literature-citation-abstract-readiness
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/literature-citation-abstract-readiness
-    updated: 2026-05-05
+    dev_docs_path: dev-docs/archive/literature-citation-abstract-readiness
+    updated: 2026-05-13
   - id: T-040
     slug: literature-content-processing-closure-fixes
-    status: done
+    status: archived
     milestone_id: M-000
     feature_id: F-000
-    dev_docs_path: dev-docs/active/literature-content-processing-closure-fixes
-    updated: 2026-05-08
+    dev_docs_path: dev-docs/archive/literature-content-processing-closure-fixes
+    updated: 2026-05-13
   - id: T-041
     slug: literature-end-to-end-quality-upgrade
     status: in-progress
@@ -436,3 +436,84 @@ tasks:
       - R-012
     dev_docs_path: dev-docs/active/experiment-foundation-v1
     updated: 2026-05-12
+  - id: T-044
+    slug: topic-selection-v1a-evidence-to-need
+    status: planned
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1a-evidence-to-need
+    updated: 2026-05-13
+  - id: T-045
+    slug: topic-selection-v1b-need-to-draft-topic
+    status: planned
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1b-need-to-draft-topic
+    updated: 2026-05-13
+  - id: T-046
+    slug: topic-selection-v1c-promotion-bridge
+    status: planned
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1c-promotion-bridge
+    updated: 2026-05-13
+  - id: T-047
+    slug: topic-selection-v1a-evidence-map-strength
+    status: planned
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1a-evidence-map-strength
+    updated: 2026-05-13
+  - id: T-048
+    slug: topic-selection-v1a-foundation-control-plane
+    status: planned
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1a-foundation-control-plane
+    updated: 2026-05-13
+  - id: T-049
+    slug: topic-selection-v1a-need-validation
+    status: planned
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1a-need-validation
+    updated: 2026-05-13
+  - id: T-050
+    slug: topic-selection-v1a-offline-evaluation-replay
+    status: planned
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1a-offline-evaluation-replay
+    updated: 2026-05-13
+  - id: T-051
+    slug: topic-selection-v1a-recheck-risk-memory
+    status: planned
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1a-recheck-risk-memory
+    updated: 2026-05-13
+  - id: T-052
+    slug: topic-selection-v1a-search-resource-evidence-inputs
+    status: planned
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1a-search-resource-evidence-inputs
+    updated: 2026-05-13

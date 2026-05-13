@@ -10,8 +10,7 @@
       ".next",
       ".ai",
       ".codex",
-      "coverage",
-      "apps/desktop/src/renderer/styles"
+      "coverage"
     ]
   },
   "tailwind": {

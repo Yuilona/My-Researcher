@@ -8,30 +8,30 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 43 (planned: 4, in-progress: 9, blocked: 0, done: 20, archived: 10)
+- Tasks: 52 (planned: 10, in-progress: 3, blocked: 0, done: 0, archived: 39)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
-| T-043 experiment-foundation-v1 | planned | F-001 | dev-docs/active/experiment-foundation-v1 |
-| T-042 topic-selection-decision-chain-redesign | in-progress | F-001 | dev-docs/active/topic-selection-decision-chain-redesign |
-| T-040 literature-content-processing-closure-fixes | done | F-000 | dev-docs/active/literature-content-processing-closure-fixes |
-| T-041 literature-end-to-end-quality-upgrade | in-progress | F-000 | dev-docs/active/literature-end-to-end-quality-upgrade |
-| T-030 literature-content-processing-landing-roadmap | done | F-000 | dev-docs/active/literature-content-processing-landing-roadmap |
-| T-031 literature-content-processing-contracts-stage-state | done | F-000 | dev-docs/active/literature-content-processing-contracts-stage-state |
-| T-032 literature-settings-provider-storage-roots | done | F-000 | dev-docs/active/literature-settings-provider-storage-roots |
-| T-033 literature-content-assets-fulltext-preprocessing | done | F-000 | dev-docs/active/literature-content-assets-fulltext-preprocessing |
-| T-034 literature-key-content-extraction-v1 | done | F-000 | dev-docs/active/literature-key-content-extraction-v1 |
-| T-035 literature-chunk-embedding-index-pipeline | done | F-000 | dev-docs/active/literature-chunk-embedding-index-pipeline |
-| T-036 literature-retrieve-stale-trigger-ui | done | F-000 | dev-docs/active/literature-retrieve-stale-trigger-ui |
-| T-037 literature-backfill-operations-workbench | done | F-000 | dev-docs/active/literature-backfill-operations-workbench |
-| T-038 literature-content-processing-cutover-verification | done | F-000 | dev-docs/active/literature-content-processing-cutover-verification |
-| T-039 literature-citation-abstract-readiness | done | F-000 | dev-docs/active/literature-citation-abstract-readiness |
-| T-029 literature-collection-content-processing-boundary | done | F-000 | dev-docs/active/literature-collection-content-processing-boundary |
-| T-023 research-argument-control-plane-v1 | in-progress | F-001 | dev-docs/active/research-argument-control-plane-v1 |
-| T-024 research-argument-contracts-and-ssot | done | F-001 | dev-docs/active/research-argument-contracts-and-ssot |
-| T-025 research-argument-graph-and-state-v1 | in-progress | F-001 | dev-docs/active/research-argument-graph-and-state-v1 |
-| T-026 research-argument-titlecard-paper-bridge | planned | F-001 | dev-docs/active/research-argument-titlecard-paper-bridge |
-| T-027 research-argument-control-plane-ui-v1 | planned | F-001 | dev-docs/active/research-argument-control-plane-ui-v1 |
+| T-011 literature-management-flow | archived | F-000 | dev-docs/archive/literature-management-flow |
+| T-012 app-tsx-layout-split | archived | F-000 | dev-docs/archive/app-tsx-layout-split |
+| T-013 topic-initial-pull-and-rule-preview | archived | F-000 | dev-docs/archive/topic-initial-pull-and-rule-preview |
+| T-014 automated-topic-management | archived | F-001 | dev-docs/archive/automated-topic-management |
+| T-015 maintainability-file-split-governance | archived | F-000 | dev-docs/archive/maintainability-file-split-governance |
+| T-016 backend-service-boundary-split-wave3 | archived | F-000 | dev-docs/archive/backend-service-boundary-split-wave3 |
+| T-017 frontend-normalizers-and-css-split-wave2 | archived | F-000 | dev-docs/archive/frontend-normalizers-and-css-split-wave2 |
+| T-018 literature-container-controller-split-wave1 | archived | F-000 | dev-docs/archive/literature-container-controller-split-wave1 |
+| T-019 shared-contract-decomposition-wave4 | archived | F-000 | dev-docs/archive/shared-contract-decomposition-wave4 |
+| T-020 shared-contract-compat-cleanup-and-consumer-migration | archived | F-000 | dev-docs/archive/shared-contract-compat-cleanup-and-consumer-migration |
+| T-021 topic-management-workbench-ui | archived | F-001 | dev-docs/archive/topic-management-workbench-ui |
+| T-022 desktop-legacy-css-retirement | archived | F-002 | dev-docs/archive/desktop-legacy-css-retirement |
+| T-024 research-argument-contracts-and-ssot | archived | F-001 | dev-docs/archive/research-argument-contracts-and-ssot |
+| T-025 research-argument-graph-and-state-v1 | archived | F-001 | dev-docs/archive/research-argument-graph-and-state-v1 |
+| T-026 research-argument-titlecard-paper-bridge | archived | F-001 | dev-docs/archive/research-argument-titlecard-paper-bridge |
+| T-027 research-argument-control-plane-ui-v1 | archived | F-001 | dev-docs/archive/research-argument-control-plane-ui-v1 |
+| T-028 research-argument-planner-critic-v15 | archived | F-001 | dev-docs/archive/research-argument-planner-critic-v15 |
+| T-029 literature-collection-content-processing-boundary | archived | F-000 | dev-docs/archive/literature-collection-content-processing-boundary |
+| T-030 literature-content-processing-landing-roadmap | archived | F-000 | dev-docs/archive/literature-content-processing-landing-roadmap |
+| T-031 literature-content-processing-contracts-stage-state | archived | F-000 | dev-docs/archive/literature-content-processing-contracts-stage-state |
 <!-- AUTO-GENERATED:END dashboard -->

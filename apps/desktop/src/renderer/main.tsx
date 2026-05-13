@@ -1,7 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import '../../../../ui/styles/ui.css';
-import './app-layout.css';
 import { App } from './App';
 import { applyTheme, readStoredThemeMode, readSystemPrefersDark, resolveTheme } from './theme';
 

@@ -61,10 +61,9 @@ paper-engineering-assistant - Local-first desktop assistant for CS paper enginee
 
 ## Desktop UI Freeze (MUST)
 
-- `apps/desktop/src/renderer/styles/**` is a frozen legacy compatibility layer.
-- New features and new modules MUST NOT add dependencies on `apps/desktop/src/renderer/styles/**`.
-- `apps/desktop/src/renderer/app-layout.css` remains the only allowed legacy CSS aggregation entry until retirement work removes it.
-- Only `T-022 desktop-legacy-css-retirement` and its explicit follow-on migration tasks may modify the legacy CSS layer.
+- The former `apps/desktop/src/renderer/styles/**` legacy compatibility layer is retired.
+- Do not recreate `apps/desktop/src/renderer/styles/**` or `apps/desktop/src/renderer/app-layout.css`.
+- Desktop runtime styles load through `ui/styles/ui.css`; any remaining compatibility selectors live under `ui/styles/desktop-runtime/**` until their owning UI surfaces are rewritten.
 - New desktop UI work MUST use the `data-ui` + token/contract path, with Tailwind restricted to `B1-layout-only`.
 
 ## Workspace Safety (MUST)
