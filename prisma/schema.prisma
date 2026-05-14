@@ -1011,30 +1011,47 @@ model TitleCardNeedReview {
 }
 
 model TitleCardValueAssessment {
-  id                      String                       @id
-  titleCardId             String                       @map("topicId")
-  researchQuestionId      String                       @map("questionId")
-  researchRecordId        String                       @unique
-  strongestClaimIfSuccess String
-  fallbackClaimIfSuccess  String?
-  hardGates               Json
-  scoredDimensions        Json
-  riskPenalty             Json
-  reviewerObjections      Json                         @default("[]")
-  ceilingCase             String
-  baseCase                String
-  floorCase               String
-  verdict                 TitleCardValueVerdict
-  totalScore              Decimal                      @db.Decimal(5, 2)
-  createdAt               DateTime                     @db.Timestamptz(6)
-  updatedAt               DateTime                     @db.Timestamptz(6)
-  researchRecord          TitleCardResearchRecord      @relation(fields: [researchRecordId], references: [id], onDelete: Cascade)
-  researchQuestion        TitleCardResearchQuestion    @relation(fields: [researchQuestionId], references: [id], onDelete: Cascade)
-  packages                TitleCardPackage[]
-  promotionDecisions      TitleCardPromotionDecision[]
+  id                              String                       @id
+  titleCardId                     String                       @map("topicId")
+  researchQuestionId              String                       @map("questionId")
+  researchRecordId                String                       @unique
+  strongestClaimIfSuccess         String
+  fallbackClaimIfSuccess          String?
+  hardGates                       Json
+  scoredDimensions                Json
+  riskPenalty                     Json
+  reviewerObjections              Json                         @default("[]")
+  ceilingCase                     String
+  baseCase                        String
+  floorCase                       String
+  verdict                         TitleCardValueVerdict
+  totalScore                      Decimal                      @db.Decimal(5, 2)
+  v1bSourceQuestionContractId     String?
+  v1bSourceResearchSliceId        String?
+  v1bSourceResearchSliceVersion   String?
+  v1bAssessmentRunId              String?
+  v1bInputSnapshotId              String?
+  v1bReasoningMemoId              String?
+  v1bActiveDispositionDecisionId  String?
+  v1bReadinessStatus              String?
+  v1bFreshnessStatus              String?
+  createdAt                       DateTime                     @db.Timestamptz(6)
+  updatedAt                       DateTime                     @db.Timestamptz(6)
+  researchRecord                  TitleCardResearchRecord      @relation(fields: [researchRecordId], references: [id], onDelete: Cascade)
+  researchQuestion                TitleCardResearchQuestion    @relation(fields: [researchQuestionId], references: [id], onDelete: Cascade)
+  packages                        TitleCardPackage[]
+  promotionDecisions              TitleCardPromotionDecision[]
 
   @@index([titleCardId, updatedAt(sort: Desc)])
   @@index([researchQuestionId, updatedAt(sort: Desc)])
+  @@index([v1bSourceQuestionContractId])
+  @@index([v1bSourceResearchSliceId])
+  @@index([v1bAssessmentRunId])
+  @@index([v1bInputSnapshotId])
+  @@index([v1bReasoningMemoId])
+  @@index([v1bActiveDispositionDecisionId])
+  @@index([v1bReadinessStatus])
+  @@index([v1bFreshnessStatus])
   @@map("TopicValueAssessment")
 }
 
@@ -2999,6 +3016,184 @@ model TopicSelectionTopicQuestionFalsificationCondition {
   @@index([conditionType])
   @@index([severity])
   @@index([status])
+}
+
+model TopicSelectionAssessTopicValueRun {
+  id                         String   @id
+  workspaceId                String?
+  titleCardId                String
+  topicQuestionContractId    String
+  topicQuestionId            String
+  researchSliceId            String
+  researchSliceVersion       String
+  topicValueAssessmentId     String?
+  valueReasoningMemoId       String?
+  status                     String
+  triggeredBy                String
+  topicQuestionRef           Json     @default("{}")
+  topicQuestionContractRef   Json     @default("{}")
+  answerabilityPlanRef       Json     @default("{}")
+  researchSliceRef           Json     @default("{}")
+  selectionDecisionRef       Json     @default("{}")
+  validatedNeedRefs          Json     @default("[]")
+  evidenceRefs               Json     @default("[]")
+  acceptedRiskRefs           Json     @default("[]")
+  memorySuggestionRefs       Json     @default("[]")
+  recheckRequestRefs         Json     @default("[]")
+  workflowProfileKey         String
+  workflowProfileVersion     String?
+  providerId                 String?
+  modelId                    String?
+  promptTemplateId           String?
+  promptTemplateVersion      String?
+  topicValueInputSnapshotId  String?
+  inputSnapshotId            String?
+  workflowRunId              String?
+  gateResultId               String?
+  transitionAttemptId        String?
+  artifactRefs               Json     @default("[]")
+  qualityFlags               String[] @default([])
+  failureReason              String?
+  createdAt                  DateTime @db.Timestamptz(6)
+  updatedAt                  DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([topicQuestionContractId], map: "TSAssessRun_contract_idx")
+  @@index([topicQuestionId], map: "TSAssessRun_question_idx")
+  @@index([researchSliceId])
+  @@index([topicValueAssessmentId])
+  @@index([valueReasoningMemoId])
+  @@index([status])
+  @@index([workflowRunId])
+  @@index([gateResultId])
+}
+
+model TopicSelectionTopicValueAssessmentInputSnapshot {
+  id                          String   @id
+  workspaceId                 String?
+  titleCardId                 String
+  topicQuestionContractId     String
+  topicQuestionId             String
+  researchSliceId             String
+  researchSliceVersion        String
+  topicQuestionRef            Json     @default("{}")
+  topicQuestionContractRef    Json     @default("{}")
+  answerabilityPlanRef        Json     @default("{}")
+  researchSliceRef            Json     @default("{}")
+  validatedNeedRefs           Json     @default("[]")
+  evidenceRefs                Json     @default("[]")
+  needRefs                    Json     @default("[]")
+  boundaryRefs                Json     @default("[]")
+  assumptionRefs              Json     @default("[]")
+  falsificationConditions     Json     @default("[]")
+  acceptedRiskRefs            Json     @default("[]")
+  memorySuggestionRefs        Json     @default("[]")
+  recheckRequestRefs          Json     @default("[]")
+  questionContract            Json     @default("{}")
+  answerabilityPlan           Json     @default("{}")
+  researchSliceSnapshot       Json     @default("{}")
+  snapshotHash                String
+  controlPlaneInputSnapshotId String?
+  createdAt                   DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([topicQuestionContractId], map: "TSValueInputSnapshot_contract_idx")
+  @@index([topicQuestionId], map: "TSValueInputSnapshot_question_idx")
+  @@index([researchSliceId])
+  @@index([snapshotHash])
+  @@index([controlPlaneInputSnapshotId])
+}
+
+model TopicSelectionValueReasoningMemo {
+  id                         String   @id
+  workspaceId                String?
+  titleCardId                String
+  topicValueAssessmentId     String
+  topicQuestionContractId    String
+  recommendation             String
+  valueThesis                String
+  significance               String
+  originality                String
+  claimLeverage              String
+  reviewerRisks              String[] @default([])
+  effortToValue              String
+  strategicFit               String
+  negativeMemoryCheck        String
+  evidenceBackedRationale    String
+  topObjections              String[] @default([])
+  uncertainty                String
+  dispositionBridge          String
+  requiresCriticReview       Boolean  @default(false)
+  criticTriggers             String[] @default([])
+  citedRefs                  Json     @default("[]")
+  createdByWorkflowRunId     String?
+  artifactRefs               Json     @default("[]")
+  createdAt                  DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([topicValueAssessmentId])
+  @@index([topicQuestionContractId])
+  @@index([recommendation])
+  @@index([requiresCriticReview])
+  @@index([createdByWorkflowRunId])
+}
+
+model TopicSelectionValueDispositionDecision {
+  id                         String   @id
+  workspaceId                String?
+  titleCardId                String
+  topicValueAssessmentId     String
+  topicQuestionContractId    String
+  valueReasoningMemoId       String
+  decision                   String
+  decidedBy                  String
+  decisionRationale          String
+  requiredActions            String[] @default([])
+  loopbackTargetRef          Json?
+  blockingContexts           Json     @default("[]")
+  acceptedRiskRefs           Json     @default("[]")
+  blockerRefs                Json     @default("[]")
+  packageDraftInput          Json?
+  outputTopicPackageId       String?
+  status                     String
+  isCurrent                  Boolean  @default(true)
+  inputSnapshotId            String?
+  workflowRunId              String?
+  gateResultId               String?
+  transitionAttemptId        String?
+  artifactRefs               Json     @default("[]")
+  createdAt                  DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([topicValueAssessmentId])
+  @@index([topicQuestionContractId])
+  @@index([valueReasoningMemoId])
+  @@index([decision])
+  @@index([status])
+  @@index([isCurrent])
+  @@index([workflowRunId])
+  @@index([gateResultId])
+}
+
+model TopicSelectionTopicValueEvidenceRef {
+  id                       String   @id
+  workspaceId              String?
+  titleCardId              String
+  topicValueAssessmentId   String
+  topicQuestionContractId  String
+  evidenceRef              Json     @default("{}")
+  evidenceRefType          String
+  evidenceRefId            String
+  evidenceRole             String
+  valueUse                 String
+  rationale                String
+  createdAt                DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId])
+  @@index([topicValueAssessmentId])
+  @@index([topicQuestionContractId])
+  @@index([evidenceRefType, evidenceRefId])
+  @@index([evidenceRole])
 }
 
 model TopicSelectionRecheckEvent {
