@@ -12,3 +12,4 @@ export * from './topic-selection-recheck-risk-memory-contracts.js';
 export * from './topic-selection-offline-evaluation-replay-contracts.js';
 export * from './topic-selection-v1b-intake-contracts.js';
 export * from './topic-selection-v1b-research-slice-contracts.js';
+export * from './topic-selection-v1b-topic-question-contracts.js';

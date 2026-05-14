@@ -69,3 +69,19 @@ templates:
       - Do not introduce unmet needs beyond the provided ValidatedNeed and evidence refs.
       - Every option must cite copied refs from the supplied planning input.
       - Every option must include claim_ceiling_alignment; exceeds is not selectable and uncertain requires review.
+
+  - prompt_template_id: topic-selection-topic-question-formation
+    version: 1
+    runtime_profile_id: topic_selection_topic_question_formation.v1
+    description: Generate source-grounded, answerability-checked TopicQuestion candidates for v1b topic selection.
+    variables_schema:
+      type: object
+      required: [topic_question_formation_input_json]
+      properties:
+        topic_question_formation_input_json:
+          type: object
+    notes:
+      - Return only JSON matching the TopicQuestion candidate-set schema.
+      - Copy ValidatedNeed, ResearchSlice boundary, assumption, and evidence refs from the supplied v1b handoff.
+      - Do not introduce new unmet-need proof, new evidence authority, value assessment, package, promotion, or PaperProject objects.
+      - Each admissible candidate must include an answerability plan, claim ceiling fit, excluded claims, allowed refinements, and falsification conditions.

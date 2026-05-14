@@ -22,6 +22,7 @@ import * as topicSelectionRecheckRiskMemoryContracts from './topic-selection-rec
 import * as topicSelectionSearchResourceContracts from './topic-selection-search-resource-contracts.js';
 import * as topicSelectionV1bIntakeContracts from './topic-selection-v1b-intake-contracts.js';
 import * as topicSelectionV1bResearchSliceContracts from './topic-selection-v1b-research-slice-contracts.js';
+import * as topicSelectionV1bTopicQuestionContracts from './topic-selection-v1b-topic-question-contracts.js';
 import type {
   ReleaseGateReviewResponse,
   StageGateVerifyRequest,
@@ -232,6 +233,34 @@ test('topic-selection v1b research-slice schemas load through direct and aggrega
   ]);
   assert.ok(researchLifecycleContracts.topicSelectionPlanResearchSliceRunRecordSchema);
   assert.ok(researchLifecycleContracts.topicSelectionV1bTopicQuestionFormationInputSchema);
+});
+
+test('topic-selection v1b topic-question schemas load through direct and aggregate exports', () => {
+  assert.ok(topicSelectionV1bTopicQuestionContracts.topicSelectionFormTopicQuestionRunRecordSchema);
+  assert.ok(topicSelectionV1bTopicQuestionContracts.topicSelectionQuestionFrameRecordSchema);
+  assert.ok(topicSelectionV1bTopicQuestionContracts.topicSelectionTopicQuestionCandidateSetRecordSchema);
+  assert.ok(topicSelectionV1bTopicQuestionContracts.topicSelectionTopicQuestionCandidateRecordSchema);
+  assert.ok(topicSelectionV1bTopicQuestionContracts.topicSelectionTopicQuestionSelectionDecisionRecordSchema);
+  assert.ok(topicSelectionV1bTopicQuestionContracts.topicSelectionTopicQuestionRecordSchema);
+  assert.ok(topicSelectionV1bTopicQuestionContracts.topicSelectionTopicQuestionContractRecordSchema);
+  assert.ok(topicSelectionV1bTopicQuestionContracts.topicSelectionTopicQuestionAnswerabilityPlanRecordSchema);
+  assert.ok(topicSelectionV1bTopicQuestionContracts.topicSelectionTopicQuestionNeedRefRecordSchema);
+  assert.ok(topicSelectionV1bTopicQuestionContracts.topicSelectionTopicQuestionEvidenceRefRecordSchema);
+  assert.ok(topicSelectionV1bTopicQuestionContracts.topicSelectionTopicQuestionBoundaryRefRecordSchema);
+  assert.ok(topicSelectionV1bTopicQuestionContracts.topicSelectionTopicQuestionAssumptionRefRecordSchema);
+  assert.ok(topicSelectionV1bTopicQuestionContracts.topicSelectionTopicQuestionFalsificationConditionRecordSchema);
+  assert.ok(topicSelectionV1bTopicQuestionContracts.topicSelectionV1bValueAssessmentInputSchema);
+  assert.ok(topicSelectionV1bTopicQuestionContracts.topicSelectionFormTopicQuestionLlmOutputSchema);
+  assert.deepEqual([...topicSelectionV1bTopicQuestionContracts.TOPIC_SELECTION_TOPIC_QUESTION_SELECTION_DECISIONS], [
+    'admit',
+    'admit_multiple',
+    'merge_then_admit',
+    'park',
+    'reject_all',
+    'no_admissible_candidate',
+  ]);
+  assert.ok(researchLifecycleContracts.topicSelectionFormTopicQuestionRunRecordSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionV1bValueAssessmentInputSchema);
 });
 
 test('topic-selection v1b constraint profile schema accepts draft constraint gaps', async () => {
@@ -857,6 +886,7 @@ test('research-lifecycle barrel re-exports the runtime value surface of split mo
     ...Object.keys(topicSelectionOfflineEvaluationReplayContracts),
     ...Object.keys(topicSelectionV1bIntakeContracts),
     ...Object.keys(topicSelectionV1bResearchSliceContracts),
+    ...Object.keys(topicSelectionV1bTopicQuestionContracts),
   ]);
 
   assert.deepEqual(Object.keys(researchLifecycleContracts).sort(), [...expectedKeys].sort());

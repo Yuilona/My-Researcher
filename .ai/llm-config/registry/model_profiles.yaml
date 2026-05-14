@@ -57,3 +57,14 @@ profiles:
       - provider_id: openai
         model_id: gpt-5.5
         weight: 100
+
+  - profile_id: topic-selection-topic-question-formation
+    intent: source_grounded_topic_question_contract_formation
+    candidates:
+      - provider_id: openai
+        model_id: gpt-5.4-mini
+        weight: 100
+    fallback:
+      - provider_id: openai
+        model_id: gpt-5.5
+        weight: 100
