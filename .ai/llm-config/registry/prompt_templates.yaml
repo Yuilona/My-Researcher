@@ -85,3 +85,22 @@ templates:
       - Copy ValidatedNeed, ResearchSlice boundary, assumption, and evidence refs from the supplied v1b handoff.
       - Do not introduce new unmet-need proof, new evidence authority, value assessment, package, promotion, or PaperProject objects.
       - Each admissible candidate must include an answerability plan, claim ceiling fit, excluded claims, allowed refinements, and falsification conditions.
+
+  - prompt_template_id: topic-selection-topic-value-assessment
+    version: 1
+    runtime_profile_id: topic_selection_topic_value_assessment.v1
+    description: Assess v1b TopicQuestion value from the active question contract and selected ResearchSlice snapshot.
+    variables_schema:
+      type: object
+      required: [topic_value_assessment_input_json, research_slice_snapshot_json]
+      properties:
+        topic_value_assessment_input_json:
+          type: object
+        research_slice_snapshot_json:
+          type: object
+    notes:
+      - Return only JSON matching the TopicValueAssessment structured reasoning schema.
+      - Cite only refs inherited from the T-059 value handoff and T-057 ResearchSlice snapshot.
+      - Do not prove a new unmet need, create new evidence authority, rewrite the question, or expand the slice.
+      - Do not create a TopicPackage, promotion decision, PaperProject, or package-readiness claim.
+      - advance_to_package only means the draft-package handoff may be prepared by deterministic service logic.
