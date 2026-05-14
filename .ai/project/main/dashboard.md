@@ -8,7 +8,7 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 60 (planned: 6, in-progress: 4, blocked: 0, done: 11, archived: 39)
+- Tasks: 60 (planned: 5, in-progress: 4, blocked: 0, done: 12, archived: 39)
 
 ## Recent tasks
 
@@ -26,7 +26,7 @@ Project: `main`
 | T-057 topic-selection-v1b-research-slice | done | F-001 | dev-docs/active/topic-selection-v1b-research-slice |
 | T-058 topic-selection-v1b-topic-package-draft | planned | F-001 | dev-docs/active/topic-selection-v1b-topic-package-draft |
 | T-059 topic-selection-v1b-topic-question-contract | done | F-001 | dev-docs/active/topic-selection-v1b-topic-question-contract |
-| T-060 topic-selection-v1b-value-assessment | planned | F-001 | dev-docs/active/topic-selection-v1b-value-assessment |
+| T-060 topic-selection-v1b-value-assessment | done | F-001 | dev-docs/active/topic-selection-v1b-value-assessment |
 | T-011 literature-management-flow | archived | F-000 | dev-docs/archive/literature-management-flow |
 | T-012 app-tsx-layout-split | archived | F-000 | dev-docs/archive/app-tsx-layout-split |
 | T-013 topic-initial-pull-and-rule-preview | archived | F-000 | dev-docs/archive/topic-initial-pull-and-rule-preview |

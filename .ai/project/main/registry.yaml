@@ -582,7 +582,7 @@ tasks:
     updated: 2026-05-14
   - id: T-060
     slug: topic-selection-v1b-value-assessment
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:

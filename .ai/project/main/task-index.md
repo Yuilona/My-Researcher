@@ -69,5 +69,5 @@ Project: `main`
 | T-057 topic-selection-v1b-research-slice | done | F-001 | dev-docs/active/topic-selection-v1b-research-slice |
 | T-058 topic-selection-v1b-topic-package-draft | planned | F-001 | dev-docs/active/topic-selection-v1b-topic-package-draft |
 | T-059 topic-selection-v1b-topic-question-contract | done | F-001 | dev-docs/active/topic-selection-v1b-topic-question-contract |
-| T-060 topic-selection-v1b-value-assessment | planned | F-001 | dev-docs/active/topic-selection-v1b-value-assessment |
+| T-060 topic-selection-v1b-value-assessment | done | F-001 | dev-docs/active/topic-selection-v1b-value-assessment |
 <!-- AUTO-GENERATED:END task-index -->

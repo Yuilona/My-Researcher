@@ -73,7 +73,7 @@ Project: `main`
 | T-057 topic-selection-v1b-research-slice | done | dev-docs/active/topic-selection-v1b-research-slice |
 | T-058 topic-selection-v1b-topic-package-draft | planned | dev-docs/active/topic-selection-v1b-topic-package-draft |
 | T-059 topic-selection-v1b-topic-question-contract | done | dev-docs/active/topic-selection-v1b-topic-question-contract |
-| T-060 topic-selection-v1b-value-assessment | planned | dev-docs/active/topic-selection-v1b-value-assessment |
+| T-060 topic-selection-v1b-value-assessment | done | dev-docs/active/topic-selection-v1b-value-assessment |
 
 ### F-002 Desktop Frontend Foundation
 
