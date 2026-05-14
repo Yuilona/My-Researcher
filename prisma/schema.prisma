@@ -2271,6 +2271,333 @@ model TopicSelectionV1bIntakeReadinessAssessment {
   @@index([policyVersionId])
 }
 
+model TopicSelectionPlanResearchSliceRun {
+  id                              String   @id
+  workspaceId                     String?
+  titleCardId                     String
+  v1bIntakeReadinessAssessmentId  String
+  v1bIntakeSnapshotId             String
+  researchConstraintProfileId     String
+  v1bInputBundleId                String
+  validatedNeedId                 String
+  status                          String
+  triggeredBy                     String
+  v1bInputBundleRef               Json     @default("{}")
+  v1bIntakeSnapshotRef            Json     @default("{}")
+  researchConstraintProfileRef    Json     @default("{}")
+  readinessAssessmentRef          Json     @default("{}")
+  validatedNeedRef                Json     @default("{}")
+  evidenceMapRef                  Json     @default("{}")
+  searchRunRef                    Json     @default("{}")
+  searchPlanRef                   Json     @default("{}")
+  literatureSnapshotRef           Json     @default("{}")
+  acceptedRiskRefs                Json     @default("[]")
+  memorySuggestionRefs            Json     @default("[]")
+  recheckRequestRefs              Json     @default("[]")
+  gapCodes                        String[] @default([])
+  workflowProfileKey              String
+  workflowProfileVersion          String?
+  providerId                      String?
+  modelId                         String?
+  promptTemplateId                String?
+  promptTemplateVersion           String?
+  inputSnapshotId                 String?
+  workflowRunId                   String?
+  optionSetId                     String?
+  artifactRefs                    Json     @default("[]")
+  qualityFlags                    String[] @default([])
+  failureReason                   String?
+  createdAt                       DateTime @db.Timestamptz(6)
+  updatedAt                       DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([v1bIntakeReadinessAssessmentId])
+  @@index([v1bIntakeSnapshotId])
+  @@index([researchConstraintProfileId])
+  @@index([v1bInputBundleId])
+  @@index([validatedNeedId])
+  @@index([status])
+  @@index([workflowRunId])
+  @@index([optionSetId])
+}
+
+model TopicSelectionResearchSliceOptionSet {
+  id                             String   @id
+  workspaceId                    String?
+  titleCardId                    String
+  planResearchSliceRunId         String
+  v1bIntakeReadinessAssessmentId String
+  v1bIntakeSnapshotId            String
+  researchConstraintProfileId    String
+  v1bInputBundleId               String
+  validatedNeedIds               String[] @default([])
+  status                         String
+  recommendedOptionId            String?
+  selectedOptionId               String?
+  optionCount                    Int
+  highRiskOptionCount            Int
+  requiresHumanReview            Boolean
+  comparisonAxes                 String[] @default([])
+  comparisonSummary              String
+  missingOptionTypes             String[] @default([])
+  unresolvedDisagreements        String[] @default([])
+  humanReviewTriggers            String[] @default([])
+  optionsPayload                 Json     @default("{}")
+  comparisonPayload              Json     @default("{}")
+  inputSnapshotId                String?
+  workflowRunId                  String?
+  artifactRefs                   Json     @default("[]")
+  createdAt                      DateTime @db.Timestamptz(6)
+  updatedAt                      DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([planResearchSliceRunId])
+  @@index([v1bIntakeReadinessAssessmentId])
+  @@index([v1bIntakeSnapshotId])
+  @@index([researchConstraintProfileId])
+  @@index([v1bInputBundleId])
+  @@index([status])
+  @@index([recommendedOptionId])
+  @@index([selectedOptionId])
+  @@index([workflowRunId])
+}
+
+model TopicSelectionResearchSliceOption {
+  id                         String   @id
+  workspaceId                String?
+  titleCardId                String
+  researchSliceOptionSetId   String
+  optionOrdinal              Int
+  optionKey                  String
+  status                     String
+  sourceValidatedNeedRefs    Json     @default("[]")
+  sliceStatement             String
+  problemSpace               String
+  targetSetting              String
+  targetCommunity            String
+  includedBoundaries         String[] @default([])
+  excludedBoundaries         String[] @default([])
+  contributionTypeCandidate  String
+  supportEvidenceRefs        Json     @default("[]")
+  challengeEvidenceRefs      Json     @default("[]")
+  baselineEvidenceRefs       Json     @default("[]")
+  contextEvidenceRefs        Json     @default("[]")
+  resourceAssumptions        String[] @default([])
+  dataAssumptions            String[] @default([])
+  evaluationPath             String
+  baselineAssumptions        String[] @default([])
+  hardBlockers               String[] @default([])
+  dependencyRisks            String[] @default([])
+  sliceBudget                Json     @default("{}")
+  expectedClaim              String
+  fallbackClaim              String
+  observableSuccessCriteria  String[] @default([])
+  mainRisks                  String[] @default([])
+  baselineRisk               String
+  executionRisk              String
+  scopeRisk                  String
+  claimCeilingAlignment      Json     @default("{}")
+  confidence                 Float?
+  requiresHumanReview        Boolean
+  humanReviewTriggers        String[] @default([])
+  detailsPayload             Json     @default("{}")
+  createdAt                  DateTime @db.Timestamptz(6)
+
+  @@unique([researchSliceOptionSetId, optionKey])
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([researchSliceOptionSetId])
+  @@index([status])
+  @@index([baselineRisk])
+  @@index([executionRisk])
+  @@index([scopeRisk])
+  @@index([requiresHumanReview])
+}
+
+model TopicSelectionSliceSelectionDecision {
+  id                          String   @id
+  workspaceId                 String?
+  titleCardId                 String
+  researchSliceOptionSetId    String
+  selectedOptionId            String?
+  decision                    String
+  decidedBy                   String
+  selectionPolicyVersion      String
+  decisionBasis               Json     @default("{}")
+  selectionRationale          String
+  rejectedOptionReasons       Json     @default("[]")
+  hardBlockers                String[] @default([])
+  openRisks                   String[] @default([])
+  unresolvedDisagreements     String[] @default([])
+  loopbackTarget              String?
+  loopbackTargetRef           Json?
+  requiredActions             String[] @default([])
+  loopbackReasonCode          String?
+  sourceDownstreamObjectRef   Json?
+  createsNewRunOrVersion      Boolean
+  confidence                  Float?
+  requiresHumanReview         Boolean
+  humanReviewReason           String?
+  outputResearchSliceId       String?
+  outputResearchSliceRef      Json?
+  inputSnapshotId             String?
+  workflowRunId               String?
+  gateResultId                String?
+  transitionAttemptId         String?
+  artifactRefs                Json     @default("[]")
+  createdAt                   DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([researchSliceOptionSetId])
+  @@index([selectedOptionId])
+  @@index([decision])
+  @@index([outputResearchSliceId])
+  @@index([gateResultId])
+  @@index([workflowRunId])
+}
+
+model TopicSelectionResearchSlice {
+  id                              String                                      @id
+  workspaceId                     String?
+  titleCardId                     String
+  v1bIntakeSnapshotId             String
+  researchConstraintProfileId     String
+  v1bInputBundleId                String
+  validatedNeedId                 String
+  sourceOptionSetId               String
+  sourceOptionId                  String
+  sliceSelectionDecisionId        String
+  sliceVersion                    String
+  status                          String
+  v1bIntakeSnapshotRef            Json                                        @default("{}")
+  researchConstraintProfileRef    Json                                        @default("{}")
+  readinessAssessmentRef          Json                                        @default("{}")
+  v1bInputBundleRef               Json                                        @default("{}")
+  validatedNeedRef                Json                                        @default("{}")
+  evidenceMapRef                  Json                                        @default("{}")
+  searchRunRef                    Json                                        @default("{}")
+  searchPlanRef                   Json                                        @default("{}")
+  literatureSnapshotRef           Json                                        @default("{}")
+  sourceOptionSetRef              Json                                        @default("{}")
+  sourceOptionRef                 Json                                        @default("{}")
+  sliceSelectionDecisionRef       Json                                        @default("{}")
+  problemSpace                    String
+  sliceStatement                  String
+  targetSetting                   String
+  targetCommunity                 String
+  includedBoundaries              String[]                                    @default([])
+  excludedBoundaries              String[]                                    @default([])
+  candidateContributionTypes      String[]                                    @default([])
+  preferredContributionType       String?
+  contributionRationale           String
+  expectedClaim                   String
+  fallbackClaim                   String
+  observableSuccessCriteria       String[]                                    @default([])
+  resourceAssumptions             String[]                                    @default([])
+  dataAssumptions                 String[]                                    @default([])
+  evaluationPath                  String
+  baselineAssumptions             String[]                                    @default([])
+  dependencyRisks                 String[]                                    @default([])
+  sliceBudget                     Json                                        @default("{}")
+  topicQuestionGuardrails         String[]                                    @default([])
+  valueAssessmentInputs           String[]                                    @default([])
+  mustPreserveBoundaries          String[]                                    @default([])
+  acceptedRiskRefs                Json                                        @default("[]")
+  memorySuggestionRefs            Json                                        @default("[]")
+  recheckRequestRefs              Json                                        @default("[]")
+  gapCodes                        String[]                                    @default([])
+  nonGoals                        String[]                                    @default([])
+  claimCeiling                    String
+  decisionReason                  String?
+  supersedesResearchSliceId       String?
+  supersedesResearchSliceRef      Json?
+  supersededByResearchSliceId     String?
+  supersededByResearchSliceRef    Json?
+  inputSnapshotId                 String?
+  workflowRunId                   String?
+  gateResultId                    String?
+  transitionAttemptId             String?
+  traceSnapshotId                 String?
+  artifactRefs                    Json                                        @default("[]")
+  createdBy                       String
+  createdAt                       DateTime                                    @db.Timestamptz(6)
+  updatedAt                       DateTime                                    @db.Timestamptz(6)
+  evidenceRefs                    TopicSelectionResearchSliceEvidenceRef[]
+  boundaries                      TopicSelectionResearchSliceBoundary[]
+  assumptions                     TopicSelectionResearchSliceAssumption[]
+
+  @@unique([sourceOptionSetId, sourceOptionId, sliceVersion])
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([v1bIntakeSnapshotId])
+  @@index([researchConstraintProfileId])
+  @@index([v1bInputBundleId])
+  @@index([validatedNeedId])
+  @@index([status])
+  @@index([sourceOptionId])
+  @@index([sourceOptionSetId])
+  @@index([gateResultId])
+  @@index([workflowRunId])
+}
+
+model TopicSelectionResearchSliceEvidenceRef {
+  id                       String                      @id
+  workspaceId              String?
+  titleCardId              String
+  researchSliceId          String
+  evidenceRef              Json                        @default("{}")
+  evidenceRefType          String
+  evidenceRefId            String
+  evidenceRole             String
+  rationale                String
+  evidenceStrengthSnapshot Json                        @default("{}")
+  sourceLocatorSnapshot    Json                        @default("{}")
+  createdAt                DateTime                    @db.Timestamptz(6)
+  researchSlice            TopicSelectionResearchSlice @relation(fields: [researchSliceId], references: [id], onDelete: Cascade)
+
+  @@index([titleCardId])
+  @@index([researchSliceId])
+  @@index([evidenceRefType, evidenceRefId])
+  @@index([evidenceRole])
+}
+
+model TopicSelectionResearchSliceBoundary {
+  id                String                      @id
+  workspaceId       String?
+  titleCardId       String
+  researchSliceId   String
+  boundaryKind      String
+  boundaryType      String
+  statement         String
+  reason            String
+  evidenceRefs      Json                        @default("[]")
+  createdAt         DateTime                    @db.Timestamptz(6)
+  researchSlice     TopicSelectionResearchSlice @relation(fields: [researchSliceId], references: [id], onDelete: Cascade)
+
+  @@index([titleCardId])
+  @@index([researchSliceId])
+  @@index([boundaryKind])
+  @@index([boundaryType])
+}
+
+model TopicSelectionResearchSliceAssumption {
+  id                String                      @id
+  workspaceId       String?
+  titleCardId       String
+  researchSliceId   String
+  assumptionType    String
+  statement         String
+  status            String
+  evidenceRefs      Json                        @default("[]")
+  riskLevel         String
+  createdAt         DateTime                    @db.Timestamptz(6)
+  researchSlice     TopicSelectionResearchSlice @relation(fields: [researchSliceId], references: [id], onDelete: Cascade)
+
+  @@index([titleCardId])
+  @@index([researchSliceId])
+  @@index([assumptionType])
+  @@index([status])
+  @@index([riskLevel])
+}
+
 model TopicSelectionRecheckEvent {
   id                String    @id
   workspaceId       String?

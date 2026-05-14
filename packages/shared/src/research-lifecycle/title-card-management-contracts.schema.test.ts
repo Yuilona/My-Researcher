@@ -21,6 +21,7 @@ import * as topicSelectionOfflineEvaluationReplayContracts from './topic-selecti
 import * as topicSelectionRecheckRiskMemoryContracts from './topic-selection-recheck-risk-memory-contracts.js';
 import * as topicSelectionSearchResourceContracts from './topic-selection-search-resource-contracts.js';
 import * as topicSelectionV1bIntakeContracts from './topic-selection-v1b-intake-contracts.js';
+import * as topicSelectionV1bResearchSliceContracts from './topic-selection-v1b-research-slice-contracts.js';
 import type {
   ReleaseGateReviewResponse,
   StageGateVerifyRequest,
@@ -210,6 +211,27 @@ test('topic-selection v1b intake schemas load through direct and aggregate expor
   ]);
   assert.ok(researchLifecycleContracts.topicSelectionV1bIntakeSnapshotRecordSchema);
   assert.ok(researchLifecycleContracts.topicSelectionV1bResearchSlicePlanningInputSchema);
+});
+
+test('topic-selection v1b research-slice schemas load through direct and aggregate exports', () => {
+  assert.ok(topicSelectionV1bResearchSliceContracts.topicSelectionPlanResearchSliceRunRecordSchema);
+  assert.ok(topicSelectionV1bResearchSliceContracts.topicSelectionResearchSliceOptionSetRecordSchema);
+  assert.ok(topicSelectionV1bResearchSliceContracts.topicSelectionResearchSliceOptionRecordSchema);
+  assert.ok(topicSelectionV1bResearchSliceContracts.topicSelectionSliceSelectionDecisionRecordSchema);
+  assert.ok(topicSelectionV1bResearchSliceContracts.topicSelectionResearchSliceRecordSchema);
+  assert.ok(topicSelectionV1bResearchSliceContracts.topicSelectionResearchSliceEvidenceRefRecordSchema);
+  assert.ok(topicSelectionV1bResearchSliceContracts.topicSelectionResearchSliceBoundaryRecordSchema);
+  assert.ok(topicSelectionV1bResearchSliceContracts.topicSelectionResearchSliceAssumptionRecordSchema);
+  assert.ok(topicSelectionV1bResearchSliceContracts.topicSelectionV1bTopicQuestionFormationInputSchema);
+  assert.ok(topicSelectionV1bResearchSliceContracts.topicSelectionResearchSliceOptionSetLlmOutputSchema);
+  assert.deepEqual([...topicSelectionV1bResearchSliceContracts.TOPIC_SELECTION_SLICE_SELECTION_DECISIONS], [
+    'select',
+    'request_more_options',
+    'park',
+    'reject',
+  ]);
+  assert.ok(researchLifecycleContracts.topicSelectionPlanResearchSliceRunRecordSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionV1bTopicQuestionFormationInputSchema);
 });
 
 test('topic-selection v1b constraint profile schema accepts draft constraint gaps', async () => {
@@ -834,6 +856,7 @@ test('research-lifecycle barrel re-exports the runtime value surface of split mo
     ...Object.keys(topicSelectionRecheckRiskMemoryContracts),
     ...Object.keys(topicSelectionOfflineEvaluationReplayContracts),
     ...Object.keys(topicSelectionV1bIntakeContracts),
+    ...Object.keys(topicSelectionV1bResearchSliceContracts),
   ]);
 
   assert.deepEqual(Object.keys(researchLifecycleContracts).sort(), [...expectedKeys].sort());

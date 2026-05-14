@@ -1,8 +1,8 @@
 # 00 Overview
 
 ## Status
-- State: planned
-- Next step: Implement ResearchSlice planning after intake/constraint profile contracts land.
+- State: done
+- Next step: Hand off selected/current `ResearchSlice` DTO contract to T-059 topic-question formation.
 
 ## Parent Package
 - Stage parent: `dev-docs/active/topic-selection-v1b-need-to-draft-topic/`
@@ -27,7 +27,7 @@
 - slice blockers and loopback recommendations
 
 ## Acceptance Criteria
-- [ ] Slice options are generated from intake snapshot, constraint profile, and inherited evidence refs.
-- [ ] `SliceSelectionDecision` records selected, rejected, and deferred options with rationale.
-- [ ] `ResearchSlice` has explicit boundary, method/resource assumptions, target community, claim ceiling, and non-goals.
-- [ ] TopicQuestion formation can consume `ResearchSlice` without inventing new scope.
+- [x] Slice options are generated from intake snapshot, constraint profile, and inherited evidence refs.
+- [x] `SliceSelectionDecision` records selected, rejected, and deferred options with rationale.
+- [x] `ResearchSlice` has explicit boundary, method/resource assumptions, target community, claim ceiling, and non-goals.
+- [x] TopicQuestion formation can consume `ResearchSlice` without inventing new scope.

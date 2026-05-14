@@ -46,3 +46,14 @@ profiles:
       - provider_id: openai
         model_id: gpt-5.4-mini
         weight: 100
+
+  - profile_id: topic-selection-research-slice-planning
+    intent: source_grounded_research_slice_option_planning
+    candidates:
+      - provider_id: openai
+        model_id: gpt-5.4-mini
+        weight: 100
+    fallback:
+      - provider_id: openai
+        model_id: gpt-5.5
+        weight: 100

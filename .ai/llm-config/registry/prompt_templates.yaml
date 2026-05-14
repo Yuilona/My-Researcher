@@ -53,3 +53,19 @@ templates:
           type: object
     notes:
       - Return a single quality_score number from 0 to 100.
+
+  - prompt_template_id: topic-selection-research-slice-planning
+    version: 1
+    runtime_profile_id: topic_selection_research_slice_planning.v1
+    description: Generate source-grounded, constraint-bounded ResearchSlice options for v1b topic selection.
+    variables_schema:
+      type: object
+      required: [planning_input_json]
+      properties:
+        planning_input_json:
+          type: object
+    notes:
+      - Return only JSON matching the ResearchSlice option-set schema.
+      - Do not introduce unmet needs beyond the provided ValidatedNeed and evidence refs.
+      - Every option must cite copied refs from the supplied planning input.
+      - Every option must include claim_ceiling_alignment; exceeds is not selectable and uncertain requires review.
