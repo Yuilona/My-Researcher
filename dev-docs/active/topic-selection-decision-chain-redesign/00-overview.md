@@ -2,7 +2,7 @@
 
 ## Status
 - State: in-progress
-- Next step: 作为母包维护总体架构和跨阶段不变量；下一步细拆 `topic-selection-v1a-evidence-to-need` 的实施子包。
+- Next step: 作为母包维护总体架构和跨阶段不变量；v1a backend/service/API 已闭环，v1b 已拆为实施子包并进入 need-to-draft-topic 执行准备。
 
 ## Goal
 - 创建并维护一个面向“完善选题链路”的母包。
@@ -39,7 +39,8 @@
 - [x] 任务包包含标准 `roadmap.md`、`00~05` 文件。
 - [x] 任务包包含独立设计说明 `06-design-spec.md`。
 - [x] 母包已拆出 v1a/v1b/v1c 阶段子包。
-- [ ] `roadmap.md` 记录讨论中的 open questions、milestones 与决策。
-- [ ] `06-design-spec.md` 明确新版链路、对象模型、gate、回流路径与人机分工。
+- [x] `roadmap.md` 记录讨论中的 open questions、milestones 与决策。
+- [x] `06-design-spec.md` 明确新版链路、对象模型、gate、回流路径与人机分工。
 - [ ] 后续完成 current implementation gap map。
-- [ ] 后续完成 v1a 内部实施子包拆分。
+- [x] 后续完成 v1a 内部实施子包拆分。
+- [x] v1b implementation child packages are split with an implementation contract review.

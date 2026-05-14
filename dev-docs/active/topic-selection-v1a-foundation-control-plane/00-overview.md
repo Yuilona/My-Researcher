@@ -1,8 +1,8 @@
 # 00 Overview
 
 ## Status
-- State: in-progress
-- Next step: Keep T-048 as the shared v1a control-plane foundation for T-049/T-051/T-050; apply the generated migration to a target DB only after an explicit environment approval.
+- State: done
+- Next step: Reuse T-048 control-plane contracts from v1b/v1c; apply generated migrations to target environments only through the DB sync workflow.
 - Review: implementation-prep survey completed on 2026-05-13; shared contracts, persistence schema, repositories, service, fake harness verification, and control-plane hardening fixes are implemented. T-052 and T-047 now consume these contracts rather than redefining workflow/gate/transition records.
 
 ## Parent Package

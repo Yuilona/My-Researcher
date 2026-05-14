@@ -378,3 +378,8 @@
 - D295: 阶段子包固定为 `topic-selection-v1a-evidence-to-need`、`topic-selection-v1b-need-to-draft-topic` 和 `topic-selection-v1c-promotion-bridge`。
 - D296: v1a 阶段包先继续细拆为实施子包；v1b/v1c 先保留为阶段级边界合同，等待上游阶段输出合同稳定后再细拆。
 - D297: v1a planned child tasks 为 foundation/control-plane、search/resource/evidence inputs、evidence-map/strength、need-validation、recheck-risk-memory 和 offline-evaluation/replay。
+- D298: v1a backend/service/API closure 已完成；v1b 可以以 `TopicSelectionV1aToV1bInputBundle` 作为稳定入口，不再等待 v1a 合同稳定。
+- D299: v1b implementation split 固定为 intake/constraint-profile、research-slice、topic-question-contract、value-assessment、topic-package-draft、offline-evaluation-replay 和 http-api-closure。
+- D300: v1b 必须在 ResearchSlice 前运行 intake readiness；`ResearchConstraintProfile` 是独立入口约束对象，不应被塞入 ResearchSlice 生成逻辑。
+- D301: v1b 需要独立 replay baseline，覆盖 boundary drift、answerability false-pass、value overclaim、package trace completeness、package readiness false-pass 和 downstream loopback cause。
+- D302: `TopicSelectionV1bToV1cInputBundle` 由 v1b draft package 包负责；v1c 消费该 bundle，不重新运行 value assessment，也不从 package prose 反推 promotion 输入。

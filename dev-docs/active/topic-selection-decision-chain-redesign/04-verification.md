@@ -52,5 +52,13 @@
 - Check: v1a implementation child-package contract review.
 - Result: v1a child-package coverage is complete after clarifying shared ownership for runtime quality signals, recheck request handling, generic human confirmation, trace lineage, v1b handoff, and offline replay sequencing in `topic-selection-v1a-evidence-to-need/06-implementation-contract-review.md`.
 
+## 2026-05-14
+- Check: v1a status closure before v1b split.
+- Result: v1a stage and implementation child packages are represented as `done` in project governance after backend/service/API closure.
+- Check: v1b implementation child-package split and contract review.
+- Result: `T-045` now owns the v1b stage split with `T-055 intake-constraint-profile`, `T-057 research-slice`, `T-059 topic-question-contract`, `T-060 value-assessment`, `T-058 topic-package-draft`, `T-056 offline-evaluation-replay`, and `T-054 http-api-closure`.
+- Check: v1b coverage review against parent design.
+- Result: coverage is complete after adding explicit owners for `ResearchConstraintProfile`, v1b replay/evaluation, and `TopicSelectionV1bToV1cInputBundle`.
+
 ## Pending
 - None for the `topic-selection-decision-chain-redesign` task bundle.

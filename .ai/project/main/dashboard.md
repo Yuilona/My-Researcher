@@ -8,12 +8,25 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 52 (planned: 4, in-progress: 7, blocked: 0, done: 2, archived: 39)
+- Tasks: 60 (planned: 6, in-progress: 4, blocked: 0, done: 11, archived: 39)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
+| T-044 topic-selection-v1a-evidence-to-need | done | F-001 | dev-docs/active/topic-selection-v1a-evidence-to-need |
+| T-045 topic-selection-v1b-need-to-draft-topic | in-progress | F-001 | dev-docs/active/topic-selection-v1b-need-to-draft-topic |
+| T-047 topic-selection-v1a-evidence-map-strength | done | F-001 | dev-docs/active/topic-selection-v1a-evidence-map-strength |
+| T-048 topic-selection-v1a-foundation-control-plane | done | F-001 | dev-docs/active/topic-selection-v1a-foundation-control-plane |
+| T-049 topic-selection-v1a-need-validation | done | F-001 | dev-docs/active/topic-selection-v1a-need-validation |
+| T-052 topic-selection-v1a-search-resource-evidence-inputs | done | F-001 | dev-docs/active/topic-selection-v1a-search-resource-evidence-inputs |
+| T-054 topic-selection-v1b-http-api-closure | planned | F-001 | dev-docs/active/topic-selection-v1b-http-api-closure |
+| T-055 topic-selection-v1b-intake-constraint-profile | done | F-001 | dev-docs/active/topic-selection-v1b-intake-constraint-profile |
+| T-056 topic-selection-v1b-offline-evaluation-replay | planned | F-001 | dev-docs/active/topic-selection-v1b-offline-evaluation-replay |
+| T-057 topic-selection-v1b-research-slice | done | F-001 | dev-docs/active/topic-selection-v1b-research-slice |
+| T-058 topic-selection-v1b-topic-package-draft | planned | F-001 | dev-docs/active/topic-selection-v1b-topic-package-draft |
+| T-059 topic-selection-v1b-topic-question-contract | done | F-001 | dev-docs/active/topic-selection-v1b-topic-question-contract |
+| T-060 topic-selection-v1b-value-assessment | planned | F-001 | dev-docs/active/topic-selection-v1b-value-assessment |
 | T-011 literature-management-flow | archived | F-000 | dev-docs/archive/literature-management-flow |
 | T-012 app-tsx-layout-split | archived | F-000 | dev-docs/archive/app-tsx-layout-split |
 | T-013 topic-initial-pull-and-rule-preview | archived | F-000 | dev-docs/archive/topic-initial-pull-and-rule-preview |
@@ -21,17 +34,4 @@ Project: `main`
 | T-015 maintainability-file-split-governance | archived | F-000 | dev-docs/archive/maintainability-file-split-governance |
 | T-016 backend-service-boundary-split-wave3 | archived | F-000 | dev-docs/archive/backend-service-boundary-split-wave3 |
 | T-017 frontend-normalizers-and-css-split-wave2 | archived | F-000 | dev-docs/archive/frontend-normalizers-and-css-split-wave2 |
-| T-018 literature-container-controller-split-wave1 | archived | F-000 | dev-docs/archive/literature-container-controller-split-wave1 |
-| T-019 shared-contract-decomposition-wave4 | archived | F-000 | dev-docs/archive/shared-contract-decomposition-wave4 |
-| T-020 shared-contract-compat-cleanup-and-consumer-migration | archived | F-000 | dev-docs/archive/shared-contract-compat-cleanup-and-consumer-migration |
-| T-021 topic-management-workbench-ui | archived | F-001 | dev-docs/archive/topic-management-workbench-ui |
-| T-022 desktop-legacy-css-retirement | archived | F-002 | dev-docs/archive/desktop-legacy-css-retirement |
-| T-024 research-argument-contracts-and-ssot | archived | F-001 | dev-docs/archive/research-argument-contracts-and-ssot |
-| T-025 research-argument-graph-and-state-v1 | archived | F-001 | dev-docs/archive/research-argument-graph-and-state-v1 |
-| T-026 research-argument-titlecard-paper-bridge | archived | F-001 | dev-docs/archive/research-argument-titlecard-paper-bridge |
-| T-027 research-argument-control-plane-ui-v1 | archived | F-001 | dev-docs/archive/research-argument-control-plane-ui-v1 |
-| T-028 research-argument-planner-critic-v15 | archived | F-001 | dev-docs/archive/research-argument-planner-critic-v15 |
-| T-029 literature-collection-content-processing-boundary | archived | F-000 | dev-docs/archive/literature-collection-content-processing-boundary |
-| T-030 literature-content-processing-landing-roadmap | archived | F-000 | dev-docs/archive/literature-content-processing-landing-roadmap |
-| T-031 literature-content-processing-contracts-stage-state | archived | F-000 | dev-docs/archive/literature-content-processing-contracts-stage-state |
 <!-- AUTO-GENERATED:END dashboard -->

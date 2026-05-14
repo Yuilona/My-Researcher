@@ -1,18 +1,19 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-11T00:08:26.284Z",
+  "generatedAt": "2026-05-13T23:06:05.237Z",
   "sourceOpenapi": "docs/context/api/openapi.yaml",
-  "sourceChecksumSha256": "b1be3ed039309e3c908b1b9b3014a35f0a4bc21c1ace6490b148c466b2cd1f3f",
+  "sourceChecksumSha256": "bddba510592b0bd6d6758575671ea34b39d4279d177d05edbaba85951b5ec1e6",
   "stats": {
-    "totalEndpoints": 98,
+    "totalEndpoints": 129,
     "byTag": {
       "health": 1,
       "research-lifecycle": 8,
-      "literature": 43,
+      "literature": 44,
       "settings": 5,
       "topic-settings": 3,
       "auto-pull": 10,
-      "title-card-management": 28
+      "title-card-management": 28,
+      "topic-selection-v1a": 30
     }
   },
   "endpoints": [
@@ -690,6 +691,41 @@
       ],
       "example": {
         "curl": "curl -X POST '/topics/{topicId}/literature-scope' -H 'Content-Type: application/json' -d '{\"actions\":\"<actions>\"}'"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/topics/{topicId}/literature-activation",
+      "operationId": "updateTopicLiteratureEvidenceActivation",
+      "summary": "Batch update topic-level evidence activation.",
+      "tag": "literature",
+      "auth": "none",
+      "input": {
+        "params": [
+          "topicId"
+        ],
+        "query": [],
+        "body": {
+          "required": [
+            "actions"
+          ],
+          "optional": []
+        }
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "topic_id",
+          "items"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        500
+      ],
+      "example": {
+        "curl": "curl -X PATCH '/topics/{topicId}/literature-activation' -H 'Content-Type: application/json' -d '{\"actions\":\"<actions>\"}'"
       }
     },
     {
@@ -3127,6 +3163,1008 @@
       ],
       "example": {
         "curl": "curl -X POST '/title-cards/{titleCardId}/promote-to-paper-project'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/topic-seeds/from-title-card",
+      "operationId": "createTopicSelectionV1aTopicSeedFromTitleCard",
+      "summary": "Create a v1a TopicSeed from a title card.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "title_card_id"
+          ],
+          "optional": [
+            "workspace_id",
+            "seed_version",
+            "intent_summary",
+            "scope_notes",
+            "created_by",
+            "policy_version_id"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409,
+        500
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/topic-seeds/from-title-card' -H 'Content-Type: application/json' -d '{\"title_card_id\":\"<title_card_id>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/literature-resource-pool-snapshots",
+      "operationId": "createTopicSelectionV1aLiteratureResourcePoolSnapshot",
+      "summary": "Create a v1a literature resource pool snapshot from the title-card evidence basket.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "title_card_id",
+            "topic_seed_id"
+          ],
+          "optional": [
+            "workspace_id",
+            "snapshot_version",
+            "source_scope",
+            "created_by",
+            "policy_version_id"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409,
+        500
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/literature-resource-pool-snapshots' -H 'Content-Type: application/json' -d '{\"title_card_id\":\"<title_card_id>\",\"topic_seed_id\":\"<topic_seed_id>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/search-plans",
+      "operationId": "createTopicSelectionV1aSearchPlan",
+      "summary": "Create a v1a SearchPlan with coverage row intents.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "title_card_id",
+            "topic_seed_id",
+            "literature_resource_pool_snapshot_id",
+            "query_intents"
+          ],
+          "optional": [
+            "workspace_id",
+            "must_check_constraints",
+            "exclusion_rules",
+            "coverage_strategy",
+            "coverage_intents"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "search_plan",
+          "coverage_row_intents"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409,
+        500
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/search-plans' -H 'Content-Type: application/json' -d '{\"title_card_id\":\"<title_card_id>\",\"topic_seed_id\":\"<topic_seed_id>\",\"literature_resource_pool_snapshot_id\":\"<literature_resource_pool_snapshot_id>\",\"query_intents\":\"<query_intents>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/search-runs",
+      "operationId": "recordTopicSelectionV1aSearchRun",
+      "summary": "Record a v1a SearchRun and associated coverage records.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "title_card_id",
+            "search_plan_id",
+            "result_accounting",
+            "source_health_summary",
+            "evidence_map_input_refs"
+          ],
+          "optional": [
+            "workspace_id",
+            "run_kind",
+            "run_status",
+            "dedup_summary"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "search_run",
+          "observations",
+          "evidence_bindings",
+          "assessments",
+          "risk_acceptances"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409,
+        500
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/search-runs' -H 'Content-Type: application/json' -d '{\"title_card_id\":\"<title_card_id>\",\"search_plan_id\":\"<search_plan_id>\",\"result_accounting\":\"<result_accounting>\",\"source_health_summary\":\"<source_health_summary>\",\"evidence_map_input_refs\":\"<evidence_map_input_refs>\"}'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1a/search-plans/{searchPlanId}/coverage-matrix",
+      "operationId": "getTopicSelectionV1aSearchPlanCoverageMatrix",
+      "summary": "Render the SearchPlan coverage matrix view.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "searchPlanId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        404,
+        500
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1a/search-plans/{searchPlanId}/coverage-matrix'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/search-plan-recheck-requests",
+      "operationId": "createTopicSelectionV1aSearchPlanRecheckRequest",
+      "summary": "Create a SearchPlan recheck request.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "title_card_id",
+            "source_ref",
+            "target_search_plan_id",
+            "reason"
+          ],
+          "optional": [
+            "gap_codes"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/search-plan-recheck-requests' -H 'Content-Type: application/json' -d '{\"title_card_id\":\"<title_card_id>\",\"source_ref\":\"<source_ref>\",\"target_search_plan_id\":\"<target_search_plan_id>\",\"reason\":\"<reason>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/search-plan-recheck-requests/{requestId}/resolve",
+      "operationId": "resolveTopicSelectionV1aSearchPlanRecheckRequest",
+      "summary": "Resolve a SearchPlan recheck request.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "requestId"
+        ],
+        "query": [],
+        "body": {
+          "required": [
+            "outcome",
+            "decision_summary"
+          ],
+          "optional": [
+            "revised_search_plan",
+            "follow_up_search_run"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/search-plan-recheck-requests/{requestId}/resolve' -H 'Content-Type: application/json' -d '{\"outcome\":\"<outcome>\",\"decision_summary\":\"<decision_summary>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/search-plan-recheck-requests/{requestId}/queue",
+      "operationId": "queueTopicSelectionV1aSearchPlanRecheckRequest",
+      "summary": "Interpret a SearchPlan recheck request into the decision work queue.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "requestId"
+        ],
+        "query": [],
+        "body": {
+          "required": [],
+          "optional": [
+            "cooldown_minutes"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "event",
+          "impact",
+          "queue_item"
+        ]
+      },
+      "errors": [
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/search-plan-recheck-requests/{requestId}/queue'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/evidence-maps",
+      "operationId": "createTopicSelectionV1aEvidenceMap",
+      "summary": "Create a claim-level EvidenceMap from a SearchRun.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "title_card_id",
+            "search_run_id",
+            "evidence_units"
+          ],
+          "optional": []
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "evidence_map",
+          "evidence_units"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/evidence-maps' -H 'Content-Type: application/json' -d '{\"title_card_id\":\"<title_card_id>\",\"search_run_id\":\"<search_run_id>\",\"evidence_units\":\"<evidence_units>\"}'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1a/evidence-maps/{evidenceMapId}/need-validation-bundle",
+      "operationId": "getTopicSelectionV1aNeedValidationEvidenceBundle",
+      "summary": "Read the evidence bundle consumed by need validation.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "evidenceMapId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1a/evidence-maps/{evidenceMapId}/need-validation-bundle'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/evidence-strength-assessments",
+      "operationId": "assessTopicSelectionV1aEvidenceStrength",
+      "summary": "Assess evidence strength for a v1a target ref.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "evidence_map_id",
+            "target_ref",
+            "purpose",
+            "role_bundle",
+            "assessment_workflow_version"
+          ],
+          "optional": [
+            "granularity"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/evidence-strength-assessments' -H 'Content-Type: application/json' -d '{\"evidence_map_id\":\"<evidence_map_id>\",\"target_ref\":\"<target_ref>\",\"purpose\":\"<purpose>\",\"role_bundle\":\"<role_bundle>\",\"assessment_workflow_version\":\"<assessment_workflow_version>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/evidence-maps/{evidenceMapId}/stale",
+      "operationId": "markTopicSelectionV1aEvidenceMapStale",
+      "summary": "Mark an EvidenceMap stale or recheck-required.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "evidenceMapId"
+        ],
+        "query": [],
+        "body": {
+          "required": [
+            "stale_reason_codes"
+          ],
+          "optional": [
+            "freshness_status"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/evidence-maps/{evidenceMapId}/stale' -H 'Content-Type: application/json' -d '{\"stale_reason_codes\":\"<stale_reason_codes>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/need-candidates",
+      "operationId": "createTopicSelectionV1aNeedCandidate",
+      "summary": "Create a NeedCandidate hypothesis from an EvidenceMap.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "title_card_id",
+            "evidence_map_id",
+            "candidate_need"
+          ],
+          "optional": [
+            "mechanism_type",
+            "scope_notes",
+            "prior_art_status"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/need-candidates' -H 'Content-Type: application/json' -d '{\"title_card_id\":\"<title_card_id>\",\"evidence_map_id\":\"<evidence_map_id>\",\"candidate_need\":\"<candidate_need>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/need-candidates/{needCandidateId}/readiness-assessments",
+      "operationId": "assessTopicSelectionV1aNeedCandidateReadiness",
+      "summary": "Assess whether a NeedCandidate is ready for human validation.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "needCandidateId"
+        ],
+        "query": [],
+        "body": {
+          "required": [],
+          "optional": [
+            "assessment_workflow_version",
+            "assessed_by"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/need-candidates/{needCandidateId}/readiness-assessments'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/validation-support-packets",
+      "operationId": "createTopicSelectionV1aValidationSupportPacket",
+      "summary": "Create a ValidationDecisionSupportPacket for human validation.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "need_candidate_id"
+          ],
+          "optional": [
+            "readiness_assessment_id"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/validation-support-packets' -H 'Content-Type: application/json' -d '{\"need_candidate_id\":\"<need_candidate_id>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/need-candidates/{needCandidateId}/adjudications",
+      "operationId": "adjudicateTopicSelectionV1aNeed",
+      "summary": "Record the human adjudication result for a NeedCandidate.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "needCandidateId"
+        ],
+        "query": [],
+        "body": {
+          "required": [
+            "support_packet_id",
+            "final_decision",
+            "rationale"
+          ],
+          "optional": [
+            "adjudicated_by",
+            "human_actor"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "adjudication_result",
+          "need_candidate",
+          "validated_need",
+          "memory_suggestion",
+          "v1b_input_bundle"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/need-candidates/{needCandidateId}/adjudications' -H 'Content-Type: application/json' -d '{\"support_packet_id\":\"<support_packet_id>\",\"final_decision\":\"<final_decision>\",\"rationale\":\"<rationale>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/v1b-input-bundles",
+      "operationId": "publishTopicSelectionV1aToV1bInputBundle",
+      "summary": "Publish a v1b input bundle from a ValidatedNeed.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "validated_need_id"
+          ],
+          "optional": [
+            "bundle_version"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/v1b-input-bundles' -H 'Content-Type: application/json' -d '{\"validated_need_id\":\"<validated_need_id>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/quality-signals",
+      "operationId": "emitTopicSelectionV1aQualitySignal",
+      "summary": "Emit a raw QualitySignal for later policy interpretation.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "target_ref",
+            "stage",
+            "check_type",
+            "verdict"
+          ],
+          "optional": [
+            "title_card_id"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/quality-signals' -H 'Content-Type: application/json' -d '{\"target_ref\":\"<target_ref>\",\"stage\":\"<stage>\",\"check_type\":\"<check_type>\",\"verdict\":\"<verdict>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/quality-signals/{qualitySignalId}/interpret",
+      "operationId": "interpretTopicSelectionV1aQualitySignal",
+      "summary": "Interpret a QualitySignal into durable recheck/risk/queue state.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "qualitySignalId"
+        ],
+        "query": [],
+        "body": {
+          "required": [],
+          "optional": [
+            "affected_ref",
+            "cooldown_minutes"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "event",
+          "impact",
+          "queue_item"
+        ]
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/quality-signals/{qualitySignalId}/interpret'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/candidate-memory-suggestions/{memorySuggestionId}/materialize",
+      "operationId": "materializeTopicSelectionV1aCandidateMemorySuggestion",
+      "summary": "Materialize a candidate memory suggestion into durable decision memory.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "memorySuggestionId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "memory_entry",
+          "candidate_memory"
+        ]
+      },
+      "errors": [
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/candidate-memory-suggestions/{memorySuggestionId}/materialize'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/accepted-risks",
+      "operationId": "acceptTopicSelectionV1aRisk",
+      "summary": "Record a human accepted risk for a v1a target ref.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "risk_type",
+            "target_ref",
+            "scope_refs",
+            "rationale",
+            "accepted_by"
+          ],
+          "optional": [
+            "recheck_condition",
+            "expires_at"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/accepted-risks' -H 'Content-Type: application/json' -d '{\"risk_type\":\"<risk_type>\",\"target_ref\":\"<target_ref>\",\"scope_refs\":\"<scope_refs>\",\"rationale\":\"<rationale>\",\"accepted_by\":\"<accepted_by>\"}'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1a/work-queue/open",
+      "operationId": "listTopicSelectionV1aOpenWorkQueueItems",
+      "summary": "List open v1a decision work queue items.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1a/work-queue/open'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/offline-evaluation/datasets",
+      "operationId": "createTopicSelectionV1aOfflineEvaluationDataset",
+      "summary": "Create a v1a offline evaluation dataset.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [],
+          "optional": [
+            "dataset_key",
+            "dataset_version",
+            "description"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/offline-evaluation/datasets'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/offline-evaluation/datasets/synthetic-baseline",
+      "operationId": "createTopicSelectionV1aSyntheticOfflineEvaluationDataset",
+      "summary": "Create the synthetic v1a offline evaluation baseline dataset.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [],
+          "optional": [
+            "dataset_key",
+            "dataset_version",
+            "description"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "dataset",
+          "cases"
+        ]
+      },
+      "errors": [
+        400
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/offline-evaluation/datasets/synthetic-baseline'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/offline-evaluation/cases",
+      "operationId": "addTopicSelectionV1aOfflineEvaluationCase",
+      "summary": "Add a frozen case to a v1a offline evaluation dataset.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "dataset_id",
+            "case_key",
+            "case_type",
+            "frozen_input_bundle",
+            "gold_expectation"
+          ],
+          "optional": []
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/offline-evaluation/cases' -H 'Content-Type: application/json' -d '{\"dataset_id\":\"<dataset_id>\",\"case_key\":\"<case_key>\",\"case_type\":\"<case_type>\",\"frozen_input_bundle\":\"<frozen_input_bundle>\",\"gold_expectation\":\"<gold_expectation>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/offline-evaluation/runs",
+      "operationId": "startTopicSelectionV1aOfflineEvaluationRun",
+      "summary": "Start a v1a offline evaluation run.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "dataset_id",
+            "workflow_profile_key"
+          ],
+          "optional": [
+            "metric_keys"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/offline-evaluation/runs' -H 'Content-Type: application/json' -d '{\"dataset_id\":\"<dataset_id>\",\"workflow_profile_key\":\"<workflow_profile_key>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/offline-evaluation/case-results",
+      "operationId": "recordTopicSelectionV1aOfflineEvaluationCaseResult",
+      "summary": "Record a frozen case result and replay diff.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "run_id",
+            "case_id",
+            "observed_output"
+          ],
+          "optional": []
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "case_result",
+          "replay_diff"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/offline-evaluation/case-results' -H 'Content-Type: application/json' -d '{\"run_id\":\"<run_id>\",\"case_id\":\"<case_id>\",\"observed_output\":\"<observed_output>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1a/offline-evaluation/runs/{runId}/complete",
+      "operationId": "completeTopicSelectionV1aOfflineEvaluationRun",
+      "summary": "Complete an offline evaluation run and calculate metrics.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "runId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "run",
+          "metric_results"
+        ]
+      },
+      "errors": [
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1a/offline-evaluation/runs/{runId}/complete'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1a/offline-evaluation/runs/{runId}/metric-results",
+      "operationId": "listTopicSelectionV1aOfflineEvaluationMetricResults",
+      "summary": "List metric results for a v1a offline evaluation run.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "runId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1a/offline-evaluation/runs/{runId}/metric-results'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1a/offline-evaluation/runs/{runId}/replay-diffs",
+      "operationId": "listTopicSelectionV1aOfflineEvaluationReplayDiffs",
+      "summary": "List replay diffs for a v1a offline evaluation run.",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "runId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1a/offline-evaluation/runs/{runId}/replay-diffs'"
       }
     }
   ]

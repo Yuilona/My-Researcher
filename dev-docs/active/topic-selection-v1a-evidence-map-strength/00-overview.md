@@ -1,8 +1,8 @@
 # 00 Overview
 
 ## Status
-- State: in-progress
-- Next step: Handoff stable EvidenceMap/EvidenceUnit/assessment refs to `topic-selection-v1a-need-validation`.
+- State: done
+- Next step: Consume stable EvidenceMap/EvidenceUnit/assessment refs from v1b or future UI/API layers as needed.
 - Implementation: internal shared-contract/backend slice landed on 2026-05-13; no UI, REST API, OpenAPI, NeedCandidate, ValidatedNeed, v1b, or v1c behavior added; no target DB migration applied.
 
 ## Parent Package

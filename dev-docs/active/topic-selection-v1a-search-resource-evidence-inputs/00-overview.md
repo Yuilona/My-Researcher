@@ -1,8 +1,8 @@
 # 00 Overview
 
 ## Status
-- State: in-progress
-- Next step: Keep stable `SearchRun` refs and coverage matrix contracts available for T-047/T-049 consumers; T-047 has consumed the T-052 SearchRun handoff.
+- State: done
+- Next step: Keep stable `SearchRun` refs and coverage matrix contracts available for v1b/v1c consumers and future UI/API layers.
 - Implementation: internal shared-contract/backend slice landed on 2026-05-13; no UI or REST API added; no target DB migration applied.
 
 ## Parent Package

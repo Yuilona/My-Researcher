@@ -1,8 +1,8 @@
 # 00 Overview
 
 ## Status
-- State: in-progress
-- Current slice: internal shared/backend implementation landed for the v1a `EvidenceMap -> ValidatedNeed -> v1b input bundle` path. No UI, REST/OpenAPI, target DB apply, v1b implementation, or T-051 durable memory writes are included.
+- State: done
+- Current slice: internal shared/backend implementation and HTTP/API exposure landed for the v1a `EvidenceMap -> ValidatedNeed -> v1b input bundle` path. UI remains a future package; v1b implementation is intentionally outside this package.
 
 ## Parent Package
 - Stage parent: `dev-docs/active/topic-selection-v1a-evidence-to-need/`

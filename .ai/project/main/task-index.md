@@ -53,13 +53,21 @@ Project: `main`
 | T-041 literature-end-to-end-quality-upgrade | in-progress | F-000 | dev-docs/active/literature-end-to-end-quality-upgrade |
 | T-042 topic-selection-decision-chain-redesign | in-progress | F-001 | dev-docs/active/topic-selection-decision-chain-redesign |
 | T-043 experiment-foundation-v1 | planned | F-001 | dev-docs/active/experiment-foundation-v1 |
-| T-044 topic-selection-v1a-evidence-to-need | planned | F-001 | dev-docs/active/topic-selection-v1a-evidence-to-need |
-| T-045 topic-selection-v1b-need-to-draft-topic | planned | F-001 | dev-docs/active/topic-selection-v1b-need-to-draft-topic |
+| T-044 topic-selection-v1a-evidence-to-need | done | F-001 | dev-docs/active/topic-selection-v1a-evidence-to-need |
+| T-045 topic-selection-v1b-need-to-draft-topic | in-progress | F-001 | dev-docs/active/topic-selection-v1b-need-to-draft-topic |
 | T-046 topic-selection-v1c-promotion-bridge | planned | F-001 | dev-docs/active/topic-selection-v1c-promotion-bridge |
-| T-047 topic-selection-v1a-evidence-map-strength | in-progress | F-001 | dev-docs/active/topic-selection-v1a-evidence-map-strength |
-| T-048 topic-selection-v1a-foundation-control-plane | in-progress | F-001 | dev-docs/active/topic-selection-v1a-foundation-control-plane |
-| T-049 topic-selection-v1a-need-validation | in-progress | F-001 | dev-docs/active/topic-selection-v1a-need-validation |
+| T-047 topic-selection-v1a-evidence-map-strength | done | F-001 | dev-docs/active/topic-selection-v1a-evidence-map-strength |
+| T-048 topic-selection-v1a-foundation-control-plane | done | F-001 | dev-docs/active/topic-selection-v1a-foundation-control-plane |
+| T-049 topic-selection-v1a-need-validation | done | F-001 | dev-docs/active/topic-selection-v1a-need-validation |
 | T-050 topic-selection-v1a-offline-evaluation-replay | done | F-001 | dev-docs/active/topic-selection-v1a-offline-evaluation-replay |
 | T-051 topic-selection-v1a-recheck-risk-memory | done | F-001 | dev-docs/active/topic-selection-v1a-recheck-risk-memory |
-| T-052 topic-selection-v1a-search-resource-evidence-inputs | in-progress | F-001 | dev-docs/active/topic-selection-v1a-search-resource-evidence-inputs |
+| T-052 topic-selection-v1a-search-resource-evidence-inputs | done | F-001 | dev-docs/active/topic-selection-v1a-search-resource-evidence-inputs |
+| T-053 topic-selection-v1a-http-api-closure | done | F-001 | dev-docs/active/topic-selection-v1a-http-api-closure |
+| T-054 topic-selection-v1b-http-api-closure | planned | F-001 | dev-docs/active/topic-selection-v1b-http-api-closure |
+| T-055 topic-selection-v1b-intake-constraint-profile | done | F-001 | dev-docs/active/topic-selection-v1b-intake-constraint-profile |
+| T-056 topic-selection-v1b-offline-evaluation-replay | planned | F-001 | dev-docs/active/topic-selection-v1b-offline-evaluation-replay |
+| T-057 topic-selection-v1b-research-slice | done | F-001 | dev-docs/active/topic-selection-v1b-research-slice |
+| T-058 topic-selection-v1b-topic-package-draft | planned | F-001 | dev-docs/active/topic-selection-v1b-topic-package-draft |
+| T-059 topic-selection-v1b-topic-question-contract | done | F-001 | dev-docs/active/topic-selection-v1b-topic-question-contract |
+| T-060 topic-selection-v1b-value-assessment | planned | F-001 | dev-docs/active/topic-selection-v1b-value-assessment |
 <!-- AUTO-GENERATED:END task-index -->

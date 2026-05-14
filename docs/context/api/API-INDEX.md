@@ -1,9 +1,9 @@
 # API Index
 
-> Auto-generated at 2026-05-11T00:08:26.284Z — do NOT hand-edit.
-> Source: `docs/context/api/openapi.yaml` (SHA-256: `b1be3ed03930...`)
+> Auto-generated at 2026-05-13T23:06:05.237Z — do NOT hand-edit.
+> Source: `docs/context/api/openapi.yaml` (SHA-256: `bddba510592b...`)
 
-Total endpoints: **98**
+Total endpoints: **129**
 
 | Method | Path | Summary | Auth | Input (required) | Output (core) | Errors |
 |--------|------|---------|------|------------------|---------------|--------|
@@ -26,6 +26,7 @@ Total endpoints: **98**
 | PATCH | /literature/clusters/{clusterId} | Confirm, reject, split, or edit a literature cluster decision. | none | clusterId | item | 400, 404, 500 |
 | GET | /topics/{topicId}/literature-scope | Get literature scope list for a topic. | none | topicId | topic_id, items | 404, 500 |
 | POST | /topics/{topicId}/literature-scope | Upsert literature scope actions for a topic. | none | actions | topic_id, items | 400, 404, 500 |
+| PATCH | /topics/{topicId}/literature-activation | Batch update topic-level evidence activation. | none | actions | topic_id, items | 400, 404, 500 |
 | POST | /paper-projects/{id}/literature-links/from-topic | Sync in-scope topic literature into paper links. | none | topic_id | paper_id, topic_id, linked_count, skipped_count | 400, 404, 500 |
 | GET | /paper-projects/{id}/literature | Get literature links under a paper. | none | id | paper_id, items | 404, 500 |
 | PATCH | /paper-projects/{id}/literature-links/{linkId} | Update citation status or note of a paper literature link. | none | id, linkId | paper_id, item | 400, 404, 500 |
@@ -105,3 +106,33 @@ Total endpoints: **98**
 | GET | /title-cards/{titleCardId}/promotion-decisions/{decisionId} | Get a promotion decision detail. | none | titleCardId, decisionId | — | — |
 | PATCH | /title-cards/{titleCardId}/promotion-decisions/{decisionId} | Patch the current promotion decision. | none | titleCardId, decisionId | — | — |
 | POST | /title-cards/{titleCardId}/promote-to-paper-project | Promote a title card into a paper project using aligned question, value, and package ids. | none | titleCardId | — | 400, 404, 409, 422 |
+| POST | /topic-selection/v1a/topic-seeds/from-title-card | Create a v1a TopicSeed from a title card. | none | title_card_id | — | 400, 404, 409, 500 |
+| POST | /topic-selection/v1a/literature-resource-pool-snapshots | Create a v1a literature resource pool snapshot from the title-card evidence basket. | none | title_card_id, topic_seed_id | — | 400, 404, 409, 500 |
+| POST | /topic-selection/v1a/search-plans | Create a v1a SearchPlan with coverage row intents. | none | title_card_id, topic_seed_id, literature_resource_pool_snapshot_id, query_intents | search_plan, coverage_row_intents | 400, 404, 409, 500 |
+| POST | /topic-selection/v1a/search-runs | Record a v1a SearchRun and associated coverage records. | none | title_card_id, search_plan_id, result_accounting, source_health_summary, evidence_map_input_refs | search_run, observations, evidence_bindings, assessments, risk_acceptances | 400, 404, 409, 500 |
+| GET | /topic-selection/v1a/search-plans/{searchPlanId}/coverage-matrix | Render the SearchPlan coverage matrix view. | none | searchPlanId | — | 404, 500 |
+| POST | /topic-selection/v1a/search-plan-recheck-requests | Create a SearchPlan recheck request. | none | title_card_id, source_ref, target_search_plan_id, reason | — | 400, 404, 409 |
+| POST | /topic-selection/v1a/search-plan-recheck-requests/{requestId}/resolve | Resolve a SearchPlan recheck request. | none | outcome, decision_summary | — | 400, 404, 409 |
+| POST | /topic-selection/v1a/search-plan-recheck-requests/{requestId}/queue | Interpret a SearchPlan recheck request into the decision work queue. | none | requestId | event, impact, queue_item | 404, 409 |
+| POST | /topic-selection/v1a/evidence-maps | Create a claim-level EvidenceMap from a SearchRun. | none | title_card_id, search_run_id, evidence_units | evidence_map, evidence_units | 400, 404, 409 |
+| GET | /topic-selection/v1a/evidence-maps/{evidenceMapId}/need-validation-bundle | Read the evidence bundle consumed by need validation. | none | evidenceMapId | — | 404 |
+| POST | /topic-selection/v1a/evidence-strength-assessments | Assess evidence strength for a v1a target ref. | none | evidence_map_id, target_ref, purpose, role_bundle, assessment_workflow_version | — | 400, 404, 409 |
+| POST | /topic-selection/v1a/evidence-maps/{evidenceMapId}/stale | Mark an EvidenceMap stale or recheck-required. | none | stale_reason_codes | — | 404 |
+| POST | /topic-selection/v1a/need-candidates | Create a NeedCandidate hypothesis from an EvidenceMap. | none | title_card_id, evidence_map_id, candidate_need | — | 400, 404, 409 |
+| POST | /topic-selection/v1a/need-candidates/{needCandidateId}/readiness-assessments | Assess whether a NeedCandidate is ready for human validation. | none | needCandidateId | — | 404, 409 |
+| POST | /topic-selection/v1a/validation-support-packets | Create a ValidationDecisionSupportPacket for human validation. | none | need_candidate_id | — | 400, 404, 409 |
+| POST | /topic-selection/v1a/need-candidates/{needCandidateId}/adjudications | Record the human adjudication result for a NeedCandidate. | none | support_packet_id, final_decision, rationale | adjudication_result, need_candidate, validated_need, memory_suggestion, v1b_input_bundle | 400, 404, 409 |
+| POST | /topic-selection/v1a/v1b-input-bundles | Publish a v1b input bundle from a ValidatedNeed. | none | validated_need_id | — | 404, 409 |
+| POST | /topic-selection/v1a/quality-signals | Emit a raw QualitySignal for later policy interpretation. | none | target_ref, stage, check_type, verdict | — | 400 |
+| POST | /topic-selection/v1a/quality-signals/{qualitySignalId}/interpret | Interpret a QualitySignal into durable recheck/risk/queue state. | none | qualitySignalId | event, impact, queue_item | 404 |
+| POST | /topic-selection/v1a/candidate-memory-suggestions/{memorySuggestionId}/materialize | Materialize a candidate memory suggestion into durable decision memory. | none | memorySuggestionId | memory_entry, candidate_memory | 404, 409 |
+| POST | /topic-selection/v1a/accepted-risks | Record a human accepted risk for a v1a target ref. | none | risk_type, target_ref, scope_refs, rationale, accepted_by | — | 400, 409 |
+| GET | /topic-selection/v1a/work-queue/open | List open v1a decision work queue items. | none | — | items | — |
+| POST | /topic-selection/v1a/offline-evaluation/datasets | Create a v1a offline evaluation dataset. | none | — | — | 400 |
+| POST | /topic-selection/v1a/offline-evaluation/datasets/synthetic-baseline | Create the synthetic v1a offline evaluation baseline dataset. | none | — | dataset, cases | 400 |
+| POST | /topic-selection/v1a/offline-evaluation/cases | Add a frozen case to a v1a offline evaluation dataset. | none | dataset_id, case_key, case_type, frozen_input_bundle, gold_expectation | — | 400, 404 |
+| POST | /topic-selection/v1a/offline-evaluation/runs | Start a v1a offline evaluation run. | none | dataset_id, workflow_profile_key | — | 400, 404, 409 |
+| POST | /topic-selection/v1a/offline-evaluation/case-results | Record a frozen case result and replay diff. | none | run_id, case_id, observed_output | case_result, replay_diff | 400, 404, 409 |
+| POST | /topic-selection/v1a/offline-evaluation/runs/{runId}/complete | Complete an offline evaluation run and calculate metrics. | none | runId | run, metric_results | 404, 409 |
+| GET | /topic-selection/v1a/offline-evaluation/runs/{runId}/metric-results | List metric results for a v1a offline evaluation run. | none | runId | items | 404 |
+| GET | /topic-selection/v1a/offline-evaluation/runs/{runId}/replay-diffs | List replay diffs for a v1a offline evaluation run. | none | runId | items | 404 |

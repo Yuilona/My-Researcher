@@ -2,7 +2,7 @@
 
 ## Status
 - State: done
-- Next step: Use real v1a vertical-slice outputs to seed the next non-synthetic baseline dataset.
+- Next step: Curate a larger reviewed non-synthetic dataset after more real v1a cases exist; the first Prisma-backed smoke fixture now seeds replay from a real vertical-slice output.
 
 ## Parent Package
 - Stage parent: `dev-docs/active/topic-selection-v1a-evidence-to-need/`

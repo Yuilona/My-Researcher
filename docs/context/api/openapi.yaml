@@ -23,6 +23,8 @@ tags:
     description: Rule-driven automatic pull, runs, and alerts.
   - name: topic-research
     description: Topic-level research question, need, package, and promotion endpoints.
+  - name: topic-selection-v1a
+    description: Topic selection v1a evidence-to-need decision-chain endpoints.
 
 paths:
   /health:
@@ -614,6 +616,38 @@ paths:
       responses:
         '200':
           description: Updated topic scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicLiteratureScopeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /topics/{topicId}/literature-activation:
+    patch:
+      operationId: updateTopicLiteratureEvidenceActivation
+      summary: Batch update topic-level evidence activation.
+      tags: [literature]
+      parameters:
+        - name: topicId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTopicLiteratureEvidenceActivationRequest'
+      responses:
+        '200':
+          description: Updated topic activation states.
           content:
             application/json:
               schema:
@@ -2556,6 +2590,758 @@ paths:
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
 
+  /topic-selection/v1a/topic-seeds/from-title-card:
+    post:
+      operationId: createTopicSelectionV1aTopicSeedFromTitleCard
+      summary: Create a v1a TopicSeed from a title card.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aTopicSeedRequest'
+      responses:
+        '201':
+          description: TopicSeed created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /topic-selection/v1a/literature-resource-pool-snapshots:
+    post:
+      operationId: createTopicSelectionV1aLiteratureResourcePoolSnapshot
+      summary: Create a v1a literature resource pool snapshot from the title-card evidence basket.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aLiteratureSnapshotRequest'
+      responses:
+        '201':
+          description: Literature resource pool snapshot created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /topic-selection/v1a/search-plans:
+    post:
+      operationId: createTopicSelectionV1aSearchPlan
+      summary: Create a v1a SearchPlan with coverage row intents.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aSearchPlanRequest'
+      responses:
+        '201':
+          description: SearchPlan and coverage row intents created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aSearchPlanResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /topic-selection/v1a/search-runs:
+    post:
+      operationId: recordTopicSelectionV1aSearchRun
+      summary: Record a v1a SearchRun and associated coverage records.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aSearchRunRequest'
+      responses:
+        '201':
+          description: SearchRun and coverage records created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aSearchRunResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /topic-selection/v1a/search-plans/{searchPlanId}/coverage-matrix:
+    get:
+      operationId: getTopicSelectionV1aSearchPlanCoverageMatrix
+      summary: Render the SearchPlan coverage matrix view.
+      tags: [topic-selection-v1a]
+      parameters:
+        - name: searchPlanId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Coverage matrix view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /topic-selection/v1a/search-plan-recheck-requests:
+    post:
+      operationId: createTopicSelectionV1aSearchPlanRecheckRequest
+      summary: Create a SearchPlan recheck request.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aSearchPlanRecheckRequest'
+      responses:
+        '201':
+          description: SearchPlan recheck request created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1a/search-plan-recheck-requests/{requestId}/resolve:
+    post:
+      operationId: resolveTopicSelectionV1aSearchPlanRecheckRequest
+      summary: Resolve a SearchPlan recheck request.
+      tags: [topic-selection-v1a]
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aResolveSearchPlanRecheckRequest'
+      responses:
+        '200':
+          description: SearchPlan recheck request resolved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1a/search-plan-recheck-requests/{requestId}/queue:
+    post:
+      operationId: queueTopicSelectionV1aSearchPlanRecheckRequest
+      summary: Interpret a SearchPlan recheck request into the decision work queue.
+      tags: [topic-selection-v1a]
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aOptionalCooldownRequest'
+      responses:
+        '201':
+          description: Recheck queue item created or merged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aInterpretationResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1a/evidence-maps:
+    post:
+      operationId: createTopicSelectionV1aEvidenceMap
+      summary: Create a claim-level EvidenceMap from a SearchRun.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aEvidenceMapRequest'
+      responses:
+        '201':
+          description: EvidenceMap and child evidence records created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aEvidenceMapResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1a/evidence-maps/{evidenceMapId}/need-validation-bundle:
+    get:
+      operationId: getTopicSelectionV1aNeedValidationEvidenceBundle
+      summary: Read the evidence bundle consumed by need validation.
+      tags: [topic-selection-v1a]
+      parameters:
+        - name: evidenceMapId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Need-validation evidence bundle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1a/evidence-strength-assessments:
+    post:
+      operationId: assessTopicSelectionV1aEvidenceStrength
+      summary: Assess evidence strength for a v1a target ref.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aEvidenceStrengthAssessmentRequest'
+      responses:
+        '201':
+          description: Evidence strength assessment created or returned from cache.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1a/evidence-maps/{evidenceMapId}/stale:
+    post:
+      operationId: markTopicSelectionV1aEvidenceMapStale
+      summary: Mark an EvidenceMap stale or recheck-required.
+      tags: [topic-selection-v1a]
+      parameters:
+        - name: evidenceMapId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aMarkStaleRequest'
+      responses:
+        '200':
+          description: EvidenceMap freshness updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1a/need-candidates:
+    post:
+      operationId: createTopicSelectionV1aNeedCandidate
+      summary: Create a NeedCandidate hypothesis from an EvidenceMap.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aNeedCandidateRequest'
+      responses:
+        '201':
+          description: NeedCandidate created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1a/need-candidates/{needCandidateId}/readiness-assessments:
+    post:
+      operationId: assessTopicSelectionV1aNeedCandidateReadiness
+      summary: Assess whether a NeedCandidate is ready for human validation.
+      tags: [topic-selection-v1a]
+      parameters:
+        - name: needCandidateId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aNeedReadinessRequest'
+      responses:
+        '201':
+          description: Readiness assessment created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1a/validation-support-packets:
+    post:
+      operationId: createTopicSelectionV1aValidationSupportPacket
+      summary: Create a ValidationDecisionSupportPacket for human validation.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aValidationSupportPacketRequest'
+      responses:
+        '201':
+          description: Validation support packet created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1a/need-candidates/{needCandidateId}/adjudications:
+    post:
+      operationId: adjudicateTopicSelectionV1aNeed
+      summary: Record the human adjudication result for a NeedCandidate.
+      tags: [topic-selection-v1a]
+      parameters:
+        - name: needCandidateId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aAdjudicationRequest'
+      responses:
+        '201':
+          description: Adjudication side effects written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aAdjudicationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1a/v1b-input-bundles:
+    post:
+      operationId: publishTopicSelectionV1aToV1bInputBundle
+      summary: Publish a v1b input bundle from a ValidatedNeed.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aV1bInputBundleRequest'
+      responses:
+        '201':
+          description: v1b input bundle created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1a/quality-signals:
+    post:
+      operationId: emitTopicSelectionV1aQualitySignal
+      summary: Emit a raw QualitySignal for later policy interpretation.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aQualitySignalRequest'
+      responses:
+        '201':
+          description: QualitySignal emitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /topic-selection/v1a/quality-signals/{qualitySignalId}/interpret:
+    post:
+      operationId: interpretTopicSelectionV1aQualitySignal
+      summary: Interpret a QualitySignal into durable recheck/risk/queue state.
+      tags: [topic-selection-v1a]
+      parameters:
+        - name: qualitySignalId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aInterpretQualitySignalRequest'
+      responses:
+        '201':
+          description: Interpretation created queue/risk state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aInterpretationResponse'
+        '200':
+          description: QualitySignal required no durable state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aInterpretationResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1a/candidate-memory-suggestions/{memorySuggestionId}/materialize:
+    post:
+      operationId: materializeTopicSelectionV1aCandidateMemorySuggestion
+      summary: Materialize a candidate memory suggestion into durable decision memory.
+      tags: [topic-selection-v1a]
+      parameters:
+        - name: memorySuggestionId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '201':
+          description: Decision memory materialized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aMemoryMaterializationResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1a/accepted-risks:
+    post:
+      operationId: acceptTopicSelectionV1aRisk
+      summary: Record a human accepted risk for a v1a target ref.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aAcceptedRiskRequest'
+      responses:
+        '201':
+          description: Accepted risk recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1a/work-queue/open:
+    get:
+      operationId: listTopicSelectionV1aOpenWorkQueueItems
+      summary: List open v1a decision work queue items.
+      tags: [topic-selection-v1a]
+      responses:
+        '200':
+          description: Open work queue items.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aListResponse'
+
+  /topic-selection/v1a/offline-evaluation/datasets:
+    post:
+      operationId: createTopicSelectionV1aOfflineEvaluationDataset
+      summary: Create a v1a offline evaluation dataset.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aOfflineDatasetRequest'
+      responses:
+        '201':
+          description: Offline evaluation dataset created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /topic-selection/v1a/offline-evaluation/datasets/synthetic-baseline:
+    post:
+      operationId: createTopicSelectionV1aSyntheticOfflineEvaluationDataset
+      summary: Create the synthetic v1a offline evaluation baseline dataset.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aOfflineDatasetRequest'
+      responses:
+        '201':
+          description: Synthetic dataset and cases created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aSyntheticOfflineDatasetResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /topic-selection/v1a/offline-evaluation/cases:
+    post:
+      operationId: addTopicSelectionV1aOfflineEvaluationCase
+      summary: Add a frozen case to a v1a offline evaluation dataset.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aOfflineCaseRequest'
+      responses:
+        '201':
+          description: Offline evaluation case added.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1a/offline-evaluation/runs:
+    post:
+      operationId: startTopicSelectionV1aOfflineEvaluationRun
+      summary: Start a v1a offline evaluation run.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aOfflineRunRequest'
+      responses:
+        '201':
+          description: Offline evaluation run started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1a/offline-evaluation/case-results:
+    post:
+      operationId: recordTopicSelectionV1aOfflineEvaluationCaseResult
+      summary: Record a frozen case result and replay diff.
+      tags: [topic-selection-v1a]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1aOfflineCaseResultRequest'
+      responses:
+        '201':
+          description: Case result and replay diff recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aOfflineCaseResultResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1a/offline-evaluation/runs/{runId}/complete:
+    post:
+      operationId: completeTopicSelectionV1aOfflineEvaluationRun
+      summary: Complete an offline evaluation run and calculate metrics.
+      tags: [topic-selection-v1a]
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Run completed and metric results calculated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aOfflineCompletionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1a/offline-evaluation/runs/{runId}/metric-results:
+    get:
+      operationId: listTopicSelectionV1aOfflineEvaluationMetricResults
+      summary: List metric results for a v1a offline evaluation run.
+      tags: [topic-selection-v1a]
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Metric results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aListResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1a/offline-evaluation/runs/{runId}/replay-diffs:
+    get:
+      operationId: listTopicSelectionV1aOfflineEvaluationReplayDiffs
+      summary: List replay diffs for a v1a offline evaluation run.
+      tags: [topic-selection-v1a]
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Replay diffs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aListResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   parameters:
     PaperIdParam:
@@ -2741,6 +3527,557 @@ components:
           additionalProperties: false
       additionalProperties: false
 
+    JsonObject:
+      type: object
+      additionalProperties: true
+
+    TopicSelectionFunctionalRef:
+      type: object
+      required: [ref_type, ref_id]
+      additionalProperties: false
+      properties:
+        ref_type:
+          type: string
+          minLength: 1
+        ref_id:
+          type: string
+          minLength: 1
+        version_id:
+          type: string
+          nullable: true
+        title_card_id:
+          type: string
+          nullable: true
+        legacy_ref:
+          $ref: '#/components/schemas/JsonObject'
+
+    TopicSelectionActorRef:
+      type: object
+      required: [actor_type]
+      additionalProperties: false
+      properties:
+        actor_type:
+          type: string
+          enum: [human, llm, system, hybrid]
+        actor_id:
+          type: string
+          nullable: true
+
+    TopicSelectionV1aRecord:
+      type: object
+      additionalProperties: true
+
+    TopicSelectionV1aListResponse:
+      type: object
+      required: [items]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionV1aRecord'
+
+    TopicSelectionV1aSearchPlanResponse:
+      type: object
+      required: [search_plan, coverage_row_intents]
+      additionalProperties: false
+      properties:
+        search_plan:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        coverage_row_intents:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionV1aRecord'
+
+    TopicSelectionV1aSearchRunResponse:
+      type: object
+      required: [search_run, observations, evidence_bindings, assessments, risk_acceptances]
+      additionalProperties: false
+      properties:
+        search_run:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        observations:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        evidence_bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        assessments:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        risk_acceptances:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionV1aRecord'
+
+    TopicSelectionV1aEvidenceMapResponse:
+      type: object
+      required: [evidence_map, evidence_units]
+      additionalProperties: true
+      properties:
+        evidence_map:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        evidence_units:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionV1aRecord'
+
+    TopicSelectionV1aAdjudicationResponse:
+      type: object
+      required: [adjudication_result, need_candidate]
+      additionalProperties: true
+      properties:
+        adjudication_result:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        need_candidate:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        validated_need:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        memory_suggestion:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        v1b_input_bundle:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+
+    TopicSelectionV1aInterpretationResponse:
+      type: object
+      required: [event, impact, queue_item]
+      additionalProperties: false
+      properties:
+        event:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+          nullable: true
+        impact:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+          nullable: true
+        queue_item:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+          nullable: true
+
+    TopicSelectionV1aMemoryMaterializationResponse:
+      type: object
+      required: [memory_entry, candidate_memory]
+      additionalProperties: false
+      properties:
+        memory_entry:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        candidate_memory:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+
+    TopicSelectionV1aSyntheticOfflineDatasetResponse:
+      type: object
+      required: [dataset, cases]
+      additionalProperties: false
+      properties:
+        dataset:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        cases:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionV1aRecord'
+
+    TopicSelectionV1aOfflineCaseResultResponse:
+      type: object
+      required: [case_result, replay_diff]
+      additionalProperties: false
+      properties:
+        case_result:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        replay_diff:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+
+    TopicSelectionV1aOfflineCompletionResponse:
+      type: object
+      required: [run, metric_results]
+      additionalProperties: false
+      properties:
+        run:
+          $ref: '#/components/schemas/TopicSelectionV1aRecord'
+        metric_results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionV1aRecord'
+
+    TopicSelectionV1aTopicSeedRequest:
+      type: object
+      required: [title_card_id]
+      additionalProperties: true
+      properties:
+        workspace_id: { type: string, nullable: true }
+        title_card_id: { type: string, minLength: 1 }
+        seed_version: { type: string }
+        intent_summary: { type: string }
+        scope_notes: { type: string, nullable: true }
+        created_by: { type: string, enum: [human, llm, system, hybrid] }
+        policy_version_id: { type: string, nullable: true }
+
+    TopicSelectionV1aLiteratureSnapshotRequest:
+      type: object
+      required: [title_card_id, topic_seed_id]
+      additionalProperties: true
+      properties:
+        workspace_id: { type: string, nullable: true }
+        title_card_id: { type: string, minLength: 1 }
+        topic_seed_id: { type: string, minLength: 1 }
+        snapshot_version: { type: string }
+        source_scope:
+          type: string
+          enum: [title_card_evidence_basket, manual_selection, search_result]
+        created_by: { type: string, enum: [human, llm, system, hybrid] }
+        policy_version_id: { type: string, nullable: true }
+
+    TopicSelectionCoverageIntent:
+      type: object
+      required: [query]
+      additionalProperties: true
+      properties:
+        coverage_key: { type: string }
+        intent_type:
+          type: string
+          enum: [support, challenge, baseline, context, exclusion]
+        query: { type: string, minLength: 1 }
+        rationale: { type: string }
+        required: { type: boolean }
+        priority: { type: number }
+        expected_evidence_role:
+          type: string
+          enum: [support, challenge, baseline, context, unknown]
+        refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+
+    TopicSelectionV1aSearchPlanRequest:
+      type: object
+      required: [title_card_id, topic_seed_id, literature_resource_pool_snapshot_id, query_intents]
+      additionalProperties: true
+      properties:
+        workspace_id: { type: string, nullable: true }
+        title_card_id: { type: string, minLength: 1 }
+        topic_seed_id: { type: string, minLength: 1 }
+        literature_resource_pool_snapshot_id: { type: string, minLength: 1 }
+        query_intents:
+          type: array
+          items: { type: string, minLength: 1 }
+        must_check_constraints:
+          type: array
+          items: { type: string }
+        exclusion_rules:
+          type: array
+          items: { type: string }
+        coverage_strategy:
+          $ref: '#/components/schemas/JsonObject'
+        coverage_intents:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionCoverageIntent'
+
+    TopicSelectionSearchRunResultAccounting:
+      type: object
+      required: [total_result_count, unique_literature_count, duplicate_result_count, failed_source_count, skipped_source_count]
+      additionalProperties: false
+      properties:
+        total_result_count: { type: number }
+        unique_literature_count: { type: number }
+        duplicate_result_count: { type: number }
+        failed_source_count: { type: number }
+        skipped_source_count: { type: number }
+
+    TopicSelectionV1aSearchRunRequest:
+      type: object
+      required: [title_card_id, search_plan_id, result_accounting, source_health_summary, evidence_map_input_refs]
+      additionalProperties: true
+      properties:
+        workspace_id: { type: string, nullable: true }
+        title_card_id: { type: string, minLength: 1 }
+        search_plan_id: { type: string, minLength: 1 }
+        run_kind:
+          type: string
+          enum: [planned_search, recheck_followup, manual_import]
+        run_status:
+          type: string
+          enum: [queued, running, succeeded, partial, failed, blocked]
+        result_accounting:
+          $ref: '#/components/schemas/TopicSelectionSearchRunResultAccounting'
+        source_health_summary:
+          $ref: '#/components/schemas/JsonObject'
+        dedup_summary:
+          $ref: '#/components/schemas/JsonObject'
+        evidence_map_input_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+
+    TopicSelectionV1aSearchPlanRecheckRequest:
+      type: object
+      required: [title_card_id, source_ref, target_search_plan_id, reason]
+      additionalProperties: true
+      properties:
+        title_card_id: { type: string, minLength: 1 }
+        source_ref:
+          $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+        target_search_plan_id: { type: string, minLength: 1 }
+        reason: { type: string, minLength: 1 }
+        gap_codes:
+          type: array
+          items: { type: string }
+
+    TopicSelectionV1aResolveSearchPlanRecheckRequest:
+      type: object
+      required: [outcome, decision_summary]
+      additionalProperties: true
+      properties:
+        outcome:
+          type: string
+          enum: [accepted, rejected, accepted_risk, materialized]
+        decision_summary: { type: string, minLength: 1 }
+        revised_search_plan:
+          $ref: '#/components/schemas/JsonObject'
+        follow_up_search_run:
+          $ref: '#/components/schemas/JsonObject'
+
+    TopicSelectionEvidenceSourceLocator:
+      type: object
+      required: [locator_type, locator_ref, literature_ref, source_ref]
+      additionalProperties: true
+      properties:
+        locator_type:
+          type: string
+          enum: [abstract, section, paragraph, anchor, manual]
+        locator_ref:
+          $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+        literature_ref:
+          $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+        source_ref:
+          $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+        manual_label: { type: string, nullable: true }
+
+    TopicSelectionEvidenceUnitInput:
+      type: object
+      required: [evidence_role, literature_ref, locator, source_statement]
+      additionalProperties: true
+      properties:
+        client_unit_key: { type: string }
+        coverage_row_intent_id: { type: string, nullable: true }
+        evidence_role:
+          type: string
+          enum: [support, challenge, baseline, context]
+        literature_ref:
+          $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+        locator:
+          $ref: '#/components/schemas/TopicSelectionEvidenceSourceLocator'
+        source_statement: { type: string, minLength: 1 }
+
+    TopicSelectionV1aEvidenceMapRequest:
+      type: object
+      required: [title_card_id, search_run_id, evidence_units]
+      additionalProperties: true
+      properties:
+        title_card_id: { type: string, minLength: 1 }
+        search_run_id: { type: string, minLength: 1 }
+        evidence_units:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/TopicSelectionEvidenceUnitInput'
+
+    TopicSelectionEvidenceRoleBundleInput:
+      type: object
+      additionalProperties: true
+      properties:
+        support_unit_ids:
+          type: array
+          items: { type: string }
+        challenge_unit_ids:
+          type: array
+          items: { type: string }
+        baseline_unit_ids:
+          type: array
+          items: { type: string }
+        context_unit_ids:
+          type: array
+          items: { type: string }
+
+    TopicSelectionV1aEvidenceStrengthAssessmentRequest:
+      type: object
+      required: [evidence_map_id, target_ref, purpose, role_bundle, assessment_workflow_version]
+      additionalProperties: true
+      properties:
+        evidence_map_id: { type: string, minLength: 1 }
+        target_ref:
+          $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+        purpose:
+          type: string
+          enum: [need_validation, readiness, recheck, audit]
+        granularity:
+          type: string
+          enum: [bundle, role_bundle, unit_drilldown]
+        role_bundle:
+          $ref: '#/components/schemas/TopicSelectionEvidenceRoleBundleInput'
+        assessment_workflow_version: { type: string, minLength: 1 }
+
+    TopicSelectionV1aMarkStaleRequest:
+      type: object
+      required: [stale_reason_codes]
+      additionalProperties: true
+      properties:
+        stale_reason_codes:
+          type: array
+          items: { type: string, minLength: 1 }
+        freshness_status:
+          type: string
+          enum: [stale, recheck_required, superseded]
+
+    TopicSelectionV1aNeedCandidateRequest:
+      type: object
+      required: [title_card_id, evidence_map_id, candidate_need]
+      additionalProperties: true
+      properties:
+        title_card_id: { type: string, minLength: 1 }
+        evidence_map_id: { type: string, minLength: 1 }
+        candidate_need: { type: string, minLength: 1 }
+        mechanism_type:
+          type: string
+          enum: [workflow_gap, evaluation_gap, method_gap, system_gap, data_gap, theory_gap, other]
+        scope_notes: { type: string, nullable: true }
+        prior_art_status:
+          type: string
+          enum: [unknown, no_strong_solution_found, partial_solution_known, already_solved, falsified]
+
+    TopicSelectionV1aNeedReadinessRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        assessment_workflow_version: { type: string }
+        assessed_by:
+          type: string
+          enum: [human, llm, system, hybrid]
+
+    TopicSelectionV1aValidationSupportPacketRequest:
+      type: object
+      required: [need_candidate_id]
+      additionalProperties: true
+      properties:
+        need_candidate_id: { type: string, minLength: 1 }
+        readiness_assessment_id: { type: string, nullable: true }
+
+    TopicSelectionV1aAdjudicationRequest:
+      type: object
+      required: [support_packet_id, final_decision, rationale]
+      additionalProperties: true
+      properties:
+        support_packet_id: { type: string, minLength: 1 }
+        final_decision:
+          type: string
+          enum: [validate, return_to_candidate, request_searchplan_recheck, reject, park, merge]
+        rationale: { type: string, minLength: 1 }
+        adjudicated_by:
+          $ref: '#/components/schemas/TopicSelectionActorRef'
+        human_actor:
+          $ref: '#/components/schemas/TopicSelectionActorRef'
+
+    TopicSelectionV1aV1bInputBundleRequest:
+      type: object
+      required: [validated_need_id]
+      additionalProperties: true
+      properties:
+        validated_need_id: { type: string, minLength: 1 }
+        bundle_version: { type: string }
+
+    TopicSelectionV1aQualitySignalRequest:
+      type: object
+      required: [target_ref, stage, check_type, verdict]
+      additionalProperties: true
+      properties:
+        title_card_id: { type: string, nullable: true }
+        target_ref:
+          $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+        stage: { type: string, minLength: 1 }
+        check_type: { type: string, minLength: 1 }
+        verdict:
+          type: string
+          enum: [pass, warn, fail, unknown]
+
+    TopicSelectionV1aInterpretQualitySignalRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        affected_ref:
+          $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+        cooldown_minutes: { type: number }
+
+    TopicSelectionV1aOptionalCooldownRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        cooldown_minutes: { type: number }
+
+    TopicSelectionV1aAcceptedRiskRequest:
+      type: object
+      required: [risk_type, target_ref, scope_refs, rationale, accepted_by]
+      additionalProperties: true
+      properties:
+        risk_type: { type: string, minLength: 1 }
+        target_ref:
+          $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+        scope_refs:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+        rationale: { type: string, minLength: 1 }
+        accepted_by:
+          $ref: '#/components/schemas/TopicSelectionActorRef'
+        recheck_condition: { type: string, nullable: true }
+        expires_at: { type: string, nullable: true }
+
+    TopicSelectionV1aOfflineDatasetRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        dataset_key: { type: string }
+        dataset_version: { type: string }
+        description: { type: string, nullable: true }
+
+    TopicSelectionV1aOfflineCaseRequest:
+      type: object
+      required: [dataset_id, case_key, case_type, frozen_input_bundle, gold_expectation]
+      additionalProperties: true
+      properties:
+        dataset_id: { type: string, minLength: 1 }
+        case_key: { type: string, minLength: 1 }
+        case_type:
+          type: string
+          enum: [false_gap, baseline_miss, counter_evidence, trace_completeness, readiness_false_pass, downstream_rework]
+        frozen_input_bundle:
+          $ref: '#/components/schemas/JsonObject'
+        gold_expectation:
+          $ref: '#/components/schemas/JsonObject'
+
+    TopicSelectionV1aOfflineRunRequest:
+      type: object
+      required: [dataset_id, workflow_profile_key]
+      additionalProperties: true
+      properties:
+        dataset_id: { type: string, minLength: 1 }
+        workflow_profile_key: { type: string, minLength: 1 }
+        metric_keys:
+          type: array
+          items:
+            type: string
+
+    TopicSelectionV1aOfflineCaseResultRequest:
+      type: object
+      required: [run_id, case_id, observed_output]
+      additionalProperties: true
+      properties:
+        run_id: { type: string, minLength: 1 }
+        case_id: { type: string, minLength: 1 }
+        observed_output:
+          $ref: '#/components/schemas/JsonObject'
+
     HealthResponse:
       type: object
       required: [ok]
@@ -2792,6 +4129,14 @@ components:
     TopicScopeStatus:
       type: string
       enum: [in_scope, excluded]
+
+    LiteratureQualityStatus:
+      type: string
+      enum: [high_confidence, medium_confidence, needs_review, low_confidence, excluded]
+
+    LiteratureEvidenceActivationStatus:
+      type: string
+      enum: [candidate, needs_review, eligible, active, blocked, excluded]
 
     PaperCitationStatus:
       type: string
@@ -3474,6 +4819,12 @@ components:
           $ref: '#/components/schemas/TopicScopeStatus'
         reason:
           type: string
+        activation_status:
+          $ref: '#/components/schemas/LiteratureEvidenceActivationStatus'
+        activation_reason:
+          type: string
+        activation_score:
+          type: [number, 'null']
       additionalProperties: false
 
     UpsertTopicLiteratureScopeRequest:
@@ -3487,6 +4838,67 @@ components:
             $ref: '#/components/schemas/TopicLiteratureScopeAction'
       additionalProperties: false
 
+    TopicLiteratureEvidenceActivationAction:
+      type: object
+      required: [literature_id, activation_status]
+      properties:
+        literature_id:
+          type: string
+          minLength: 1
+        activation_status:
+          $ref: '#/components/schemas/LiteratureEvidenceActivationStatus'
+        reason:
+          type: string
+        activation_score:
+          type: [number, 'null']
+      additionalProperties: false
+
+    UpdateTopicLiteratureEvidenceActivationRequest:
+      type: object
+      required: [actions]
+      properties:
+        actions:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/TopicLiteratureEvidenceActivationAction'
+      additionalProperties: false
+
+    LiteratureQualityAssessment:
+      type: object
+      required:
+        - literature_id
+        - quality_status
+        - quality_score
+        - quality_components
+        - blocker_codes
+        - source
+        - assessed_at
+        - updated_at
+      properties:
+        literature_id:
+          type: string
+        quality_status:
+          $ref: '#/components/schemas/LiteratureQualityStatus'
+        quality_score:
+          type: [number, 'null']
+        quality_components:
+          type: object
+          additionalProperties: true
+        blocker_codes:
+          type: array
+          items:
+            type: string
+        source:
+          type: string
+        assessed_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+
     TopicLiteratureScopeItem:
       type: object
       required:
@@ -3494,6 +4906,10 @@ components:
         - topic_id
         - literature_id
         - scope_status
+        - activation_status
+        - activation_reason
+        - activation_score
+        - activated_at
         - updated_at
         - title
         - authors
@@ -3511,6 +4927,15 @@ components:
           $ref: '#/components/schemas/TopicScopeStatus'
         reason:
           type: string
+        activation_status:
+          $ref: '#/components/schemas/LiteratureEvidenceActivationStatus'
+        activation_reason:
+          type: [string, 'null']
+        activation_score:
+          type: [number, 'null']
+        activated_at:
+          type: [string, 'null']
+          format: date-time
         updated_at:
           type: string
           format: date-time
@@ -3526,6 +4951,10 @@ components:
           type: [string, 'null']
         arxiv_id:
           type: [string, 'null']
+        quality_assessment:
+          anyOf:
+            - $ref: '#/components/schemas/LiteratureQualityAssessment'
+            - type: 'null'
       additionalProperties: false
 
     TopicLiteratureScopeResponse:
@@ -5826,6 +7255,26 @@ components:
           type: integer
       additionalProperties: false
 
+    LiteratureOverviewActivationStatusCount:
+      type: object
+      required: [activation_status, count]
+      properties:
+        activation_status:
+          $ref: '#/components/schemas/LiteratureEvidenceActivationStatus'
+        count:
+          type: integer
+      additionalProperties: false
+
+    LiteratureOverviewQualityStatusCount:
+      type: object
+      required: [quality_status, count]
+      properties:
+        quality_status:
+          $ref: '#/components/schemas/LiteratureQualityStatus'
+        count:
+          type: integer
+      additionalProperties: false
+
     LiteratureOverviewTagCount:
       type: object
       required: [tag, count]
@@ -5848,6 +7297,8 @@ components:
         - used_count
         - provider_counts
         - rights_class_counts
+        - activation_status_counts
+        - quality_status_counts
         - top_tags
       properties:
         total_literatures:
@@ -5872,6 +7323,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LiteratureOverviewRightsClassCount'
+        activation_status_counts:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureOverviewActivationStatusCount'
+        quality_status_counts:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiteratureOverviewQualityStatusCount'
         top_tags:
           type: array
           items:
@@ -5930,6 +7389,19 @@ components:
           type: [string, 'null']
         topic_scope_status:
           $ref: '#/components/schemas/TopicScopeStatus'
+        evidence_activation_status:
+          $ref: '#/components/schemas/LiteratureEvidenceActivationStatus'
+        evidence_activation_reason:
+          type: [string, 'null']
+        evidence_activation_score:
+          type: [number, 'null']
+        evidence_activated_at:
+          type: [string, 'null']
+          format: date-time
+        quality_assessment:
+          anyOf:
+            - $ref: '#/components/schemas/LiteratureQualityAssessment'
+            - type: 'null'
         citation_status:
           $ref: '#/components/schemas/PaperCitationStatus'
         overview_status:

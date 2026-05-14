@@ -36,7 +36,11 @@
   - `git diff --check` passed.
 
 ## Pending Checks
-- Seed a non-synthetic dataset from real v1a vertical-slice outputs.
+- Curate a larger reviewed non-synthetic dataset after more real v1a cases exist.
+
+## 2026-05-13 Prisma Vertical-Slice Replay Smoke
+- Check: `DATABASE_URL='postgresql://yurui@127.0.0.1:5432/my_researcher_v1a_e2e_20260513?schema=public' RUN_TOPIC_SELECTION_V1A_PRISMA_E2E=1 node --test --loader ts-node/esm src/services/topic-selection-v1a-prisma.e2e.test.ts` from `apps/backend`.
+- Result: passed. The new E2E smoke creates a `frozen_snapshot` dataset from a real Prisma-backed v1a vertical-slice output, records a case result, completes a replay run, and verifies `trace_completeness = 1` for the smoke case without writing production authority objects from replay.
 
 ## Acceptance Checks
 - [x] Replay does not write production ValidatedNeed.

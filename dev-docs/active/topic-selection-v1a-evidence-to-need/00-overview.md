@@ -1,8 +1,9 @@
 # 00 Overview
 
 ## Status
-- State: planned
-- Next step: Review the first implementation package, `topic-selection-v1a-foundation-control-plane`, before product code changes.
+- State: done
+- Next step: Use the stable v1a output bundle as the entry contract for v1b implementation packages. Frontend/UIUX exposure should be tracked as a separate future package.
+- Review: v1a implementation packages have landed. A Prisma-backed E2E smoke verifies the full `TopicSeed -> SearchRun -> EvidenceMap -> NeedCandidate -> ValidateNeedAdjudicationResult -> ValidatedNeed` vertical slice, plus recheck/risk/memory handling and a frozen replay baseline seeded from the real smoke output. `T-053` now closes the backend HTTP/API layer through Fastify routes, route tests, and OpenAPI context updates.
 
 ## Parent Package
 - Parent: `dev-docs/active/topic-selection-decision-chain-redesign/`
@@ -33,10 +34,12 @@
 - `T-049 topic-selection-v1a-need-validation`
 - `T-051 topic-selection-v1a-recheck-risk-memory`
 - `T-050 topic-selection-v1a-offline-evaluation-replay`
+- `T-053 topic-selection-v1a-http-api-closure`
 
 ## Acceptance Criteria
 - [x] v1a implementation child tasks are created with non-overlapping ownership.
 - [x] Each child task has clear inputs, outputs, authority objects, and verification.
-- [ ] v1a can be verified end-to-end with at least one human-confirmed `ValidatedNeed`.
-- [ ] v1b input bundle is explicit: `ValidatedNeed`, adjudication result, support packet, evidence/search snapshots, trace, risks, gaps, memory, and recheck status.
-- [ ] v1a offline evaluation/replay produces a first baseline for the agreed minimum metrics.
+- [x] v1a can be verified end-to-end with at least one human-confirmed `ValidatedNeed`.
+- [x] v1b input bundle is explicit: `ValidatedNeed`, adjudication result, support packet, evidence/search snapshots, trace, risks, gaps, memory, and recheck status.
+- [x] v1a offline evaluation/replay produces a first baseline for the agreed minimum metrics.
+- [x] v1a backend HTTP/API routes can drive the evidence-to-need chain through `buildApp()`.
