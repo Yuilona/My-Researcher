@@ -1,0 +1,432 @@
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import { AppError } from '../errors/app-error.js';
+import { TopicSelectionControlPlaneService } from '../services/topic-selection-control-plane-service.js';
+import { TopicSelectionEvidenceMapService } from '../services/topic-selection-evidence-map-service.js';
+import { TopicSelectionNeedValidationService } from '../services/topic-selection-need-validation-service.js';
+import { TopicSelectionOfflineEvaluationReplayService } from '../services/topic-selection-offline-evaluation-replay-service.js';
+import { TopicSelectionRecheckRiskMemoryService } from '../services/topic-selection-recheck-risk-memory-service.js';
+import { TopicSelectionSearchResourceService } from '../services/topic-selection-search-resource-service.js';
+
+type BodyRequest<T> = FastifyRequest<{ Body: T }>;
+type ParamsRequest<T> = FastifyRequest<{ Params: T }>;
+type BodyParamsRequest<TBody, TParams> = FastifyRequest<{ Body: TBody; Params: TParams }>;
+
+type TopicSeedBody = Parameters<TopicSelectionSearchResourceService['createTopicSeedFromTitleCard']>[0];
+type LiteratureSnapshotBody = Parameters<TopicSelectionSearchResourceService['createLiteratureResourcePoolSnapshot']>[0];
+type SearchPlanBody = Parameters<TopicSelectionSearchResourceService['createSearchPlan']>[0];
+type SearchRunBody = Parameters<TopicSelectionSearchResourceService['recordSearchRun']>[0];
+type SearchPlanRecheckBody = Parameters<TopicSelectionSearchResourceService['createSearchPlanRecheckRequest']>[0];
+type ResolveSearchPlanRecheckBody =
+  Omit<Parameters<TopicSelectionSearchResourceService['resolveSearchPlanRecheckRequest']>[0], 'request_id'>;
+type EvidenceMapBody = Parameters<TopicSelectionEvidenceMapService['createEvidenceMapFromSearchRun']>[0];
+type EvidenceStrengthBody = Parameters<TopicSelectionEvidenceMapService['assessEvidenceStrength']>[0];
+type MarkEvidenceMapStaleBody = Omit<Parameters<TopicSelectionEvidenceMapService['markEvidenceMapStale']>[0], 'evidence_map_id'>;
+type NeedCandidateBody = Parameters<TopicSelectionNeedValidationService['createNeedCandidateFromEvidenceMap']>[0];
+export type ReadinessBody = Omit<
+  Parameters<TopicSelectionNeedValidationService['assessCandidateReadiness']>[0],
+  'need_candidate_id'
+>;
+type SupportPacketBody = Parameters<TopicSelectionNeedValidationService['createValidationDecisionSupportPacket']>[0];
+type AdjudicationBody = Omit<Parameters<TopicSelectionNeedValidationService['adjudicateNeed']>[0], 'need_candidate_id'>;
+type V1bInputBundleBody = Parameters<TopicSelectionNeedValidationService['publishV1bInputBundle']>[0];
+type QualitySignalBody = Parameters<TopicSelectionControlPlaneService['emitQualitySignal']>[0];
+export type InterpretQualitySignalBody = Omit<
+  Parameters<TopicSelectionRecheckRiskMemoryService['interpretQualitySignal']>[0],
+  'quality_signal_id'
+>;
+export type QueueSearchPlanRecheckBody = Omit<
+  Parameters<TopicSelectionRecheckRiskMemoryService['queueSearchPlanRecheckRequest']>[0],
+  'search_plan_recheck_request_id'
+>;
+type AcceptedRiskBody = Parameters<TopicSelectionRecheckRiskMemoryService['acceptRisk']>[0];
+type MaterializeMemoryBody = Omit<
+  Parameters<TopicSelectionRecheckRiskMemoryService['materializeCandidateMemorySuggestion']>[0],
+  'memory_suggestion_id'
+>;
+export type OfflineDatasetBody = Parameters<TopicSelectionOfflineEvaluationReplayService['createDataset']>[0];
+type OfflineCaseBody = Parameters<TopicSelectionOfflineEvaluationReplayService['addCase']>[0];
+type OfflineRunBody = Parameters<TopicSelectionOfflineEvaluationReplayService['startRun']>[0];
+type OfflineCaseResultBody = Parameters<TopicSelectionOfflineEvaluationReplayService['recordFrozenCaseResult']>[0];
+
+function handleError(reply: FastifyReply, error: unknown) {
+  if (error instanceof AppError) {
+    return reply.status(error.statusCode).send({
+      error: {
+        code: error.errorCode,
+        message: error.message,
+        details: error.details,
+      },
+    });
+  }
+
+  const request = (reply as { request?: { log?: { error: (err: unknown, msg?: string) => void } } }).request;
+  if (request?.log?.error) {
+    request.log.error(error, 'topic-selection v1a error');
+  } else {
+    console.error('[topic-selection-v1a]', error);
+  }
+  return reply.status(500).send({
+    error: {
+      code: 'INTERNAL_ERROR',
+      message: 'Unexpected topic-selection v1a failure.',
+    },
+  });
+}
+
+export class TopicSelectionV1aController {
+  constructor(
+    private readonly controlPlane: TopicSelectionControlPlaneService,
+    private readonly searchResources: TopicSelectionSearchResourceService,
+    private readonly evidenceMaps: TopicSelectionEvidenceMapService,
+    private readonly needValidation: TopicSelectionNeedValidationService,
+    private readonly recheckRiskMemory: TopicSelectionRecheckRiskMemoryService,
+    private readonly offlineReplay: TopicSelectionOfflineEvaluationReplayService,
+  ) {}
+
+  createTopicSeedFromTitleCard = async (request: BodyRequest<TopicSeedBody>, reply: FastifyReply) => {
+    try {
+      const result = await this.searchResources.createTopicSeedFromTitleCard(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createLiteratureResourcePoolSnapshot = async (
+    request: BodyRequest<LiteratureSnapshotBody>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.searchResources.createLiteratureResourcePoolSnapshot(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createSearchPlan = async (request: BodyRequest<SearchPlanBody>, reply: FastifyReply) => {
+    try {
+      const result = await this.searchResources.createSearchPlan(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  recordSearchRun = async (request: BodyRequest<SearchRunBody>, reply: FastifyReply) => {
+    try {
+      const result = await this.searchResources.recordSearchRun(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  getCoverageMatrix = async (
+    request: ParamsRequest<{ searchPlanId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.searchResources.getCoverageMatrix(request.params.searchPlanId);
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createSearchPlanRecheckRequest = async (
+    request: BodyRequest<SearchPlanRecheckBody>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.searchResources.createSearchPlanRecheckRequest(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  resolveSearchPlanRecheckRequest = async (
+    request: BodyParamsRequest<ResolveSearchPlanRecheckBody, { requestId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.searchResources.resolveSearchPlanRecheckRequest({
+        ...request.body,
+        request_id: request.params.requestId,
+      });
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createEvidenceMapFromSearchRun = async (request: BodyRequest<EvidenceMapBody>, reply: FastifyReply) => {
+    try {
+      const result = await this.evidenceMaps.createEvidenceMapFromSearchRun(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  getNeedValidationEvidenceBundle = async (
+    request: ParamsRequest<{ evidenceMapId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.evidenceMaps.getNeedValidationEvidenceBundle(request.params.evidenceMapId);
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  assessEvidenceStrength = async (request: BodyRequest<EvidenceStrengthBody>, reply: FastifyReply) => {
+    try {
+      const result = await this.evidenceMaps.assessEvidenceStrength(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  markEvidenceMapStale = async (
+    request: BodyParamsRequest<MarkEvidenceMapStaleBody, { evidenceMapId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.evidenceMaps.markEvidenceMapStale({
+        ...request.body,
+        evidence_map_id: request.params.evidenceMapId,
+      });
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createNeedCandidateFromEvidenceMap = async (
+    request: BodyRequest<NeedCandidateBody>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.needValidation.createNeedCandidateFromEvidenceMap(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  assessCandidateReadiness = async (
+    request: BodyParamsRequest<ReadinessBody, { needCandidateId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.needValidation.assessCandidateReadiness({
+        ...request.body,
+        need_candidate_id: request.params.needCandidateId,
+      });
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createValidationDecisionSupportPacket = async (
+    request: BodyRequest<SupportPacketBody>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.needValidation.createValidationDecisionSupportPacket(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  adjudicateNeed = async (
+    request: BodyParamsRequest<AdjudicationBody, { needCandidateId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.needValidation.adjudicateNeed({
+        ...request.body,
+        need_candidate_id: request.params.needCandidateId,
+      });
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  publishV1bInputBundle = async (request: BodyRequest<V1bInputBundleBody>, reply: FastifyReply) => {
+    try {
+      const result = await this.needValidation.publishV1bInputBundle(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  emitQualitySignal = async (request: BodyRequest<QualitySignalBody>, reply: FastifyReply) => {
+    try {
+      const result = await this.controlPlane.emitQualitySignal(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  interpretQualitySignal = async (
+    request: BodyParamsRequest<InterpretQualitySignalBody, { qualitySignalId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.recheckRiskMemory.interpretQualitySignal({
+        ...request.body,
+        quality_signal_id: request.params.qualitySignalId,
+      });
+      return reply.status(result.queue_item ? 201 : 200).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  queueSearchPlanRecheckRequest = async (
+    request: BodyParamsRequest<QueueSearchPlanRecheckBody, { requestId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.recheckRiskMemory.queueSearchPlanRecheckRequest({
+        ...request.body,
+        search_plan_recheck_request_id: request.params.requestId,
+      });
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  materializeCandidateMemorySuggestion = async (
+    request: BodyParamsRequest<MaterializeMemoryBody, { memorySuggestionId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.recheckRiskMemory.materializeCandidateMemorySuggestion({
+        memory_suggestion_id: request.params.memorySuggestionId,
+      });
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  acceptRisk = async (request: BodyRequest<AcceptedRiskBody>, reply: FastifyReply) => {
+    try {
+      const result = await this.recheckRiskMemory.acceptRisk(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listOpenWorkQueueItems = async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const result = await this.recheckRiskMemory.listOpenQueueItems();
+      return reply.send({ items: result });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createOfflineEvaluationDataset = async (
+    request: BodyRequest<OfflineDatasetBody>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.offlineReplay.createDataset(request.body ?? {});
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createSyntheticOfflineEvaluationDataset = async (
+    request: BodyRequest<OfflineDatasetBody>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.offlineReplay.createSyntheticV1aBaselineDataset(request.body ?? {});
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  addOfflineEvaluationCase = async (request: BodyRequest<OfflineCaseBody>, reply: FastifyReply) => {
+    try {
+      const result = await this.offlineReplay.addCase(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  startOfflineEvaluationRun = async (request: BodyRequest<OfflineRunBody>, reply: FastifyReply) => {
+    try {
+      const result = await this.offlineReplay.startRun(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  recordOfflineEvaluationCaseResult = async (
+    request: BodyRequest<OfflineCaseResultBody>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.offlineReplay.recordFrozenCaseResult(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  completeOfflineEvaluationRun = async (
+    request: ParamsRequest<{ runId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.offlineReplay.completeRunAndCalculateMetrics({ run_id: request.params.runId });
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listOfflineEvaluationMetricResults = async (
+    request: ParamsRequest<{ runId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.offlineReplay.listMetricResults(request.params.runId);
+      return reply.send({ items: result });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listOfflineEvaluationReplayDiffs = async (
+    request: ParamsRequest<{ runId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.offlineReplay.listReplayDiffs(request.params.runId);
+      return reply.send({ items: result });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+}

@@ -6,11 +6,18 @@ import { LiteratureContentProcessingSettingsController } from './controllers/lit
 import { LiteratureFulltextAcquisitionController } from './controllers/literature-fulltext-acquisition-controller.js';
 import { LiteratureController } from './controllers/literature-controller.js';
 import { TopicSettingsController } from './controllers/topic-settings-controller.js';
+import { TopicSelectionV1aController } from './controllers/topic-selection-v1a-controller.js';
 import { InMemoryApplicationSettingsRepository } from './repositories/in-memory-application-settings-repository.js';
 import { InMemoryAutoPullRepository } from './repositories/in-memory-auto-pull-repository.js';
 import { InMemoryLiteratureRepository } from './repositories/in-memory-literature-repository.js';
 import { ResearchLifecycleController } from './controllers/research-lifecycle-controller.js';
 import { InMemoryResearchLifecycleRepository } from './repositories/in-memory-research-lifecycle-repository.js';
+import { InMemoryTopicSelectionControlPlaneRepository } from './repositories/in-memory-topic-selection-control-plane-repository.js';
+import { InMemoryTopicSelectionEvidenceMapRepository } from './repositories/in-memory-topic-selection-evidence-map-repository.js';
+import { InMemoryTopicSelectionNeedValidationRepository } from './repositories/in-memory-topic-selection-need-validation-repository.js';
+import { InMemoryTopicSelectionOfflineEvaluationReplayRepository } from './repositories/in-memory-topic-selection-offline-evaluation-replay-repository.js';
+import { InMemoryTopicSelectionRecheckRiskMemoryRepository } from './repositories/in-memory-topic-selection-recheck-risk-memory-repository.js';
+import { InMemoryTopicSelectionSearchResourceRepository } from './repositories/in-memory-topic-selection-search-resource-repository.js';
 import { getPrismaClient } from './repositories/prisma/prisma-client.js';
 import { PrismaApplicationSettingsRepository } from './repositories/prisma/prisma-application-settings-repository.js';
 import { PrismaAutoPullRepository } from './repositories/prisma/prisma-auto-pull-repository.js';
@@ -18,6 +25,12 @@ import { PrismaLiteratureRepository } from './repositories/prisma/prisma-literat
 import { PrismaResearchLifecycleRepository } from './repositories/prisma/prisma-research-lifecycle-repository.js';
 import { InMemoryTitleCardManagementRepository } from './repositories/title-card-management.repository.js';
 import { PrismaTitleCardManagementRepository } from './repositories/prisma/prisma-title-card-management-repository.js';
+import { PrismaTopicSelectionControlPlaneRepository } from './repositories/prisma/prisma-topic-selection-control-plane-repository.js';
+import { PrismaTopicSelectionEvidenceMapRepository } from './repositories/prisma/prisma-topic-selection-evidence-map-repository.js';
+import { PrismaTopicSelectionNeedValidationRepository } from './repositories/prisma/prisma-topic-selection-need-validation-repository.js';
+import { PrismaTopicSelectionOfflineEvaluationReplayRepository } from './repositories/prisma/prisma-topic-selection-offline-evaluation-replay-repository.js';
+import { PrismaTopicSelectionRecheckRiskMemoryRepository } from './repositories/prisma/prisma-topic-selection-recheck-risk-memory-repository.js';
+import { PrismaTopicSelectionSearchResourceRepository } from './repositories/prisma/prisma-topic-selection-search-resource-repository.js';
 import { registerAutoPullRoutes } from './routes/auto-pull-routes.js';
 import { registerLiteratureAcquisitionSettingsRoutes } from './routes/literature-acquisition-settings-routes.js';
 import { registerLiteratureBackfillRoutes } from './routes/literature-backfill-routes.js';
@@ -27,11 +40,18 @@ import { registerLiteratureRoutes } from './routes/literature-routes.js';
 import { registerResearchLifecycleRoutes } from './routes/research-lifecycle-routes.js';
 import { registerTitleCardManagementRoutes } from './routes/title-card-management.js';
 import { registerTopicSettingsRoutes } from './routes/topic-settings-routes.js';
+import { registerTopicSelectionV1aRoutes } from './routes/topic-selection-v1a-routes.js';
 import type { ApplicationSettingsRepository } from './repositories/application-settings-repository.js';
 import type { AutoPullRepository } from './repositories/auto-pull-repository.js';
 import type { LiteratureRepository } from './repositories/literature-repository.js';
 import type { ResearchLifecycleRepository } from './repositories/research-lifecycle-repository.js';
 import type { TitleCardManagementRepository } from './repositories/title-card-management.repository.js';
+import type { TopicSelectionControlPlaneRepository } from './repositories/topic-selection-control-plane.repository.js';
+import type { TopicSelectionEvidenceMapRepository } from './repositories/topic-selection-evidence-map.repository.js';
+import type { TopicSelectionNeedValidationRepository } from './repositories/topic-selection-need-validation.repository.js';
+import type { TopicSelectionOfflineEvaluationReplayRepository } from './repositories/topic-selection-offline-evaluation-replay.repository.js';
+import type { TopicSelectionRecheckRiskMemoryRepository } from './repositories/topic-selection-recheck-risk-memory.repository.js';
+import type { TopicSelectionSearchResourceRepository } from './repositories/topic-selection-search-resource.repository.js';
 import { AutoPullScheduler } from './services/auto-pull-scheduler.js';
 import { AutoPullService } from './services/auto-pull-service.js';
 import { LiteratureBackfillService } from './services/literature-backfill-service.js';
@@ -48,6 +68,12 @@ import {
   type PaperProjectGateway,
 } from './services/title-card-management.service.js';
 import { TitleCardManagementController } from './controllers/title-card-management.controller.js';
+import { TopicSelectionControlPlaneService } from './services/topic-selection-control-plane-service.js';
+import { TopicSelectionEvidenceMapService } from './services/topic-selection-evidence-map-service.js';
+import { TopicSelectionNeedValidationService } from './services/topic-selection-need-validation-service.js';
+import { TopicSelectionOfflineEvaluationReplayService } from './services/topic-selection-offline-evaluation-replay-service.js';
+import { TopicSelectionRecheckRiskMemoryService } from './services/topic-selection-recheck-risk-memory-service.js';
+import { TopicSelectionSearchResourceService } from './services/topic-selection-search-resource-service.js';
 import { FileGovernanceDeliveryAuditStore } from './services/event-delivery/governance-delivery-audit-store.js';
 import { FileGovernanceDeliveryOutboxStore } from './services/event-delivery/governance-delivery-outbox-store.js';
 import { InProcessGovernanceEventDeliveryAdapter } from './services/event-delivery/governance-event-delivery-adapter.js';
@@ -107,6 +133,14 @@ export function buildApp(): FastifyInstance {
   const autoPullRepository = createAutoPullRepository(storeConfig.autoPullStrategy);
   const applicationSettingsRepository = createApplicationSettingsRepository(storeConfig.applicationSettingsStrategy);
   const titleCardManagementRepository = createTitleCardManagementRepository(storeConfig.titleCardStrategy);
+  const topicSelectionControlPlaneRepository = createTopicSelectionControlPlaneRepository(storeConfig.titleCardStrategy);
+  const topicSelectionSearchResourceRepository = createTopicSelectionSearchResourceRepository(storeConfig.titleCardStrategy);
+  const topicSelectionEvidenceMapRepository = createTopicSelectionEvidenceMapRepository(storeConfig.titleCardStrategy);
+  const topicSelectionNeedValidationRepository = createTopicSelectionNeedValidationRepository(storeConfig.titleCardStrategy);
+  const topicSelectionRecheckRiskMemoryRepository = createTopicSelectionRecheckRiskMemoryRepository(storeConfig.titleCardStrategy);
+  const topicSelectionOfflineEvaluationReplayRepository = createTopicSelectionOfflineEvaluationReplayRepository(
+    storeConfig.titleCardStrategy,
+  );
   const auditStore = new FileGovernanceDeliveryAuditStore({
     filePath: process.env.GOVERNANCE_DELIVERY_AUDIT_LOG_PATH,
   });
@@ -127,6 +161,42 @@ export function buildApp(): FastifyInstance {
     listPipelineStatesByLiteratureIds: (literatureIds) => literatureRepository.listPipelineStatesByLiteratureIds(literatureIds),
   });
   const titleCardManagementController = new TitleCardManagementController(titleCardManagementService);
+  const topicSelectionControlPlaneService = new TopicSelectionControlPlaneService(topicSelectionControlPlaneRepository);
+  const topicSelectionSearchResourceService = new TopicSelectionSearchResourceService(
+    topicSelectionSearchResourceRepository,
+    topicSelectionControlPlaneService,
+    titleCardManagementRepository,
+    literatureRepository,
+  );
+  const topicSelectionEvidenceMapService = new TopicSelectionEvidenceMapService(
+    topicSelectionEvidenceMapRepository,
+    topicSelectionControlPlaneService,
+    topicSelectionSearchResourceRepository,
+    literatureRepository,
+  );
+  const topicSelectionNeedValidationService = new TopicSelectionNeedValidationService(
+    topicSelectionNeedValidationRepository,
+    topicSelectionControlPlaneService,
+    topicSelectionEvidenceMapService,
+    topicSelectionSearchResourceService,
+  );
+  const topicSelectionRecheckRiskMemoryService = new TopicSelectionRecheckRiskMemoryService(
+    topicSelectionRecheckRiskMemoryRepository,
+    topicSelectionControlPlaneService,
+    topicSelectionSearchResourceRepository,
+    topicSelectionNeedValidationRepository,
+  );
+  const topicSelectionOfflineEvaluationReplayService = new TopicSelectionOfflineEvaluationReplayService(
+    topicSelectionOfflineEvaluationReplayRepository,
+  );
+  const topicSelectionV1aController = new TopicSelectionV1aController(
+    topicSelectionControlPlaneService,
+    topicSelectionSearchResourceService,
+    topicSelectionEvidenceMapService,
+    topicSelectionNeedValidationService,
+    topicSelectionRecheckRiskMemoryService,
+    topicSelectionOfflineEvaluationReplayService,
+  );
   const literatureContentProcessingSettingsService = new LiteratureContentProcessingSettingsService(applicationSettingsRepository);
   const llmGateway = new BackendLlmGateway({
     settingsService: literatureContentProcessingSettingsService,
@@ -222,6 +292,7 @@ export function buildApp(): FastifyInstance {
   app.register(async (instance) => {
     await registerResearchLifecycleRoutes(instance, researchLifecycleController);
     await registerTitleCardManagementRoutes(instance, titleCardManagementController);
+    await registerTopicSelectionV1aRoutes(instance, topicSelectionV1aController);
     await registerLiteratureAcquisitionSettingsRoutes(instance, literatureAcquisitionSettingsController);
     await registerLiteratureContentProcessingSettingsRoutes(instance, literatureContentProcessingSettingsController);
     await registerLiteratureBackfillRoutes(instance, literatureBackfillController);
@@ -318,6 +389,70 @@ function createTitleCardManagementRepository(strategy: RepositoryStrategy): Titl
   }
 
   return new InMemoryTitleCardManagementRepository();
+}
+
+function createTopicSelectionControlPlaneRepository(
+  strategy: RepositoryStrategy,
+): TopicSelectionControlPlaneRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaTopicSelectionControlPlaneRepository(prisma);
+  }
+
+  return new InMemoryTopicSelectionControlPlaneRepository();
+}
+
+function createTopicSelectionSearchResourceRepository(
+  strategy: RepositoryStrategy,
+): TopicSelectionSearchResourceRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaTopicSelectionSearchResourceRepository(prisma);
+  }
+
+  return new InMemoryTopicSelectionSearchResourceRepository();
+}
+
+function createTopicSelectionEvidenceMapRepository(strategy: RepositoryStrategy): TopicSelectionEvidenceMapRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaTopicSelectionEvidenceMapRepository(prisma);
+  }
+
+  return new InMemoryTopicSelectionEvidenceMapRepository();
+}
+
+function createTopicSelectionNeedValidationRepository(
+  strategy: RepositoryStrategy,
+): TopicSelectionNeedValidationRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaTopicSelectionNeedValidationRepository(prisma);
+  }
+
+  return new InMemoryTopicSelectionNeedValidationRepository();
+}
+
+function createTopicSelectionRecheckRiskMemoryRepository(
+  strategy: RepositoryStrategy,
+): TopicSelectionRecheckRiskMemoryRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaTopicSelectionRecheckRiskMemoryRepository(prisma);
+  }
+
+  return new InMemoryTopicSelectionRecheckRiskMemoryRepository();
+}
+
+function createTopicSelectionOfflineEvaluationReplayRepository(
+  strategy: RepositoryStrategy,
+): TopicSelectionOfflineEvaluationReplayRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaTopicSelectionOfflineEvaluationReplayRepository(prisma);
+  }
+
+  return new InMemoryTopicSelectionOfflineEvaluationReplayRepository();
 }
 
 function createAutoPullScheduler(service: AutoPullService): AutoPullScheduler | null {
