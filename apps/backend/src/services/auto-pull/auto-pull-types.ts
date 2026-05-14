@@ -1,5 +1,6 @@
 import type {
   LiteratureCollectionImportItem,
+  LiteratureEvidenceActivationStatus,
   TopicScopeStatus,
 } from '@paper-engineering-assistant/shared/research-lifecycle/literature-contracts';
 import type { AutoPullSource } from '@paper-engineering-assistant/shared/research-lifecycle/auto-pull-contracts';
@@ -42,6 +43,8 @@ export type EligibleCandidate = {
   rankingScore: number;
   rankingMode: AutoPullRankingMode;
   suggestedScope: TopicScopeStatus;
+  activationStatus: LiteratureEvidenceActivationStatus;
+  activationReason: string;
   scopeReason: string;
 };
 
@@ -58,6 +61,8 @@ export type SourceExecutionResult = {
     literatureId: string;
     topicId: string | null;
     suggestedScope: TopicScopeStatus;
+    activationStatus: LiteratureEvidenceActivationStatus;
+    activationReason: string;
     reason: string;
     score: number;
   }>;

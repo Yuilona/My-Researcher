@@ -765,7 +765,7 @@ test('quality threshold filters low-score items', async () => {
         ])), { status: 200 });
       }
       if (url === 'https://mock-llm.local/score') {
-        return new Response(JSON.stringify({ quality_score: 65 }), { status: 200 });
+        return new Response(JSON.stringify({ quality_score: 54 }), { status: 200 });
       }
       return new Response('not found', { status: 404 });
     }) as typeof fetch, async () => {
@@ -782,9 +782,10 @@ test('quality threshold filters low-score items', async () => {
       const meta = run.source_attempts?.[0]?.meta as Record<string, unknown>;
       assert.equal(meta.scored_count, 1);
       assert.equal(meta.below_threshold_count, 1);
-      assert.equal(meta.imported_count, 1);
+      assert.equal(meta.below_import_threshold_count, 1);
+      assert.equal(meta.imported_count, 0);
       assert.equal(meta.eligible_count, 0);
-      assert.equal(run.suggestions?.[0]?.suggested_scope, 'excluded');
+      assert.equal(run.suggestions?.length, 0);
     });
   });
 });
@@ -1054,7 +1055,7 @@ test('run fails with QUALITY_SCORE_UNAVAILABLE when scorer config is missing', a
   });
 });
 
-test('auto-pull writes in_scope/excluded to topic scope with hard score cut', async () => {
+test('auto-pull applies import and activation thresholds to topic scope writeback', async () => {
   const { service, literatureService } = buildService();
   await service.createRule({
     scope: 'GLOBAL',
@@ -1081,7 +1082,8 @@ test('auto-pull writes in_scope/excluded to topic scope with hard score cut', as
       if (url.startsWith('https://api.crossref.org/works')) {
         return new Response(JSON.stringify(crossrefPayload([
           buildCrossrefItem({ title: 'Scope Keep Paper', doi: '10.1000/scope-keep', year: 2025 }),
-          buildCrossrefItem({ title: 'Scope Exclude Paper', doi: '10.1000/scope-exclude', year: 2025 }),
+          buildCrossrefItem({ title: 'Scope Review Paper', doi: '10.1000/scope-review', year: 2025 }),
+          buildCrossrefItem({ title: 'Scope Reject Paper', doi: '10.1000/scope-reject', year: 2025 }),
         ])), { status: 200 });
       }
       if (url === 'https://mock-llm.local/score') {
@@ -1089,7 +1091,7 @@ test('auto-pull writes in_scope/excluded to topic scope with hard score cut', as
           ? (JSON.parse(init.body) as { input?: { title?: string } })
           : {};
         const title = payload.input?.title ?? '';
-        const score = title.includes('Keep') ? 88 : 60;
+        const score = title.includes('Keep') ? 88 : title.includes('Review') ? 60 : 54;
         return new Response(JSON.stringify({ quality_score: score }), { status: 200 });
       }
       return new Response('not found', { status: 404 });
@@ -1106,18 +1108,25 @@ test('auto-pull writes in_scope/excluded to topic scope with hard score cut', as
       const queued = await service.triggerRuleRun(rule.rule_id, { trigger_type: 'MANUAL' });
       const run = await waitForTerminalRun(service, queued.run_id);
       assert.equal(run.status, 'SUCCESS');
+      assert.equal(run.summary.below_import_threshold_count, 1);
+      assert.equal(run.summary.needs_review_count, 1);
+      assert.equal(run.summary.eligible_count, 1);
 
       const scope = await literatureService.getTopicScope('TOPIC-AUTO-SCOPE-WB');
       assert.equal(scope.items.length, 2);
 
       const kept = scope.items.find((item) => item.title === 'Scope Keep Paper');
-      const excluded = scope.items.find((item) => item.title === 'Scope Exclude Paper');
+      const review = scope.items.find((item) => item.title === 'Scope Review Paper');
+      const rejected = scope.items.find((item) => item.title === 'Scope Reject Paper');
       assert.ok(kept);
-      assert.ok(excluded);
+      assert.ok(review);
+      assert.equal(rejected, undefined);
       assert.equal(kept?.scope_status, 'in_scope');
-      assert.equal(excluded?.scope_status, 'excluded');
-      assert.equal(kept?.reason, 'AUTO_RULE_SCORE_GTE_THRESHOLD');
-      assert.equal(excluded?.reason, 'AUTO_RULE_SCORE_LT_THRESHOLD');
+      assert.equal(review?.scope_status, 'in_scope');
+      assert.equal(kept?.activation_status, 'eligible');
+      assert.equal(review?.activation_status, 'needs_review');
+      assert.equal(kept?.reason, 'AUTO_PULL_SCORE_GTE_ACTIVATION_THRESHOLD');
+      assert.equal(review?.reason, 'AUTO_PULL_SCORE_LT_ACTIVATION_THRESHOLD');
     });
   });
 });

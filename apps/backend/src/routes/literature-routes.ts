@@ -13,6 +13,7 @@ import {
   updateLiteratureClusterRequestSchema,
   updateLiteratureMetadataRequestSchema,
   updatePaperLiteratureLinkRequestSchema,
+  updateTopicLiteratureEvidenceActivationRequestSchema,
   upsertTopicLiteratureScopeRequestSchema,
   zoteroImportRequestSchema,
   type LiteratureOverviewQuery,
@@ -29,6 +30,7 @@ import {
   type UpdateLiteratureClusterRequest,
   type UpdateLiteratureMetadataRequest,
   type UpdatePaperLiteratureLinkRequest,
+  type UpdateTopicLiteratureEvidenceActivationRequest,
   type UpsertTopicLiteratureScopeRequest,
   type ZoteroImportRequest,
   type ZoteroPreviewRequest,
@@ -186,6 +188,17 @@ export async function registerLiteratureRoutes(
       },
     },
     async (request, reply) => controller.upsertTopicScope(request, reply),
+  );
+
+  app.patch<{ Params: { topicId: string }; Body: UpdateTopicLiteratureEvidenceActivationRequest }>(
+    '/topics/:topicId/literature-activation',
+    {
+      schema: {
+        params: topicParamsSchema,
+        body: updateTopicLiteratureEvidenceActivationRequestSchema,
+      },
+    },
+    async (request, reply) => controller.updateTopicEvidenceActivation(request, reply),
   );
 
   app.post<{ Params: { id: string }; Body: SyncPaperLiteratureFromTopicRequest }>(

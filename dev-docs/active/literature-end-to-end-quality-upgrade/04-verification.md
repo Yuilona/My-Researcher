@@ -1104,3 +1104,56 @@
   - `node .ai/scripts/ctl-api-index.mjs verify --strict`: PASS.
   - `node .ai/skills/features/context-awareness/scripts/ctl-context.mjs verify --strict`: PASS.
   - `git diff --check`: PASS.
+
+## 2026-05-14 - Evidence Activation Backend Pass
+
+- Scope:
+  - Implemented global quality assessment, topic-level evidence activation, auto-pull dual thresholds, evidence-only retrieval, activation-gated backfill/fulltext worksets, and historical bootstrap tooling.
+  - Desktop review UI remains intentionally out of scope for this pass.
+- Deterministic verification:
+  - `DATABASE_URL=postgresql://user:pass@localhost:5432/db pnpm --filter @paper-engineering-assistant/backend prisma:validate`: PASS.
+  - `pnpm --filter @paper-engineering-assistant/shared typecheck`: PASS.
+  - `pnpm --filter @paper-engineering-assistant/backend typecheck`: PASS.
+  - `node --check .ai/scripts/literature-evidence-activation-bootstrap.mjs`: PASS.
+  - Targeted backend tests for evidence activation, retrieval, backfill, auto-pull, literature service, and research lifecycle routes: PASS.
+  - `pnpm --filter @paper-engineering-assistant/backend test`: PASS, `287/288` with `1` intentional skipped Prisma E2E smoke.
+  - `node .ai/scripts/ctl-openapi-quality.mjs verify --source docs/context/api/openapi.yaml --strict`: PASS.
+  - `node .ai/scripts/ctl-api-index.mjs generate --source docs/context/api/openapi.yaml --touch`: PASS.
+  - `node .ai/scripts/ctl-api-index.mjs verify --source docs/context/api/openapi.yaml --strict`: PASS.
+  - `node .ai/scripts/ctl-db-ssot.mjs sync-to-context`: PASS.
+  - `node .ai/skills/features/context-awareness/scripts/ctl-context.mjs verify --strict`: PASS.
+- Coverage added/updated:
+  - Auto-pull threshold classification and writeback summary counters.
+  - Evidence activation resolver promotion and medium-confidence exclusion.
+  - Retrieval excludes active embeddings unless evidence readiness and topic activation are satisfied.
+  - Backfill topic worksets exclude `candidate` and `needs_review`.
+  - Route and service tests now reflect that `in_scope` is membership only, not retrieval or paper-sync eligibility.
+
+## 2026-05-14 - Full Active E2E And Semantic Cleanup
+
+- Full real E2E with Evidence Activation:
+  - Run: `20260513T233922Z-t041-full-active-local`.
+  - Raw PDF root: `/Volumes/DataDisk/Paper/Auto/20260513T233922Z-t041-full-active-local`.
+  - Report: `.ai/.tmp/literature-e2e/20260513T233922Z-t041-full-active-local/report.json`.
+  - Audit: `.ai/.tmp/literature-e2e/20260513T233922Z-t041-full-active-local/report-audit.json`; status `PASS`, with only local-PDF retention review info.
+  - Topic activation verification: `.ai/.tmp/literature-e2e/20260513T233922Z-t041-full-active-local/topic-activation-verification.json`; status `PASS`.
+  - Samples: `18` total, `16` processable fulltext samples, `2` expected blockers.
+  - Download/parser/key-content/index success: `16/16` for each processable stage.
+  - Retrieval: `37/37` positive recall@5, `9/9` blind recall@5, `1/1` negative exclusion, degraded retrieval `0`, duplicate-work top5 hits `0`.
+  - Ranking metrics: recall@5 `1.0000`, MRR@5 `0.9347`, nDCG@5 `0.9511`.
+  - Key-content warning rate: `0`; external key-content calls: `0`.
+  - Topic activation assertions: `16` active scopes, one injected noise literature remained `needs_review`, retrieval/fulltext/backfill all excluded that noise item.
+- Cleanup changes verified:
+  - Centralized retrieval and automatic-processing eligibility in `LiteratureEvidenceActivationService`.
+  - Removed duplicated processable predicates from backfill and fulltext acquisition.
+  - Paper-literature sync now resolves active topic evidence via the activation service, keeping `scope_status` as membership only.
+  - Removed disposable `.ai/.tmp/backend-test-evidence-activation*.log` files.
+- Deterministic verification after cleanup:
+  - `pnpm --filter @paper-engineering-assistant/shared typecheck`: PASS.
+  - `pnpm --filter @paper-engineering-assistant/backend typecheck`: PASS.
+  - Targeted evidence activation/backfill/retrieval/literature-service/research-lifecycle route tests: PASS, `65/65`.
+  - `pnpm --filter @paper-engineering-assistant/backend test`: PASS, `299/300` with `1` intentional skipped Prisma E2E smoke.
+  - `git diff --check`: PASS.
+  - Stale semantic scan for old pending plan text, `in_scope` retrieval consumption, and removed processable helpers: PASS; remaining matches are documentation notes about the intended membership-only rule.
+  - Disposable temp-artifact scan under `.ai/.tmp`: PASS.
+  - Secret scan: PASS; only fake `sk-test*` route/unit-test keys remain.

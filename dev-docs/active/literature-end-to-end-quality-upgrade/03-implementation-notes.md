@@ -201,3 +201,19 @@
   - Refactored `AutoPullService` dependency wiring to a named dependency object and passed the literature repository as the shared source-runtime store from `buildApp`.
   - Auto-pull source fetches now use shared source runtime state and acquisition throttles for Crossref, arXiv, and Zotero. Request/success/failure state is written before candidate ranking/import so source health reflects fetch behavior rather than downstream filters.
   - Invalid Zotero/source config remains a non-retryable client-side failure and no longer sets a cooldown; retryable source rate-limit/unreachable failures still enter cooldown.
+- 2026-05-14: Evidence Activation / Noise Control backend pass:
+  - Added `LiteratureQualityAssessment` as the global per-literature quality layer and extended `TopicLiteratureScope` with topic-level evidence activation fields.
+  - Introduced explicit quality and activation enums in shared contracts, overview DTOs, topic-scope DTOs, and OpenAPI/API index.
+  - Auto-pull now uses the locked dual thresholds: `<55` is rejected before import, `55-74` imports as `needs_review`, and `>=75` imports as `eligible`.
+  - Retrieval now consumes evidence-only records: global readiness requires high-confidence quality, key-content readiness, and a fresh active embedding version; topic retrieval additionally requires topic activation `active`.
+  - Backfill and fulltext acquisition topic worksets now default to `eligible | active` instead of `scope_status = in_scope`; `candidate`, `needs_review`, `blocked`, and `excluded` stay out of automatic expensive processing.
+  - Content-processing `INDEXED` activation refreshes topic scopes from `eligible` to `active` only after quality, key content, and active index checks pass.
+  - Added `PATCH /topics/:topicId/literature-activation` for later review-queue/UI consumption; setting `active` also records a manual-review high-confidence quality assessment, then still passes through evidence-readiness checks.
+  - Added `.ai/scripts/literature-evidence-activation-bootstrap.mjs` for idempotent historical dry-run/apply backfill of activation and missing quality assessments.
+- 2026-05-14: Evidence Activation semantic cleanup:
+  - Centralized retrieval and automatic-processing eligibility helpers in `LiteratureEvidenceActivationService` so consumer services do not each maintain their own activation predicates.
+  - Retrieval topic scope now resolves active literature through the activation service; paper retrieval resolves topic-scoped links through active topic activation and still applies global evidence readiness before returning versions.
+  - Backfill and fulltext acquisition now reuse the same service helpers for `eligible | active` automatic worksets and high-confidence global worksets.
+  - Paper-literature sync from a topic now uses the activation service's topic-active resolver instead of directly checking `activationStatus === "active"`.
+  - Removed the local `isProcessableActivationStatus` and paper/global processable resolver copies from backfill and fulltext acquisition services.
+  - Updated the task plan to remove stale "pending" status text for E2E, evaluator, source pacing, parser quality, and cutover evidence.

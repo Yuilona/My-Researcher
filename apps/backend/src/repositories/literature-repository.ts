@@ -12,6 +12,8 @@ import type {
   LiteratureFulltextAcquisitionItemStatus as SharedLiteratureFulltextAcquisitionItemStatus,
   LiteratureFulltextAcquisitionJobStatus as SharedLiteratureFulltextAcquisitionJobStatus,
   LiteratureFulltextAcquisitionSourceKind,
+  LiteratureEvidenceActivationStatus,
+  LiteratureQualityStatus,
   PaperCitationStatus,
   RightsClass,
   TopicScopeStatus,
@@ -297,6 +299,19 @@ export type LiteratureSourceRuntimeStateRecord = {
   updatedAt: string;
 };
 
+export type LiteratureQualityAssessmentRecord = {
+  id: string;
+  literatureId: string;
+  qualityStatus: LiteratureQualityStatus;
+  qualityScore: number | null;
+  qualityComponents: Record<string, unknown>;
+  blockerCodes: string[];
+  source: string;
+  assessedAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type LiteratureSourceRecord = {
   id: string;
   literatureId: string;
@@ -488,6 +503,10 @@ export type TopicLiteratureScopeRecord = {
   literatureId: string;
   scopeStatus: TopicScopeStatus;
   reason: string | null;
+  activationStatus: LiteratureEvidenceActivationStatus;
+  activationReason: string | null;
+  activationScore: number | null;
+  activatedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -522,6 +541,12 @@ export interface LiteratureRepository {
     record: LiteratureSourceRecord,
   ): Promise<{ record: LiteratureSourceRecord; created: boolean }>;
   listSourcesByLiteratureId(literatureId: string): Promise<LiteratureSourceRecord[]>;
+
+  upsertQualityAssessment(
+    record: LiteratureQualityAssessmentRecord,
+  ): Promise<{ record: LiteratureQualityAssessmentRecord; created: boolean }>;
+  findQualityAssessmentByLiteratureId(literatureId: string): Promise<LiteratureQualityAssessmentRecord | null>;
+  listQualityAssessmentsByLiteratureIds(literatureIds: string[]): Promise<LiteratureQualityAssessmentRecord[]>;
 
   upsertCitationProfile(
     record: LiteratureCitationProfileRecord,
@@ -568,6 +593,18 @@ export interface LiteratureRepository {
     record: TopicLiteratureScopeRecord,
   ): Promise<{ record: TopicLiteratureScopeRecord; created: boolean }>;
   listTopicScopesByTopicId(topicId: string): Promise<TopicLiteratureScopeRecord[]>;
+  listTopicScopesByLiteratureId(literatureId: string): Promise<TopicLiteratureScopeRecord[]>;
+  updateTopicScopeActivation(
+    topicId: string,
+    literatureId: string,
+    patch: {
+      activationStatus: LiteratureEvidenceActivationStatus;
+      activationReason?: string | null;
+      activationScore?: number | null;
+      activatedAt?: string | null;
+      updatedAt: string;
+    },
+  ): Promise<TopicLiteratureScopeRecord>;
 
   upsertPaperLiteratureLink(
     record: PaperLiteratureLinkRecord,

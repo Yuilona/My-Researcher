@@ -29,6 +29,7 @@ import type {
   LiteratureRecord,
   LiteratureRepository,
 } from '../repositories/literature-repository.js';
+import { LiteratureEvidenceActivationService } from './literature-evidence-activation-service.js';
 import { LiteratureFlowService } from './literature-flow-service.js';
 
 const STAGE_ORDER: LiteratureContentProcessingStageCode[] = [
@@ -86,6 +87,7 @@ export class LiteratureBackfillService {
       contentRunTimeoutMs?: number;
       resolvePreferredKeyContentMethod?: () => Promise<LiteratureKeyContentReadyMethod>;
     } = {},
+    private readonly evidenceActivationService = new LiteratureEvidenceActivationService(repository),
   ) {}
 
   async resumeRunnableJobs(): Promise<void> {
@@ -487,26 +489,20 @@ export class LiteratureBackfillService {
     allLiteratures: LiteratureRecord[],
     workset: LiteratureContentProcessingBackfillWorkset,
   ): Promise<LiteratureRecord[]> {
+    const hasExplicitLiteratureIds = Boolean(workset.literature_ids?.length);
     let selectedIds: Set<string> | null = workset.literature_ids?.length
       ? new Set(workset.literature_ids)
       : null;
 
     if (workset.topic_id) {
-      const topicIds = new Set(
-        (await this.repository.listTopicScopesByTopicId(workset.topic_id))
-          .filter((scope) => scope.scopeStatus === 'in_scope')
-          .map((scope) => scope.literatureId),
-      );
+      const topicIds = await this.evidenceActivationService.resolveTopicAutomaticProcessingLiteratureIds(workset.topic_id);
       selectedIds = selectedIds
         ? new Set([...selectedIds].filter((id) => topicIds.has(id)))
         : topicIds;
     }
 
     if (workset.paper_id) {
-      const paperIds = new Set(
-        (await this.repository.listPaperLiteratureLinksByPaperId(workset.paper_id))
-          .map((link) => link.literatureId),
-      );
+      const paperIds = await this.evidenceActivationService.resolvePaperAutomaticProcessingLiteratureIds(workset.paper_id);
       selectedIds = selectedIds
         ? new Set([...selectedIds].filter((id) => paperIds.has(id)))
         : paperIds;
@@ -519,14 +515,20 @@ export class LiteratureBackfillService {
       throw new AppError(400, 'INVALID_PAYLOAD', 'updated_at_from must be earlier than or equal to updated_at_to.');
     }
 
-    return allLiteratures
+    let filteredLiteratures = allLiteratures
       .filter((literature) => !selectedIds || selectedIds.has(literature.id))
       .filter((literature) => !rightsFilter || rightsFilter.has(literature.rightsClass))
       .filter((literature) => {
         const updatedMs = Date.parse(literature.updatedAt);
         return updatedMs >= fromMs && updatedMs <= toMs;
-      })
-      .sort((left, right) => left.id.localeCompare(right.id));
+      });
+    if (!hasExplicitLiteratureIds && !workset.topic_id && !workset.paper_id) {
+      const processableIds = await this.evidenceActivationService.filterGlobalAutomaticProcessingLiteratureIds(
+        filteredLiteratures.map((literature) => literature.id),
+      );
+      filteredLiteratures = filteredLiteratures.filter((literature) => processableIds.has(literature.id));
+    }
+    return filteredLiteratures.sort((left, right) => left.id.localeCompare(right.id));
   }
 
   private planLiteratureItem(

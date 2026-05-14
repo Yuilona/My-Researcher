@@ -26,6 +26,7 @@ import type {
   LiteraturePipelineRunStepRecord,
   LiteraturePipelineStageStateRecord,
   LiteraturePipelineStateRecord,
+  LiteratureQualityAssessmentRecord,
   LiteratureRecord,
   LiteratureSourceRuntimeStateRecord,
   LiteratureSourceRecord,
@@ -44,6 +45,7 @@ export class InMemoryLiteratureRepository implements LiteratureRepository {
   private readonly literatureSources = new Map<string, LiteratureSourceRecord>();
   private readonly sourceByProviderItem = new Map<string, string>();
   private readonly sourceIdsByLiterature = new Map<string, string[]>();
+  private readonly qualityAssessmentsByLiterature = new Map<string, LiteratureQualityAssessmentRecord>();
   private readonly citationProfilesByLiterature = new Map<string, LiteratureCitationProfileRecord>();
   private readonly abstractProfilesByLiterature = new Map<string, LiteratureAbstractProfileRecord>();
   private readonly contentAssets = new Map<string, LiteratureContentAssetRecord>();
@@ -194,6 +196,30 @@ export class InMemoryLiteratureRepository implements LiteratureRepository {
       .map((id) => this.literatureSources.get(id))
       .filter((row): row is LiteratureSourceRecord => row !== undefined)
       .sort((a, b) => a.fetchedAt.localeCompare(b.fetchedAt));
+  }
+
+  async upsertQualityAssessment(
+    record: LiteratureQualityAssessmentRecord,
+  ): Promise<{ record: LiteratureQualityAssessmentRecord; created: boolean }> {
+    const existing = this.qualityAssessmentsByLiterature.get(record.literatureId);
+    const next = existing
+      ? {
+          ...record,
+          id: existing.id,
+          createdAt: existing.createdAt,
+        }
+      : record;
+    this.qualityAssessmentsByLiterature.set(record.literatureId, next);
+    return { record: next, created: !existing };
+  }
+
+  async findQualityAssessmentByLiteratureId(literatureId: string): Promise<LiteratureQualityAssessmentRecord | null> {
+    return this.qualityAssessmentsByLiterature.get(literatureId) ?? null;
+  }
+
+  async listQualityAssessmentsByLiteratureIds(literatureIds: string[]): Promise<LiteratureQualityAssessmentRecord[]> {
+    const ids = new Set(literatureIds);
+    return [...this.qualityAssessmentsByLiterature.values()].filter((record) => ids.has(record.literatureId));
   }
 
   async upsertCitationProfile(
@@ -504,6 +530,10 @@ export class InMemoryLiteratureRepository implements LiteratureRepository {
         ...existing,
         scopeStatus: record.scopeStatus,
         reason: record.reason,
+        activationStatus: record.activationStatus,
+        activationReason: record.activationReason,
+        activationScore: record.activationScore,
+        activatedAt: record.activatedAt,
         updatedAt: record.updatedAt,
       };
       this.topicScopes.set(key, next);
@@ -522,6 +552,40 @@ export class InMemoryLiteratureRepository implements LiteratureRepository {
       .map((key) => this.topicScopes.get(key))
       .filter((row): row is TopicLiteratureScopeRecord => row !== undefined)
       .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+  }
+
+  async listTopicScopesByLiteratureId(literatureId: string): Promise<TopicLiteratureScopeRecord[]> {
+    return [...this.topicScopes.values()]
+      .filter((row) => row.literatureId === literatureId)
+      .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+  }
+
+  async updateTopicScopeActivation(
+    topicId: string,
+    literatureId: string,
+    patch: {
+      activationStatus: TopicLiteratureScopeRecord['activationStatus'];
+      activationReason?: string | null;
+      activationScore?: number | null;
+      activatedAt?: string | null;
+      updatedAt: string;
+    },
+  ): Promise<TopicLiteratureScopeRecord> {
+    const key = this.topicScopeKey(topicId, literatureId);
+    const existing = this.topicScopes.get(key);
+    if (!existing) {
+      throw new Error(`Topic scope ${topicId}/${literatureId} not found.`);
+    }
+    const next: TopicLiteratureScopeRecord = {
+      ...existing,
+      activationStatus: patch.activationStatus,
+      activationReason: patch.activationReason !== undefined ? patch.activationReason : existing.activationReason,
+      activationScore: patch.activationScore !== undefined ? patch.activationScore : existing.activationScore,
+      activatedAt: patch.activatedAt !== undefined ? patch.activatedAt : existing.activatedAt,
+      updatedAt: patch.updatedAt,
+    };
+    this.topicScopes.set(key, next);
+    return next;
   }
 
   async upsertPaperLiteratureLink(

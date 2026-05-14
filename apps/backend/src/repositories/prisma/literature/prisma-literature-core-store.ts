@@ -1,12 +1,14 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type {
   LiteratureRecord,
+  LiteratureQualityAssessmentRecord,
   LiteratureSourceRecord,
   PaperLiteratureLinkRecord,
   TopicLiteratureScopeRecord,
 } from '../../literature-repository.js';
 import {
   toLiteratureRecord,
+  toQualityAssessmentRecord,
   toPaperLinkRecord,
   toSourceRecord,
   toTopicScopeRecord,
@@ -167,6 +169,62 @@ export class PrismaLiteratureCoreStore {
     return rows.map((row) => toSourceRecord(row));
   }
 
+  async upsertQualityAssessment(
+    record: LiteratureQualityAssessmentRecord,
+  ): Promise<{ record: LiteratureQualityAssessmentRecord; created: boolean }> {
+    const existing = await this.prisma.literatureQualityAssessment.findUnique({
+      where: { literatureId: record.literatureId },
+    });
+    if (existing) {
+      const updated = await this.prisma.literatureQualityAssessment.update({
+        where: { id: existing.id },
+        data: {
+          qualityStatus: record.qualityStatus,
+          qualityScore: record.qualityScore,
+          qualityComponents: record.qualityComponents as Prisma.InputJsonValue,
+          blockerCodes: record.blockerCodes,
+          source: record.source,
+          assessedAt: new Date(record.assessedAt),
+          updatedAt: new Date(record.updatedAt),
+        },
+      });
+      return { record: toQualityAssessmentRecord(updated), created: false };
+    }
+
+    const created = await this.prisma.literatureQualityAssessment.create({
+      data: {
+        id: record.id,
+        literatureId: record.literatureId,
+        qualityStatus: record.qualityStatus,
+        qualityScore: record.qualityScore,
+        qualityComponents: record.qualityComponents as Prisma.InputJsonValue,
+        blockerCodes: record.blockerCodes,
+        source: record.source,
+        assessedAt: new Date(record.assessedAt),
+        createdAt: new Date(record.createdAt),
+        updatedAt: new Date(record.updatedAt),
+      },
+    });
+    return { record: toQualityAssessmentRecord(created), created: true };
+  }
+
+  async findQualityAssessmentByLiteratureId(literatureId: string): Promise<LiteratureQualityAssessmentRecord | null> {
+    const row = await this.prisma.literatureQualityAssessment.findUnique({
+      where: { literatureId },
+    });
+    return row ? toQualityAssessmentRecord(row) : null;
+  }
+
+  async listQualityAssessmentsByLiteratureIds(literatureIds: string[]): Promise<LiteratureQualityAssessmentRecord[]> {
+    if (literatureIds.length === 0) {
+      return [];
+    }
+    const rows = await this.prisma.literatureQualityAssessment.findMany({
+      where: { literatureId: { in: literatureIds } },
+    });
+    return rows.map((row) => toQualityAssessmentRecord(row));
+  }
+
   async upsertTopicScope(
     record: TopicLiteratureScopeRecord,
   ): Promise<{ record: TopicLiteratureScopeRecord; created: boolean }> {
@@ -185,6 +243,10 @@ export class PrismaLiteratureCoreStore {
         data: {
           scopeStatus: record.scopeStatus,
           reason: record.reason,
+          activationStatus: record.activationStatus,
+          activationReason: record.activationReason,
+          activationScore: record.activationScore,
+          activatedAt: record.activatedAt ? new Date(record.activatedAt) : null,
           updatedAt: new Date(record.updatedAt),
         },
       });
@@ -198,6 +260,10 @@ export class PrismaLiteratureCoreStore {
         literatureId: record.literatureId,
         scopeStatus: record.scopeStatus,
         reason: record.reason,
+        activationStatus: record.activationStatus,
+        activationReason: record.activationReason,
+        activationScore: record.activationScore,
+        activatedAt: record.activatedAt ? new Date(record.activatedAt) : null,
         createdAt: new Date(record.createdAt),
         updatedAt: new Date(record.updatedAt),
       },
@@ -211,6 +277,49 @@ export class PrismaLiteratureCoreStore {
       orderBy: { updatedAt: 'asc' },
     });
     return rows.map((row) => toTopicScopeRecord(row));
+  }
+
+  async listTopicScopesByLiteratureId(literatureId: string): Promise<TopicLiteratureScopeRecord[]> {
+    const rows = await this.prisma.topicLiteratureScope.findMany({
+      where: { literatureId },
+      orderBy: { updatedAt: 'asc' },
+    });
+    return rows.map((row) => toTopicScopeRecord(row));
+  }
+
+  async updateTopicScopeActivation(
+    topicId: string,
+    literatureId: string,
+    patch: {
+      activationStatus: TopicLiteratureScopeRecord['activationStatus'];
+      activationReason?: string | null;
+      activationScore?: number | null;
+      activatedAt?: string | null;
+      updatedAt: string;
+    },
+  ): Promise<TopicLiteratureScopeRecord> {
+    const existing = await this.prisma.topicLiteratureScope.findUnique({
+      where: {
+        topicId_literatureId: {
+          topicId,
+          literatureId,
+        },
+      },
+    });
+    if (!existing) {
+      throw new Error(`Topic scope ${topicId}/${literatureId} not found.`);
+    }
+    const updated = await this.prisma.topicLiteratureScope.update({
+      where: { id: existing.id },
+      data: {
+        activationStatus: patch.activationStatus,
+        ...(patch.activationReason !== undefined ? { activationReason: patch.activationReason } : {}),
+        ...(patch.activationScore !== undefined ? { activationScore: patch.activationScore } : {}),
+        ...(patch.activatedAt !== undefined ? { activatedAt: patch.activatedAt ? new Date(patch.activatedAt) : null } : {}),
+        updatedAt: new Date(patch.updatedAt),
+      },
+    });
+    return toTopicScopeRecord(updated);
   }
 
   async upsertPaperLiteratureLink(

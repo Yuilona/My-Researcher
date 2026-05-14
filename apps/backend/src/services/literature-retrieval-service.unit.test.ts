@@ -83,6 +83,29 @@ async function seedLocalLiterature(
       updatedAt: now,
     },
   ]);
+
+  await repository.upsertPipelineState({
+    id: `${input.literatureId}-pipeline-state`,
+    literatureId: input.literatureId,
+    citationComplete: true,
+    abstractReady: true,
+    keyContentReady: true,
+    dedupStatus: 'unique',
+    updatedAt: now,
+  });
+
+  await repository.upsertQualityAssessment({
+    id: `${input.literatureId}-quality`,
+    literatureId: input.literatureId,
+    qualityStatus: 'high_confidence',
+    qualityScore: 100,
+    qualityComponents: { test_fixture: true },
+    blockerCodes: [],
+    source: 'test_fixture',
+    assessedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 test('retrieve ranks literature by hybrid score and returns chunk evidence', async () => {
@@ -119,6 +142,59 @@ test('retrieve ranks literature by hybrid score and returns chunk evidence', asy
   assert.equal(response.meta.profiles_used.length, 0);
   assert.equal(response.meta.skipped_profiles.length, 1);
   assert.equal(response.meta.query_embedding_telemetry, null);
+});
+
+test('retrieve only consumes active topic evidence activation', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const service = new LiteratureRetrievalService(repository);
+  const now = new Date().toISOString();
+
+  await seedLocalLiterature(repository, {
+    literatureId: 'LIT-RET-ACTIVE',
+    title: 'Active Evidence Work',
+    versionId: 'EV-RET-ACTIVE',
+    chunkText: 'topic gated evidence that should be retrieved',
+  });
+  await seedLocalLiterature(repository, {
+    literatureId: 'LIT-RET-CANDIDATE',
+    title: 'Candidate Evidence Work',
+    versionId: 'EV-RET-CANDIDATE',
+    chunkText: 'topic gated evidence that should stay hidden',
+  });
+  await repository.upsertTopicScope({
+    id: 'scope-active',
+    topicId: 'topic-evidence',
+    literatureId: 'LIT-RET-ACTIVE',
+    scopeStatus: 'in_scope',
+    reason: 'test',
+    activationStatus: 'active',
+    activationReason: 'EVIDENCE_READY',
+    activationScore: 100,
+    activatedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await repository.upsertTopicScope({
+    id: 'scope-candidate',
+    topicId: 'topic-evidence',
+    literatureId: 'LIT-RET-CANDIDATE',
+    scopeStatus: 'in_scope',
+    reason: 'test',
+    activationStatus: 'candidate',
+    activationReason: 'TEST_NOT_REVIEWED',
+    activationScore: null,
+    activatedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const response = await service.retrieve({
+    query: 'topic gated evidence',
+    topic_id: 'topic-evidence',
+    top_k: 10,
+  });
+
+  assert.deepEqual(response.items.map((item) => item.literature_id), ['LIT-RET-ACTIVE']);
 });
 
 test('retrieve boosts exact phrase lexical matches and explains matched tokens', async () => {
@@ -451,6 +527,28 @@ test('retrieve skips OpenAI profile when API key is not configured', async () =>
       updatedAt: now,
     },
   ]);
+
+  await repository.upsertPipelineState({
+    id: 'LIT-RET-OPENAI-pipeline-state',
+    literatureId: 'LIT-RET-OPENAI',
+    citationComplete: true,
+    abstractReady: true,
+    keyContentReady: true,
+    dedupStatus: 'unique',
+    updatedAt: now,
+  });
+  await repository.upsertQualityAssessment({
+    id: 'LIT-RET-OPENAI-quality',
+    literatureId: 'LIT-RET-OPENAI',
+    qualityStatus: 'high_confidence',
+    qualityScore: 100,
+    qualityComponents: { test_fixture: true },
+    blockerCodes: [],
+    source: 'test_fixture',
+    assessedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
 
   const response = await service.retrieve({
     query: 'openai embedding',

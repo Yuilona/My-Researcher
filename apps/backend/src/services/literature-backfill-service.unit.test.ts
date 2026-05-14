@@ -75,7 +75,9 @@ test('backfill dry-run scales to 10000 literature records without triggering pro
   const service = new LiteratureBackfillService(repository, fakeFlow as unknown as LiteratureFlowService);
 
   for (let index = 0; index < 10000; index += 1) {
-    await seedLiterature(repository, `LIT-BACKFILL-${String(index).padStart(5, '0')}`);
+    const literatureId = `LIT-BACKFILL-${String(index).padStart(5, '0')}`;
+    await seedLiterature(repository, literatureId);
+    await seedQualityAssessment(repository, literatureId, 'high_confidence');
   }
 
   const response = await service.dryRun({
@@ -94,6 +96,82 @@ test('backfill dry-run scales to 10000 literature records without triggering pro
   assert.equal(response.estimate.stage_counts.CITATION_NORMALIZED, 10000);
   assert.equal(response.estimate.stage_counts.ABSTRACT_READY, 10000);
   assert.equal(fakeFlow.calls.length, 0);
+});
+
+test('backfill global worksets exclude medium-confidence auto-pull candidates by default', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const fakeFlow = new FakeFlowRunner();
+  const service = new LiteratureBackfillService(repository, fakeFlow as unknown as LiteratureFlowService);
+
+  await seedLiterature(repository, 'LIT-BACKFILL-HIGH');
+  await seedQualityAssessment(repository, 'LIT-BACKFILL-HIGH', 'high_confidence');
+  await seedLiterature(repository, 'LIT-BACKFILL-MEDIUM');
+  await seedQualityAssessment(repository, 'LIT-BACKFILL-MEDIUM', 'medium_confidence');
+
+  const response = await service.dryRun({
+    target_stage: 'ABSTRACT_READY',
+    workset: {
+      stage_filters: {
+        missing: true,
+        stale: true,
+        failed: true,
+      },
+    },
+  });
+
+  assert.deepEqual(
+    response.estimate.plan_items.map((item) => item.literature_id),
+    ['LIT-BACKFILL-HIGH'],
+  );
+});
+
+test('backfill topic worksets only consume eligible or active evidence activation', async () => {
+  const repository = new InMemoryLiteratureRepository();
+  const fakeFlow = new FakeFlowRunner();
+  const service = new LiteratureBackfillService(repository, fakeFlow as unknown as LiteratureFlowService);
+  const now = new Date().toISOString();
+
+  await seedLiterature(repository, 'LIT-BACKFILL-ELIGIBLE');
+  await seedLiterature(repository, 'LIT-BACKFILL-CANDIDATE');
+  await seedLiterature(repository, 'LIT-BACKFILL-REVIEW');
+  for (const [literatureId, activationStatus] of [
+    ['LIT-BACKFILL-ELIGIBLE', 'eligible'],
+    ['LIT-BACKFILL-CANDIDATE', 'candidate'],
+    ['LIT-BACKFILL-REVIEW', 'needs_review'],
+  ] as const) {
+    await repository.upsertTopicScope({
+      id: `scope-${literatureId}`,
+      topicId: 'topic-backfill-gate',
+      literatureId,
+      scopeStatus: 'in_scope',
+      reason: 'test',
+      activationStatus,
+      activationReason: 'TEST',
+      activationScore: null,
+      activatedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  const response = await service.dryRun({
+    target_stage: 'ABSTRACT_READY',
+    workset: {
+      topic_id: 'topic-backfill-gate',
+      stage_filters: {
+        missing: true,
+        stale: true,
+        failed: true,
+      },
+    },
+  });
+
+  assert.equal(response.estimate.total_literatures, 3);
+  assert.equal(response.estimate.selected_count, 1);
+  assert.deepEqual(
+    response.estimate.plan_items.map((item) => item.literature_id),
+    ['LIT-BACKFILL-ELIGIBLE'],
+  );
 });
 
 test('backfill dry-run estimates zero key-content provider calls for curated method', async () => {
@@ -584,6 +662,26 @@ async function seedLiterature(
     rightsClass,
     tags: [],
     activeEmbeddingVersionId: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+async function seedQualityAssessment(
+  repository: InMemoryLiteratureRepository,
+  literatureId: string,
+  qualityStatus: 'high_confidence' | 'medium_confidence',
+): Promise<void> {
+  const now = new Date().toISOString();
+  await repository.upsertQualityAssessment({
+    id: `QA-${literatureId}`,
+    literatureId,
+    qualityStatus,
+    qualityScore: qualityStatus === 'high_confidence' ? 90 : 60,
+    qualityComponents: { test_fixture: true },
+    blockerCodes: [],
+    source: 'test_fixture',
+    assessedAt: now,
     createdAt: now,
     updatedAt: now,
   });

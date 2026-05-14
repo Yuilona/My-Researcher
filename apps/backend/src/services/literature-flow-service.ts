@@ -43,6 +43,7 @@ import type { LiteratureContentProcessingSettingsService } from './literature-co
 import { LiteratureAbstractReadinessService } from './literature-abstract-readiness-service.js';
 import { LiteratureCitationNormalizationService } from './literature-citation-normalization-service.js';
 import type { BackendLlmGateway } from './llm-gateway.js';
+import { LiteratureEvidenceActivationService } from './literature-evidence-activation-service.js';
 import { OverviewStatusResolver, type OverviewStatusResolverInput } from './overview-status-resolver.js';
 import { PipelineOrchestrator, type StageExecutionContext, type StageExecutionResult } from './pipeline-orchestrator.js';
 
@@ -124,6 +125,7 @@ export class LiteratureFlowService {
     private readonly repository: LiteratureRepository,
     private readonly settingsService?: LiteratureContentProcessingSettingsService,
     llmGateway?: BackendLlmGateway,
+    private readonly evidenceActivationService = new LiteratureEvidenceActivationService(repository),
   ) {
     this.citationNormalizationService = new LiteratureCitationNormalizationService(repository);
     this.abstractReadinessService = new LiteratureAbstractReadinessService(repository);
@@ -1310,6 +1312,7 @@ export class LiteratureFlowService {
         embeddedArtifact: embedded,
         indexedArtifact: indexed,
       });
+      await this.evidenceActivationService.refreshAfterIndexed(context.literatureId);
       return {
         status: 'SUCCEEDED',
         detail: {

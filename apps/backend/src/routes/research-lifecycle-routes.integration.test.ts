@@ -1712,39 +1712,6 @@ test('literature workflow routes support import, topic scope, paper link sync an
   assert.equal(scopeBody.items.length, 1);
   assert.equal(scopeBody.items[0]?.scope_status, 'in_scope');
 
-  const syncRes = await app.inject({
-    method: 'POST',
-    url: '/paper-projects/' + paperId + '/literature-links/from-topic',
-    payload: {
-      topic_id: 'TOPIC-INT-LIT-1',
-    },
-  });
-  assert.equal(syncRes.statusCode, 200);
-  const syncBody = syncRes.json();
-  assert.equal(syncBody.linked_count, 1);
-
-  const paperLiteratureRes = await app.inject({
-    method: 'GET',
-    url: '/paper-projects/' + paperId + '/literature',
-  });
-  assert.equal(paperLiteratureRes.statusCode, 200);
-  const paperLiteratureBody = paperLiteratureRes.json();
-  assert.equal(paperLiteratureBody.items.length, 1);
-  const linkId = paperLiteratureBody.items[0]?.link_id;
-
-  const patchRes = await app.inject({
-    method: 'PATCH',
-    url: '/paper-projects/' + paperId + '/literature-links/' + linkId,
-    payload: {
-      citation_status: 'cited',
-      note: 'used in final draft',
-    },
-  });
-  assert.equal(patchRes.statusCode, 200);
-  const patchBody = patchRes.json();
-  assert.equal(patchBody.item.citation_status, 'cited');
-  assert.equal(patchBody.item.note, 'used in final draft');
-
   const scopeQueryRes = await app.inject({
     method: 'GET',
     url: '/topics/TOPIC-INT-LIT-1/literature-scope',
@@ -1752,20 +1719,7 @@ test('literature workflow routes support import, topic scope, paper link sync an
   assert.equal(scopeQueryRes.statusCode, 200);
   const scopeQueryBody = scopeQueryRes.json();
   assert.equal(scopeQueryBody.items.length, 1);
-
-  const overviewRes = await app.inject({
-    method: 'GET',
-    url: '/literature/overview?topic_id=TOPIC-INT-LIT-1&paper_id=' + paperId,
-  });
-  assert.equal(overviewRes.statusCode, 200);
-  const overviewBody = overviewRes.json();
-  assert.equal(overviewBody.summary.total_literatures, 1);
-  assert.equal(overviewBody.summary.cited_count, 1);
-  assert.equal(typeof overviewBody.items[0]?.overview_status, 'string');
-  assert.equal(typeof overviewBody.items[0]?.content_processing_state?.citation_complete, 'boolean');
-  assert.equal(typeof overviewBody.items[0]?.content_processing_state?.fulltext_preprocessed, 'boolean');
-  assert.equal(typeof overviewBody.items[0]?.content_processing_stage_status?.ABSTRACT_READY, 'string');
-  assert.equal(typeof overviewBody.items[0]?.content_processing_actions?.process_content?.enabled, 'boolean');
+  assert.equal(scopeQueryBody.items[0]?.activation_status, 'eligible');
 
   const metadataPatchRes = await app.inject({
     method: 'PATCH',
@@ -1892,6 +1846,61 @@ test('literature workflow routes support import, topic scope, paper link sync an
     url: '/literature/' + literatureId + '/pipeline/runs?limit=5',
   });
   assert.equal(removedPipelineRunsListRes.statusCode, 404);
+
+  const activatedScopeRes = await app.inject({
+    method: 'GET',
+    url: '/topics/TOPIC-INT-LIT-1/literature-scope',
+  });
+  assert.equal(activatedScopeRes.statusCode, 200);
+  assert.equal(activatedScopeRes.json().items[0]?.activation_status, 'active');
+
+  const syncRes = await app.inject({
+    method: 'POST',
+    url: '/paper-projects/' + paperId + '/literature-links/from-topic',
+    payload: {
+      topic_id: 'TOPIC-INT-LIT-1',
+    },
+  });
+  assert.equal(syncRes.statusCode, 200);
+  const syncBody = syncRes.json();
+  assert.equal(syncBody.linked_count, 1);
+
+  const paperLiteratureRes = await app.inject({
+    method: 'GET',
+    url: '/paper-projects/' + paperId + '/literature',
+  });
+  assert.equal(paperLiteratureRes.statusCode, 200);
+  const paperLiteratureBody = paperLiteratureRes.json();
+  assert.equal(paperLiteratureBody.items.length, 1);
+  const linkId = paperLiteratureBody.items[0]?.link_id;
+
+  const patchRes = await app.inject({
+    method: 'PATCH',
+    url: '/paper-projects/' + paperId + '/literature-links/' + linkId,
+    payload: {
+      citation_status: 'cited',
+      note: 'used in final draft',
+    },
+  });
+  assert.equal(patchRes.statusCode, 200);
+  const patchBody = patchRes.json();
+  assert.equal(patchBody.item.citation_status, 'cited');
+  assert.equal(patchBody.item.note, 'used in final draft');
+
+  const overviewRes = await app.inject({
+    method: 'GET',
+    url: '/literature/overview?topic_id=TOPIC-INT-LIT-1&paper_id=' + paperId,
+  });
+  assert.equal(overviewRes.statusCode, 200);
+  const overviewBody = overviewRes.json();
+  assert.equal(overviewBody.summary.total_literatures, 1);
+  assert.equal(overviewBody.summary.cited_count, 1);
+  assert.equal(overviewBody.summary.activation_status_counts[0]?.activation_status, 'active');
+  assert.equal(typeof overviewBody.items[0]?.overview_status, 'string');
+  assert.equal(typeof overviewBody.items[0]?.content_processing_state?.citation_complete, 'boolean');
+  assert.equal(typeof overviewBody.items[0]?.content_processing_state?.fulltext_preprocessed, 'boolean');
+  assert.equal(typeof overviewBody.items[0]?.content_processing_stage_status?.ABSTRACT_READY, 'string');
+  assert.equal(typeof overviewBody.items[0]?.content_processing_actions?.process_content?.enabled, 'boolean');
 
   const retrieveRes = await app.inject({
     method: 'POST',

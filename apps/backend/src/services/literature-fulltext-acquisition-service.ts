@@ -25,6 +25,7 @@ import type {
   LiteratureRepository,
 } from '../repositories/literature-repository.js';
 import { LiteratureAcquisitionSettingsService } from './literature-acquisition-settings-service.js';
+import { LiteratureEvidenceActivationService } from './literature-evidence-activation-service.js';
 import { LiteratureService } from './literature-service.js';
 
 type NormalizedOptions = LiteratureFulltextAcquisitionDryRunEstimateDTO['options'];
@@ -70,6 +71,7 @@ export class LiteratureFulltextAcquisitionService {
     private readonly literatureService: LiteratureService,
     private readonly settingsService: LiteratureAcquisitionSettingsService,
     private readonly options: { pollIntervalMs?: number } = {},
+    private readonly evidenceActivationService = new LiteratureEvidenceActivationService(repository),
   ) {}
 
   async resumeRunnableJobs(): Promise<void> {
@@ -312,19 +314,18 @@ export class LiteratureFulltextAcquisitionService {
   }
 
   private async selectLiteratures(workset: LiteratureFulltextAcquisitionWorkset): Promise<LiteratureRecord[]> {
+    const hasExplicitLiteratureIds = Boolean(workset.literature_ids?.length);
     let literatures = await this.repository.listLiteratures();
     if (workset.literature_ids?.length) {
       const idSet = new Set(workset.literature_ids);
       literatures = literatures.filter((item) => idSet.has(item.id));
     }
     if (workset.topic_id) {
-      const scopes = await this.repository.listTopicScopesByTopicId(workset.topic_id);
-      const scopedIds = new Set(scopes.filter((item) => item.scopeStatus === 'in_scope').map((item) => item.literatureId));
+      const scopedIds = await this.evidenceActivationService.resolveTopicAutomaticProcessingLiteratureIds(workset.topic_id);
       literatures = literatures.filter((item) => scopedIds.has(item.id));
     }
     if (workset.paper_id) {
-      const links = await this.repository.listPaperLiteratureLinksByPaperId(workset.paper_id);
-      const linkedIds = new Set(links.map((item) => item.literatureId));
+      const linkedIds = await this.evidenceActivationService.resolvePaperAutomaticProcessingLiteratureIds(workset.paper_id);
       literatures = literatures.filter((item) => linkedIds.has(item.id));
     }
     if (workset.rights_classes?.length) {
@@ -336,6 +337,12 @@ export class LiteratureFulltextAcquisitionService {
     }
     if (workset.updated_at_to) {
       literatures = literatures.filter((item) => item.updatedAt <= workset.updated_at_to!);
+    }
+    if (!hasExplicitLiteratureIds && !workset.topic_id && !workset.paper_id) {
+      const processableIds = await this.evidenceActivationService.filterGlobalAutomaticProcessingLiteratureIds(
+        literatures.map((literature) => literature.id),
+      );
+      literatures = literatures.filter((literature) => processableIds.has(literature.id));
     }
     return literatures.sort((left, right) => left.title.localeCompare(right.title));
   }

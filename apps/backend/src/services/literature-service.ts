@@ -35,6 +35,7 @@ import type {
   RightsClass,
   SyncPaperLiteratureFromTopicRequest,
   SyncPaperLiteratureFromTopicResponse,
+  UpdateTopicLiteratureEvidenceActivationRequest,
   TopicScopeStatus,
   TopicLiteratureScopeResponse,
   UpdateLiteratureMetadataRequest,
@@ -56,6 +57,8 @@ import type {
 } from '../repositories/literature-repository.js';
 import type { ResearchLifecycleRepository } from '../repositories/research-lifecycle-repository.js';
 import { LiteratureFlowService } from './literature-flow-service.js';
+import { LiteratureEvidenceActivationService } from './literature-evidence-activation-service.js';
+import type { EvidenceActivationClassification } from './literature-evidence-activation-service.js';
 import type { LiteratureAcquisitionSettingsService } from './literature-acquisition-settings-service.js';
 import type { LiteratureContentProcessingSettingsService } from './literature-content-processing-settings-service.js';
 import { LiteratureRetrievalService } from './literature-retrieval-service.js';
@@ -91,6 +94,7 @@ type DownloadFetchResult = {
 type LiteratureServiceDependencies = {
   literatureFlowService?: LiteratureFlowService;
   literatureRetrievalService?: LiteratureRetrievalService;
+  evidenceActivationService?: LiteratureEvidenceActivationService;
   literatureAcquisitionSettingsService?: Pick<LiteratureAcquisitionSettingsService, 'resolveDownloaderOptions'>;
   llmGateway?: BackendLlmGateway;
 };
@@ -106,13 +110,26 @@ export class LiteratureService {
     private readonly contentProcessingSettingsService?: LiteratureContentProcessingSettingsService,
     dependencies: LiteratureServiceDependencies = {},
   ) {
+    this.evidenceActivationService = dependencies.evidenceActivationService
+      ?? new LiteratureEvidenceActivationService(literatureRepository);
     this.literatureFlowService = dependencies.literatureFlowService
-      ?? new LiteratureFlowService(literatureRepository, contentProcessingSettingsService, dependencies.llmGateway);
+      ?? new LiteratureFlowService(
+        literatureRepository,
+        contentProcessingSettingsService,
+        dependencies.llmGateway,
+        this.evidenceActivationService,
+      );
     this.literatureRetrievalService = dependencies.literatureRetrievalService
-      ?? new LiteratureRetrievalService(literatureRepository, contentProcessingSettingsService, dependencies.llmGateway);
+      ?? new LiteratureRetrievalService(
+        literatureRepository,
+        contentProcessingSettingsService,
+        dependencies.llmGateway,
+        this.evidenceActivationService,
+      );
     this.literatureAcquisitionSettingsService = dependencies.literatureAcquisitionSettingsService;
   }
 
+  private readonly evidenceActivationService: LiteratureEvidenceActivationService;
   private readonly literatureFlowService: LiteratureFlowService;
   private readonly literatureRetrievalService: LiteratureRetrievalService;
   private readonly literatureAcquisitionSettingsService?: Pick<LiteratureAcquisitionSettingsService, 'resolveDownloaderOptions'>;
@@ -241,6 +258,20 @@ export class LiteratureService {
     return this.collectionImport(request);
   }
 
+  classifyAutoPullScore(score: number): EvidenceActivationClassification {
+    return this.evidenceActivationService.classifyAutoPullScore(score);
+  }
+
+  async recordAutoPullQualityAssessment(input: {
+    literatureId: string;
+    score: number;
+    rankingScore: number;
+    rankingMode: string;
+    source: string;
+  }): Promise<void> {
+    await this.evidenceActivationService.upsertAutoPullAssessment(input);
+  }
+
   async findCollectionDedupMatch(item: LiteratureCollectionImportItem): Promise<DedupMatchType> {
     const normalized = this.normalizeImportItem(item);
     const dedup = await this.findExisting(normalized);
@@ -364,6 +395,8 @@ export class LiteratureService {
     const literatureMap = new Map(literatures.map((row) => [row.id, row]));
     const pipelineStateMap = await this.literatureFlowService.refreshPipelineStatesByLiteratureIds(literatureIds);
     const pipelineStageStates = await this.literatureRepository.listPipelineStageStatesByLiteratureIds(literatureIds);
+    const qualityAssessments = await this.literatureRepository.listQualityAssessmentsByLiteratureIds(literatureIds);
+    const qualityByLiterature = new Map(qualityAssessments.map((record) => [record.literatureId, record]));
     const pipelineStageStatesByLiterature = new Map<string, LiteraturePipelineStageStateRecord[]>();
     for (const stageState of pipelineStageStates) {
       const rows = pipelineStageStatesByLiterature.get(stageState.literatureId) ?? [];
@@ -372,8 +405,10 @@ export class LiteratureService {
     }
 
     const scopeStatusByLiterature = new Map<string, TopicScopeStatus>();
+    const activationByLiterature = new Map<string, Awaited<ReturnType<LiteratureRepository['listTopicScopesByTopicId']>>[number]>();
     for (const scope of topicScopes) {
       scopeStatusByLiterature.set(scope.literatureId, scope.scopeStatus);
+      activationByLiterature.set(scope.literatureId, scope);
     }
 
     const citationStatusByLiterature = new Map<string, PaperCitationStatus>();
@@ -383,6 +418,8 @@ export class LiteratureService {
 
     const providerCounts = new Map<LiteratureProvider, number>();
     const rightsCounts = new Map<RightsClass, number>();
+    const activationStatusCounts = new Map<string, number>();
+    const qualityStatusCounts = new Map<string, number>();
     const tagCounts = new Map<string, number>();
     const items: LiteratureOverviewResponse['items'] = [];
 
@@ -425,6 +462,20 @@ export class LiteratureService {
         pipelineState: normalizedPipelineState,
         stageStatusMap,
       });
+      const activation = activationByLiterature.get(literature.id);
+      const qualityAssessment = qualityByLiterature.get(literature.id);
+      if (activation) {
+        activationStatusCounts.set(
+          activation.activationStatus,
+          (activationStatusCounts.get(activation.activationStatus) ?? 0) + 1,
+        );
+      }
+      if (qualityAssessment) {
+        qualityStatusCounts.set(
+          qualityAssessment.qualityStatus,
+          (qualityStatusCounts.get(qualityAssessment.qualityStatus) ?? 0) + 1,
+        );
+      }
 
       items.push({
         literature_id: literature.id,
@@ -440,6 +491,13 @@ export class LiteratureService {
         source_url: latestSource?.sourceUrl ?? null,
         source_updated_at: latestSource?.fetchedAt ?? null,
         topic_scope_status: scopeStatusByLiterature.get(literature.id),
+        evidence_activation_status: activation?.activationStatus,
+        evidence_activation_reason: activation?.activationReason ?? null,
+        evidence_activation_score: activation?.activationScore ?? null,
+        evidence_activated_at: activation?.activatedAt ?? null,
+        quality_assessment: qualityAssessment
+          ? this.evidenceActivationService.toQualityAssessmentDTO(qualityAssessment)
+          : null,
         citation_status: citationStatusByLiterature.get(literature.id),
         overview_status: this.literatureFlowService.resolveOverviewStatus({
           topicScopeStatus: scopeStatusByLiterature.get(literature.id) ?? null,
@@ -487,6 +545,18 @@ export class LiteratureService {
         rights_class_counts: [...rightsCounts.entries()]
           .map(([rightsClass, count]) => ({ rights_class: rightsClass, count }))
           .sort((left, right) => right.count - left.count),
+        activation_status_counts: [...activationStatusCounts.entries()]
+          .map(([activationStatus, count]) => ({
+            activation_status: activationStatus as LiteratureOverviewResponse['summary']['activation_status_counts'][number]['activation_status'],
+            count,
+          }))
+          .sort((left, right) => right.count - left.count),
+        quality_status_counts: [...qualityStatusCounts.entries()]
+          .map(([qualityStatus, count]) => ({
+            quality_status: qualityStatus as LiteratureOverviewResponse['summary']['quality_status_counts'][number]['quality_status'],
+            count,
+          }))
+          .sort((left, right) => right.count - left.count),
         top_tags: [...tagCounts.entries()]
           .map(([tag, count]) => ({ tag, count }))
           .sort((left, right) => right.count - left.count)
@@ -502,6 +572,10 @@ export class LiteratureService {
       scopes.map((scope) => scope.literatureId),
     );
     const literatureMap = new Map(literatures.map((row) => [row.id, row]));
+    const qualityAssessments = await this.literatureRepository.listQualityAssessmentsByLiteratureIds(
+      scopes.map((scope) => scope.literatureId),
+    );
+    const qualityByLiterature = new Map(qualityAssessments.map((record) => [record.literatureId, record]));
 
     return {
       topic_id: topicId,
@@ -518,12 +592,19 @@ export class LiteratureService {
             literature_id: scope.literatureId,
             scope_status: scope.scopeStatus,
             reason: scope.reason ?? undefined,
+            activation_status: scope.activationStatus,
+            activation_reason: scope.activationReason,
+            activation_score: scope.activationScore,
+            activated_at: scope.activatedAt,
             updated_at: scope.updatedAt,
             title: literature.title,
             authors: literature.authors,
             year: literature.year,
             doi: literature.doiNormalized,
             arxiv_id: literature.arxivId,
+            quality_assessment: qualityByLiterature.get(scope.literatureId)
+              ? this.evidenceActivationService.toQualityAssessmentDTO(qualityByLiterature.get(scope.literatureId)!)
+              : null,
           };
         })
         .filter((item) => item !== null),
@@ -535,6 +616,10 @@ export class LiteratureService {
     request: UpsertTopicLiteratureScopeRequest,
   ): Promise<TopicLiteratureScopeResponse> {
     const now = new Date().toISOString();
+    const existingScopes = new Map(
+      (await this.literatureRepository.listTopicScopesByTopicId(topicId))
+        .map((scope) => [scope.literatureId, scope]),
+    );
 
     for (const action of request.actions) {
       const literature = await this.literatureRepository.findLiteratureById(action.literature_id);
@@ -546,17 +631,71 @@ export class LiteratureService {
         );
       }
 
+      const existing = existingScopes.get(action.literature_id);
+      const defaultActivation = this.evidenceActivationService.defaultActivationForScopeStatus(action.scope_status);
+      const activationStatus = action.scope_status === 'excluded'
+        ? 'excluded'
+        : action.activation_status ?? existing?.activationStatus ?? defaultActivation.activationStatus;
       await this.literatureRepository.upsertTopicScope({
         id: await this.nextTopicScopeId(),
         topicId,
         literatureId: action.literature_id,
         scopeStatus: action.scope_status,
         reason: action.reason ?? null,
+        activationStatus,
+        activationReason: action.scope_status === 'excluded'
+          ? defaultActivation.reason
+          : action.activation_reason ?? existing?.activationReason ?? defaultActivation.reason,
+        activationScore: action.scope_status === 'excluded' ? null : action.activation_score ?? existing?.activationScore ?? null,
+        activatedAt: action.scope_status === 'excluded' ? null : existing?.activatedAt ?? null,
         createdAt: now,
         updatedAt: now,
       });
+      const nextScope = (await this.literatureRepository.listTopicScopesByTopicId(topicId))
+        .find((scope) => scope.literatureId === action.literature_id);
+      if (nextScope) {
+        await this.evidenceActivationService.refreshTopicActivation(nextScope);
+      }
     }
 
+    return this.getTopicScope(topicId);
+  }
+
+  async updateTopicEvidenceActivation(
+    topicId: string,
+    request: UpdateTopicLiteratureEvidenceActivationRequest,
+  ): Promise<TopicLiteratureScopeResponse> {
+    const now = new Date().toISOString();
+    const existingScopes = new Map(
+      (await this.literatureRepository.listTopicScopesByTopicId(topicId))
+        .map((scope) => [scope.literatureId, scope]),
+    );
+    for (const action of request.actions) {
+      const scope = existingScopes.get(action.literature_id);
+      if (!scope) {
+        throw new AppError(404, 'NOT_FOUND', `Topic scope ${topicId}/${action.literature_id} not found.`);
+      }
+      const activatedAt = action.activation_status === 'active'
+        ? scope.activatedAt ?? now
+        : null;
+      const activationReason = action.reason ?? `MANUAL_${action.activation_status.toUpperCase()}`;
+      if (action.activation_status === 'active') {
+        await this.evidenceActivationService.upsertManualReviewAssessment({
+          literatureId: action.literature_id,
+          qualityScore: action.activation_score ?? scope.activationScore,
+          reason: activationReason,
+        });
+      }
+      await this.literatureRepository.updateTopicScopeActivation(topicId, action.literature_id, {
+        activationStatus: action.activation_status,
+        activationReason,
+        activationScore: action.activation_score ?? scope.activationScore,
+        activatedAt,
+        updatedAt: now,
+      });
+    }
+    const updatedScopes = await this.literatureRepository.listTopicScopesByTopicId(topicId);
+    await Promise.all(updatedScopes.map((scope) => this.evidenceActivationService.refreshTopicActivation(scope)));
     return this.getTopicScope(topicId);
   }
 
@@ -572,12 +711,13 @@ export class LiteratureService {
     const topicId = request.topic_id.trim();
     const now = new Date().toISOString();
     const scopes = await this.literatureRepository.listTopicScopesByTopicId(topicId);
-    const inScopeRows = scopes.filter((scope) => scope.scopeStatus === 'in_scope');
+    const evidenceActiveIds = await this.evidenceActivationService.resolveTopicEvidenceActiveLiteratureIds(topicId);
+    const evidenceActiveRows = scopes.filter((scope) => evidenceActiveIds.has(scope.literatureId));
 
     let linkedCount = 0;
-    let skippedCount = 0;
+    let skippedCount = scopes.length - evidenceActiveRows.length;
 
-    for (const scope of inScopeRows) {
+    for (const scope of evidenceActiveRows) {
       const upserted = await this.literatureRepository.upsertPaperLiteratureLink({
         id: await this.nextPaperLiteratureLinkId(),
         paperId: paper.id,

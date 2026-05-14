@@ -15,6 +15,7 @@ import type {
   LiteratureRepository,
 } from '../repositories/literature-repository.js';
 import type { ActiveEmbeddingProfileConfig, LiteratureContentProcessingSettingsService } from './literature-content-processing-settings-service.js';
+import { LiteratureEvidenceActivationService } from './literature-evidence-activation-service.js';
 import { BackendLlmGateway } from './llm-gateway.js';
 import type { LlmCallTelemetry } from './llm-gateway.js';
 import {
@@ -151,6 +152,7 @@ export class LiteratureRetrievalService {
     private readonly repository: LiteratureRepository,
     private readonly settingsService?: LiteratureContentProcessingSettingsService,
     private readonly llmGateway: BackendLlmGateway = new BackendLlmGateway({ settingsService }),
+    private readonly evidenceActivationService = new LiteratureEvidenceActivationService(repository),
   ) {}
 
   async retrieve(request: LiteratureRetrieveRequest): Promise<LiteratureRetrieveResponse> {
@@ -319,24 +321,18 @@ export class LiteratureRetrievalService {
     const paperId = request.paper_id?.trim();
 
     if (!topicId && !paperId) {
-      return this.repository.listActiveEmbeddingVersions();
+      const versions = await this.repository.listActiveEmbeddingVersions();
+      return this.filterEvidenceReadyVersions(versions);
     }
 
     let scopedLiteratureIds: Set<string> | null = null;
 
     if (topicId) {
-      const topicScopes = await this.repository.listTopicScopesByTopicId(topicId);
-      const topicScopeIds = new Set(
-        topicScopes
-          .filter((item) => item.scopeStatus === 'in_scope')
-          .map((item) => item.literatureId),
-      );
-      scopedLiteratureIds = topicScopeIds;
+      scopedLiteratureIds = await this.evidenceActivationService.resolveTopicEvidenceActiveLiteratureIds(topicId);
     }
 
     if (paperId) {
-      const links = await this.repository.listPaperLiteratureLinksByPaperId(paperId);
-      const paperIds = new Set(links.map((item) => item.literatureId));
+      const paperIds = await this.evidenceActivationService.resolvePaperEvidenceCandidateLiteratureIds(paperId);
       if (scopedLiteratureIds === null) {
         scopedLiteratureIds = paperIds;
       } else {
@@ -348,7 +344,20 @@ export class LiteratureRetrievalService {
     if (finalIds.length === 0) {
       return [];
     }
-    return this.repository.listActiveEmbeddingVersionsByLiteratureIds(finalIds);
+    return this.filterEvidenceReadyVersions(await this.repository.listActiveEmbeddingVersionsByLiteratureIds(finalIds));
+  }
+
+  private async filterEvidenceReadyVersions(
+    versions: LiteratureEmbeddingVersionRecord[],
+  ): Promise<LiteratureEmbeddingVersionRecord[]> {
+    if (versions.length === 0) {
+      return versions;
+    }
+    const readyIds = await this.evidenceActivationService.filterEvidenceReadyLiteratureIds(
+      [...new Set(versions.map((version) => version.literatureId))],
+    );
+    const readySet = new Set(readyIds);
+    return versions.filter((version) => readySet.has(version.literatureId));
   }
 
   private async resolveFreshnessWarnings(

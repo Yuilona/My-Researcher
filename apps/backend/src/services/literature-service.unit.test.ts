@@ -229,7 +229,8 @@ test('zotero collection import does not enqueue content-processing runs', async 
 
 test('topic scope can sync into paper literature links', async () => {
   const researchRepository = new InMemoryResearchLifecycleRepository();
-  const literatureService = new LiteratureService(new InMemoryLiteratureRepository(), researchRepository);
+  const literatureRepository = new InMemoryLiteratureRepository();
+  const literatureService = new LiteratureService(literatureRepository, researchRepository);
   const lifecycleService = new ResearchLifecycleService(researchRepository);
 
   const paper = await lifecycleService.createPaperProject({
@@ -257,6 +258,7 @@ test('topic scope can sync into paper literature links', async () => {
 
   const literatureId = imported.results[0]?.literature_id;
   assert.ok(literatureId);
+  await markLiteratureEvidenceReady(literatureRepository, literatureId);
 
   const scoped = await literatureService.upsertTopicScope('TOPIC-LIT-UNIT-1', {
     actions: [
@@ -282,7 +284,8 @@ test('topic scope can sync into paper literature links', async () => {
 
 test('paper literature link status can be updated', async () => {
   const researchRepository = new InMemoryResearchLifecycleRepository();
-  const literatureService = new LiteratureService(new InMemoryLiteratureRepository(), researchRepository);
+  const literatureRepository = new InMemoryLiteratureRepository();
+  const literatureService = new LiteratureService(literatureRepository, researchRepository);
   const lifecycleService = new ResearchLifecycleService(researchRepository);
 
   const paper = await lifecycleService.createPaperProject({
@@ -310,6 +313,7 @@ test('paper literature link status can be updated', async () => {
 
   const literatureId = imported.results[0]?.literature_id;
   assert.ok(literatureId);
+  await markLiteratureEvidenceReady(literatureRepository, literatureId);
 
   await literatureService.upsertTopicScope('TOPIC-LIT-UNIT-2', {
     actions: [{ literature_id: literatureId, scope_status: 'in_scope' }],
@@ -333,7 +337,8 @@ test('paper literature link status can be updated', async () => {
 
 test('literature overview includes summary and metadata updates', async () => {
   const researchRepository = new InMemoryResearchLifecycleRepository();
-  const literatureService = new LiteratureService(new InMemoryLiteratureRepository(), researchRepository);
+  const literatureRepository = new InMemoryLiteratureRepository();
+  const literatureService = new LiteratureService(literatureRepository, researchRepository);
   const lifecycleService = new ResearchLifecycleService(researchRepository);
 
   const paper = await lifecycleService.createPaperProject({
@@ -378,6 +383,7 @@ test('literature overview includes summary and metadata updates', async () => {
     tags: ['dataset', 'benchmark'],
     abstract: 'Updated abstract',
   });
+  await markLiteratureEvidenceReady(literatureRepository, firstLiteratureId);
 
   await literatureService.upsertTopicScope('TOPIC-LIT-UNIT-OVERVIEW', {
     actions: [
@@ -814,6 +820,63 @@ test('metadata display digest update does not stale semantic content-processing 
   assert.equal(stageStates.find((stage) => stage.stageCode === 'KEY_CONTENT_READY')?.status, 'SUCCEEDED');
   assert.equal(stageStates.find((stage) => stage.stageCode === 'INDEXED')?.status, 'SUCCEEDED');
 });
+
+async function markLiteratureEvidenceReady(
+  repository: InMemoryLiteratureRepository,
+  literatureId: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const literature = await repository.findLiteratureById(literatureId);
+  assert.ok(literature);
+  const versionId = `EV-${literatureId}`;
+  await repository.createEmbeddingVersion({
+    id: versionId,
+    literatureId,
+    versionNo: 1,
+    status: 'INDEXED',
+    profileId: 'default',
+    provider: 'openai',
+    model: 'text-embedding-3-large',
+    dimension: 3,
+    chunkCount: 1,
+    vectorCount: 1,
+    tokenCount: 4,
+    inputChecksum: 'input',
+    chunkArtifactChecksum: 'chunk',
+    embeddingArtifactChecksum: 'embedding',
+    indexArtifactChecksum: 'index',
+    indexedAt: now,
+    activatedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await repository.updateLiterature({
+    ...literature,
+    activeEmbeddingVersionId: versionId,
+    updatedAt: now,
+  });
+  await repository.upsertPipelineState({
+    id: `pipeline-${literatureId}`,
+    literatureId,
+    citationComplete: true,
+    abstractReady: true,
+    keyContentReady: true,
+    dedupStatus: 'unique',
+    updatedAt: now,
+  });
+  await repository.upsertQualityAssessment({
+    id: `quality-${literatureId}`,
+    literatureId,
+    qualityStatus: 'high_confidence',
+    qualityScore: 100,
+    qualityComponents: { test_fixture: true },
+    blockerCodes: [],
+    source: 'test_fixture',
+    assessedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
 
 async function waitForTerminalRun(repository: InMemoryLiteratureRepository, runId: string) {
   for (let attempt = 0; attempt < 120; attempt += 1) {

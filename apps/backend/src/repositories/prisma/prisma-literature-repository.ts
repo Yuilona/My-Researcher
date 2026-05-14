@@ -27,6 +27,7 @@ import type {
   LiteraturePipelineRunStepRecord,
   LiteraturePipelineStageStateRecord,
   LiteraturePipelineStateRecord,
+  LiteratureQualityAssessmentRecord,
   LiteratureRecord,
   LiteratureRepository,
   ListLiteratureClustersFilter,
@@ -115,6 +116,20 @@ export class PrismaLiteratureRepository implements LiteratureRepository {
 
   async listSourcesByLiteratureId(literatureId: string): Promise<LiteratureSourceRecord[]> {
     return this.coreStore.listSourcesByLiteratureId(literatureId);
+  }
+
+  async upsertQualityAssessment(
+    record: LiteratureQualityAssessmentRecord,
+  ): Promise<{ record: LiteratureQualityAssessmentRecord; created: boolean }> {
+    return this.coreStore.upsertQualityAssessment(record);
+  }
+
+  async findQualityAssessmentByLiteratureId(literatureId: string): Promise<LiteratureQualityAssessmentRecord | null> {
+    return this.coreStore.findQualityAssessmentByLiteratureId(literatureId);
+  }
+
+  async listQualityAssessmentsByLiteratureIds(literatureIds: string[]): Promise<LiteratureQualityAssessmentRecord[]> {
+    return this.coreStore.listQualityAssessmentsByLiteratureIds(literatureIds);
   }
 
   async upsertCitationProfile(
@@ -220,6 +235,24 @@ export class PrismaLiteratureRepository implements LiteratureRepository {
 
   async listTopicScopesByTopicId(topicId: string): Promise<TopicLiteratureScopeRecord[]> {
     return this.coreStore.listTopicScopesByTopicId(topicId);
+  }
+
+  async listTopicScopesByLiteratureId(literatureId: string): Promise<TopicLiteratureScopeRecord[]> {
+    return this.coreStore.listTopicScopesByLiteratureId(literatureId);
+  }
+
+  async updateTopicScopeActivation(
+    topicId: string,
+    literatureId: string,
+    patch: {
+      activationStatus: TopicLiteratureScopeRecord['activationStatus'];
+      activationReason?: string | null;
+      activationScore?: number | null;
+      activatedAt?: string | null;
+      updatedAt: string;
+    },
+  ): Promise<TopicLiteratureScopeRecord> {
+    return this.coreStore.updateTopicScopeActivation(topicId, literatureId, patch);
   }
 
   async upsertPaperLiteratureLink(

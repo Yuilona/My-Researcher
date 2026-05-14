@@ -13,6 +13,25 @@ export type DedupMatchType = (typeof DEDUP_MATCH_TYPES)[number];
 export const TOPIC_SCOPE_STATUSES = ['in_scope', 'excluded'] as const;
 export type TopicScopeStatus = (typeof TOPIC_SCOPE_STATUSES)[number];
 
+export const LITERATURE_QUALITY_STATUSES = [
+  'high_confidence',
+  'medium_confidence',
+  'needs_review',
+  'low_confidence',
+  'excluded',
+] as const;
+export type LiteratureQualityStatus = (typeof LITERATURE_QUALITY_STATUSES)[number];
+
+export const LITERATURE_EVIDENCE_ACTIVATION_STATUSES = [
+  'candidate',
+  'needs_review',
+  'eligible',
+  'active',
+  'blocked',
+  'excluded',
+] as const;
+export type LiteratureEvidenceActivationStatus = (typeof LITERATURE_EVIDENCE_ACTIVATION_STATUSES)[number];
+
 export const PAPER_CITATION_STATUSES = ['seeded', 'selected', 'used', 'cited', 'dropped'] as const;
 export type PaperCitationStatus = (typeof PAPER_CITATION_STATUSES)[number];
 
@@ -626,10 +645,35 @@ export interface TopicLiteratureScopeAction {
   literature_id: string;
   scope_status: TopicScopeStatus;
   reason?: string;
+  activation_status?: LiteratureEvidenceActivationStatus;
+  activation_reason?: string;
+  activation_score?: number | null;
 }
 
 export interface UpsertTopicLiteratureScopeRequest {
   actions: TopicLiteratureScopeAction[];
+}
+
+export interface TopicLiteratureEvidenceActivationAction {
+  literature_id: string;
+  activation_status: LiteratureEvidenceActivationStatus;
+  reason?: string;
+  activation_score?: number | null;
+}
+
+export interface UpdateTopicLiteratureEvidenceActivationRequest {
+  actions: TopicLiteratureEvidenceActivationAction[];
+}
+
+export interface LiteratureQualityAssessmentDTO {
+  literature_id: string;
+  quality_status: LiteratureQualityStatus;
+  quality_score: number | null;
+  quality_components: Record<string, unknown>;
+  blocker_codes: string[];
+  source: string;
+  assessed_at: string;
+  updated_at: string;
 }
 
 export interface TopicLiteratureScopeItem {
@@ -638,12 +682,17 @@ export interface TopicLiteratureScopeItem {
   literature_id: string;
   scope_status: TopicScopeStatus;
   reason?: string;
+  activation_status: LiteratureEvidenceActivationStatus;
+  activation_reason: string | null;
+  activation_score: number | null;
+  activated_at: string | null;
   updated_at: string;
   title: string;
   authors: string[];
   year: number | null;
   doi: string | null;
   arxiv_id: string | null;
+  quality_assessment?: LiteratureQualityAssessmentDTO | null;
 }
 
 export interface TopicLiteratureScopeResponse {
@@ -1175,6 +1224,11 @@ export interface LiteratureOverviewItem {
   source_url: string | null;
   source_updated_at: string | null;
   topic_scope_status?: TopicScopeStatus;
+  evidence_activation_status?: LiteratureEvidenceActivationStatus;
+  evidence_activation_reason?: string | null;
+  evidence_activation_score?: number | null;
+  evidence_activated_at?: string | null;
+  quality_assessment?: LiteratureQualityAssessmentDTO | null;
   citation_status?: PaperCitationStatus;
   overview_status: OverviewStatus;
   content_processing_state: {
@@ -1208,6 +1262,8 @@ export interface LiteratureOverviewResponse {
     used_count: number;
     provider_counts: Array<{ provider: LiteratureProvider; count: number }>;
     rights_class_counts: Array<{ rights_class: RightsClass; count: number }>;
+    activation_status_counts: Array<{ activation_status: LiteratureEvidenceActivationStatus; count: number }>;
+    quality_status_counts: Array<{ quality_status: LiteratureQualityStatus; count: number }>;
     top_tags: Array<{ tag: string; count: number }>;
   };
   items: LiteratureOverviewItem[];
@@ -2081,6 +2137,42 @@ export const upsertTopicLiteratureScopeRequestSchema = {
           literature_id: { type: 'string', minLength: 1 },
           scope_status: { type: 'string', enum: TOPIC_SCOPE_STATUSES },
           reason: { type: 'string' },
+          activation_status: { type: 'string', enum: LITERATURE_EVIDENCE_ACTIVATION_STATUSES },
+          activation_reason: { type: 'string' },
+          activation_score: {
+            anyOf: [
+              { type: 'number', minimum: 0, maximum: 100 },
+              { type: 'null' },
+            ],
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  additionalProperties: false,
+} as const;
+
+export const updateTopicLiteratureEvidenceActivationRequestSchema = {
+  type: 'object',
+  required: ['actions'],
+  properties: {
+    actions: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'object',
+        required: ['literature_id', 'activation_status'],
+        properties: {
+          literature_id: { type: 'string', minLength: 1 },
+          activation_status: { type: 'string', enum: LITERATURE_EVIDENCE_ACTIVATION_STATUSES },
+          reason: { type: 'string' },
+          activation_score: {
+            anyOf: [
+              { type: 'number', minimum: 0, maximum: 100 },
+              { type: 'null' },
+            ],
+          },
         },
         additionalProperties: false,
       },

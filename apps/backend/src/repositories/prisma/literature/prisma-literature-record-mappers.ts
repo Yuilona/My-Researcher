@@ -18,6 +18,7 @@ import type {
   LiteratureFulltextParagraphRecord,
   LiteratureFulltextSectionRecord,
   LiteraturePipelineArtifactRecord,
+  LiteratureQualityAssessmentRecord,
   LiteraturePipelineRunRecord,
   LiteraturePipelineRunStepRecord,
   LiteraturePipelineStageStateRecord,
@@ -98,6 +99,32 @@ export function toSourceRecord(row: {
     sourceUrl: row.sourceUrl,
     rawPayload: asRecord(row.rawPayload),
     fetchedAt: row.fetchedAt.toISOString(),
+  };
+}
+
+export function toQualityAssessmentRecord(row: {
+  id: string;
+  literatureId: string;
+  qualityStatus: string;
+  qualityScore: number | null;
+  qualityComponents: unknown;
+  blockerCodes: string[];
+  source: string;
+  assessedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}): LiteratureQualityAssessmentRecord {
+  return {
+    id: row.id,
+    literatureId: row.literatureId,
+    qualityStatus: row.qualityStatus as LiteratureQualityAssessmentRecord['qualityStatus'],
+    qualityScore: row.qualityScore,
+    qualityComponents: asRecord(row.qualityComponents),
+    blockerCodes: row.blockerCodes,
+    source: row.source,
+    assessedAt: row.assessedAt.toISOString(),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -443,6 +470,10 @@ export function toTopicScopeRecord(row: {
   literatureId: string;
   scopeStatus: string;
   reason: string | null;
+  activationStatus: string;
+  activationReason: string | null;
+  activationScore: number | null;
+  activatedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }): TopicLiteratureScopeRecord {
@@ -452,6 +483,10 @@ export function toTopicScopeRecord(row: {
     literatureId: row.literatureId,
     scopeStatus: row.scopeStatus as TopicLiteratureScopeRecord['scopeStatus'],
     reason: row.reason,
+    activationStatus: row.activationStatus as TopicLiteratureScopeRecord['activationStatus'],
+    activationReason: row.activationReason,
+    activationScore: row.activationScore,
+    activatedAt: row.activatedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

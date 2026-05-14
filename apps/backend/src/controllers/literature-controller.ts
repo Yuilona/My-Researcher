@@ -26,6 +26,7 @@ import type {
   SyncPaperLiteratureFromTopicRequest,
   SyncPaperLiteratureFromTopicResponse,
   TopicLiteratureScopeResponse,
+  UpdateTopicLiteratureEvidenceActivationRequest,
   UpdateLiteratureClusterRequest,
   UpdateLiteratureClusterResponse,
   UpdateLiteratureMetadataRequest,
@@ -138,6 +139,18 @@ export class LiteratureController {
   ): Promise<void> {
     try {
       const result = await this.service.upsertTopicScope(request.params.topicId, request.body);
+      reply.status(200).send(result satisfies TopicLiteratureScopeResponse);
+    } catch (error) {
+      this.handleError(reply, error);
+    }
+  }
+
+  async updateTopicEvidenceActivation(
+    request: FastifyRequest<{ Params: TopicParams; Body: UpdateTopicLiteratureEvidenceActivationRequest }>,
+    reply: FastifyReply,
+  ): Promise<void> {
+    try {
+      const result = await this.service.updateTopicEvidenceActivation(request.params.topicId, request.body);
       reply.status(200).send(result satisfies TopicLiteratureScopeResponse);
     } catch (error) {
       this.handleError(reply, error);

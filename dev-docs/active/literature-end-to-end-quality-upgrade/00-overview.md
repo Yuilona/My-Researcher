@@ -4,7 +4,7 @@
 - State: in-progress
 - Parent: `T-030 literature-content-processing-landing-roadmap`
 - Related: `T-011 literature-management-flow`, `T-029 literature-collection-content-processing-boundary`, `T-037 literature-backfill-operations-workbench`, `T-040 literature-content-processing-closure-fixes`
-- Next step: review the pushed Batch 5/6/7/8 closure commit and decide whether to proceed with a default cutover artifact or hold for additional production-like soak runs.
+- Next step: complete Evidence Activation semantic cleanup, verify the centralized consumption gates, and prepare the next commit/push set.
 
 ## Goal
 - Upgrade the literature module from "functionally complete" to "reliable full-chain operation" across web discovery, metadata import, fulltext acquisition, parsing, semantic extraction, chunking, embedding, indexing, retrieval, stale handling, backfill, and cutover verification.
@@ -74,3 +74,4 @@
 - [x] Auto-pull source fetches now reuse the shared source runtime state and acquisition source throttle settings for Crossref, arXiv, and Zotero pacing/cooldown.
 - [x] Raw PDF lifecycle management has a non-destructive dry-run/apply quarantine workflow for stale duplicate PDFs with active-manifest protection.
 - [x] Retrieval evaluator v2 requires blind query coverage and expands blind/adversarial DOI/Unpaywall and explicit-PDF queries.
+- [x] Evidence Activation separates collected/topic-related/evidence-active literature, and retrieval/backfill/fulltext worksets no longer treat `scope_status=in_scope` as a consumption gate.

@@ -1,7 +1,7 @@
 # 01 Plan
 
 ## Phase 1 - Alignment And Test Matrix
-- Status: aligned; deterministic mock coverage expanded in the backend suite. Real E2E harness remains pending.
+- Status: completed. Deterministic mock coverage and repeatable local/temporary-Postgres E2E modes are in place.
 - Confirm roadmap scope and milestone order.
 - Convert the quality baseline into a test matrix:
   - source discovery
@@ -13,7 +13,7 @@
 - Decide which real external dependencies are allowed in CI-like local runs.
 
 ## Phase 2 - Source And Scorer Hardening
-- Status: partially implemented. Acquisition settings now carry source throttles and an OpenAI quality-scorer profile; source cooldown/runtime persistence exists for fulltext acquisition. Broader auto-pull source pacing remains pending.
+- Status: completed for the T-041 scope. Acquisition settings carry source throttles and scorer profiles; Crossref, arXiv, Zotero, Unpaywall, explicit URL, and download runtime state share cooldown/health semantics.
 - Add source-specific rate/backoff behavior.
 - Improve run summaries and alert taxonomy for fetch/import/scoring boundaries.
 - Implement or integrate a real scorer profile with deterministic fallback behavior.
@@ -27,31 +27,34 @@
 - Decide whether batch downloads are synchronous or durable jobs.
 
 ## Phase 4 - Parser And Extraction Quality Gates
-- Status: unchanged except existing GROBID health/OCR blocker behavior remains covered by backend tests.
+- Status: completed for v1. GROBID health/OCR blockers, parser-quality diagnostics, key-content provenance, and real E2E parser/extraction evidence are covered.
 - Harden GROBID health/version diagnostics.
 - Add parser failure fixtures.
 - Add key-content evaluator and real OpenAI smoke path.
 - Preserve user edits through extraction reruns.
 
 ## Phase 5 - Retrieval Evaluation
-- Status: stale-index isolation implemented in retrieve; seeded recall evaluator remains pending.
+- Status: completed. Retrieval evaluation covers stale isolation, seeded and blind queries, recall/MRR/nDCG, degraded-mode evidence, and duplicate-work guards.
 - Create seeded retrieval evaluation set.
 - Add evaluator script and thresholds.
 - Tune retrieve profiles without changing the physical index split.
 - Record relevance, provenance, and degraded-mode evidence.
 
 ## Phase 6 - Temporary Postgres Batch E2E
+- Status: completed. Lightweight and full E2E modes run against temporary schemas and record reports under `.ai/.tmp/literature-e2e/`.
 - Create a temporary schema test harness.
 - Run batch ingestion/download/process/index/retrieve.
 - Cover stale propagation, retry, partial failure, and cleanup dry-run.
 - Record artifacts under `04-verification.md`.
 
 ## Phase 7 - Desktop And Operator UX
+- Status: partially completed. Cluster-review and operator diagnostics are surfaced; Evidence Activation review UI remains a follow-on task.
 - Surface missing prerequisites and recovery actions.
 - Surface acquisition/download/parser/scorer status.
 - Keep UI changes on the data-ui/token path; do not extend frozen legacy CSS.
 
 ## Phase 8 - Cutover Review
+- Status: completed for broad-cutover evidence gates; default cutover remains an explicit operation artifact rather than an implicit code path.
 - Run final verification suite.
 - Update OpenAPI/API index/context.
 - Split remaining non-blocking work into explicit follow-on tasks.
@@ -84,7 +87,7 @@
 - Add structured review outcomes so future clustering work cannot drift into implicit merges.
 
 ### Batch 5 - Cutover Operations
-- Status: completed for local operational tooling and evidence gates; pending next real E2E evidence attachment.
+- Status: completed for local operational tooling and evidence gates. Full E2E evidence and cutover preflight artifacts are recorded in `04-verification.md`.
 - Add a preflight/cutover/rollback playbook and automate evidence checks around the existing cutover gate.
 - Keep lightweight, smoke, duplicate-stress, and full E2E modes explicitly separated.
 - Treat broad cutover as blocked unless consecutive full real E2E and CI mock suites both pass.
