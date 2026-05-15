@@ -47,6 +47,10 @@ pnpm install
 # Primary local entrypoint (desktop app)
 pnpm desktop:dev
 
+# Prisma-backed backend API against the repo-standard local dev DB
+pnpm backend:dev:prisma:setup
+pnpm backend:dev:prisma
+
 # Note: root `pnpm dev` is currently a placeholder script.
 ```
 

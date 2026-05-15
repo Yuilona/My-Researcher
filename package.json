@@ -10,11 +10,17 @@
   "packageManager": "pnpm@9.0.0",
   "scripts": {
     "build": "echo \"Add build script\"",
+    "backend:dev:prisma": "pnpm --filter @paper-engineering-assistant/backend dev:prisma",
+    "backend:dev:prisma:setup": "pnpm env:dev:db-url:init && pnpm env:dev:compile && pnpm db:dev:migrate",
     "ci:prisma-smoke": "node ci/scripts/prisma-smoke.mjs",
+    "db:dev:migrate": "set -a; . ./.env.local; set +a; pnpm exec prisma migrate deploy --schema prisma/schema.prisma",
     "desktop:build": "pnpm --filter @paper-engineering-assistant/desktop build",
     "desktop:dev": "pnpm --filter @paper-engineering-assistant/desktop dev",
     "desktop:typecheck": "pnpm --filter @paper-engineering-assistant/desktop typecheck",
     "dev": "echo \"Add dev script\"",
+    "env:dev:compile": "python3 -B -S .ai/skills/features/environment/env-localctl/scripts/env_localctl.py compile --root . --env dev --runtime-target local --workload api --out .ai/.tmp/env-local/dev-compile.md",
+    "env:dev:db-url:init": "mkdir -p env/.secrets-store/dev && if [ ! -f env/.secrets-store/dev/database_url ]; then printf 'postgresql://%s@127.0.0.1:5432/postgres?schema=my_researcher_dev\\n' \"${USER:-postgres}\" > env/.secrets-store/dev/database_url; fi && chmod 600 env/.secrets-store/dev/database_url",
+    "env:dev:doctor": "python3 -B -S .ai/skills/features/environment/env-localctl/scripts/env_localctl.py doctor --root . --env dev --runtime-target local --workload api --out .ai/.tmp/env-local/dev-doctor.md",
     "lint": "echo \"Add lint script\"",
     "test": "echo \"Add test script\"",
     "typecheck": "tsc --noEmit"

@@ -188,7 +188,6 @@ function main() {
   const stepEnv = {
     ...process.env,
     DATABASE_URL: smokeUrl,
-    RESEARCH_LIFECYCLE_REPOSITORY: 'prisma',
   };
 
   try {
@@ -211,7 +210,7 @@ function main() {
     });
 
     runStep({
-      label: 'Backend tests in prisma mode',
+      label: 'Backend tests with isolated Prisma schema',
       command: 'pnpm',
       args: ['--filter', '@paper-engineering-assistant/backend', 'test'],
       env: stepEnv,

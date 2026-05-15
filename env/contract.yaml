@@ -16,6 +16,48 @@ variables:
     required: true
     default: 8000
     description: Service listen port.
+  HOST:
+    type: string
+    required: false
+    default: 0.0.0.0
+    description: Service listen host.
+  DATABASE_URL:
+    type: url
+    required: true
+    secret: true
+    secret_ref: database_url
+    scopes: [dev]
+    description: Prisma database URL for the local development database.
+  TITLE_CARD_REPOSITORY:
+    type: enum
+    enum: [memory, prisma]
+    required: false
+    default: memory
+    description: Repository strategy for title-card management and topic-selection authority stores.
+  RESEARCH_LIFECYCLE_REPOSITORY:
+    type: enum
+    enum: [memory, prisma]
+    required: false
+    default: memory
+    description: Repository strategy for research lifecycle stores; cascades from TITLE_CARD_REPOSITORY when unset.
+  AUTO_PULL_REPOSITORY:
+    type: enum
+    enum: [memory, prisma]
+    required: false
+    default: memory
+    description: Repository strategy for auto-pull stores; must match TITLE_CARD_REPOSITORY when title-card uses Prisma.
+  APPLICATION_SETTINGS_REPOSITORY:
+    type: enum
+    enum: [memory, prisma]
+    required: false
+    default: memory
+    description: Repository strategy for application settings; must match TITLE_CARD_REPOSITORY when title-card uses Prisma.
+  AUTO_PULL_SCHEDULER_ENABLED:
+    type: enum
+    enum: ['true', 'false']
+    required: false
+    default: 'true'
+    description: Enable the auto-pull background scheduler.
   LITERATURE_USER_AUTH_PIPELINE_ENABLED:
     type: enum
     enum: ['true', 'false']

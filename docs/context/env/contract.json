@@ -1,0 +1,251 @@
+{
+  "envs": [
+    "dev",
+    "prod",
+    "staging"
+  ],
+  "generated_at_utc": "2026-05-14T22:28:17Z",
+  "ssot_mode": "repo-env-contract",
+  "variables": {
+    "APPLICATION_SETTINGS_REPOSITORY": {
+      "default": "memory",
+      "deprecate_after": null,
+      "description": "Repository strategy for application settings; must match TITLE_CARD_REPOSITORY when title-card uses Prisma.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": null,
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "enum"
+    },
+    "APP_ENV": {
+      "default": "dev",
+      "deprecate_after": null,
+      "description": "Deployment environment profile.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": true,
+      "scopes": null,
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "enum"
+    },
+    "AUTO_PULL_REPOSITORY": {
+      "default": "memory",
+      "deprecate_after": null,
+      "description": "Repository strategy for auto-pull stores; must match TITLE_CARD_REPOSITORY when title-card uses Prisma.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": null,
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "enum"
+    },
+    "AUTO_PULL_SCHEDULER_ENABLED": {
+      "default": "true",
+      "deprecate_after": null,
+      "description": "Enable the auto-pull background scheduler.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": null,
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "enum"
+    },
+    "DATABASE_URL": {
+      "default": null,
+      "deprecate_after": null,
+      "description": "Prisma database URL for the local development database.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": true,
+      "scopes": [
+        "dev"
+      ],
+      "secret": true,
+      "secret_ref": "database_url",
+      "state": "active",
+      "type": "url"
+    },
+    "HOST": {
+      "default": "0.0.0.0",
+      "deprecate_after": null,
+      "description": "Service listen host.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": null,
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "string"
+    },
+    "LITERATURE_PIPELINE_EMBEDDING_API_KEY": {
+      "default": null,
+      "deprecate_after": null,
+      "description": "Optional API key for external embedding endpoint.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": null,
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "string"
+    },
+    "LITERATURE_PIPELINE_EMBEDDING_MODEL": {
+      "default": "text-embedding-v1",
+      "deprecate_after": null,
+      "description": "Embedding model name used when external embedding endpoint is configured.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": null,
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "string"
+    },
+    "LITERATURE_PIPELINE_EMBEDDING_URL": {
+      "default": null,
+      "deprecate_after": null,
+      "description": "Optional external embedding endpoint; unset means local fallback embedding.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": null,
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "string"
+    },
+    "LITERATURE_USER_AUTH_PIPELINE_ENABLED": {
+      "default": "false",
+      "deprecate_after": null,
+      "description": "Enable deep pipeline stages for USER_AUTH literature rights class.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": null,
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "enum"
+    },
+    "PORT": {
+      "default": 8000,
+      "deprecate_after": null,
+      "description": "Service listen port.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": true,
+      "scopes": null,
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "int"
+    },
+    "RESEARCH_LIFECYCLE_REPOSITORY": {
+      "default": "memory",
+      "deprecate_after": null,
+      "description": "Repository strategy for research lifecycle stores; cascades from TITLE_CARD_REPOSITORY when unset.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": null,
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "enum"
+    },
+    "SERVICE_NAME": {
+      "default": "your-service",
+      "deprecate_after": null,
+      "description": "Service name (logical).",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": true,
+      "scopes": null,
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "string"
+    },
+    "TITLE_CARD_REPOSITORY": {
+      "default": "memory",
+      "deprecate_after": null,
+      "description": "Repository strategy for title-card management and topic-selection authority stores.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": null,
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "enum"
+    }
+  }
+}

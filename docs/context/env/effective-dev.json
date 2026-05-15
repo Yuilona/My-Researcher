@@ -1,0 +1,18 @@
+{
+  "env": "dev",
+  "generated_at_utc": "2026-05-14T22:30:14Z",
+  "values": {
+    "APPLICATION_SETTINGS_REPOSITORY": "prisma",
+    "APP_ENV": "dev",
+    "AUTO_PULL_REPOSITORY": "prisma",
+    "AUTO_PULL_SCHEDULER_ENABLED": "false",
+    "DATABASE_URL": "***REDACTED***",
+    "HOST": "127.0.0.1",
+    "LITERATURE_PIPELINE_EMBEDDING_MODEL": "text-embedding-v1",
+    "LITERATURE_USER_AUTH_PIPELINE_ENABLED": "false",
+    "PORT": 3000,
+    "RESEARCH_LIFECYCLE_REPOSITORY": "prisma",
+    "SERVICE_NAME": "paper-engineering-assistant-backend",
+    "TITLE_CARD_REPOSITORY": "prisma"
+  }
+}

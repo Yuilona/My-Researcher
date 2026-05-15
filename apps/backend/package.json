@@ -13,6 +13,7 @@
     "prisma:validate": "prisma validate --schema ../../prisma/schema.prisma",
     "prisma:generate": "prisma generate --schema ../../prisma/schema.prisma",
     "dev": "node --enable-source-maps --loader ts-node/esm src/server.ts",
+    "dev:prisma": "node --env-file=../../.env.local --enable-source-maps --loader ts-node/esm src/server.ts",
     "content-processing:backfill": "node scripts/backfill-literature-content-processing.mjs"
   },
   "dependencies": {

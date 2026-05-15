@@ -14,6 +14,11 @@ CLAUDE.md
 
 # Temporary files
 .ai/.tmp/
+.env.local
+.env.*.local
+env/.secrets-store/
+env/values/*.local.yaml
+env/values/*.local.yml
 
 # Node
 node_modules/
