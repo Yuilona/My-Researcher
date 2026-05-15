@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-13T23:06:05.237Z",
+  "generatedAt": "2026-05-14T14:34:59.279Z",
   "sourceOpenapi": "docs/context/api/openapi.yaml",
-  "sourceChecksumSha256": "bddba510592b0bd6d6758575671ea34b39d4279d177d05edbaba85951b5ec1e6",
+  "sourceChecksumSha256": "933743e69bddfe0653f0389ac116b8ef7feedb2e2818dd89effc98ea3ccffd4b",
   "stats": {
-    "totalEndpoints": 129,
+    "totalEndpoints": 149,
     "byTag": {
       "health": 1,
       "research-lifecycle": 8,
@@ -13,7 +13,8 @@
       "topic-settings": 3,
       "auto-pull": 10,
       "title-card-management": 28,
-      "topic-selection-v1a": 30
+      "topic-selection-v1a": 30,
+      "topic-selection-v1b": 20
     }
   },
   "endpoints": [
@@ -4165,6 +4166,727 @@
       ],
       "example": {
         "curl": "curl -X GET '/topic-selection/v1a/offline-evaluation/runs/{runId}/replay-diffs'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/intake-snapshots",
+      "operationId": "createTopicSelectionV1bIntakeSnapshot",
+      "summary": "Create a v1b intake snapshot from a v1a-to-v1b input bundle.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "v1b_input_bundle_id"
+          ],
+          "optional": [
+            "workspace_id",
+            "snapshot_version",
+            "created_by",
+            "policy_version_id"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/intake-snapshots' -H 'Content-Type: application/json' -d '{\"v1b_input_bundle_id\":\"<v1b_input_bundle_id>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/research-constraint-profiles",
+      "operationId": "createTopicSelectionV1bResearchConstraintProfile",
+      "summary": "Create the ResearchConstraintProfile consumed by ResearchSlice planning.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "v1b_intake_snapshot_id",
+            "target_community",
+            "claim_ceiling"
+          ],
+          "optional": [
+            "workspace_id",
+            "previous_profile_id",
+            "profile_version",
+            "target_venue_class",
+            "intended_contribution_style",
+            "method_constraints",
+            "resource_constraints",
+            "available_assets",
+            "feasibility_budget",
+            "non_goals",
+            "human_constraint_notes",
+            "constraint_payload",
+            "created_by",
+            "policy_version_id"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/research-constraint-profiles' -H 'Content-Type: application/json' -d '{\"v1b_intake_snapshot_id\":\"<v1b_intake_snapshot_id>\",\"target_community\":\"<target_community>\",\"claim_ceiling\":\"<claim_ceiling>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/intake-readiness-assessments",
+      "operationId": "assessTopicSelectionV1bIntakeReadiness",
+      "summary": "Assess whether v1b intake/profile is ready for ResearchSlice planning.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "v1b_intake_snapshot_id",
+            "research_constraint_profile_id"
+          ],
+          "optional": [
+            "workspace_id",
+            "policy_version_id",
+            "assessed_by"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/intake-readiness-assessments' -H 'Content-Type: application/json' -d '{\"v1b_intake_snapshot_id\":\"<v1b_intake_snapshot_id>\",\"research_constraint_profile_id\":\"<research_constraint_profile_id>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/research-slice-option-sets",
+      "operationId": "createTopicSelectionV1bResearchSliceOptionSet",
+      "summary": "Plan ResearchSlice options from a ready v1b intake handoff.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "readiness_assessment_id"
+          ],
+          "optional": [
+            "workspace_id",
+            "triggered_by",
+            "workflow_profile_version",
+            "prompt_template_version",
+            "policy_version_id",
+            "model"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "plan_run",
+          "option_set",
+          "options"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/research-slice-option-sets' -H 'Content-Type: application/json' -d '{\"readiness_assessment_id\":\"<readiness_assessment_id>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/research-slice-option-sets/{optionSetId}/selection-decisions",
+      "operationId": "selectTopicSelectionV1bResearchSlice",
+      "summary": "Select a ResearchSlice option and materialize the selected ResearchSlice.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [
+          "optionSetId"
+        ],
+        "query": [],
+        "body": {
+          "required": [
+            "decision",
+            "selection_rationale"
+          ],
+          "optional": [
+            "option_set_id",
+            "selected_option_id",
+            "decided_by",
+            "selection_policy_version",
+            "decision_basis",
+            "required_actions",
+            "confidence",
+            "policy_version_id"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/research-slice-option-sets/{optionSetId}/selection-decisions' -H 'Content-Type: application/json' -d '{\"decision\":\"<decision>\",\"selection_rationale\":\"<selection_rationale>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/topic-question-candidate-sets",
+      "operationId": "createTopicSelectionV1bTopicQuestionCandidateSet",
+      "summary": "Form TopicQuestion candidates from a selected ResearchSlice.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "research_slice_id"
+          ],
+          "optional": [
+            "workspace_id",
+            "triggered_by",
+            "workflow_profile_version",
+            "prompt_template_version",
+            "policy_version_id",
+            "model"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "form_topic_question_run",
+          "question_frame",
+          "candidate_set",
+          "candidates"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/topic-question-candidate-sets' -H 'Content-Type: application/json' -d '{\"research_slice_id\":\"<research_slice_id>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/topic-question-candidate-sets/{candidateSetId}/selection-decisions",
+      "operationId": "selectTopicSelectionV1bTopicQuestion",
+      "summary": "Select/admit TopicQuestion candidates and create a TopicQuestionContract.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [
+          "candidateSetId"
+        ],
+        "query": [],
+        "body": {
+          "required": [
+            "decision",
+            "decision_rationale"
+          ],
+          "optional": [
+            "candidate_set_id",
+            "admitted_candidate_ids",
+            "decided_by",
+            "selection_policy_version",
+            "confidence",
+            "policy_version_id"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/topic-question-candidate-sets/{candidateSetId}/selection-decisions' -H 'Content-Type: application/json' -d '{\"decision\":\"<decision>\",\"decision_rationale\":\"<decision_rationale>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/topic-value-assessments",
+      "operationId": "createTopicSelectionV1bTopicValueAssessment",
+      "summary": "Assess value for an active TopicQuestionContract.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "topic_question_contract_id"
+          ],
+          "optional": [
+            "workspace_id",
+            "triggered_by",
+            "workflow_profile_version",
+            "prompt_template_version",
+            "policy_version_id",
+            "model"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/topic-value-assessments' -H 'Content-Type: application/json' -d '{\"topic_question_contract_id\":\"<topic_question_contract_id>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/topic-value-assessments/{topicValueAssessmentId}/disposition-decisions",
+      "operationId": "decideTopicSelectionV1bTopicValueDisposition",
+      "summary": "Record the value disposition decision for a TopicValueAssessment.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [
+          "topicValueAssessmentId"
+        ],
+        "query": [],
+        "body": {
+          "required": [
+            "decision",
+            "decision_rationale"
+          ],
+          "optional": [
+            "topic_value_assessment_id",
+            "decided_by",
+            "required_actions",
+            "loopback_target_ref",
+            "policy_version_id"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/topic-value-assessments/{topicValueAssessmentId}/disposition-decisions' -H 'Content-Type: application/json' -d '{\"decision\":\"<decision>\",\"decision_rationale\":\"<decision_rationale>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/topic-packages/drafts",
+      "operationId": "createTopicSelectionV1bTopicPackageDraft",
+      "summary": "Create a trace-ready TopicPackage draft from an advance_to_package disposition.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "value_disposition_decision_id"
+          ],
+          "optional": [
+            "workspace_id",
+            "created_by",
+            "policy_version_id"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "topic_package",
+          "package_trace_boundary_check",
+          "package_readiness_assessment",
+          "v1c_input_bundle"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/topic-packages/drafts' -H 'Content-Type: application/json' -d '{\"value_disposition_decision_id\":\"<value_disposition_decision_id>\"}'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1b/topic-packages/{topicPackageId}",
+      "operationId": "getTopicSelectionV1bTopicPackageDraft",
+      "summary": "Read a TopicPackage draft.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [
+          "topicPackageId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1b/topic-packages/{topicPackageId}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/topic-packages/{topicPackageId}/v1c-input-bundles",
+      "operationId": "publishTopicSelectionV1bToV1cInputBundle",
+      "summary": "Publish the v1c input bundle for a ready TopicPackage draft.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [
+          "topicPackageId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/topic-packages/{topicPackageId}/v1c-input-bundles'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/offline-evaluation/datasets",
+      "operationId": "createTopicSelectionV1bOfflineEvaluationDataset",
+      "summary": "Create a v1b offline evaluation dataset.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [],
+          "optional": [
+            "workspace_id",
+            "dataset_key",
+            "dataset_version",
+            "stage",
+            "source",
+            "status",
+            "description",
+            "payload",
+            "created_by"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/offline-evaluation/datasets'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/offline-evaluation/datasets/synthetic-baseline",
+      "operationId": "createTopicSelectionV1bSyntheticOfflineEvaluationDataset",
+      "summary": "Create the synthetic v1b offline evaluation baseline dataset.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [],
+          "optional": [
+            "workspace_id",
+            "dataset_key",
+            "dataset_version",
+            "stage",
+            "source",
+            "status",
+            "description",
+            "payload",
+            "created_by"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "dataset",
+          "cases"
+        ]
+      },
+      "errors": [
+        400
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/offline-evaluation/datasets/synthetic-baseline'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/offline-evaluation/cases",
+      "operationId": "addTopicSelectionV1bOfflineEvaluationCase",
+      "summary": "Add a frozen v1b replay case to an offline evaluation dataset.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "dataset_id",
+            "case_key",
+            "case_type",
+            "frozen_input_bundle",
+            "gold_expectation"
+          ],
+          "optional": [
+            "workspace_id",
+            "title_card_id",
+            "tags"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/offline-evaluation/cases' -H 'Content-Type: application/json' -d '{\"dataset_id\":\"<dataset_id>\",\"case_key\":\"<case_key>\",\"case_type\":\"<case_type>\",\"frozen_input_bundle\":\"<frozen_input_bundle>\",\"gold_expectation\":\"<gold_expectation>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/offline-evaluation/runs",
+      "operationId": "startTopicSelectionV1bOfflineEvaluationRun",
+      "summary": "Start a v1b offline evaluation replay run.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "dataset_id",
+            "workflow_profile_key"
+          ],
+          "optional": [
+            "workspace_id",
+            "run_key",
+            "workflow_profile_version",
+            "model_profile_key",
+            "search_profile_key",
+            "policy_version_id",
+            "metric_keys",
+            "run_payload",
+            "created_by"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/offline-evaluation/runs' -H 'Content-Type: application/json' -d '{\"dataset_id\":\"<dataset_id>\",\"workflow_profile_key\":\"<workflow_profile_key>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/offline-evaluation/case-results",
+      "operationId": "recordTopicSelectionV1bOfflineEvaluationCaseResult",
+      "summary": "Record a frozen v1b replay case result and diff.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "run_id",
+            "case_id",
+            "observed_output"
+          ],
+          "optional": [
+            "workspace_id"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "case_result",
+          "replay_diff"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/offline-evaluation/case-results' -H 'Content-Type: application/json' -d '{\"run_id\":\"<run_id>\",\"case_id\":\"<case_id>\",\"observed_output\":\"<observed_output>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1b/offline-evaluation/runs/{runId}/complete",
+      "operationId": "completeTopicSelectionV1bOfflineEvaluationRun",
+      "summary": "Complete a v1b offline evaluation run and calculate metrics.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [
+          "runId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "run",
+          "metric_results"
+        ]
+      },
+      "errors": [
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1b/offline-evaluation/runs/{runId}/complete'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1b/offline-evaluation/runs/{runId}/metric-results",
+      "operationId": "listTopicSelectionV1bOfflineEvaluationMetricResults",
+      "summary": "List metric results for a v1b offline evaluation run.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [
+          "runId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1b/offline-evaluation/runs/{runId}/metric-results'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1b/offline-evaluation/runs/{runId}/replay-diffs",
+      "operationId": "listTopicSelectionV1bOfflineEvaluationReplayDiffs",
+      "summary": "List replay diffs for a v1b offline evaluation run.",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [
+          "runId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1b/offline-evaluation/runs/{runId}/replay-diffs'"
       }
     }
   ]

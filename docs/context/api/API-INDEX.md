@@ -1,9 +1,9 @@
 # API Index
 
-> Auto-generated at 2026-05-13T23:06:05.237Z — do NOT hand-edit.
-> Source: `docs/context/api/openapi.yaml` (SHA-256: `bddba510592b...`)
+> Auto-generated at 2026-05-14T14:34:59.279Z — do NOT hand-edit.
+> Source: `docs/context/api/openapi.yaml` (SHA-256: `933743e69bdd...`)
 
-Total endpoints: **129**
+Total endpoints: **149**
 
 | Method | Path | Summary | Auth | Input (required) | Output (core) | Errors |
 |--------|------|---------|------|------------------|---------------|--------|
@@ -136,3 +136,23 @@ Total endpoints: **129**
 | POST | /topic-selection/v1a/offline-evaluation/runs/{runId}/complete | Complete an offline evaluation run and calculate metrics. | none | runId | run, metric_results | 404, 409 |
 | GET | /topic-selection/v1a/offline-evaluation/runs/{runId}/metric-results | List metric results for a v1a offline evaluation run. | none | runId | items | 404 |
 | GET | /topic-selection/v1a/offline-evaluation/runs/{runId}/replay-diffs | List replay diffs for a v1a offline evaluation run. | none | runId | items | 404 |
+| POST | /topic-selection/v1b/intake-snapshots | Create a v1b intake snapshot from a v1a-to-v1b input bundle. | none | v1b_input_bundle_id | — | 400, 404, 409 |
+| POST | /topic-selection/v1b/research-constraint-profiles | Create the ResearchConstraintProfile consumed by ResearchSlice planning. | none | v1b_intake_snapshot_id, target_community, claim_ceiling | — | 400, 404, 409 |
+| POST | /topic-selection/v1b/intake-readiness-assessments | Assess whether v1b intake/profile is ready for ResearchSlice planning. | none | v1b_intake_snapshot_id, research_constraint_profile_id | — | 400, 404, 409 |
+| POST | /topic-selection/v1b/research-slice-option-sets | Plan ResearchSlice options from a ready v1b intake handoff. | none | readiness_assessment_id | plan_run, option_set, options | 400, 404, 409 |
+| POST | /topic-selection/v1b/research-slice-option-sets/{optionSetId}/selection-decisions | Select a ResearchSlice option and materialize the selected ResearchSlice. | none | decision, selection_rationale | — | 400, 404, 409 |
+| POST | /topic-selection/v1b/topic-question-candidate-sets | Form TopicQuestion candidates from a selected ResearchSlice. | none | research_slice_id | form_topic_question_run, question_frame, candidate_set, candidates | 400, 404, 409 |
+| POST | /topic-selection/v1b/topic-question-candidate-sets/{candidateSetId}/selection-decisions | Select/admit TopicQuestion candidates and create a TopicQuestionContract. | none | decision, decision_rationale | — | 400, 404, 409 |
+| POST | /topic-selection/v1b/topic-value-assessments | Assess value for an active TopicQuestionContract. | none | topic_question_contract_id | — | 400, 404, 409 |
+| POST | /topic-selection/v1b/topic-value-assessments/{topicValueAssessmentId}/disposition-decisions | Record the value disposition decision for a TopicValueAssessment. | none | decision, decision_rationale | — | 400, 404, 409 |
+| POST | /topic-selection/v1b/topic-packages/drafts | Create a trace-ready TopicPackage draft from an advance_to_package disposition. | none | value_disposition_decision_id | topic_package, package_trace_boundary_check, package_readiness_assessment, v1c_input_bundle | 400, 404, 409 |
+| GET | /topic-selection/v1b/topic-packages/{topicPackageId} | Read a TopicPackage draft. | none | topicPackageId | — | 404 |
+| POST | /topic-selection/v1b/topic-packages/{topicPackageId}/v1c-input-bundles | Publish the v1c input bundle for a ready TopicPackage draft. | none | topicPackageId | — | 404, 409 |
+| POST | /topic-selection/v1b/offline-evaluation/datasets | Create a v1b offline evaluation dataset. | none | — | — | 400 |
+| POST | /topic-selection/v1b/offline-evaluation/datasets/synthetic-baseline | Create the synthetic v1b offline evaluation baseline dataset. | none | — | dataset, cases | 400 |
+| POST | /topic-selection/v1b/offline-evaluation/cases | Add a frozen v1b replay case to an offline evaluation dataset. | none | dataset_id, case_key, case_type, frozen_input_bundle, gold_expectation | — | 400, 404 |
+| POST | /topic-selection/v1b/offline-evaluation/runs | Start a v1b offline evaluation replay run. | none | dataset_id, workflow_profile_key | — | 400, 404, 409 |
+| POST | /topic-selection/v1b/offline-evaluation/case-results | Record a frozen v1b replay case result and diff. | none | run_id, case_id, observed_output | case_result, replay_diff | 400, 404, 409 |
+| POST | /topic-selection/v1b/offline-evaluation/runs/{runId}/complete | Complete a v1b offline evaluation run and calculate metrics. | none | runId | run, metric_results | 404, 409 |
+| GET | /topic-selection/v1b/offline-evaluation/runs/{runId}/metric-results | List metric results for a v1b offline evaluation run. | none | runId | items | 404 |
+| GET | /topic-selection/v1b/offline-evaluation/runs/{runId}/replay-diffs | List replay diffs for a v1b offline evaluation run. | none | runId | items | 404 |

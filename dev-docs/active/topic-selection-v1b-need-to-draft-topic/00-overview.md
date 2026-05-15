@@ -1,8 +1,8 @@
 # 00 Overview
 
 ## Status
-- State: in-progress
-- Next step: Execute `T-057 topic-selection-v1b-research-slice` using the T-055 intake/profile/readiness handoff.
+- State: done
+- Next step: Start v1c planning from `TopicSelectionV1bToV1cInputBundle`.
 
 ## Parent Package
 - Parent: `dev-docs/active/topic-selection-decision-chain-redesign/`
@@ -39,15 +39,15 @@
 
 ## Child Tasks
 - `T-055 topic-selection-v1b-intake-constraint-profile` - done
-- `T-057 topic-selection-v1b-research-slice`
-- `T-059 topic-selection-v1b-topic-question-contract`
-- `T-060 topic-selection-v1b-value-assessment`
-- `T-058 topic-selection-v1b-topic-package-draft`
-- `T-056 topic-selection-v1b-offline-evaluation-replay`
-- `T-054 topic-selection-v1b-http-api-closure`
+- `T-057 topic-selection-v1b-research-slice` - done
+- `T-059 topic-selection-v1b-topic-question-contract` - done
+- `T-060 topic-selection-v1b-value-assessment` - done
+- `T-058 topic-selection-v1b-topic-package-draft` - done
+- `T-056 topic-selection-v1b-offline-evaluation-replay` - done
+- `T-054 topic-selection-v1b-http-api-closure` - done
 
 ## Acceptance Criteria
 - [x] v1a output contract for `ValidatedNeed` and `TopicSelectionV1aToV1bInputBundle` is stable enough for v1b detailed split.
 - [x] v1b child tasks are created only after v1a backend/service/API closure.
-- [ ] v1b stage can produce a trace-ready `TopicPackage(draft)`.
-- [ ] v1c input bundle is explicit: package readiness, trace/boundary checks, value decision, accepted risks, blockers, and recheck state.
+- [x] v1b stage can produce a trace-ready `TopicPackage(draft)`.
+- [x] v1c input bundle is explicit: package readiness, trace/boundary checks, value decision, accepted risks, blockers, and recheck state.

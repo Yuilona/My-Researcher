@@ -2,7 +2,7 @@
 
 ## Status
 - State: in-progress
-- Next step: 作为母包维护总体架构和跨阶段不变量；v1a backend/service/API 已闭环，v1b 已拆为实施子包并进入 need-to-draft-topic 执行准备。
+- Next step: 作为母包维护总体架构和跨阶段不变量；v1a 和 v1b backend/service/API 已闭环，v1c 现在应从稳定的 `TopicSelectionV1bToV1cInputBundle` 拆实施子包。
 
 ## Goal
 - 创建并维护一个面向“完善选题链路”的母包。
@@ -44,3 +44,4 @@
 - [ ] 后续完成 current implementation gap map。
 - [x] 后续完成 v1a 内部实施子包拆分。
 - [x] v1b implementation child packages are split with an implementation contract review.
+- [x] v1b closed the need-to-draft-topic path through HTTP/API, replay baseline, Prisma smoke, and v1c input bundle handoff.

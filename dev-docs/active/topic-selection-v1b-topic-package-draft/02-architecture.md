@@ -30,3 +30,10 @@
 
 ## Handoff To V1C
 v1c consumes the bundle for promotion review. It must not re-run value assessment as a hidden promotion gate.
+
+## Implementation Decisions
+- `TopicSelectionV1bTopicPackageService` is a backend service only; no Fastify routes, OpenAPI entries, or `buildApp()` wiring were added in this package.
+- Draft package narrative is deterministic and derived from the T-060 package-draft handoff payload; T-058 performs no new LLM drafting run and creates no new need or evidence refs.
+- Persistence reuses `TitleCardPackage` / `TopicPackage` with v1b authority columns and adds sidecar tables for trace/boundary check, package readiness assessment, and v1b-to-v1c input bundle.
+- The Prisma repository patches `TopicSelectionValueDispositionDecision.outputTopicPackageId` in the same transaction that creates the package and sidecars.
+- A unique guard on the source `ValueDispositionDecision` prevents duplicate draft packages for one value decision.

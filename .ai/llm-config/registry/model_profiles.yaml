@@ -79,3 +79,14 @@ profiles:
       - provider_id: openai
         model_id: gpt-5.5
         weight: 100
+
+  - profile_id: topic-selection-promotion-decision-support
+    intent: reviewer_facing_topic_promotion_support_drafting
+    candidates:
+      - provider_id: openai
+        model_id: gpt-5.4-mini
+        weight: 100
+    fallback:
+      - provider_id: openai
+        model_id: gpt-5.5
+        weight: 100

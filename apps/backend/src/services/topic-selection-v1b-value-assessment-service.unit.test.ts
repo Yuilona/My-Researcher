@@ -695,6 +695,9 @@ test('advance_to_package creates package draft input but no package id', async (
   assert.equal(decision.output_topic_package_id, null);
   assert.ok(decision.package_draft_input);
   assert.equal(packageInput.value_disposition_decision_ref.ref_id, decision.value_disposition_decision_id);
+  assert.equal(packageInput.research_slice_snapshot.research_slice_id, RESEARCH_SLICE_ID);
+  assert.equal(packageInput.research_slice_snapshot.title_card_id, TITLE_CARD_ID);
+  assert.equal(packageInput.research_slice_snapshot.slice_version, 'v1');
 });
 
 test('disposition rejects new refs and missing loopback payload', async () => {

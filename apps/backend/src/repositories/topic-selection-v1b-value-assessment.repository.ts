@@ -56,4 +56,8 @@ export interface TopicSelectionV1bValueAssessmentRepository {
   findDispositionDecisionById(
     decisionId: string,
   ): Promise<TopicSelectionValueDispositionDecisionRecord | null>;
+  patchDispositionDecisionOutputTopicPackage(
+    decisionId: string,
+    outputTopicPackageId: string,
+  ): Promise<TopicSelectionValueDispositionDecisionRecord>;
 }

@@ -4,7 +4,13 @@ import test from 'node:test';
 import {
   TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_TYPES,
   TOPIC_SELECTION_OFFLINE_EVALUATION_METRIC_KEYS,
+  TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_CASE_TYPES,
+  TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_METRIC_KEYS,
+  TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_CASE_TYPES,
+  TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_METRIC_KEYS,
   type TopicSelectionOfflineEvaluationCaseRecord,
+  type TopicSelectionOfflineEvaluationGoldExpectation,
+  type TopicSelectionOfflineFrozenInputBundle,
   type TopicSelectionOfflineEvaluationMetricResultRecord,
   type TopicSelectionOfflineEvaluationObservedOutput,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-offline-evaluation-replay-contracts';
@@ -46,6 +52,31 @@ async function createCompletedSyntheticRun() {
   return { ...ctx, dataset, cases, run: completion.run, metricResults: completion.metric_results };
 }
 
+async function createCompletedSyntheticV1bRun() {
+  const ctx = makeContext();
+  const { dataset, cases } = await ctx.service.createSyntheticV1bBaselineDataset();
+  const run = await ctx.service.startRun({
+    dataset_id: dataset.offline_evaluation_dataset_id,
+    workflow_profile_key: 'topic-selection-v1b-frozen-fixture',
+    workflow_profile_version: 'v1',
+    model_profile_key: 'offline-fixture',
+    search_profile_key: 'offline-fixture',
+    policy_version_id: 'policy_v1b',
+  });
+
+  for (const evaluationCase of cases) {
+    await ctx.service.recordFrozenCaseResult({
+      run_id: run.offline_evaluation_run_id,
+      case_id: evaluationCase.offline_evaluation_case_id,
+      observed_output: fixtureObservedOutput(evaluationCase),
+    });
+  }
+  const completion = await ctx.service.completeRunAndCalculateMetrics({
+    run_id: run.offline_evaluation_run_id,
+  });
+  return { ...ctx, dataset, cases, run: completion.run, metricResults: completion.metric_results };
+}
+
 function fixtureObservedOutput(
   evaluationCase: TopicSelectionOfflineEvaluationCaseRecord,
 ): TopicSelectionOfflineEvaluationObservedOutput {
@@ -58,15 +89,104 @@ function metricByKey(
   return new Map(metrics.map((record) => [record.metric_key, record]));
 }
 
+function minimalGoldExpectation(): TopicSelectionOfflineEvaluationGoldExpectation {
+  return {
+    expected_unmet_need: false,
+    expected_key_evidence_refs: [],
+    expected_counter_evidence_refs: [],
+    expected_blocker_codes: [],
+    required_trace_refs: [],
+    expected_recheck_action_refs: [],
+    expected_negative_memory_refs: [],
+    expected_downstream_rework_causes: [],
+    notes: [],
+  };
+}
+
+function minimalFrozenBundle(stage: 'v1a' | 'v1b'): TopicSelectionOfflineFrozenInputBundle {
+  return {
+    stage,
+    frozen_at: '2026-05-13T00:00:00.000Z',
+    source_refs: [],
+    artifact_refs: [],
+    stage_snapshots: {},
+    payload: {},
+  };
+}
+
 test('synthetic baseline covers every required v1a offline evaluation case type', async () => {
   const ctx = makeContext();
-  const { dataset, cases } = await ctx.service.createSyntheticV1aBaselineDataset();
+  const { dataset, cases } = await ctx.service.createSyntheticV1aBaselineDataset({ stage: 'v1b' });
 
-  assert.equal(dataset.case_count, TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_TYPES.length);
-  assert.deepEqual(new Set(cases.map((record) => record.case_type)), new Set(TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_TYPES));
-  assert.deepEqual(new Set(dataset.case_type_coverage), new Set(TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_TYPES));
+  assert.equal(dataset.stage, 'v1a');
+  assert.equal(dataset.case_count, TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_CASE_TYPES.length);
+  assert.deepEqual(new Set(cases.map((record) => record.case_type)), new Set(TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_CASE_TYPES));
+  assert.deepEqual(new Set(dataset.case_type_coverage), new Set(TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_CASE_TYPES));
   assert.equal(cases.every((record) => record.frozen_input_bundle.stage === 'v1a'), true);
   assert.equal(cases.every((record) => record.frozen_input_bundle.payload.fixture_observed_output), true);
+});
+
+test('synthetic baseline covers every required v1b offline evaluation case type', async () => {
+  const ctx = makeContext();
+  const { dataset, cases } = await ctx.service.createSyntheticV1bBaselineDataset();
+
+  assert.equal(dataset.stage, 'v1b');
+  assert.equal(dataset.case_count, TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_CASE_TYPES.length);
+  assert.deepEqual(new Set(cases.map((record) => record.case_type)), new Set(TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_CASE_TYPES));
+  assert.deepEqual(new Set(dataset.case_type_coverage), new Set(TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_CASE_TYPES));
+  assert.equal(cases.every((record) => record.frozen_input_bundle.stage === 'v1b'), true);
+  assert.equal(cases.every((record) => record.frozen_input_bundle.payload.fixture_observed_output), true);
+  assert.equal(TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_TYPES.includes('package_trace_gap'), true);
+  assert.equal(TOPIC_SELECTION_OFFLINE_EVALUATION_METRIC_KEYS.includes('package_trace_completeness'), true);
+});
+
+test('offline replay rejects stage-incompatible case types, frozen bundles, and metric keys', async () => {
+  const ctx = makeContext();
+  const dataset = await ctx.service.createDataset({
+    dataset_key: 'manual-v1b-hardening',
+    stage: 'v1b',
+    status: 'active',
+  });
+
+  await assert.rejects(
+    () => ctx.service.addCase({
+      dataset_id: dataset.offline_evaluation_dataset_id,
+      case_key: 'v1a-case-type',
+      case_type: 'true_unmet_need',
+      frozen_input_bundle: minimalFrozenBundle('v1b'),
+      gold_expectation: minimalGoldExpectation(),
+    }),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && /Case type true_unmet_need/.test(error.message),
+  );
+
+  await assert.rejects(
+    () => ctx.service.addCase({
+      dataset_id: dataset.offline_evaluation_dataset_id,
+      case_key: 'wrong-frozen-stage',
+      case_type: 'slice_boundary_drift',
+      frozen_input_bundle: minimalFrozenBundle('v1a'),
+      gold_expectation: minimalGoldExpectation(),
+    }),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && /does not match dataset stage v1b/.test(error.message),
+  );
+
+  await assert.rejects(
+    () => ctx.service.startRun({
+      dataset_id: dataset.offline_evaluation_dataset_id,
+      workflow_profile_key: 'topic-selection-v1b-frozen-fixture',
+      metric_keys: ['false_gap_rate'],
+    }),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && /Metric keys are not compatible with v1b/.test(error.message),
+  );
 });
 
 test('frozen replay records case results without production workflow or ValidatedNeed dependencies', async () => {
@@ -101,6 +221,11 @@ test('offline replay service remains isolated from live v1a write services', asy
   assert.doesNotMatch(serviceSource, /topic-selection-recheck-risk-memory-service/);
   assert.doesNotMatch(serviceSource, /topic-selection-search-resource-service/);
   assert.doesNotMatch(serviceSource, /topic-selection-control-plane-service/);
+  assert.doesNotMatch(serviceSource, /topic-selection-v1b-intake-constraint-profile-service/);
+  assert.doesNotMatch(serviceSource, /topic-selection-v1b-research-slice-service/);
+  assert.doesNotMatch(serviceSource, /topic-selection-v1b-topic-question-service/);
+  assert.doesNotMatch(serviceSource, /topic-selection-v1b-value-assessment-service/);
+  assert.doesNotMatch(serviceSource, /topic-selection-v1b-topic-package-service/);
 });
 
 test('offline replay runs deduplicate metric keys and reject empty metric sets', async () => {
@@ -175,8 +300,8 @@ test('metric calculation emits all minimum metrics with numerator, denominator, 
   const { metricResults } = await createCompletedSyntheticRun();
   const byKey = metricByKey(metricResults);
 
-  assert.deepEqual(new Set(byKey.keys()), new Set(TOPIC_SELECTION_OFFLINE_EVALUATION_METRIC_KEYS));
-  for (const metricKey of TOPIC_SELECTION_OFFLINE_EVALUATION_METRIC_KEYS) {
+  assert.deepEqual(new Set(byKey.keys()), new Set(TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_METRIC_KEYS));
+  for (const metricKey of TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_METRIC_KEYS) {
     const metric = byKey.get(metricKey);
     assert.ok(metric, `missing metric ${metricKey}`);
     assert.equal(typeof metric.numerator, 'number');
@@ -201,6 +326,41 @@ test('metric calculation emits all minimum metrics with numerator, denominator, 
   assert.equal(byKey.get('recheck_precision')?.denominator, 1);
 });
 
+test('v1b metric calculation emits boundary answerability value package and loopback baseline metrics', async () => {
+  const { metricResults, run } = await createCompletedSyntheticV1bRun();
+  const byKey = metricByKey(metricResults);
+
+  assert.deepEqual(new Set(run.metric_keys), new Set(TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_METRIC_KEYS));
+  assert.deepEqual(new Set(byKey.keys()), new Set(TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_METRIC_KEYS));
+  for (const metricKey of TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_METRIC_KEYS) {
+    const metric = byKey.get(metricKey);
+    assert.ok(metric, `missing metric ${metricKey}`);
+    assert.equal(typeof metric.numerator, 'number');
+    assert.equal(typeof metric.denominator, 'number');
+    assert.equal(Array.isArray(metric.contributing_case_refs), true);
+    assert.equal(Array.isArray(metric.failure_case_refs), true);
+    assert.equal(metric.notes.length > 0, true);
+  }
+
+  assert.equal(byKey.get('slice_boundary_drift_rate')?.numerator, 1);
+  assert.equal(byKey.get('slice_boundary_drift_rate')?.denominator, 6);
+  assert.equal(byKey.get('answerability_false_pass_rate')?.numerator, 1);
+  assert.equal(byKey.get('answerability_false_pass_rate')?.denominator, 1);
+  assert.equal(byKey.get('value_overclaim_rate')?.numerator, 1);
+  assert.equal(byKey.get('value_overclaim_rate')?.denominator, 6);
+  assert.equal(byKey.get('package_trace_completeness')?.numerator, 11);
+  assert.equal(byKey.get('package_trace_completeness')?.denominator, 12);
+  assert.equal(byKey.get('package_readiness_false_pass_rate')?.numerator, 1);
+  assert.equal(byKey.get('package_readiness_false_pass_rate')?.denominator, 3);
+  assert.equal(byKey.get('downstream_loopback_cause_distribution')?.numerator, 0);
+  assert.equal(byKey.get('downstream_loopback_cause_distribution')?.denominator, 1);
+  assert.deepEqual(byKey.get('downstream_loopback_cause_distribution')?.metric_payload, {
+    cause_distribution: {
+      refine_slice: 1,
+    },
+  });
+});
+
 test('ReplayDiff flags final decision, key evidence, blocker set, and trace verdict changes', async () => {
   const { run, service } = await createCompletedSyntheticRun();
   const diffs = await service.listReplayDiffs(run.offline_evaluation_run_id);
@@ -210,6 +370,20 @@ test('ReplayDiff flags final decision, key evidence, blocker set, and trace verd
   assert.equal(changedDimensions.has('key_evidence_set'), true);
   assert.equal(changedDimensions.has('blocker_set'), true);
   assert.equal(changedDimensions.has('trace_verdict'), true);
+  assert.equal(diffs.some((record) => record.status === 'mismatch'), true);
+});
+
+test('v1b ReplayDiff flags boundary answerability value package and loopback changes', async () => {
+  const { run, service } = await createCompletedSyntheticV1bRun();
+  const diffs = await service.listReplayDiffs(run.offline_evaluation_run_id);
+  const changedDimensions = new Set(diffs.flatMap((record) => record.changed_dimensions));
+
+  assert.equal(changedDimensions.has('slice_boundary'), true);
+  assert.equal(changedDimensions.has('answerability_verdict'), true);
+  assert.equal(changedDimensions.has('value_claim'), true);
+  assert.equal(changedDimensions.has('package_trace'), true);
+  assert.equal(changedDimensions.has('package_readiness'), true);
+  assert.equal(changedDimensions.has('loopback_cause'), true);
   assert.equal(diffs.some((record) => record.status === 'mismatch'), true);
 });
 

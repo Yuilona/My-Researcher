@@ -138,6 +138,23 @@ implements TopicSelectionV1bValueAssessmentRepository {
     return this.decisions.get(decisionId) ?? null;
   }
 
+  async patchDispositionDecisionOutputTopicPackage(
+    decisionId: string,
+    outputTopicPackageId: string,
+  ): Promise<TopicSelectionValueDispositionDecisionRecord> {
+    const decision = this.require(
+      this.decisions,
+      decisionId,
+      'ValueDispositionDecision',
+    );
+    const next = {
+      ...decision,
+      output_topic_package_id: outputTopicPackageId,
+    };
+    this.decisions.set(decisionId, next);
+    return next;
+  }
+
   private require<T>(records: Map<string, T>, id: string, label: string): T {
     const record = records.get(id);
     if (!record) {

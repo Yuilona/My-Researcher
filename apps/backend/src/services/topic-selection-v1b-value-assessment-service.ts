@@ -997,9 +997,16 @@ export class TopicSelectionV1bValueAssessmentService {
     controlPlaneInputSnapshotId: string;
     now: string;
   }): TopicSelectionTopicValueAssessmentInputSnapshotRecord {
+    const researchSliceSnapshot = {
+      ...input.formationInput,
+      research_slice_id: input.valueInput.research_slice_ref.ref_id,
+      workspace_id: input.workspaceId,
+      title_card_id: input.titleCardId,
+      slice_version: input.valueInput.research_slice_ref.version_id ?? 'v1',
+    };
     const payload = {
       value_input: input.valueInput,
-      research_slice_snapshot: input.formationInput,
+      research_slice_snapshot: researchSliceSnapshot,
     };
     return {
       topic_value_input_snapshot_id: input.inputSnapshotId,
@@ -1033,7 +1040,7 @@ export class TopicSelectionV1bValueAssessmentService {
       ]),
       question_contract: input.valueInput.question_contract,
       answerability_plan: input.valueInput.answerability_plan,
-      research_slice_snapshot: input.formationInput as unknown as Record<string, unknown>,
+      research_slice_snapshot: researchSliceSnapshot as unknown as Record<string, unknown>,
       snapshot_hash: sha256Text(stableStringify(payload)),
       control_plane_input_snapshot_id: input.controlPlaneInputSnapshotId,
       created_at: input.now,

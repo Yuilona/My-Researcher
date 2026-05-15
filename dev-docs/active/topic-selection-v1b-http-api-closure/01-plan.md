@@ -5,14 +5,14 @@
 - Keep controllers thin and route validation explicit.
 
 Acceptance:
-- [ ] Route inventory aligns with OpenAPI and service contracts.
+- [x] Route inventory aligns with OpenAPI and service contracts.
 
 ## Phase 2 - Wiring
 - Wire repositories/services/controllers into `buildApp()`.
 - Add route integration tests using `app.inject()`.
 
 Acceptance:
-- [ ] Route smoke creates a draft package from a valid v1b input.
+- [x] Route smoke creates a draft package from a valid v1b input.
 
 ## Phase 3 - Connectivity
 - Start real Fastify servers in memory and Prisma modes.
@@ -20,4 +20,4 @@ Acceptance:
 - Verify OpenAPI quality and API index.
 
 Acceptance:
-- [ ] HTTP connectivity passes in both storage modes.
+- [x] HTTP connectivity passes in memory mode and is wired for Prisma mode; local Prisma execution is blocked until a reachable Postgres is provided.

@@ -8,30 +8,30 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 60 (planned: 5, in-progress: 4, blocked: 0, done: 12, archived: 39)
+- Tasks: 67 (planned: 5, in-progress: 3, blocked: 0, done: 20, archived: 39)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
+| T-061 topic-selection-v1c-promotion-input-snapshot | done | F-001 | dev-docs/active/topic-selection-v1c-promotion-input-snapshot |
+| T-062 topic-selection-v1c-promotion-gate-support | done | F-001 | dev-docs/active/topic-selection-v1c-promotion-gate-support |
+| T-063 topic-selection-v1c-human-promotion-decision-profile | done | F-001 | dev-docs/active/topic-selection-v1c-human-promotion-decision-profile |
+| T-064 topic-selection-v1c-paper-project-bridge | done | F-001 | dev-docs/active/topic-selection-v1c-paper-project-bridge |
+| T-065 topic-selection-v1c-downstream-feedback-recheck | planned | F-001 | dev-docs/active/topic-selection-v1c-downstream-feedback-recheck |
+| T-066 topic-selection-v1c-offline-evaluation-replay | planned | F-001 | dev-docs/active/topic-selection-v1c-offline-evaluation-replay |
+| T-067 topic-selection-v1c-http-api-closure | planned | F-001 | dev-docs/active/topic-selection-v1c-http-api-closure |
 | T-044 topic-selection-v1a-evidence-to-need | done | F-001 | dev-docs/active/topic-selection-v1a-evidence-to-need |
-| T-045 topic-selection-v1b-need-to-draft-topic | in-progress | F-001 | dev-docs/active/topic-selection-v1b-need-to-draft-topic |
+| T-045 topic-selection-v1b-need-to-draft-topic | done | F-001 | dev-docs/active/topic-selection-v1b-need-to-draft-topic |
 | T-047 topic-selection-v1a-evidence-map-strength | done | F-001 | dev-docs/active/topic-selection-v1a-evidence-map-strength |
 | T-048 topic-selection-v1a-foundation-control-plane | done | F-001 | dev-docs/active/topic-selection-v1a-foundation-control-plane |
 | T-049 topic-selection-v1a-need-validation | done | F-001 | dev-docs/active/topic-selection-v1a-need-validation |
 | T-052 topic-selection-v1a-search-resource-evidence-inputs | done | F-001 | dev-docs/active/topic-selection-v1a-search-resource-evidence-inputs |
-| T-054 topic-selection-v1b-http-api-closure | planned | F-001 | dev-docs/active/topic-selection-v1b-http-api-closure |
+| T-054 topic-selection-v1b-http-api-closure | done | F-001 | dev-docs/active/topic-selection-v1b-http-api-closure |
 | T-055 topic-selection-v1b-intake-constraint-profile | done | F-001 | dev-docs/active/topic-selection-v1b-intake-constraint-profile |
-| T-056 topic-selection-v1b-offline-evaluation-replay | planned | F-001 | dev-docs/active/topic-selection-v1b-offline-evaluation-replay |
+| T-056 topic-selection-v1b-offline-evaluation-replay | done | F-001 | dev-docs/active/topic-selection-v1b-offline-evaluation-replay |
 | T-057 topic-selection-v1b-research-slice | done | F-001 | dev-docs/active/topic-selection-v1b-research-slice |
-| T-058 topic-selection-v1b-topic-package-draft | planned | F-001 | dev-docs/active/topic-selection-v1b-topic-package-draft |
+| T-058 topic-selection-v1b-topic-package-draft | done | F-001 | dev-docs/active/topic-selection-v1b-topic-package-draft |
 | T-059 topic-selection-v1b-topic-question-contract | done | F-001 | dev-docs/active/topic-selection-v1b-topic-question-contract |
 | T-060 topic-selection-v1b-value-assessment | done | F-001 | dev-docs/active/topic-selection-v1b-value-assessment |
-| T-011 literature-management-flow | archived | F-000 | dev-docs/archive/literature-management-flow |
-| T-012 app-tsx-layout-split | archived | F-000 | dev-docs/archive/app-tsx-layout-split |
-| T-013 topic-initial-pull-and-rule-preview | archived | F-000 | dev-docs/archive/topic-initial-pull-and-rule-preview |
-| T-014 automated-topic-management | archived | F-001 | dev-docs/archive/automated-topic-management |
-| T-015 maintainability-file-split-governance | archived | F-000 | dev-docs/archive/maintainability-file-split-governance |
-| T-016 backend-service-boundary-split-wave3 | archived | F-000 | dev-docs/archive/backend-service-boundary-split-wave3 |
-| T-017 frontend-normalizers-and-css-split-wave2 | archived | F-000 | dev-docs/archive/frontend-normalizers-and-css-split-wave2 |
 <!-- AUTO-GENERATED:END dashboard -->

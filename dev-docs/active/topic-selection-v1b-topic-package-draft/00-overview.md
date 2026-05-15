@@ -1,8 +1,8 @@
 # 00 Overview
 
 ## Status
-- State: planned
-- Next step: Implement draft package creation after value assessment handoff lands.
+- State: done
+- Next step: Proceed to `T-056 topic-selection-v1b-offline-evaluation-replay`, then `T-054 topic-selection-v1b-http-api-closure`.
 
 ## Parent Package
 - Stage parent: `dev-docs/active/topic-selection-v1b-need-to-draft-topic/`
@@ -26,7 +26,7 @@
 - draft issue/blocker records where needed
 
 ## Acceptance Criteria
-- [ ] Only `ValueDispositionDecision.decision=advance_to_package` can create a draft package.
-- [ ] Package includes refs to validated need, ResearchSlice, TopicQuestionContract, TopicValueAssessment, ValueReasoningMemo, evidence/search refs, accepted risks, blockers, and recheck state.
-- [ ] Package readiness is explicit and blocks v1c when trace, boundary, risk, or recheck checks fail.
-- [ ] v1c input bundle is explicit and sufficient for promotion bridge review.
+- [x] Only `ValueDispositionDecision.decision=advance_to_package` can create a draft package.
+- [x] Package includes refs to validated need, ResearchSlice, TopicQuestionContract, TopicValueAssessment, ValueReasoningMemo, evidence/search refs, accepted risks, blockers, and recheck state.
+- [x] Package readiness is explicit and blocks v1c when trace, boundary, risk, or recheck checks fail.
+- [x] v1c input bundle is explicit and sufficient for promotion bridge review.

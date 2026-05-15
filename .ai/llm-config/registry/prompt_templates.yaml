@@ -104,3 +104,19 @@ templates:
       - Do not prove a new unmet need, create new evidence authority, rewrite the question, or expand the slice.
       - Do not create a TopicPackage, promotion decision, PaperProject, or package-readiness claim.
       - advance_to_package only means the draft-package handoff may be prepared by deterministic service logic.
+
+  - prompt_template_id: topic-selection-promotion-decision-support
+    version: 1
+    runtime_profile_id: topic_selection_promotion_decision_support.v1
+    description: Draft reviewer-facing support prose for v1c promotion review from a frozen PromotionInputSnapshotHandoff.
+    variables_schema:
+      type: object
+      required: [promotion_input_handoff_json]
+      properties:
+        promotion_input_handoff_json:
+          type: object
+    notes:
+      - Return only JSON with summary, reviewer_questions, risk_notes, recheck_notes, and dossier_markdown.
+      - Do not output or override a promotion gate disposition.
+      - Do not authorize promotion, create human decisions, create PaperProject bridges, or modify v1b/T-061 authority objects.
+      - Copy refs only from the supplied PromotionInputSnapshotHandoff.

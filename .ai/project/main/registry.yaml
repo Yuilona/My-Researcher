@@ -447,7 +447,7 @@ tasks:
     updated: 2026-05-14
   - id: T-045
     slug: topic-selection-v1b-need-to-draft-topic
-    status: in-progress
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
@@ -528,7 +528,7 @@ tasks:
     updated: 2026-05-13
   - id: T-054
     slug: topic-selection-v1b-http-api-closure
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
@@ -546,7 +546,7 @@ tasks:
     updated: 2026-05-14
   - id: T-056
     slug: topic-selection-v1b-offline-evaluation-replay
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
@@ -564,7 +564,7 @@ tasks:
     updated: 2026-05-14
   - id: T-058
     slug: topic-selection-v1b-topic-package-draft
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
@@ -589,3 +589,66 @@ tasks:
       - R-009
     dev_docs_path: dev-docs/active/topic-selection-v1b-value-assessment
     updated: 2026-05-14
+  - id: T-061
+    slug: topic-selection-v1c-promotion-input-snapshot
+    status: done
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1c-promotion-input-snapshot
+    updated: 2026-05-15
+  - id: T-062
+    slug: topic-selection-v1c-promotion-gate-support
+    status: done
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1c-promotion-gate-support
+    updated: 2026-05-15
+  - id: T-063
+    slug: topic-selection-v1c-human-promotion-decision-profile
+    status: done
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1c-human-promotion-decision-profile
+    updated: 2026-05-15
+  - id: T-064
+    slug: topic-selection-v1c-paper-project-bridge
+    status: done
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1c-paper-project-bridge
+    updated: 2026-05-15
+  - id: T-065
+    slug: topic-selection-v1c-downstream-feedback-recheck
+    status: planned
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1c-downstream-feedback-recheck
+    updated: 2026-05-15
+  - id: T-066
+    slug: topic-selection-v1c-offline-evaluation-replay
+    status: planned
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1c-offline-evaluation-replay
+    updated: 2026-05-15
+  - id: T-067
+    slug: topic-selection-v1c-http-api-closure
+    status: planned
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-009
+    dev_docs_path: dev-docs/active/topic-selection-v1c-http-api-closure
+    updated: 2026-05-15

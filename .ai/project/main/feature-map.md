@@ -58,7 +58,7 @@ Project: `main`
 | T-042 topic-selection-decision-chain-redesign | in-progress | dev-docs/active/topic-selection-decision-chain-redesign |
 | T-043 experiment-foundation-v1 | planned | dev-docs/active/experiment-foundation-v1 |
 | T-044 topic-selection-v1a-evidence-to-need | done | dev-docs/active/topic-selection-v1a-evidence-to-need |
-| T-045 topic-selection-v1b-need-to-draft-topic | in-progress | dev-docs/active/topic-selection-v1b-need-to-draft-topic |
+| T-045 topic-selection-v1b-need-to-draft-topic | done | dev-docs/active/topic-selection-v1b-need-to-draft-topic |
 | T-046 topic-selection-v1c-promotion-bridge | planned | dev-docs/active/topic-selection-v1c-promotion-bridge |
 | T-047 topic-selection-v1a-evidence-map-strength | done | dev-docs/active/topic-selection-v1a-evidence-map-strength |
 | T-048 topic-selection-v1a-foundation-control-plane | done | dev-docs/active/topic-selection-v1a-foundation-control-plane |
@@ -67,13 +67,20 @@ Project: `main`
 | T-051 topic-selection-v1a-recheck-risk-memory | done | dev-docs/active/topic-selection-v1a-recheck-risk-memory |
 | T-052 topic-selection-v1a-search-resource-evidence-inputs | done | dev-docs/active/topic-selection-v1a-search-resource-evidence-inputs |
 | T-053 topic-selection-v1a-http-api-closure | done | dev-docs/active/topic-selection-v1a-http-api-closure |
-| T-054 topic-selection-v1b-http-api-closure | planned | dev-docs/active/topic-selection-v1b-http-api-closure |
+| T-054 topic-selection-v1b-http-api-closure | done | dev-docs/active/topic-selection-v1b-http-api-closure |
 | T-055 topic-selection-v1b-intake-constraint-profile | done | dev-docs/active/topic-selection-v1b-intake-constraint-profile |
-| T-056 topic-selection-v1b-offline-evaluation-replay | planned | dev-docs/active/topic-selection-v1b-offline-evaluation-replay |
+| T-056 topic-selection-v1b-offline-evaluation-replay | done | dev-docs/active/topic-selection-v1b-offline-evaluation-replay |
 | T-057 topic-selection-v1b-research-slice | done | dev-docs/active/topic-selection-v1b-research-slice |
-| T-058 topic-selection-v1b-topic-package-draft | planned | dev-docs/active/topic-selection-v1b-topic-package-draft |
+| T-058 topic-selection-v1b-topic-package-draft | done | dev-docs/active/topic-selection-v1b-topic-package-draft |
 | T-059 topic-selection-v1b-topic-question-contract | done | dev-docs/active/topic-selection-v1b-topic-question-contract |
 | T-060 topic-selection-v1b-value-assessment | done | dev-docs/active/topic-selection-v1b-value-assessment |
+| T-061 topic-selection-v1c-promotion-input-snapshot | done | dev-docs/active/topic-selection-v1c-promotion-input-snapshot |
+| T-062 topic-selection-v1c-promotion-gate-support | done | dev-docs/active/topic-selection-v1c-promotion-gate-support |
+| T-063 topic-selection-v1c-human-promotion-decision-profile | done | dev-docs/active/topic-selection-v1c-human-promotion-decision-profile |
+| T-064 topic-selection-v1c-paper-project-bridge | done | dev-docs/active/topic-selection-v1c-paper-project-bridge |
+| T-065 topic-selection-v1c-downstream-feedback-recheck | planned | dev-docs/active/topic-selection-v1c-downstream-feedback-recheck |
+| T-066 topic-selection-v1c-offline-evaluation-replay | planned | dev-docs/active/topic-selection-v1c-offline-evaluation-replay |
+| T-067 topic-selection-v1c-http-api-closure | planned | dev-docs/active/topic-selection-v1c-http-api-closure |
 
 ### F-002 Desktop Frontend Foundation
 

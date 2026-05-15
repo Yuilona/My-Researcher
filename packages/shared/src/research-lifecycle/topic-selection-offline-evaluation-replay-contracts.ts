@@ -11,7 +11,11 @@ import {
   type TopicSelectionNeedReadinessRecommendation,
 } from './topic-selection-need-validation-contracts.js';
 
-export const TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_TYPES = [
+export const TOPIC_SELECTION_OFFLINE_EVALUATION_STAGES = ['v1a', 'v1b'] as const;
+export type TopicSelectionOfflineEvaluationStage =
+  (typeof TOPIC_SELECTION_OFFLINE_EVALUATION_STAGES)[number];
+
+export const TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_CASE_TYPES = [
   'true_unmet_need',
   'pseudo_gap',
   'strong_baseline_solved',
@@ -21,6 +25,20 @@ export const TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_TYPES = [
   'same_team_duplicate_claim',
   'source_health_or_missing_fulltext',
   'downstream_failure_feedback',
+] as const;
+
+export const TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_CASE_TYPES = [
+  'slice_boundary_drift',
+  'answerability_false_pass',
+  'value_overclaim',
+  'package_trace_gap',
+  'package_readiness_false_pass',
+  'downstream_loopback_feedback',
+] as const;
+
+export const TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_TYPES = [
+  ...TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_CASE_TYPES,
+  ...TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_CASE_TYPES,
 ] as const;
 export type TopicSelectionOfflineEvaluationCaseType =
   (typeof TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_TYPES)[number];
@@ -65,7 +83,7 @@ export const TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_RESULT_STATUSES = [
 export type TopicSelectionOfflineEvaluationCaseResultStatus =
   (typeof TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_RESULT_STATUSES)[number];
 
-export const TOPIC_SELECTION_OFFLINE_EVALUATION_METRIC_KEYS = [
+export const TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_METRIC_KEYS = [
   'false_gap_rate',
   'baseline_miss_rate',
   'counter_evidence_recall',
@@ -76,6 +94,20 @@ export const TOPIC_SELECTION_OFFLINE_EVALUATION_METRIC_KEYS = [
   'recheck_precision',
   'negative_memory_usefulness',
   'downstream_rework_cause',
+] as const;
+
+export const TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_METRIC_KEYS = [
+  'slice_boundary_drift_rate',
+  'answerability_false_pass_rate',
+  'value_overclaim_rate',
+  'package_trace_completeness',
+  'package_readiness_false_pass_rate',
+  'downstream_loopback_cause_distribution',
+] as const;
+
+export const TOPIC_SELECTION_OFFLINE_EVALUATION_METRIC_KEYS = [
+  ...TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_METRIC_KEYS,
+  ...TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_METRIC_KEYS,
 ] as const;
 export type TopicSelectionOfflineEvaluationMetricKey =
   (typeof TOPIC_SELECTION_OFFLINE_EVALUATION_METRIC_KEYS)[number];
@@ -88,11 +120,17 @@ export const TOPIC_SELECTION_REPLAY_DIFF_DIMENSIONS = [
   'key_evidence_set',
   'blocker_set',
   'trace_verdict',
+  'slice_boundary',
+  'answerability_verdict',
+  'value_claim',
+  'package_trace',
+  'package_readiness',
+  'loopback_cause',
 ] as const;
 export type TopicSelectionReplayDiffDimension = (typeof TOPIC_SELECTION_REPLAY_DIFF_DIMENSIONS)[number];
 
 export interface TopicSelectionOfflineFrozenInputBundle {
-  stage: 'v1a';
+  stage: TopicSelectionOfflineEvaluationStage;
   frozen_at: string;
   source_refs: TopicSelectionFunctionalRef[];
   artifact_refs: TopicSelectionFunctionalRef[];
@@ -103,6 +141,12 @@ export interface TopicSelectionOfflineFrozenInputBundle {
     need_validation?: Record<string, unknown>;
     recheck_risk_memory?: Record<string, unknown>;
     downstream_feedback?: Record<string, unknown>;
+    v1b_intake?: Record<string, unknown>;
+    research_slice?: Record<string, unknown>;
+    topic_question_contract?: Record<string, unknown>;
+    topic_value_assessment?: Record<string, unknown>;
+    topic_package?: Record<string, unknown>;
+    v1c_input_bundle?: Record<string, unknown>;
   };
   payload: Record<string, unknown>;
 }
@@ -120,6 +164,13 @@ export interface TopicSelectionOfflineEvaluationGoldExpectation {
   expected_negative_memory_refs: TopicSelectionFunctionalRef[];
   expected_downstream_rework_causes: string[];
   expected_baseline_solved?: boolean;
+  allowed_slice_boundary_drift_codes?: string[];
+  expected_answerability_passed?: boolean | null;
+  allowed_value_overclaim_codes?: string[];
+  required_package_trace_refs?: TopicSelectionFunctionalRef[];
+  expected_package_ready?: boolean | null;
+  expected_package_readiness_status?: string | null;
+  expected_downstream_loopback_causes?: string[];
   notes: string[];
 }
 
@@ -138,6 +189,15 @@ export interface TopicSelectionOfflineEvaluationObservedSnapshot {
   memory_refs: TopicSelectionFunctionalRef[];
   memory_used_as_evidence_refs: TopicSelectionFunctionalRef[];
   downstream_rework_causes: string[];
+  slice_boundary_drift_codes?: string[];
+  answerability_verdict?: string | null;
+  answerability_passed?: boolean | null;
+  value_overclaim_codes?: string[];
+  package_trace_refs?: TopicSelectionFunctionalRef[];
+  package_trace_verdict?: string | null;
+  package_readiness_status?: string | null;
+  package_readiness_passed?: boolean | null;
+  downstream_loopback_causes?: string[];
   payload: Record<string, unknown>;
 }
 
@@ -151,7 +211,7 @@ export interface TopicSelectionOfflineEvaluationDatasetRecord {
   workspace_id?: string | null;
   dataset_key: string;
   dataset_version: string;
-  stage: 'v1a';
+  stage: TopicSelectionOfflineEvaluationStage;
   source: TopicSelectionOfflineEvaluationDatasetSource;
   status: TopicSelectionOfflineEvaluationDatasetStatus;
   description?: string | null;
@@ -251,7 +311,7 @@ export function createTopicSelectionOfflineFrozenInputBundle(
   input: Partial<TopicSelectionOfflineFrozenInputBundle> & { frozen_at: string },
 ): TopicSelectionOfflineFrozenInputBundle {
   return {
-    stage: 'v1a',
+    stage: input.stage ?? 'v1a',
     frozen_at: input.frozen_at,
     source_refs: input.source_refs ?? [],
     artifact_refs: input.artifact_refs ?? [],
@@ -281,7 +341,7 @@ export const topicSelectionOfflineFrozenInputBundleSchema = {
   additionalProperties: false,
   required: ['stage', 'frozen_at', 'source_refs', 'artifact_refs', 'stage_snapshots', 'payload'],
   properties: {
-    stage: { enum: ['v1a'] },
+    stage: { enum: [...TOPIC_SELECTION_OFFLINE_EVALUATION_STAGES] },
     frozen_at: stringId,
     source_refs: functionalRefArray,
     artifact_refs: functionalRefArray,
@@ -317,6 +377,13 @@ export const topicSelectionOfflineEvaluationGoldExpectationSchema = {
     expected_negative_memory_refs: functionalRefArray,
     expected_downstream_rework_causes: stringArray,
     expected_baseline_solved: booleanValue,
+    allowed_slice_boundary_drift_codes: stringArray,
+    expected_answerability_passed: { anyOf: [booleanValue, { type: 'null' }] },
+    allowed_value_overclaim_codes: stringArray,
+    required_package_trace_refs: functionalRefArray,
+    expected_package_ready: { anyOf: [booleanValue, { type: 'null' }] },
+    expected_package_readiness_status: nullableStringId,
+    expected_downstream_loopback_causes: stringArray,
     notes: stringArray,
   },
 } as const;
@@ -350,6 +417,15 @@ const topicSelectionOfflineEvaluationObservedSnapshotProperties = {
   memory_refs: functionalRefArray,
   memory_used_as_evidence_refs: functionalRefArray,
   downstream_rework_causes: stringArray,
+  slice_boundary_drift_codes: stringArray,
+  answerability_verdict: nullableStringId,
+  answerability_passed: { anyOf: [booleanValue, { type: 'null' }] },
+  value_overclaim_codes: stringArray,
+  package_trace_refs: functionalRefArray,
+  package_trace_verdict: nullableStringId,
+  package_readiness_status: nullableStringId,
+  package_readiness_passed: { anyOf: [booleanValue, { type: 'null' }] },
+  downstream_loopback_causes: stringArray,
   payload: objectPayload,
 } as const;
 
@@ -394,7 +470,7 @@ export const topicSelectionOfflineEvaluationDatasetRecordSchema = {
     workspace_id: nullableStringId,
     dataset_key: stringId,
     dataset_version: stringId,
-    stage: { enum: ['v1a'] },
+    stage: { enum: [...TOPIC_SELECTION_OFFLINE_EVALUATION_STAGES] },
     source: { enum: [...TOPIC_SELECTION_OFFLINE_EVALUATION_DATASET_SOURCES] },
     status: { enum: [...TOPIC_SELECTION_OFFLINE_EVALUATION_DATASET_STATUSES] },
     description: nullableStringId,

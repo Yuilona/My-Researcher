@@ -60,5 +60,11 @@
 - Check: v1b coverage review against parent design.
 - Result: coverage is complete after adding explicit owners for `ResearchConstraintProfile`, v1b replay/evaluation, and `TopicSelectionV1bToV1cInputBundle`.
 
+## 2026-05-15
+- Check: v1b closure hardening and parent-stage sync.
+- Result: v1b is represented as closed after HTTP/API, replay baseline, Prisma smoke, and stage-pure replay hardening; parent next step now points to v1c implementation splitting from `TopicSelectionV1bToV1cInputBundle`.
+- Check: v1c readiness review.
+- Result: `T-046` no longer waits for v1b readiness stabilization; it is ready for child-package splitting while preserving the no-promotion/no-bridge boundary in v1b.
+
 ## Pending
 - None for the `topic-selection-decision-chain-redesign` task bundle.

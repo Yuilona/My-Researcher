@@ -1,8 +1,8 @@
 # 00 Overview
 
 ## Status
-- State: planned
-- Next step: Implement HTTP/API closure after v1b service layer and draft package vertical smoke land.
+- State: done
+- Next step: Use the completed v1b HTTP/API surface as the input boundary for v1c planning.
 
 ## Parent Package
 - Stage parent: `dev-docs/active/topic-selection-v1b-need-to-draft-topic/`
@@ -31,7 +31,7 @@
 - route integration tests and real HTTP connectivity smoke
 
 ## Acceptance Criteria
-- [ ] `buildApp()` registers v1b routes in memory mode.
-- [ ] Prisma mode can use the same v1b route wiring.
-- [ ] Route smoke drives intake, slice, question, value, package, readiness, and v1c bundle publication.
-- [ ] Malformed payloads return consistent `INVALID_PAYLOAD`.
+- [x] `buildApp()` registers v1b routes in memory mode.
+- [x] Prisma mode uses the same v1b route wiring; the smoke is intentionally non-skipped and requires a reachable `DATABASE_URL`.
+- [x] Route smoke drives intake, slice, question, value, package, readiness, and v1c bundle publication.
+- [x] Malformed payloads return consistent `INVALID_PAYLOAD`.

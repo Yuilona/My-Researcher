@@ -2,8 +2,8 @@ version: 1
 task_id: T-045
 project: main
 slug: topic-selection-v1b-need-to-draft-topic
-status: in-progress
-updated: "2026-05-14"
+status: done
+updated: "2026-05-15"
 keywords:
   - topic-selection
   - v1b

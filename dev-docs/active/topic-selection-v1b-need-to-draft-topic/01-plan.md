@@ -20,9 +20,9 @@ Acceptance:
 7. `T-054 topic-selection-v1b-http-api-closure`
 
 Acceptance:
-- [ ] Each child task implements its authority objects, repositories, service contract, and focused tests.
-- [ ] Each handoff consumes refs from the previous package and rejects stale, missing, or out-of-scope refs.
-- [ ] The vertical service smoke can produce `TopicPackage(draft)` from a real v1a input bundle.
+- [x] Each child task implements its authority objects, repositories, service contract, and focused tests.
+- [x] Each handoff consumes refs from the previous package and rejects stale, missing, or out-of-scope refs; T-056 replay consumes frozen snapshots only.
+- [x] The vertical HTTP smoke can produce `TopicPackage(draft)` from a real v1a input bundle.
 
 ## Phase 3 - Stage Closure
 - Produce a `TopicPackage(draft)` from a human-confirmed `ValidatedNeed`.
@@ -31,6 +31,7 @@ Acceptance:
 - Run v1b replay metrics and HTTP/API smoke in memory and Prisma modes.
 
 Acceptance:
-- [ ] `TopicPackage(draft)` has explicit `package_readiness_status`.
-- [ ] Package trace/boundary/readiness artifacts are sufficient for promotion gate input.
-- [ ] v1c input contract is ready for detailed split.
+- [x] `TopicPackage(draft)` has explicit `package_readiness_status`.
+- [x] Package trace/boundary/readiness artifacts are sufficient for promotion gate input.
+- [x] v1c input contract is ready for detailed split.
+- [x] v1b replay metrics cover boundary drift, answerability, value overclaim, package trace/readiness, and downstream loopback causes.

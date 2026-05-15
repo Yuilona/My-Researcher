@@ -495,6 +495,17 @@ implements TopicSelectionV1bValueAssessmentRepository {
     return row ? toDecisionRecord(row) : null;
   }
 
+  async patchDispositionDecisionOutputTopicPackage(
+    decisionId: string,
+    outputTopicPackageId: string,
+  ): Promise<TopicSelectionValueDispositionDecisionRecord> {
+    const row = await this.prisma.topicSelectionValueDispositionDecision.update({
+      where: { id: decisionId },
+      data: { outputTopicPackageId },
+    });
+    return toDecisionRecord(row);
+  }
+
   private toRunCreateInput(
     record: TopicSelectionAssessTopicValueRunRecord,
   ): Prisma.TopicSelectionAssessTopicValueRunCreateInput {
