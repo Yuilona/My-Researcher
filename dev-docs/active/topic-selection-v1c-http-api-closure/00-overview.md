@@ -1,8 +1,8 @@
 # 00 Overview
 
 ## Status
-- State: planned
-- Next step: Implement after T-061 through T-066 service/repository contracts are stable.
+- State: done
+- Next step: T-067 is closed; continue with downstream PaperProject intake work in a separate task if needed.
 
 ## Parent Package
 - Stage parent: `dev-docs/active/topic-selection-v1c-promotion-bridge/`
@@ -27,9 +27,10 @@
 - Prisma HTTP smoke tests
 
 ## Acceptance Criteria
-- [ ] HTTP chain creates promotion input snapshot, support/gate artifacts, human promotion decision, commitment profile, and bridge.
-- [ ] HTTP exposes review/read routes for input snapshots, support/dossiers, gate checks, promotion decisions, bridges, feedback, and recheck requests.
-- [ ] Non-promote decisions return typed loopback/action payloads and do not create bridges.
-- [ ] Downstream feedback/recheck routes write only feedback/recheck artifacts.
-- [ ] Replay routes force `stage='v1c'`.
-- [ ] OpenAPI and API index verify cleanly.
+- [x] HTTP chain creates promotion input snapshot, support/gate artifacts, human promotion decision, commitment profile, and bridge.
+- [x] HTTP exposes review/read routes for input snapshots, support/dossiers, gate checks, promotion decisions, bridges, feedback, and recheck requests.
+- [x] Non-promote decisions return typed loopback/action payloads and do not create bridges.
+- [x] Downstream feedback/recheck routes write only feedback/recheck artifacts.
+- [x] Replay routes force `stage='v1c'`.
+- [x] OpenAPI and API index verify cleanly.
+- [x] Prisma smoke runs against an isolated local Postgres schema and cleans up after itself.

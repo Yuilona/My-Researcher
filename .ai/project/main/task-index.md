@@ -74,7 +74,7 @@ Project: `main`
 | T-062 topic-selection-v1c-promotion-gate-support | done | F-001 | dev-docs/active/topic-selection-v1c-promotion-gate-support |
 | T-063 topic-selection-v1c-human-promotion-decision-profile | done | F-001 | dev-docs/active/topic-selection-v1c-human-promotion-decision-profile |
 | T-064 topic-selection-v1c-paper-project-bridge | done | F-001 | dev-docs/active/topic-selection-v1c-paper-project-bridge |
-| T-065 topic-selection-v1c-downstream-feedback-recheck | planned | F-001 | dev-docs/active/topic-selection-v1c-downstream-feedback-recheck |
-| T-066 topic-selection-v1c-offline-evaluation-replay | planned | F-001 | dev-docs/active/topic-selection-v1c-offline-evaluation-replay |
-| T-067 topic-selection-v1c-http-api-closure | planned | F-001 | dev-docs/active/topic-selection-v1c-http-api-closure |
+| T-065 topic-selection-v1c-downstream-feedback-recheck | done | F-001 | dev-docs/active/topic-selection-v1c-downstream-feedback-recheck |
+| T-066 topic-selection-v1c-offline-evaluation-replay | done | F-001 | dev-docs/active/topic-selection-v1c-offline-evaluation-replay |
+| T-067 topic-selection-v1c-http-api-closure | done | F-001 | dev-docs/active/topic-selection-v1c-http-api-closure |
 <!-- AUTO-GENERATED:END task-index -->

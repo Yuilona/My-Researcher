@@ -8,6 +8,7 @@ import { LiteratureController } from './controllers/literature-controller.js';
 import { TopicSettingsController } from './controllers/topic-settings-controller.js';
 import { TopicSelectionV1aController } from './controllers/topic-selection-v1a-controller.js';
 import { TopicSelectionV1bController } from './controllers/topic-selection-v1b-controller.js';
+import { TopicSelectionV1cController } from './controllers/topic-selection-v1c-controller.js';
 import { InMemoryApplicationSettingsRepository } from './repositories/in-memory-application-settings-repository.js';
 import { InMemoryAutoPullRepository } from './repositories/in-memory-auto-pull-repository.js';
 import { InMemoryLiteratureRepository } from './repositories/in-memory-literature-repository.js';
@@ -24,6 +25,11 @@ import { InMemoryTopicSelectionV1bResearchSliceRepository } from './repositories
 import { InMemoryTopicSelectionV1bTopicPackageRepository } from './repositories/in-memory-topic-selection-v1b-topic-package-repository.js';
 import { InMemoryTopicSelectionV1bTopicQuestionRepository } from './repositories/in-memory-topic-selection-v1b-topic-question-repository.js';
 import { InMemoryTopicSelectionV1bValueAssessmentRepository } from './repositories/in-memory-topic-selection-v1b-value-assessment-repository.js';
+import { InMemoryTopicSelectionV1cDownstreamFeedbackRecheckRepository } from './repositories/in-memory-topic-selection-v1c-downstream-feedback-recheck-repository.js';
+import { InMemoryTopicSelectionV1cHumanPromotionDecisionRepository } from './repositories/in-memory-topic-selection-v1c-human-promotion-decision-repository.js';
+import { InMemoryTopicSelectionV1cPaperProjectBridgeRepository } from './repositories/in-memory-topic-selection-v1c-paper-project-bridge-repository.js';
+import { InMemoryTopicSelectionV1cPromotionGateRepository } from './repositories/in-memory-topic-selection-v1c-promotion-gate-repository.js';
+import { InMemoryTopicSelectionV1cPromotionInputRepository } from './repositories/in-memory-topic-selection-v1c-promotion-input-repository.js';
 import { getPrismaClient } from './repositories/prisma/prisma-client.js';
 import { PrismaApplicationSettingsRepository } from './repositories/prisma/prisma-application-settings-repository.js';
 import { PrismaAutoPullRepository } from './repositories/prisma/prisma-auto-pull-repository.js';
@@ -42,6 +48,11 @@ import { PrismaTopicSelectionV1bResearchSliceRepository } from './repositories/p
 import { PrismaTopicSelectionV1bTopicPackageRepository } from './repositories/prisma/prisma-topic-selection-v1b-topic-package-repository.js';
 import { PrismaTopicSelectionV1bTopicQuestionRepository } from './repositories/prisma/prisma-topic-selection-v1b-topic-question-repository.js';
 import { PrismaTopicSelectionV1bValueAssessmentRepository } from './repositories/prisma/prisma-topic-selection-v1b-value-assessment-repository.js';
+import { PrismaTopicSelectionV1cDownstreamFeedbackRecheckRepository } from './repositories/prisma/prisma-topic-selection-v1c-downstream-feedback-recheck-repository.js';
+import { PrismaTopicSelectionV1cHumanPromotionDecisionRepository } from './repositories/prisma/prisma-topic-selection-v1c-human-promotion-decision-repository.js';
+import { PrismaTopicSelectionV1cPaperProjectBridgeRepository } from './repositories/prisma/prisma-topic-selection-v1c-paper-project-bridge-repository.js';
+import { PrismaTopicSelectionV1cPromotionGateRepository } from './repositories/prisma/prisma-topic-selection-v1c-promotion-gate-repository.js';
+import { PrismaTopicSelectionV1cPromotionInputRepository } from './repositories/prisma/prisma-topic-selection-v1c-promotion-input-repository.js';
 import { registerAutoPullRoutes } from './routes/auto-pull-routes.js';
 import { registerLiteratureAcquisitionSettingsRoutes } from './routes/literature-acquisition-settings-routes.js';
 import { registerLiteratureBackfillRoutes } from './routes/literature-backfill-routes.js';
@@ -53,6 +64,7 @@ import { registerTitleCardManagementRoutes } from './routes/title-card-managemen
 import { registerTopicSettingsRoutes } from './routes/topic-settings-routes.js';
 import { registerTopicSelectionV1aRoutes } from './routes/topic-selection-v1a-routes.js';
 import { registerTopicSelectionV1bRoutes } from './routes/topic-selection-v1b-routes.js';
+import { registerTopicSelectionV1cRoutes } from './routes/topic-selection-v1c-routes.js';
 import type { ApplicationSettingsRepository } from './repositories/application-settings-repository.js';
 import type { AutoPullRepository } from './repositories/auto-pull-repository.js';
 import type { LiteratureRepository } from './repositories/literature-repository.js';
@@ -69,6 +81,11 @@ import type { TopicSelectionV1bResearchSliceRepository } from './repositories/to
 import type { TopicSelectionV1bTopicPackageRepository } from './repositories/topic-selection-v1b-topic-package.repository.js';
 import type { TopicSelectionV1bTopicQuestionRepository } from './repositories/topic-selection-v1b-topic-question.repository.js';
 import type { TopicSelectionV1bValueAssessmentRepository } from './repositories/topic-selection-v1b-value-assessment.repository.js';
+import type { TopicSelectionV1cDownstreamFeedbackRecheckRepository } from './repositories/topic-selection-v1c-downstream-feedback-recheck.repository.js';
+import type { TopicSelectionV1cHumanPromotionDecisionRepository } from './repositories/topic-selection-v1c-human-promotion-decision.repository.js';
+import type { TopicSelectionV1cPaperProjectBridgeRepository } from './repositories/topic-selection-v1c-paper-project-bridge.repository.js';
+import type { TopicSelectionV1cPromotionGateRepository } from './repositories/topic-selection-v1c-promotion-gate.repository.js';
+import type { TopicSelectionV1cPromotionInputRepository } from './repositories/topic-selection-v1c-promotion-input.repository.js';
 import { AutoPullScheduler } from './services/auto-pull-scheduler.js';
 import { AutoPullService } from './services/auto-pull-service.js';
 import { LiteratureBackfillService } from './services/literature-backfill-service.js';
@@ -96,6 +113,11 @@ import { TopicSelectionV1bResearchSliceService } from './services/topic-selectio
 import { TopicSelectionV1bTopicPackageService } from './services/topic-selection-v1b-topic-package-service.js';
 import { TopicSelectionV1bTopicQuestionService } from './services/topic-selection-v1b-topic-question-service.js';
 import { TopicSelectionV1bValueAssessmentService } from './services/topic-selection-v1b-value-assessment-service.js';
+import { TopicSelectionV1cDownstreamFeedbackRecheckService } from './services/topic-selection-v1c-downstream-feedback-recheck-service.js';
+import { TopicSelectionV1cHumanPromotionDecisionService } from './services/topic-selection-v1c-human-promotion-decision-service.js';
+import { TopicSelectionV1cPaperProjectBridgeService } from './services/topic-selection-v1c-paper-project-bridge-service.js';
+import { TopicSelectionV1cPromotionGateService } from './services/topic-selection-v1c-promotion-gate-service.js';
+import { TopicSelectionV1cPromotionInputService } from './services/topic-selection-v1c-promotion-input-service.js';
 import { FileGovernanceDeliveryAuditStore } from './services/event-delivery/governance-delivery-audit-store.js';
 import { FileGovernanceDeliveryOutboxStore } from './services/event-delivery/governance-delivery-outbox-store.js';
 import { InProcessGovernanceEventDeliveryAdapter } from './services/event-delivery/governance-event-delivery-adapter.js';
@@ -105,6 +127,7 @@ type RepositoryStrategy = 'memory' | 'prisma';
 
 export type BuildAppOptions = {
   topicSelectionV1bLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
+  topicSelectionV1cPromotionGateLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
 };
 
 export function resolveTitleCardManagementStoreConfig(): {
@@ -175,6 +198,21 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     storeConfig.titleCardStrategy,
     topicSelectionV1bValueAssessmentRepository,
   );
+  const topicSelectionV1cPromotionInputRepository = createTopicSelectionV1cPromotionInputRepository(
+    storeConfig.titleCardStrategy,
+  );
+  const topicSelectionV1cPromotionGateRepository = createTopicSelectionV1cPromotionGateRepository(
+    storeConfig.titleCardStrategy,
+  );
+  const topicSelectionV1cHumanPromotionDecisionRepository = createTopicSelectionV1cHumanPromotionDecisionRepository(
+    storeConfig.titleCardStrategy,
+  );
+  const topicSelectionV1cPaperProjectBridgeRepository = createTopicSelectionV1cPaperProjectBridgeRepository(
+    storeConfig.titleCardStrategy,
+  );
+  const topicSelectionV1cDownstreamFeedbackRecheckRepository = createTopicSelectionV1cDownstreamFeedbackRecheckRepository(
+    storeConfig.titleCardStrategy,
+  );
   const auditStore = new FileGovernanceDeliveryAuditStore({
     filePath: process.env.GOVERNANCE_DELIVERY_AUDIT_LOG_PATH,
   });
@@ -236,6 +274,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     settingsService: literatureContentProcessingSettingsService,
   });
   const topicSelectionV1bLlmGateway = options.topicSelectionV1bLlmGateway ?? llmGateway;
+  const topicSelectionV1cPromotionGateLlmGateway = options.topicSelectionV1cPromotionGateLlmGateway ?? llmGateway;
   const topicSelectionV1bIntakeService = new TopicSelectionV1bIntakeService(
     topicSelectionV1bIntakeRepository,
     topicSelectionControlPlaneService,
@@ -273,6 +312,36 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     topicSelectionV1bTopicQuestionService,
     topicSelectionV1bValueAssessmentService,
     topicSelectionV1bTopicPackageService,
+    topicSelectionOfflineEvaluationReplayService,
+  );
+  const topicSelectionV1cPromotionInputService = new TopicSelectionV1cPromotionInputService({
+    repository: topicSelectionV1cPromotionInputRepository,
+    topicPackageRepository: topicSelectionV1bTopicPackageRepository,
+  });
+  const topicSelectionV1cPromotionGateService = new TopicSelectionV1cPromotionGateService({
+    repository: topicSelectionV1cPromotionGateRepository,
+    promotionInputService: topicSelectionV1cPromotionInputService,
+    llmGateway: topicSelectionV1cPromotionGateLlmGateway,
+  });
+  const topicSelectionV1cHumanPromotionDecisionService = new TopicSelectionV1cHumanPromotionDecisionService({
+    repository: topicSelectionV1cHumanPromotionDecisionRepository,
+    promotionGateService: topicSelectionV1cPromotionGateService,
+  });
+  const topicSelectionV1cPaperProjectBridgeService = new TopicSelectionV1cPaperProjectBridgeService({
+    repository: topicSelectionV1cPaperProjectBridgeRepository,
+    humanPromotionDecisionService: topicSelectionV1cHumanPromotionDecisionService,
+  });
+  const topicSelectionV1cDownstreamFeedbackRecheckService = new TopicSelectionV1cDownstreamFeedbackRecheckService({
+    repository: topicSelectionV1cDownstreamFeedbackRecheckRepository,
+    paperProjectBridgeService: topicSelectionV1cPaperProjectBridgeService,
+    recheckRiskMemoryService: topicSelectionRecheckRiskMemoryService,
+  });
+  const topicSelectionV1cController = new TopicSelectionV1cController(
+    topicSelectionV1cPromotionInputService,
+    topicSelectionV1cPromotionGateService,
+    topicSelectionV1cHumanPromotionDecisionService,
+    topicSelectionV1cPaperProjectBridgeService,
+    topicSelectionV1cDownstreamFeedbackRecheckService,
     topicSelectionOfflineEvaluationReplayService,
   );
   const literatureAcquisitionSettingsService = new LiteratureAcquisitionSettingsService(applicationSettingsRepository);
@@ -368,6 +437,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     await registerTitleCardManagementRoutes(instance, titleCardManagementController);
     await registerTopicSelectionV1aRoutes(instance, topicSelectionV1aController);
     await registerTopicSelectionV1bRoutes(instance, topicSelectionV1bController);
+    await registerTopicSelectionV1cRoutes(instance, topicSelectionV1cController);
     await registerLiteratureAcquisitionSettingsRoutes(instance, literatureAcquisitionSettingsController);
     await registerLiteratureContentProcessingSettingsRoutes(instance, literatureContentProcessingSettingsController);
     await registerLiteratureBackfillRoutes(instance, literatureBackfillController);
@@ -582,6 +652,61 @@ function createTopicSelectionV1bTopicPackageRepository(
   }
 
   return new InMemoryTopicSelectionV1bTopicPackageRepository(valueAssessmentRepository);
+}
+
+function createTopicSelectionV1cPromotionInputRepository(
+  strategy: RepositoryStrategy,
+): TopicSelectionV1cPromotionInputRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaTopicSelectionV1cPromotionInputRepository(prisma);
+  }
+
+  return new InMemoryTopicSelectionV1cPromotionInputRepository();
+}
+
+function createTopicSelectionV1cPromotionGateRepository(
+  strategy: RepositoryStrategy,
+): TopicSelectionV1cPromotionGateRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaTopicSelectionV1cPromotionGateRepository(prisma);
+  }
+
+  return new InMemoryTopicSelectionV1cPromotionGateRepository();
+}
+
+function createTopicSelectionV1cHumanPromotionDecisionRepository(
+  strategy: RepositoryStrategy,
+): TopicSelectionV1cHumanPromotionDecisionRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaTopicSelectionV1cHumanPromotionDecisionRepository(prisma);
+  }
+
+  return new InMemoryTopicSelectionV1cHumanPromotionDecisionRepository();
+}
+
+function createTopicSelectionV1cPaperProjectBridgeRepository(
+  strategy: RepositoryStrategy,
+): TopicSelectionV1cPaperProjectBridgeRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaTopicSelectionV1cPaperProjectBridgeRepository(prisma);
+  }
+
+  return new InMemoryTopicSelectionV1cPaperProjectBridgeRepository();
+}
+
+function createTopicSelectionV1cDownstreamFeedbackRecheckRepository(
+  strategy: RepositoryStrategy,
+): TopicSelectionV1cDownstreamFeedbackRecheckRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaTopicSelectionV1cDownstreamFeedbackRecheckRepository(prisma);
+  }
+
+  return new InMemoryTopicSelectionV1cDownstreamFeedbackRecheckRepository();
 }
 
 function createAutoPullScheduler(service: AutoPullService): AutoPullScheduler | null {

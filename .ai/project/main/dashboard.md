@@ -8,19 +8,19 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 67 (planned: 5, in-progress: 3, blocked: 0, done: 20, archived: 39)
+- Tasks: 67 (planned: 2, in-progress: 3, blocked: 0, done: 23, archived: 39)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
+| T-065 topic-selection-v1c-downstream-feedback-recheck | done | F-001 | dev-docs/active/topic-selection-v1c-downstream-feedback-recheck |
+| T-066 topic-selection-v1c-offline-evaluation-replay | done | F-001 | dev-docs/active/topic-selection-v1c-offline-evaluation-replay |
+| T-067 topic-selection-v1c-http-api-closure | done | F-001 | dev-docs/active/topic-selection-v1c-http-api-closure |
 | T-061 topic-selection-v1c-promotion-input-snapshot | done | F-001 | dev-docs/active/topic-selection-v1c-promotion-input-snapshot |
 | T-062 topic-selection-v1c-promotion-gate-support | done | F-001 | dev-docs/active/topic-selection-v1c-promotion-gate-support |
 | T-063 topic-selection-v1c-human-promotion-decision-profile | done | F-001 | dev-docs/active/topic-selection-v1c-human-promotion-decision-profile |
 | T-064 topic-selection-v1c-paper-project-bridge | done | F-001 | dev-docs/active/topic-selection-v1c-paper-project-bridge |
-| T-065 topic-selection-v1c-downstream-feedback-recheck | planned | F-001 | dev-docs/active/topic-selection-v1c-downstream-feedback-recheck |
-| T-066 topic-selection-v1c-offline-evaluation-replay | planned | F-001 | dev-docs/active/topic-selection-v1c-offline-evaluation-replay |
-| T-067 topic-selection-v1c-http-api-closure | planned | F-001 | dev-docs/active/topic-selection-v1c-http-api-closure |
 | T-044 topic-selection-v1a-evidence-to-need | done | F-001 | dev-docs/active/topic-selection-v1a-evidence-to-need |
 | T-045 topic-selection-v1b-need-to-draft-topic | done | F-001 | dev-docs/active/topic-selection-v1b-need-to-draft-topic |
 | T-047 topic-selection-v1a-evidence-map-strength | done | F-001 | dev-docs/active/topic-selection-v1a-evidence-map-strength |

@@ -27,6 +27,8 @@ tags:
     description: Topic selection v1a evidence-to-need decision-chain endpoints.
   - name: topic-selection-v1b
     description: Topic selection v1b need-to-draft-package and frozen replay endpoints.
+  - name: topic-selection-v1c
+    description: Topic selection v1c human promotion, bridge, downstream feedback, and frozen replay endpoints.
 
 paths:
   /health:
@@ -3844,6 +3846,647 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /topic-selection/v1c/promotion-input-snapshots:
+    post:
+      operationId: createTopicSelectionV1cPromotionInputSnapshot
+      summary: Create a v1c PromotionInputSnapshot from a ready v1b-to-v1c input bundle.
+      tags: [topic-selection-v1c]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1cPromotionInputSnapshotRequest'
+      responses:
+        '201':
+          description: PromotionInputSnapshot created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1c/promotion-input-snapshots/{snapshotId}:
+    get:
+      operationId: getTopicSelectionV1cPromotionInputSnapshot
+      summary: Read a v1c PromotionInputSnapshot.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: snapshotId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: PromotionInputSnapshot record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/promotion-decision-support:
+    post:
+      operationId: createTopicSelectionV1cPromotionDecisionSupport
+      summary: Create promotion decision support, dossier, mini-check, and gate check.
+      tags: [topic-selection-v1c]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1cPromotionGateSupportRequest'
+      responses:
+        '201':
+          description: Promotion gate support bundle created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cPromotionGateSupportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1c/promotion-gate-checks:
+    post:
+      operationId: createTopicSelectionV1cPromotionGateCheck
+      summary: Create promotion gate support and return the gate check bundle.
+      tags: [topic-selection-v1c]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1cPromotionGateSupportRequest'
+      responses:
+        '201':
+          description: Promotion gate support bundle created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cPromotionGateSupportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1c/promotion-decision-support/{supportId}:
+    get:
+      operationId: getTopicSelectionV1cPromotionDecisionSupport
+      summary: Read PromotionDecisionSupport.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: supportId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: PromotionDecisionSupport record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/promotion-dossiers/{dossierId}:
+    get:
+      operationId: getTopicSelectionV1cPromotionDossier
+      summary: Read PromotionDossier.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: dossierId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: PromotionDossier record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/argument-readiness-mini-checks/{miniCheckId}:
+    get:
+      operationId: getTopicSelectionV1cArgumentReadinessMiniCheck
+      summary: Read ArgumentReadinessMiniCheck.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: miniCheckId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: ArgumentReadinessMiniCheck record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/promotion-gate-checks/{gateCheckId}:
+    get:
+      operationId: getTopicSelectionV1cPromotionGateCheck
+      summary: Read PromotionGateCheck.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: gateCheckId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: PromotionGateCheck record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/promotion-decisions:
+    post:
+      operationId: recordTopicSelectionV1cHumanPromotionDecision
+      summary: Record explicit human promotion decision.
+      tags: [topic-selection-v1c]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1cHumanPromotionDecisionRequest'
+      responses:
+        '201':
+          description: HumanPromotionDecision and PromotionDecision recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cHumanPromotionDecisionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1c/human-promotion-decisions/{humanPromotionDecisionId}:
+    get:
+      operationId: getTopicSelectionV1cHumanPromotionDecision
+      summary: Read HumanPromotionDecision.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: humanPromotionDecisionId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: HumanPromotionDecision record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/promotion-decisions/{promotionDecisionId}:
+    get:
+      operationId: getTopicSelectionV1cPromotionDecision
+      summary: Read PromotionDecision.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: promotionDecisionId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: PromotionDecision record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/promotion-decisions/{promotionDecisionId}/bundle:
+    get:
+      operationId: getTopicSelectionV1cPromotionDecisionBundle
+      summary: Read PromotionDecision bundle.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: promotionDecisionId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: PromotionDecision bundle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cPromotionDecisionBundleResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/promotion-commitment-profiles/{commitmentProfileId}:
+    get:
+      operationId: getTopicSelectionV1cPromotionCommitmentProfile
+      summary: Read PromotionCommitmentProfile.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: commitmentProfileId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: PromotionCommitmentProfile record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/paper-project-bridges:
+    post:
+      operationId: createTopicSelectionV1cPaperProjectBridge
+      summary: Create a PaperProjectBridge from a human-confirmed promote decision.
+      tags: [topic-selection-v1c]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1cPaperProjectBridgeRequest'
+      responses:
+        '201':
+          description: PaperProjectBridge created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cPaperProjectBridgeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1c/paper-project-bridges/{bridgeId}:
+    get:
+      operationId: getTopicSelectionV1cPaperProjectBridge
+      summary: Read PaperProjectBridge.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: bridgeId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: PaperProjectBridge record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/downstream-feedback:
+    post:
+      operationId: recordTopicSelectionV1cDownstreamFeedback
+      summary: Record downstream topic feedback and optional embedded recheck request.
+      tags: [topic-selection-v1c]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1cDownstreamFeedbackRequest'
+      responses:
+        '201':
+          description: Downstream feedback recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cDownstreamFeedbackResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1c/downstream-feedback/{feedbackId}:
+    get:
+      operationId: getTopicSelectionV1cDownstreamFeedback
+      summary: Read downstream topic feedback.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: feedbackId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: DownstreamTopicFeedback record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/paper-project-bridges/{bridgeId}/downstream-feedback:
+    get:
+      operationId: listTopicSelectionV1cDownstreamFeedbackByBridge
+      summary: List downstream feedback for a PaperProjectBridge.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: bridgeId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Downstream feedback list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cListResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/downstream-feedback/{feedbackId}/recheck-request:
+    get:
+      operationId: getTopicSelectionV1cRecheckRequestByFeedback
+      summary: Read the embedded downstream recheck request projection for one feedback record.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: feedbackId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Downstream recheck projection.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cDownstreamRecheckProjectionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/recheck-requests/{recheckRequestId}:
+    get:
+      operationId: getTopicSelectionV1cRecheckRequest
+      summary: Read a downstream recheck request projection by embedded recheck id.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: recheckRequestId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Downstream recheck projection.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cDownstreamRecheckProjectionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/offline-evaluation/datasets:
+    post:
+      operationId: createTopicSelectionV1cOfflineEvaluationDataset
+      summary: Create a v1c offline evaluation dataset; route forces stage v1c.
+      tags: [topic-selection-v1c]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1cOfflineDatasetRequest'
+      responses:
+        '201':
+          description: v1c offline evaluation dataset created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /topic-selection/v1c/offline-evaluation/datasets/synthetic-baseline:
+    post:
+      operationId: createTopicSelectionV1cSyntheticOfflineEvaluationDataset
+      summary: Create the synthetic v1c offline evaluation baseline dataset.
+      tags: [topic-selection-v1c]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1cOfflineDatasetRequest'
+      responses:
+        '201':
+          description: Synthetic v1c dataset and cases created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cSyntheticOfflineDatasetResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /topic-selection/v1c/offline-evaluation/cases:
+    post:
+      operationId: addTopicSelectionV1cOfflineEvaluationCase
+      summary: Add a frozen v1c replay case to an offline evaluation dataset.
+      tags: [topic-selection-v1c]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1cOfflineCaseRequest'
+      responses:
+        '201':
+          description: v1c offline evaluation case added.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/offline-evaluation/runs:
+    post:
+      operationId: startTopicSelectionV1cOfflineEvaluationRun
+      summary: Start a v1c offline evaluation replay run.
+      tags: [topic-selection-v1c]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1cOfflineRunRequest'
+      responses:
+        '201':
+          description: v1c offline evaluation run started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1c/offline-evaluation/case-results:
+    post:
+      operationId: recordTopicSelectionV1cOfflineEvaluationCaseResult
+      summary: Record a frozen v1c replay case result and diff.
+      tags: [topic-selection-v1c]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1cOfflineCaseResultRequest'
+      responses:
+        '201':
+          description: v1c case result and replay diff recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cOfflineCaseResultResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1c/offline-evaluation/runs/{runId}/complete:
+    post:
+      operationId: completeTopicSelectionV1cOfflineEvaluationRun
+      summary: Complete a v1c offline evaluation run and calculate metrics.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: v1c run completed and metric results calculated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cOfflineCompletionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /topic-selection/v1c/offline-evaluation/runs/{runId}/metrics:
+    get:
+      operationId: listTopicSelectionV1cOfflineEvaluationMetrics
+      summary: List metric results for a v1c offline evaluation run.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: v1c metric results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cListResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/offline-evaluation/runs/{runId}/diffs:
+    get:
+      operationId: listTopicSelectionV1cOfflineEvaluationDiffs
+      summary: List replay diffs for a v1c offline evaluation run.
+      tags: [topic-selection-v1c]
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: v1c replay diffs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cListResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   parameters:
     PaperIdParam:
@@ -3971,7 +4614,6 @@ components:
         minimum: 1
         maximum: 200
         default: 100
-
   responses:
     BadRequest:
       description: Invalid request payload or parameters.
@@ -4293,6 +4935,319 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TopicSelectionV1bRecord'
+
+    TopicSelectionV1cRecord:
+      type: object
+      additionalProperties: true
+
+    TopicSelectionV1cListResponse:
+      type: object
+      required: [items]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionV1cRecord'
+
+    TopicSelectionV1cPromotionGateSupportResponse:
+      type: object
+      required: [promotion_decision_support, promotion_dossier, argument_readiness_mini_check, promotion_gate_check, handoff]
+      additionalProperties: true
+      properties:
+        promotion_decision_support:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        promotion_dossier:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        argument_readiness_mini_check:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        promotion_gate_check:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        handoff:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+
+    TopicSelectionV1cHumanPromotionDecisionResponse:
+      type: object
+      required: [human_promotion_decision, promotion_decision]
+      additionalProperties: true
+      properties:
+        human_promotion_decision:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        promotion_decision:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        promotion_commitment_profile:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+          nullable: true
+        bridge_handoff:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+          nullable: true
+
+    TopicSelectionV1cPromotionDecisionBundleResponse:
+      type: object
+      required: [human_promotion_decision, promotion_decision]
+      additionalProperties: true
+      properties:
+        human_promotion_decision:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        promotion_decision:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        promotion_commitment_profile:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+          nullable: true
+
+    TopicSelectionV1cPaperProjectBridgeResponse:
+      type: object
+      required: [paper_project_bridge, handoff]
+      additionalProperties: true
+      properties:
+        paper_project_bridge:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        handoff:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+
+    TopicSelectionV1cDownstreamFeedbackResponse:
+      type: object
+      required: [downstream_topic_feedback, classification, recheck_request, impact_summary]
+      additionalProperties: true
+      properties:
+        downstream_topic_feedback:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        classification:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        recheck_request:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+          nullable: true
+        impact_summary:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+
+    TopicSelectionV1cDownstreamRecheckProjectionResponse:
+      type: object
+      required: [downstream_topic_feedback, recheck_request]
+      additionalProperties: false
+      properties:
+        downstream_topic_feedback:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        recheck_request:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+
+    TopicSelectionV1cSyntheticOfflineDatasetResponse:
+      type: object
+      required: [dataset, cases]
+      additionalProperties: false
+      properties:
+        dataset:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        cases:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionV1cRecord'
+
+    TopicSelectionV1cOfflineCaseResultResponse:
+      type: object
+      required: [case_result, replay_diff]
+      additionalProperties: false
+      properties:
+        case_result:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        replay_diff:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+
+    TopicSelectionV1cOfflineCompletionResponse:
+      type: object
+      required: [run, metric_results]
+      additionalProperties: false
+      properties:
+        run:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        metric_results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionV1cRecord'
+
+    TopicSelectionV1cPromotionInputSnapshotRequest:
+      type: object
+      required: [v1b_to_v1c_input_bundle_id]
+      additionalProperties: true
+      properties:
+        v1b_to_v1c_input_bundle_id: { type: string, minLength: 1 }
+        workspace_id: { type: string, nullable: true }
+        created_by: { type: string, enum: [human, llm, system, hybrid] }
+        policy_version_id: { type: string, nullable: true }
+
+    TopicSelectionV1cPromotionGateSupportRequest:
+      type: object
+      required: [promotion_input_snapshot_id]
+      additionalProperties: true
+      properties:
+        promotion_input_snapshot_id: { type: string, minLength: 1 }
+        workspace_id: { type: string, nullable: true }
+        created_by: { type: string, enum: [human, llm, system, hybrid] }
+        policy_version_id: { type: string, nullable: true }
+        support_generation_mode: { type: string, enum: [deterministic, llm_draft] }
+        workflow_profile_version: { type: string, nullable: true }
+        prompt_template_version: { type: string, nullable: true }
+        model:
+          $ref: '#/components/schemas/JsonObject'
+
+    TopicSelectionV1cHumanPromotionDecisionRequest:
+      type: object
+      required: [promotion_gate_check_id, decision, human_actor, rationale, confirmed_snapshot_hash]
+      additionalProperties: true
+      properties:
+        promotion_gate_check_id: { type: string, minLength: 1 }
+        decision:
+          type: string
+          enum: [promote_to_paper_project, promote_with_conditions, merge_packages, refine_package, reassess_value, revise_question, revise_slice, recheck_evidence_or_search, park, drop]
+        human_actor:
+          $ref: '#/components/schemas/TopicSelectionActorRef'
+        rationale: { type: string, minLength: 1 }
+        confirmed_snapshot_hash: { type: string, minLength: 1 }
+        decision_timestamp: { type: string, nullable: true }
+        workspace_id: { type: string, nullable: true }
+        policy_version_id: { type: string, nullable: true }
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/JsonObject'
+        required_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/JsonObject'
+        loopback_target:
+          type: string
+          enum: [package, value, question, slice, evidence_or_search, park, none]
+          nullable: true
+        allowed_refinements:
+          type: array
+          items:
+            $ref: '#/components/schemas/JsonObject'
+        stop_conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/JsonObject'
+        reopen_conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/JsonObject'
+
+    TopicSelectionV1cPaperProjectBridgeRequest:
+      type: object
+      required: [promotion_decision_id]
+      additionalProperties: false
+      properties:
+        promotion_decision_id: { type: string, minLength: 1 }
+        workspace_id: { type: string, nullable: true }
+        created_by: { type: string, enum: [human, llm, system, hybrid] }
+        policy_version_id: { type: string, nullable: true }
+
+    TopicSelectionV1cDownstreamFeedbackRequest:
+      type: object
+      required: [paper_project_bridge_id, downstream_source_kind, downstream_source_ref, feedback_signal, severity, summary]
+      additionalProperties: false
+      properties:
+        paper_project_bridge_id: { type: string, minLength: 1 }
+        workspace_id: { type: string, nullable: true }
+        downstream_source_kind:
+          type: string
+          enum: [paper_project, writing, research_argument, reviewer_check, manual]
+        downstream_source_ref:
+          $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+        source_feedback_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+        observed_blocker_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+        feedback_signal:
+          type: string
+          enum: [stale_evidence, overclaim, unanswerable_question, boundary_drift, need_invalidated, package_narrative_gap, promotion_authorization_gap, bridge_trace_gap, commitment_gap, merge_candidate_conflict, paper_project_constraint_conflict, downstream_mutation_attempt, no_recheck_needed]
+        severity:
+          type: string
+          enum: [info, warning, blocking, critical]
+        summary: { type: string, minLength: 1 }
+        required_action: { type: string, nullable: true }
+        artifact_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+        feedback_payload:
+          $ref: '#/components/schemas/JsonObject'
+        policy_version_id: { type: string, nullable: true }
+        created_by: { type: string, enum: [human, llm, system, hybrid] }
+
+    TopicSelectionV1cOfflineDatasetRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        workspace_id: { type: string, nullable: true }
+        dataset_key: { type: string }
+        dataset_version: { type: string }
+        stage: { type: string, enum: [v1c] }
+        source: { type: string, enum: [synthetic_fixture, frozen_snapshot, mixed] }
+        status: { type: string, enum: [draft, active, archived] }
+        description: { type: string, nullable: true }
+        payload:
+          $ref: '#/components/schemas/JsonObject'
+        created_by: { type: string, enum: [human, llm, system, hybrid] }
+
+    TopicSelectionV1cOfflineCaseRequest:
+      type: object
+      required: [dataset_id, case_key, case_type, frozen_input_bundle, gold_expectation]
+      additionalProperties: true
+      properties:
+        workspace_id: { type: string, nullable: true }
+        dataset_id: { type: string, minLength: 1 }
+        title_card_id: { type: string, nullable: true }
+        case_key: { type: string, minLength: 1 }
+        case_type:
+          type: string
+          enum: [promotion_input_staleness_false_pass, promotion_gate_blocker_false_pass, human_promotion_bypass, promotion_false_pass, bridge_trace_gap, commitment_profile_gap, loopback_target_misroute, downstream_mutation_attempt]
+        frozen_input_bundle:
+          type: object
+          required: [stage]
+          additionalProperties: true
+          properties:
+            stage: { type: string, enum: [v1c] }
+        gold_expectation:
+          $ref: '#/components/schemas/JsonObject'
+        tags:
+          type: array
+          items: { type: string }
+
+    TopicSelectionV1cOfflineRunRequest:
+      type: object
+      required: [dataset_id, workflow_profile_key]
+      additionalProperties: true
+      properties:
+        workspace_id: { type: string, nullable: true }
+        dataset_id: { type: string, minLength: 1 }
+        run_key: { type: string }
+        workflow_profile_key: { type: string, minLength: 1 }
+        workflow_profile_version: { type: string, nullable: true }
+        model_profile_key: { type: string, nullable: true }
+        search_profile_key: { type: string, nullable: true }
+        policy_version_id: { type: string, nullable: true }
+        metric_keys:
+          type: array
+          items:
+            type: string
+            enum: [promotion_input_staleness_false_pass_rate, promotion_gate_blocker_false_pass_rate, human_promotion_bypass_rate, promotion_false_pass_rate, bridge_trace_completeness, commitment_profile_completeness, loopback_target_accuracy, downstream_mutation_guard_rate]
+        run_payload:
+          $ref: '#/components/schemas/JsonObject'
+        created_by: { type: string, enum: [human, llm, system, hybrid] }
+
+    TopicSelectionV1cOfflineCaseResultRequest:
+      type: object
+      required: [run_id, case_id, observed_output]
+      additionalProperties: true
+      properties:
+        workspace_id: { type: string, nullable: true }
+        run_id: { type: string, minLength: 1 }
+        case_id: { type: string, minLength: 1 }
+        observed_output:
+          $ref: '#/components/schemas/JsonObject'
 
     TopicSelectionV1bIntakeSnapshotRequest:
       type: object

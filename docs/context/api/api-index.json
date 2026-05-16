@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-14T14:34:59.279Z",
+  "generatedAt": "2026-05-16T00:33:36.448Z",
   "sourceOpenapi": "docs/context/api/openapi.yaml",
-  "sourceChecksumSha256": "933743e69bddfe0653f0389ac116b8ef7feedb2e2818dd89effc98ea3ccffd4b",
+  "sourceChecksumSha256": "10d71b81260cc1be2b07a03944598f9e9dc17cbe5436adcedfef6cf2ab9a41fc",
   "stats": {
-    "totalEndpoints": 149,
+    "totalEndpoints": 177,
     "byTag": {
       "health": 1,
       "research-lifecycle": 8,
@@ -14,7 +14,8 @@
       "auto-pull": 10,
       "title-card-management": 28,
       "topic-selection-v1a": 30,
-      "topic-selection-v1b": 20
+      "topic-selection-v1b": 20,
+      "topic-selection-v1c": 28
     }
   },
   "endpoints": [
@@ -4887,6 +4888,898 @@
       ],
       "example": {
         "curl": "curl -X GET '/topic-selection/v1b/offline-evaluation/runs/{runId}/replay-diffs'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1c/promotion-input-snapshots",
+      "operationId": "createTopicSelectionV1cPromotionInputSnapshot",
+      "summary": "Create a v1c PromotionInputSnapshot from a ready v1b-to-v1c input bundle.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "v1b_to_v1c_input_bundle_id"
+          ],
+          "optional": [
+            "workspace_id",
+            "created_by",
+            "policy_version_id"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1c/promotion-input-snapshots' -H 'Content-Type: application/json' -d '{\"v1b_to_v1c_input_bundle_id\":\"<v1b_to_v1c_input_bundle_id>\"}'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/promotion-input-snapshots/{snapshotId}",
+      "operationId": "getTopicSelectionV1cPromotionInputSnapshot",
+      "summary": "Read a v1c PromotionInputSnapshot.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "snapshotId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/promotion-input-snapshots/{snapshotId}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1c/promotion-decision-support",
+      "operationId": "createTopicSelectionV1cPromotionDecisionSupport",
+      "summary": "Create promotion decision support, dossier, mini-check, and gate check.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "promotion_input_snapshot_id"
+          ],
+          "optional": [
+            "workspace_id",
+            "created_by",
+            "policy_version_id",
+            "support_generation_mode",
+            "workflow_profile_version",
+            "prompt_template_version",
+            "model"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "promotion_decision_support",
+          "promotion_dossier",
+          "argument_readiness_mini_check",
+          "promotion_gate_check",
+          "handoff"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1c/promotion-decision-support' -H 'Content-Type: application/json' -d '{\"promotion_input_snapshot_id\":\"<promotion_input_snapshot_id>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1c/promotion-gate-checks",
+      "operationId": "createTopicSelectionV1cPromotionGateCheck",
+      "summary": "Create promotion gate support and return the gate check bundle.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "promotion_input_snapshot_id"
+          ],
+          "optional": [
+            "workspace_id",
+            "created_by",
+            "policy_version_id",
+            "support_generation_mode",
+            "workflow_profile_version",
+            "prompt_template_version",
+            "model"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "promotion_decision_support",
+          "promotion_dossier",
+          "argument_readiness_mini_check",
+          "promotion_gate_check",
+          "handoff"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1c/promotion-gate-checks' -H 'Content-Type: application/json' -d '{\"promotion_input_snapshot_id\":\"<promotion_input_snapshot_id>\"}'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/promotion-decision-support/{supportId}",
+      "operationId": "getTopicSelectionV1cPromotionDecisionSupport",
+      "summary": "Read PromotionDecisionSupport.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "supportId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/promotion-decision-support/{supportId}'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/promotion-dossiers/{dossierId}",
+      "operationId": "getTopicSelectionV1cPromotionDossier",
+      "summary": "Read PromotionDossier.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "dossierId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/promotion-dossiers/{dossierId}'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/argument-readiness-mini-checks/{miniCheckId}",
+      "operationId": "getTopicSelectionV1cArgumentReadinessMiniCheck",
+      "summary": "Read ArgumentReadinessMiniCheck.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "miniCheckId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/argument-readiness-mini-checks/{miniCheckId}'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/promotion-gate-checks/{gateCheckId}",
+      "operationId": "getTopicSelectionV1cPromotionGateCheck",
+      "summary": "Read PromotionGateCheck.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "gateCheckId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/promotion-gate-checks/{gateCheckId}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1c/promotion-decisions",
+      "operationId": "recordTopicSelectionV1cHumanPromotionDecision",
+      "summary": "Record explicit human promotion decision.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "promotion_gate_check_id",
+            "decision",
+            "human_actor",
+            "rationale",
+            "confirmed_snapshot_hash"
+          ],
+          "optional": [
+            "decision_timestamp",
+            "workspace_id",
+            "policy_version_id",
+            "conditions",
+            "required_actions",
+            "loopback_target",
+            "allowed_refinements",
+            "stop_conditions",
+            "reopen_conditions"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "human_promotion_decision",
+          "promotion_decision",
+          "promotion_commitment_profile",
+          "bridge_handoff"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1c/promotion-decisions' -H 'Content-Type: application/json' -d '{\"promotion_gate_check_id\":\"<promotion_gate_check_id>\",\"decision\":\"<decision>\",\"human_actor\":\"<human_actor>\",\"rationale\":\"<rationale>\",\"confirmed_snapshot_hash\":\"<confirmed_snapshot_hash>\"}'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/human-promotion-decisions/{humanPromotionDecisionId}",
+      "operationId": "getTopicSelectionV1cHumanPromotionDecision",
+      "summary": "Read HumanPromotionDecision.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "humanPromotionDecisionId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/human-promotion-decisions/{humanPromotionDecisionId}'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/promotion-decisions/{promotionDecisionId}",
+      "operationId": "getTopicSelectionV1cPromotionDecision",
+      "summary": "Read PromotionDecision.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "promotionDecisionId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/promotion-decisions/{promotionDecisionId}'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/promotion-decisions/{promotionDecisionId}/bundle",
+      "operationId": "getTopicSelectionV1cPromotionDecisionBundle",
+      "summary": "Read PromotionDecision bundle.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "promotionDecisionId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "human_promotion_decision",
+          "promotion_decision",
+          "promotion_commitment_profile"
+        ]
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/promotion-decisions/{promotionDecisionId}/bundle'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/promotion-commitment-profiles/{commitmentProfileId}",
+      "operationId": "getTopicSelectionV1cPromotionCommitmentProfile",
+      "summary": "Read PromotionCommitmentProfile.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "commitmentProfileId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/promotion-commitment-profiles/{commitmentProfileId}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1c/paper-project-bridges",
+      "operationId": "createTopicSelectionV1cPaperProjectBridge",
+      "summary": "Create a PaperProjectBridge from a human-confirmed promote decision.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "promotion_decision_id"
+          ],
+          "optional": [
+            "workspace_id",
+            "created_by",
+            "policy_version_id"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "paper_project_bridge",
+          "handoff"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1c/paper-project-bridges' -H 'Content-Type: application/json' -d '{\"promotion_decision_id\":\"<promotion_decision_id>\"}'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/paper-project-bridges/{bridgeId}",
+      "operationId": "getTopicSelectionV1cPaperProjectBridge",
+      "summary": "Read PaperProjectBridge.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "bridgeId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/paper-project-bridges/{bridgeId}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1c/downstream-feedback",
+      "operationId": "recordTopicSelectionV1cDownstreamFeedback",
+      "summary": "Record downstream topic feedback and optional embedded recheck request.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "paper_project_bridge_id",
+            "downstream_source_kind",
+            "downstream_source_ref",
+            "feedback_signal",
+            "severity",
+            "summary"
+          ],
+          "optional": [
+            "workspace_id",
+            "source_feedback_refs",
+            "observed_blocker_refs",
+            "required_action",
+            "artifact_refs",
+            "feedback_payload",
+            "policy_version_id",
+            "created_by"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "downstream_topic_feedback",
+          "classification",
+          "recheck_request",
+          "impact_summary"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1c/downstream-feedback' -H 'Content-Type: application/json' -d '{\"paper_project_bridge_id\":\"<paper_project_bridge_id>\",\"downstream_source_kind\":\"<downstream_source_kind>\",\"downstream_source_ref\":\"<downstream_source_ref>\",\"feedback_signal\":\"<feedback_signal>\",\"severity\":\"<severity>\",\"summary\":\"<summary>\"}'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/downstream-feedback/{feedbackId}",
+      "operationId": "getTopicSelectionV1cDownstreamFeedback",
+      "summary": "Read downstream topic feedback.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "feedbackId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": []
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/downstream-feedback/{feedbackId}'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/paper-project-bridges/{bridgeId}/downstream-feedback",
+      "operationId": "listTopicSelectionV1cDownstreamFeedbackByBridge",
+      "summary": "List downstream feedback for a PaperProjectBridge.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "bridgeId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/paper-project-bridges/{bridgeId}/downstream-feedback'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/downstream-feedback/{feedbackId}/recheck-request",
+      "operationId": "getTopicSelectionV1cRecheckRequestByFeedback",
+      "summary": "Read the embedded downstream recheck request projection for one feedback record.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "feedbackId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "downstream_topic_feedback",
+          "recheck_request"
+        ]
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/downstream-feedback/{feedbackId}/recheck-request'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/recheck-requests/{recheckRequestId}",
+      "operationId": "getTopicSelectionV1cRecheckRequest",
+      "summary": "Read a downstream recheck request projection by embedded recheck id.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "recheckRequestId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "downstream_topic_feedback",
+          "recheck_request"
+        ]
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/recheck-requests/{recheckRequestId}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1c/offline-evaluation/datasets",
+      "operationId": "createTopicSelectionV1cOfflineEvaluationDataset",
+      "summary": "Create a v1c offline evaluation dataset; route forces stage v1c.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [],
+          "optional": [
+            "workspace_id",
+            "dataset_key",
+            "dataset_version",
+            "stage",
+            "source",
+            "status",
+            "description",
+            "payload",
+            "created_by"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1c/offline-evaluation/datasets'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1c/offline-evaluation/datasets/synthetic-baseline",
+      "operationId": "createTopicSelectionV1cSyntheticOfflineEvaluationDataset",
+      "summary": "Create the synthetic v1c offline evaluation baseline dataset.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [],
+          "optional": [
+            "workspace_id",
+            "dataset_key",
+            "dataset_version",
+            "stage",
+            "source",
+            "status",
+            "description",
+            "payload",
+            "created_by"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "dataset",
+          "cases"
+        ]
+      },
+      "errors": [
+        400
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1c/offline-evaluation/datasets/synthetic-baseline'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1c/offline-evaluation/cases",
+      "operationId": "addTopicSelectionV1cOfflineEvaluationCase",
+      "summary": "Add a frozen v1c replay case to an offline evaluation dataset.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "dataset_id",
+            "case_key",
+            "case_type",
+            "frozen_input_bundle",
+            "gold_expectation"
+          ],
+          "optional": [
+            "workspace_id",
+            "title_card_id",
+            "tags"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1c/offline-evaluation/cases' -H 'Content-Type: application/json' -d '{\"dataset_id\":\"<dataset_id>\",\"case_key\":\"<case_key>\",\"case_type\":\"<case_type>\",\"frozen_input_bundle\":\"<frozen_input_bundle>\",\"gold_expectation\":\"<gold_expectation>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1c/offline-evaluation/runs",
+      "operationId": "startTopicSelectionV1cOfflineEvaluationRun",
+      "summary": "Start a v1c offline evaluation replay run.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "dataset_id",
+            "workflow_profile_key"
+          ],
+          "optional": [
+            "workspace_id",
+            "run_key",
+            "workflow_profile_version",
+            "model_profile_key",
+            "search_profile_key",
+            "policy_version_id",
+            "metric_keys",
+            "run_payload",
+            "created_by"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": []
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1c/offline-evaluation/runs' -H 'Content-Type: application/json' -d '{\"dataset_id\":\"<dataset_id>\",\"workflow_profile_key\":\"<workflow_profile_key>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1c/offline-evaluation/case-results",
+      "operationId": "recordTopicSelectionV1cOfflineEvaluationCaseResult",
+      "summary": "Record a frozen v1c replay case result and diff.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [],
+        "query": [],
+        "body": {
+          "required": [
+            "run_id",
+            "case_id",
+            "observed_output"
+          ],
+          "optional": [
+            "workspace_id"
+          ]
+        }
+      },
+      "output": {
+        "successStatus": 201,
+        "coreFields": [
+          "case_result",
+          "replay_diff"
+        ]
+      },
+      "errors": [
+        400,
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1c/offline-evaluation/case-results' -H 'Content-Type: application/json' -d '{\"run_id\":\"<run_id>\",\"case_id\":\"<case_id>\",\"observed_output\":\"<observed_output>\"}'"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/topic-selection/v1c/offline-evaluation/runs/{runId}/complete",
+      "operationId": "completeTopicSelectionV1cOfflineEvaluationRun",
+      "summary": "Complete a v1c offline evaluation run and calculate metrics.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "runId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "run",
+          "metric_results"
+        ]
+      },
+      "errors": [
+        404,
+        409
+      ],
+      "example": {
+        "curl": "curl -X POST '/topic-selection/v1c/offline-evaluation/runs/{runId}/complete'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/offline-evaluation/runs/{runId}/metrics",
+      "operationId": "listTopicSelectionV1cOfflineEvaluationMetrics",
+      "summary": "List metric results for a v1c offline evaluation run.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "runId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/offline-evaluation/runs/{runId}/metrics'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/offline-evaluation/runs/{runId}/diffs",
+      "operationId": "listTopicSelectionV1cOfflineEvaluationDiffs",
+      "summary": "List replay diffs for a v1c offline evaluation run.",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "runId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [
+        404
+      ],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/offline-evaluation/runs/{runId}/diffs'"
       }
     }
   ]

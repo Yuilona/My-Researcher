@@ -627,28 +627,28 @@ tasks:
     updated: 2026-05-15
   - id: T-065
     slug: topic-selection-v1c-downstream-feedback-recheck
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
     dev_docs_path: dev-docs/active/topic-selection-v1c-downstream-feedback-recheck
-    updated: 2026-05-15
+    updated: 2026-05-16
   - id: T-066
     slug: topic-selection-v1c-offline-evaluation-replay
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
     dev_docs_path: dev-docs/active/topic-selection-v1c-offline-evaluation-replay
-    updated: 2026-05-15
+    updated: 2026-05-16
   - id: T-067
     slug: topic-selection-v1c-http-api-closure
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
     dev_docs_path: dev-docs/active/topic-selection-v1c-http-api-closure
-    updated: 2026-05-15
+    updated: 2026-05-16

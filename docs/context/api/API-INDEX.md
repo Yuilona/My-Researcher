@@ -1,9 +1,9 @@
 # API Index
 
-> Auto-generated at 2026-05-14T14:34:59.279Z — do NOT hand-edit.
-> Source: `docs/context/api/openapi.yaml` (SHA-256: `933743e69bdd...`)
+> Auto-generated at 2026-05-16T00:33:36.448Z — do NOT hand-edit.
+> Source: `docs/context/api/openapi.yaml` (SHA-256: `10d71b81260c...`)
 
-Total endpoints: **149**
+Total endpoints: **177**
 
 | Method | Path | Summary | Auth | Input (required) | Output (core) | Errors |
 |--------|------|---------|------|------------------|---------------|--------|
@@ -156,3 +156,31 @@ Total endpoints: **149**
 | POST | /topic-selection/v1b/offline-evaluation/runs/{runId}/complete | Complete a v1b offline evaluation run and calculate metrics. | none | runId | run, metric_results | 404, 409 |
 | GET | /topic-selection/v1b/offline-evaluation/runs/{runId}/metric-results | List metric results for a v1b offline evaluation run. | none | runId | items | 404 |
 | GET | /topic-selection/v1b/offline-evaluation/runs/{runId}/replay-diffs | List replay diffs for a v1b offline evaluation run. | none | runId | items | 404 |
+| POST | /topic-selection/v1c/promotion-input-snapshots | Create a v1c PromotionInputSnapshot from a ready v1b-to-v1c input bundle. | none | v1b_to_v1c_input_bundle_id | — | 400, 404, 409 |
+| GET | /topic-selection/v1c/promotion-input-snapshots/{snapshotId} | Read a v1c PromotionInputSnapshot. | none | snapshotId | — | 404 |
+| POST | /topic-selection/v1c/promotion-decision-support | Create promotion decision support, dossier, mini-check, and gate check. | none | promotion_input_snapshot_id | promotion_decision_support, promotion_dossier, argument_readiness_mini_check, promotion_gate_check, handoff | 400, 404, 409 |
+| POST | /topic-selection/v1c/promotion-gate-checks | Create promotion gate support and return the gate check bundle. | none | promotion_input_snapshot_id | promotion_decision_support, promotion_dossier, argument_readiness_mini_check, promotion_gate_check, handoff | 400, 404, 409 |
+| GET | /topic-selection/v1c/promotion-decision-support/{supportId} | Read PromotionDecisionSupport. | none | supportId | — | 404 |
+| GET | /topic-selection/v1c/promotion-dossiers/{dossierId} | Read PromotionDossier. | none | dossierId | — | 404 |
+| GET | /topic-selection/v1c/argument-readiness-mini-checks/{miniCheckId} | Read ArgumentReadinessMiniCheck. | none | miniCheckId | — | 404 |
+| GET | /topic-selection/v1c/promotion-gate-checks/{gateCheckId} | Read PromotionGateCheck. | none | gateCheckId | — | 404 |
+| POST | /topic-selection/v1c/promotion-decisions | Record explicit human promotion decision. | none | promotion_gate_check_id, decision, human_actor, rationale, confirmed_snapshot_hash | human_promotion_decision, promotion_decision, promotion_commitment_profile, bridge_handoff | 400, 404, 409 |
+| GET | /topic-selection/v1c/human-promotion-decisions/{humanPromotionDecisionId} | Read HumanPromotionDecision. | none | humanPromotionDecisionId | — | 404 |
+| GET | /topic-selection/v1c/promotion-decisions/{promotionDecisionId} | Read PromotionDecision. | none | promotionDecisionId | — | 404 |
+| GET | /topic-selection/v1c/promotion-decisions/{promotionDecisionId}/bundle | Read PromotionDecision bundle. | none | promotionDecisionId | human_promotion_decision, promotion_decision, promotion_commitment_profile | 404 |
+| GET | /topic-selection/v1c/promotion-commitment-profiles/{commitmentProfileId} | Read PromotionCommitmentProfile. | none | commitmentProfileId | — | 404 |
+| POST | /topic-selection/v1c/paper-project-bridges | Create a PaperProjectBridge from a human-confirmed promote decision. | none | promotion_decision_id | paper_project_bridge, handoff | 400, 404, 409 |
+| GET | /topic-selection/v1c/paper-project-bridges/{bridgeId} | Read PaperProjectBridge. | none | bridgeId | — | 404 |
+| POST | /topic-selection/v1c/downstream-feedback | Record downstream topic feedback and optional embedded recheck request. | none | paper_project_bridge_id, downstream_source_kind, downstream_source_ref, feedback_signal, severity, summary | downstream_topic_feedback, classification, recheck_request, impact_summary | 400, 404, 409 |
+| GET | /topic-selection/v1c/downstream-feedback/{feedbackId} | Read downstream topic feedback. | none | feedbackId | — | 404 |
+| GET | /topic-selection/v1c/paper-project-bridges/{bridgeId}/downstream-feedback | List downstream feedback for a PaperProjectBridge. | none | bridgeId | items | 404 |
+| GET | /topic-selection/v1c/downstream-feedback/{feedbackId}/recheck-request | Read the embedded downstream recheck request projection for one feedback record. | none | feedbackId | downstream_topic_feedback, recheck_request | 404 |
+| GET | /topic-selection/v1c/recheck-requests/{recheckRequestId} | Read a downstream recheck request projection by embedded recheck id. | none | recheckRequestId | downstream_topic_feedback, recheck_request | 404 |
+| POST | /topic-selection/v1c/offline-evaluation/datasets | Create a v1c offline evaluation dataset; route forces stage v1c. | none | — | — | 400 |
+| POST | /topic-selection/v1c/offline-evaluation/datasets/synthetic-baseline | Create the synthetic v1c offline evaluation baseline dataset. | none | — | dataset, cases | 400 |
+| POST | /topic-selection/v1c/offline-evaluation/cases | Add a frozen v1c replay case to an offline evaluation dataset. | none | dataset_id, case_key, case_type, frozen_input_bundle, gold_expectation | — | 400, 404 |
+| POST | /topic-selection/v1c/offline-evaluation/runs | Start a v1c offline evaluation replay run. | none | dataset_id, workflow_profile_key | — | 400, 404, 409 |
+| POST | /topic-selection/v1c/offline-evaluation/case-results | Record a frozen v1c replay case result and diff. | none | run_id, case_id, observed_output | case_result, replay_diff | 400, 404, 409 |
+| POST | /topic-selection/v1c/offline-evaluation/runs/{runId}/complete | Complete a v1c offline evaluation run and calculate metrics. | none | runId | run, metric_results | 404, 409 |
+| GET | /topic-selection/v1c/offline-evaluation/runs/{runId}/metrics | List metric results for a v1c offline evaluation run. | none | runId | items | 404 |
+| GET | /topic-selection/v1c/offline-evaluation/runs/{runId}/diffs | List replay diffs for a v1c offline evaluation run. | none | runId | items | 404 |
