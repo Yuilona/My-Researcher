@@ -8,30 +8,30 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 68 (planned: 1, in-progress: 2, blocked: 0, done: 26, archived: 39)
+- Tasks: 68 (planned: 1, in-progress: 2, blocked: 0, done: 1, archived: 64)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
-| T-042 topic-selection-decision-chain-redesign | done | F-001 | dev-docs/active/topic-selection-decision-chain-redesign |
-| T-046 topic-selection-v1c-promotion-bridge | done | F-001 | dev-docs/active/topic-selection-v1c-promotion-bridge |
-| T-065 topic-selection-v1c-downstream-feedback-recheck | done | F-001 | dev-docs/active/topic-selection-v1c-downstream-feedback-recheck |
-| T-066 topic-selection-v1c-offline-evaluation-replay | done | F-001 | dev-docs/active/topic-selection-v1c-offline-evaluation-replay |
-| T-067 topic-selection-v1c-http-api-closure | done | F-001 | dev-docs/active/topic-selection-v1c-http-api-closure |
-| T-068 topic-selection-backend-decision-chain-acceptance | done | F-001 | dev-docs/active/topic-selection-backend-decision-chain-acceptance |
-| T-061 topic-selection-v1c-promotion-input-snapshot | done | F-001 | dev-docs/active/topic-selection-v1c-promotion-input-snapshot |
-| T-062 topic-selection-v1c-promotion-gate-support | done | F-001 | dev-docs/active/topic-selection-v1c-promotion-gate-support |
-| T-063 topic-selection-v1c-human-promotion-decision-profile | done | F-001 | dev-docs/active/topic-selection-v1c-human-promotion-decision-profile |
-| T-064 topic-selection-v1c-paper-project-bridge | done | F-001 | dev-docs/active/topic-selection-v1c-paper-project-bridge |
-| T-044 topic-selection-v1a-evidence-to-need | done | F-001 | dev-docs/active/topic-selection-v1a-evidence-to-need |
-| T-045 topic-selection-v1b-need-to-draft-topic | done | F-001 | dev-docs/active/topic-selection-v1b-need-to-draft-topic |
-| T-047 topic-selection-v1a-evidence-map-strength | done | F-001 | dev-docs/active/topic-selection-v1a-evidence-map-strength |
-| T-048 topic-selection-v1a-foundation-control-plane | done | F-001 | dev-docs/active/topic-selection-v1a-foundation-control-plane |
-| T-049 topic-selection-v1a-need-validation | done | F-001 | dev-docs/active/topic-selection-v1a-need-validation |
-| T-052 topic-selection-v1a-search-resource-evidence-inputs | done | F-001 | dev-docs/active/topic-selection-v1a-search-resource-evidence-inputs |
-| T-054 topic-selection-v1b-http-api-closure | done | F-001 | dev-docs/active/topic-selection-v1b-http-api-closure |
-| T-055 topic-selection-v1b-intake-constraint-profile | done | F-001 | dev-docs/active/topic-selection-v1b-intake-constraint-profile |
-| T-056 topic-selection-v1b-offline-evaluation-replay | done | F-001 | dev-docs/active/topic-selection-v1b-offline-evaluation-replay |
-| T-057 topic-selection-v1b-research-slice | done | F-001 | dev-docs/active/topic-selection-v1b-research-slice |
+| T-042 topic-selection-decision-chain-redesign | archived | F-001 | dev-docs/archive/topic-selection-decision-chain-redesign |
+| T-044 topic-selection-v1a-evidence-to-need | archived | F-001 | dev-docs/archive/topic-selection-v1a-evidence-to-need |
+| T-045 topic-selection-v1b-need-to-draft-topic | archived | F-001 | dev-docs/archive/topic-selection-v1b-need-to-draft-topic |
+| T-046 topic-selection-v1c-promotion-bridge | archived | F-001 | dev-docs/archive/topic-selection-v1c-promotion-bridge |
+| T-047 topic-selection-v1a-evidence-map-strength | archived | F-001 | dev-docs/archive/topic-selection-v1a-evidence-map-strength |
+| T-048 topic-selection-v1a-foundation-control-plane | archived | F-001 | dev-docs/archive/topic-selection-v1a-foundation-control-plane |
+| T-049 topic-selection-v1a-need-validation | archived | F-001 | dev-docs/archive/topic-selection-v1a-need-validation |
+| T-050 topic-selection-v1a-offline-evaluation-replay | archived | F-001 | dev-docs/archive/topic-selection-v1a-offline-evaluation-replay |
+| T-051 topic-selection-v1a-recheck-risk-memory | archived | F-001 | dev-docs/archive/topic-selection-v1a-recheck-risk-memory |
+| T-052 topic-selection-v1a-search-resource-evidence-inputs | archived | F-001 | dev-docs/archive/topic-selection-v1a-search-resource-evidence-inputs |
+| T-053 topic-selection-v1a-http-api-closure | archived | F-001 | dev-docs/archive/topic-selection-v1a-http-api-closure |
+| T-054 topic-selection-v1b-http-api-closure | archived | F-001 | dev-docs/archive/topic-selection-v1b-http-api-closure |
+| T-055 topic-selection-v1b-intake-constraint-profile | archived | F-001 | dev-docs/archive/topic-selection-v1b-intake-constraint-profile |
+| T-056 topic-selection-v1b-offline-evaluation-replay | archived | F-001 | dev-docs/archive/topic-selection-v1b-offline-evaluation-replay |
+| T-057 topic-selection-v1b-research-slice | archived | F-001 | dev-docs/archive/topic-selection-v1b-research-slice |
+| T-058 topic-selection-v1b-topic-package-draft | archived | F-001 | dev-docs/archive/topic-selection-v1b-topic-package-draft |
+| T-059 topic-selection-v1b-topic-question-contract | archived | F-001 | dev-docs/archive/topic-selection-v1b-topic-question-contract |
+| T-060 topic-selection-v1b-value-assessment | archived | F-001 | dev-docs/archive/topic-selection-v1b-value-assessment |
+| T-061 topic-selection-v1c-promotion-input-snapshot | archived | F-001 | dev-docs/archive/topic-selection-v1c-promotion-input-snapshot |
+| T-062 topic-selection-v1c-promotion-gate-support | archived | F-001 | dev-docs/archive/topic-selection-v1c-promotion-gate-support |
 <!-- AUTO-GENERATED:END dashboard -->

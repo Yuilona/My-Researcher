@@ -420,12 +420,12 @@ tasks:
     updated: 2026-05-08
   - id: T-042
     slug: topic-selection-decision-chain-redesign
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-decision-chain-redesign
+    dev_docs_path: dev-docs/archive/topic-selection-decision-chain-redesign
     updated: 2026-05-16
   - id: T-043
     slug: experiment-foundation-v1
@@ -438,219 +438,219 @@ tasks:
     updated: 2026-05-12
   - id: T-044
     slug: topic-selection-v1a-evidence-to-need
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1a-evidence-to-need
-    updated: 2026-05-14
+    dev_docs_path: dev-docs/archive/topic-selection-v1a-evidence-to-need
+    updated: 2026-05-16
   - id: T-045
     slug: topic-selection-v1b-need-to-draft-topic
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1b-need-to-draft-topic
-    updated: 2026-05-14
+    dev_docs_path: dev-docs/archive/topic-selection-v1b-need-to-draft-topic
+    updated: 2026-05-16
   - id: T-046
     slug: topic-selection-v1c-promotion-bridge
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1c-promotion-bridge
+    dev_docs_path: dev-docs/archive/topic-selection-v1c-promotion-bridge
     updated: 2026-05-16
   - id: T-047
     slug: topic-selection-v1a-evidence-map-strength
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1a-evidence-map-strength
-    updated: 2026-05-14
+    dev_docs_path: dev-docs/archive/topic-selection-v1a-evidence-map-strength
+    updated: 2026-05-16
   - id: T-048
     slug: topic-selection-v1a-foundation-control-plane
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1a-foundation-control-plane
-    updated: 2026-05-14
+    dev_docs_path: dev-docs/archive/topic-selection-v1a-foundation-control-plane
+    updated: 2026-05-16
   - id: T-049
     slug: topic-selection-v1a-need-validation
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1a-need-validation
-    updated: 2026-05-14
+    dev_docs_path: dev-docs/archive/topic-selection-v1a-need-validation
+    updated: 2026-05-16
   - id: T-050
     slug: topic-selection-v1a-offline-evaluation-replay
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1a-offline-evaluation-replay
-    updated: 2026-05-13
+    dev_docs_path: dev-docs/archive/topic-selection-v1a-offline-evaluation-replay
+    updated: 2026-05-16
   - id: T-051
     slug: topic-selection-v1a-recheck-risk-memory
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1a-recheck-risk-memory
-    updated: 2026-05-13
+    dev_docs_path: dev-docs/archive/topic-selection-v1a-recheck-risk-memory
+    updated: 2026-05-16
   - id: T-052
     slug: topic-selection-v1a-search-resource-evidence-inputs
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1a-search-resource-evidence-inputs
-    updated: 2026-05-14
+    dev_docs_path: dev-docs/archive/topic-selection-v1a-search-resource-evidence-inputs
+    updated: 2026-05-16
   - id: T-053
     slug: topic-selection-v1a-http-api-closure
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1a-http-api-closure
-    updated: 2026-05-13
+    dev_docs_path: dev-docs/archive/topic-selection-v1a-http-api-closure
+    updated: 2026-05-16
   - id: T-054
     slug: topic-selection-v1b-http-api-closure
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1b-http-api-closure
-    updated: 2026-05-14
+    dev_docs_path: dev-docs/archive/topic-selection-v1b-http-api-closure
+    updated: 2026-05-16
   - id: T-055
     slug: topic-selection-v1b-intake-constraint-profile
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1b-intake-constraint-profile
-    updated: 2026-05-14
+    dev_docs_path: dev-docs/archive/topic-selection-v1b-intake-constraint-profile
+    updated: 2026-05-16
   - id: T-056
     slug: topic-selection-v1b-offline-evaluation-replay
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1b-offline-evaluation-replay
-    updated: 2026-05-14
+    dev_docs_path: dev-docs/archive/topic-selection-v1b-offline-evaluation-replay
+    updated: 2026-05-16
   - id: T-057
     slug: topic-selection-v1b-research-slice
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1b-research-slice
-    updated: 2026-05-14
+    dev_docs_path: dev-docs/archive/topic-selection-v1b-research-slice
+    updated: 2026-05-16
   - id: T-058
     slug: topic-selection-v1b-topic-package-draft
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1b-topic-package-draft
-    updated: 2026-05-14
+    dev_docs_path: dev-docs/archive/topic-selection-v1b-topic-package-draft
+    updated: 2026-05-16
   - id: T-059
     slug: topic-selection-v1b-topic-question-contract
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1b-topic-question-contract
-    updated: 2026-05-14
+    dev_docs_path: dev-docs/archive/topic-selection-v1b-topic-question-contract
+    updated: 2026-05-16
   - id: T-060
     slug: topic-selection-v1b-value-assessment
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1b-value-assessment
-    updated: 2026-05-14
+    dev_docs_path: dev-docs/archive/topic-selection-v1b-value-assessment
+    updated: 2026-05-16
   - id: T-061
     slug: topic-selection-v1c-promotion-input-snapshot
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1c-promotion-input-snapshot
-    updated: 2026-05-15
+    dev_docs_path: dev-docs/archive/topic-selection-v1c-promotion-input-snapshot
+    updated: 2026-05-16
   - id: T-062
     slug: topic-selection-v1c-promotion-gate-support
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1c-promotion-gate-support
-    updated: 2026-05-15
+    dev_docs_path: dev-docs/archive/topic-selection-v1c-promotion-gate-support
+    updated: 2026-05-16
   - id: T-063
     slug: topic-selection-v1c-human-promotion-decision-profile
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1c-human-promotion-decision-profile
-    updated: 2026-05-15
+    dev_docs_path: dev-docs/archive/topic-selection-v1c-human-promotion-decision-profile
+    updated: 2026-05-16
   - id: T-064
     slug: topic-selection-v1c-paper-project-bridge
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1c-paper-project-bridge
-    updated: 2026-05-15
+    dev_docs_path: dev-docs/archive/topic-selection-v1c-paper-project-bridge
+    updated: 2026-05-16
   - id: T-065
     slug: topic-selection-v1c-downstream-feedback-recheck
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1c-downstream-feedback-recheck
+    dev_docs_path: dev-docs/archive/topic-selection-v1c-downstream-feedback-recheck
     updated: 2026-05-16
   - id: T-066
     slug: topic-selection-v1c-offline-evaluation-replay
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1c-offline-evaluation-replay
+    dev_docs_path: dev-docs/archive/topic-selection-v1c-offline-evaluation-replay
     updated: 2026-05-16
   - id: T-067
     slug: topic-selection-v1c-http-api-closure
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
-    dev_docs_path: dev-docs/active/topic-selection-v1c-http-api-closure
+    dev_docs_path: dev-docs/archive/topic-selection-v1c-http-api-closure
     updated: 2026-05-16
   - id: T-068
     slug: topic-selection-backend-decision-chain-acceptance

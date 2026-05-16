@@ -7,6 +7,7 @@ Project: `main`
 - Prefer one line per event; link to tasks/features when possible.
 
 ## Entries
+- 2026-05-16 Archived completed topic-selection task packages T-042 and T-044 through T-067; T-068 remains active as the current backend acceptance record.
 - 2026-05-16 Extended T-068 with quality baseline acceptance for v1a/v1b/v1c synthetic offline replay datasets, metrics, diffs, and cross-stage guards.
 - 2026-05-16 Extended T-068 acceptance with invariant/negative route coverage, route-contract checks, and isolated Prisma persistence evidence; final acceptance remains done.
 - 2026-05-16 Reopened and reclosed T-068 under tightened node-level backend acceptance; added deterministic mock fixture with 27 decision-chain subtests and negative authority/boundary checks.
