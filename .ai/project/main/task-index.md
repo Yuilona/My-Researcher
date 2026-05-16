@@ -51,11 +51,11 @@ Project: `main`
 | T-039 literature-citation-abstract-readiness | archived | F-000 | dev-docs/archive/literature-citation-abstract-readiness |
 | T-040 literature-content-processing-closure-fixes | archived | F-000 | dev-docs/archive/literature-content-processing-closure-fixes |
 | T-041 literature-end-to-end-quality-upgrade | in-progress | F-000 | dev-docs/active/literature-end-to-end-quality-upgrade |
-| T-042 topic-selection-decision-chain-redesign | in-progress | F-001 | dev-docs/active/topic-selection-decision-chain-redesign |
+| T-042 topic-selection-decision-chain-redesign | done | F-001 | dev-docs/active/topic-selection-decision-chain-redesign |
 | T-043 experiment-foundation-v1 | planned | F-001 | dev-docs/active/experiment-foundation-v1 |
 | T-044 topic-selection-v1a-evidence-to-need | done | F-001 | dev-docs/active/topic-selection-v1a-evidence-to-need |
 | T-045 topic-selection-v1b-need-to-draft-topic | done | F-001 | dev-docs/active/topic-selection-v1b-need-to-draft-topic |
-| T-046 topic-selection-v1c-promotion-bridge | planned | F-001 | dev-docs/active/topic-selection-v1c-promotion-bridge |
+| T-046 topic-selection-v1c-promotion-bridge | done | F-001 | dev-docs/active/topic-selection-v1c-promotion-bridge |
 | T-047 topic-selection-v1a-evidence-map-strength | done | F-001 | dev-docs/active/topic-selection-v1a-evidence-map-strength |
 | T-048 topic-selection-v1a-foundation-control-plane | done | F-001 | dev-docs/active/topic-selection-v1a-foundation-control-plane |
 | T-049 topic-selection-v1a-need-validation | done | F-001 | dev-docs/active/topic-selection-v1a-need-validation |
@@ -77,4 +77,5 @@ Project: `main`
 | T-065 topic-selection-v1c-downstream-feedback-recheck | done | F-001 | dev-docs/active/topic-selection-v1c-downstream-feedback-recheck |
 | T-066 topic-selection-v1c-offline-evaluation-replay | done | F-001 | dev-docs/active/topic-selection-v1c-offline-evaluation-replay |
 | T-067 topic-selection-v1c-http-api-closure | done | F-001 | dev-docs/active/topic-selection-v1c-http-api-closure |
+| T-068 topic-selection-backend-decision-chain-acceptance | done | F-001 | dev-docs/active/topic-selection-backend-decision-chain-acceptance |
 <!-- AUTO-GENERATED:END task-index -->

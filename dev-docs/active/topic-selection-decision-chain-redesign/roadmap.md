@@ -52,14 +52,19 @@
 - [x] 明确 value disposition 的 `advance_to_package / refine_question / refine_slice / park / drop` 回流路径，以及 PromotionDecision 的 promote 路径。
 
 ### M4 - Current Implementation Gap Map
-- [ ] 对照当前 title-card backend/UI 实现，列出已满足、部分满足、缺失项。
-- [ ] 判断哪些设计变化只需文档/提示词，哪些需要合同/DB/API/UI 改造。
+- [x] 对照当前 title-card backend/UI 实现，列出已满足、部分满足、缺失项。
+- [x] 判断哪些设计变化只需文档/提示词，哪些需要合同/DB/API/UI 改造。
 - [x] 明确与 research-argument readiness bridge 的边界。
 
 ### M5 - Delivery Plan
-- [ ] 拆出后续可执行实现任务。
-- [ ] 明确每阶段验收方式。
-- [ ] 决定是否更新 `automated_topic_notes.md` 或将本任务设计作为新 canonical 文档。
+- [x] 拆出后续可执行实现任务。
+- [x] 明确每阶段验收方式。
+- [x] 决定是否更新 `automated_topic_notes.md` 或将本任务设计作为新 canonical 文档。
+
+Closure note:
+- T-042 uses `06-design-spec.md` plus `07-governance-scope-acceptance.md` as the current canonical topic-selection design and scope record.
+- Backend decision-chain acceptance is intentionally split out as a follow-up task so it can verify the implemented service/API/DB chain without reopening this architecture mother package.
+- Desktop reviewer-workbench UI, PaperProject execution, writing/research-argument runtime, curated real replay datasets, and mature quality thresholds remain out of T-042 closure scope.
 
 ## Open Questions
 - 当前设计轮次无未决 open question。

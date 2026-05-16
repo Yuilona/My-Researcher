@@ -55,11 +55,11 @@ Project: `main`
 | T-026 research-argument-titlecard-paper-bridge | archived | dev-docs/archive/research-argument-titlecard-paper-bridge |
 | T-027 research-argument-control-plane-ui-v1 | archived | dev-docs/archive/research-argument-control-plane-ui-v1 |
 | T-028 research-argument-planner-critic-v15 | archived | dev-docs/archive/research-argument-planner-critic-v15 |
-| T-042 topic-selection-decision-chain-redesign | in-progress | dev-docs/active/topic-selection-decision-chain-redesign |
+| T-042 topic-selection-decision-chain-redesign | done | dev-docs/active/topic-selection-decision-chain-redesign |
 | T-043 experiment-foundation-v1 | planned | dev-docs/active/experiment-foundation-v1 |
 | T-044 topic-selection-v1a-evidence-to-need | done | dev-docs/active/topic-selection-v1a-evidence-to-need |
 | T-045 topic-selection-v1b-need-to-draft-topic | done | dev-docs/active/topic-selection-v1b-need-to-draft-topic |
-| T-046 topic-selection-v1c-promotion-bridge | planned | dev-docs/active/topic-selection-v1c-promotion-bridge |
+| T-046 topic-selection-v1c-promotion-bridge | done | dev-docs/active/topic-selection-v1c-promotion-bridge |
 | T-047 topic-selection-v1a-evidence-map-strength | done | dev-docs/active/topic-selection-v1a-evidence-map-strength |
 | T-048 topic-selection-v1a-foundation-control-plane | done | dev-docs/active/topic-selection-v1a-foundation-control-plane |
 | T-049 topic-selection-v1a-need-validation | done | dev-docs/active/topic-selection-v1a-need-validation |
@@ -81,6 +81,7 @@ Project: `main`
 | T-065 topic-selection-v1c-downstream-feedback-recheck | done | dev-docs/active/topic-selection-v1c-downstream-feedback-recheck |
 | T-066 topic-selection-v1c-offline-evaluation-replay | done | dev-docs/active/topic-selection-v1c-offline-evaluation-replay |
 | T-067 topic-selection-v1c-http-api-closure | done | dev-docs/active/topic-selection-v1c-http-api-closure |
+| T-068 topic-selection-backend-decision-chain-acceptance | done | dev-docs/active/topic-selection-backend-decision-chain-acceptance |
 
 ### F-002 Desktop Frontend Foundation
 

@@ -66,5 +66,11 @@
 - Check: v1c readiness review.
 - Result: `T-046` no longer waits for v1b readiness stabilization; it is ready for child-package splitting while preserving the no-promotion/no-bridge boundary in v1b.
 
+## 2026-05-16
+- Check: governance and scope acceptance review for T-042 and T-046.
+- Result: T-042 scope is closed as parent architecture/governance package; T-046 is closed as the v1c stage package after T-061 through T-067 child packages completed. Backend decision-chain acceptance is intentionally split into a future task instead of being claimed by this parent package.
+- Check: current implementation gap map.
+- Result: documented in `07-governance-scope-acceptance.md`; backend service/API/DB implementation is covered by child package evidence, while desktop reviewer UI, full PaperProject execution, real quality-threshold calibration, and production rollout remain out of T-042 scope.
+
 ## Pending
 - None for the `topic-selection-decision-chain-redesign` task bundle.

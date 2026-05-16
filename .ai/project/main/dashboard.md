@@ -8,15 +8,18 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 67 (planned: 2, in-progress: 3, blocked: 0, done: 23, archived: 39)
+- Tasks: 68 (planned: 1, in-progress: 2, blocked: 0, done: 26, archived: 39)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
+| T-042 topic-selection-decision-chain-redesign | done | F-001 | dev-docs/active/topic-selection-decision-chain-redesign |
+| T-046 topic-selection-v1c-promotion-bridge | done | F-001 | dev-docs/active/topic-selection-v1c-promotion-bridge |
 | T-065 topic-selection-v1c-downstream-feedback-recheck | done | F-001 | dev-docs/active/topic-selection-v1c-downstream-feedback-recheck |
 | T-066 topic-selection-v1c-offline-evaluation-replay | done | F-001 | dev-docs/active/topic-selection-v1c-offline-evaluation-replay |
 | T-067 topic-selection-v1c-http-api-closure | done | F-001 | dev-docs/active/topic-selection-v1c-http-api-closure |
+| T-068 topic-selection-backend-decision-chain-acceptance | done | F-001 | dev-docs/active/topic-selection-backend-decision-chain-acceptance |
 | T-061 topic-selection-v1c-promotion-input-snapshot | done | F-001 | dev-docs/active/topic-selection-v1c-promotion-input-snapshot |
 | T-062 topic-selection-v1c-promotion-gate-support | done | F-001 | dev-docs/active/topic-selection-v1c-promotion-gate-support |
 | T-063 topic-selection-v1c-human-promotion-decision-profile | done | F-001 | dev-docs/active/topic-selection-v1c-human-promotion-decision-profile |
@@ -31,7 +34,4 @@ Project: `main`
 | T-055 topic-selection-v1b-intake-constraint-profile | done | F-001 | dev-docs/active/topic-selection-v1b-intake-constraint-profile |
 | T-056 topic-selection-v1b-offline-evaluation-replay | done | F-001 | dev-docs/active/topic-selection-v1b-offline-evaluation-replay |
 | T-057 topic-selection-v1b-research-slice | done | F-001 | dev-docs/active/topic-selection-v1b-research-slice |
-| T-058 topic-selection-v1b-topic-package-draft | done | F-001 | dev-docs/active/topic-selection-v1b-topic-package-draft |
-| T-059 topic-selection-v1b-topic-question-contract | done | F-001 | dev-docs/active/topic-selection-v1b-topic-question-contract |
-| T-060 topic-selection-v1b-value-assessment | done | F-001 | dev-docs/active/topic-selection-v1b-value-assessment |
 <!-- AUTO-GENERATED:END dashboard -->

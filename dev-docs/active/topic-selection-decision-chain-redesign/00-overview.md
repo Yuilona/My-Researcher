@@ -1,8 +1,9 @@
 # 00 Overview
 
 ## Status
-- State: in-progress
-- Next step: 作为母包维护总体架构和跨阶段不变量；v1a 和 v1b backend/service/API 已闭环，v1c 现在应从稳定的 `TopicSelectionV1bToV1cInputBundle` 拆实施子包。
+- State: done
+- Next step: T-042 治理与范围验收已完成；后端决策链路验收应作为单独任务处理，不再混入本母包。
+- Closure: See `07-governance-scope-acceptance.md` for the accepted scope boundary, implementation gap map, and follow-up task boundary.
 
 ## Goal
 - 创建并维护一个面向“完善选题链路”的母包。
@@ -41,7 +42,9 @@
 - [x] 母包已拆出 v1a/v1b/v1c 阶段子包。
 - [x] `roadmap.md` 记录讨论中的 open questions、milestones 与决策。
 - [x] `06-design-spec.md` 明确新版链路、对象模型、gate、回流路径与人机分工。
-- [ ] 后续完成 current implementation gap map。
+- [x] 后续完成 current implementation gap map。
 - [x] 后续完成 v1a 内部实施子包拆分。
 - [x] v1b implementation child packages are split with an implementation contract review.
 - [x] v1b closed the need-to-draft-topic path through HTTP/API, replay baseline, Prisma smoke, and v1c input bundle handoff.
+- [x] v1c child packages are closed through HTTP/API, replay, Prisma smoke, promotion bridge, and downstream feedback/recheck.
+- [x] 治理与范围验收明确：T-042 覆盖设计 SSOT、阶段拆分、范围边界和子包闭环；后端决策链路验收、桌面 UI 接入、PaperProject 执行与真实质量阈值校准均拆出后续任务。

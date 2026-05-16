@@ -32,8 +32,8 @@ Acceptance:
 - [x] `T-064` creates `PaperProjectBridge` only after human-confirmed promotion.
 - [x] `T-065` routes downstream issues into feedback/recheck records.
 - [x] `T-066` evaluates frozen v1c snapshots without writing production authority state.
-- [ ] `T-067` closes HTTP/API after service/repository contracts stabilize.
-- [ ] each child package documents its pre-next review checklist and stop conditions.
+- [x] `T-067` closes HTTP/API after service/repository contracts stabilize.
+- [x] each child package documents its pre-next review checklist and stop conditions.
 
 ## Phase 3 - Stage Closure
 - Create or connect `PaperProjectBridge` only after human-confirmed promotion.
@@ -42,3 +42,4 @@ Acceptance:
 Acceptance:
 - [x] Bridge trace can be followed back to package, question, slice, need, evidence, and search refs.
 - [x] Downstream feedback creates feedback/recheck events rather than mutating upstream authority.
+- [x] v1c stage closure is represented in project governance as done after T-067 HTTP/API closure.

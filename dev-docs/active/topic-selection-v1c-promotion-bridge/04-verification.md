@@ -29,7 +29,7 @@
 - Result: no new child package required. Closed contract gaps for `PromotionDossier` ownership, canonical promotion outcome vocabulary, pre-next closure statuses, gate-to-human promotion guard, v1c replay input/gate coverage, and HTTP review/read routes.
 
 ## Pending Checks
-- Execute T-065 next, then continue through T-067 in order.
+- None for v1c stage governance/scope closure.
 
 ## 2026-05-15 T-063
 - Check: `node --test --loader ts-node/esm src/services/topic-selection-v1c-human-promotion-decision-service.unit.test.ts`.
@@ -88,3 +88,9 @@
 - Result: passed.
 - Check: `pnpm --filter @paper-engineering-assistant/backend test`.
 - Result: full suite stopped only at existing T-054 Prisma HTTP smoke guard because `DATABASE_URL` was not set; 403 tests passed, 1 skipped, and new T-064 tests passed within the suite.
+
+## 2026-05-16 Stage Governance Closure
+- Check: T-061 through T-067 status and verification records.
+- Result: all v1c child packages are represented as done, including T-067 HTTP/API closure with isolated Prisma smoke evidence.
+- Check: T-046 acceptance criteria against parent T-042 scope.
+- Result: v1c stage is complete for promotion input, gate support, human promotion decision/profile, PaperProjectBridge handoff, downstream feedback/recheck, offline replay, and HTTP/API closure. Full PaperProject execution remains out of scope.

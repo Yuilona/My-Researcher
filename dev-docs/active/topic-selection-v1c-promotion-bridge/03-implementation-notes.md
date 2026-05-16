@@ -1,9 +1,9 @@
 # 03 Implementation Notes
 
 ## Current Position
-- This package is intentionally stage-level only.
-- Detailed implementation split is now available because v1b package readiness and `TopicSelectionV1bToV1cInputBundle` are stable.
-- Child packages `T-061` through `T-067` are planned and should execute in dependency order.
+- This package is closed as the v1c stage-level package.
+- Detailed implementation split was executed after v1b package readiness and `TopicSelectionV1bToV1cInputBundle` stabilized.
+- Child packages `T-061` through `T-067` are done.
 - v1c must preserve promotion as human authorization. `PromotionDecisionSupport` and `PromotionGateCheck` can recommend, block, or request refinement, but cannot create `PaperProjectBridge`.
 - v1c closure must preserve a downstream feedback/recheck path so PaperProject, Writing, or ResearchArgument issues return as typed feedback instead of upstream authority rewrites.
 
@@ -18,12 +18,10 @@
 - Bridge creation is idempotent by `sourcePromotionDecisionId`; duplicate creates return the existing active bridge handoff.
 - `promote_with_conditions` carries conditions into the commitment-derived working-copy payload and bridge record.
 
-## Expected Future Split
-- `PromotionInputSnapshot` owns v1c entry validation from `TopicSelectionV1bToV1cInputBundle`.
-- `PromotionGateCheck` owns trace, boundary, blocker, risk, recheck, package narrative, and argument mini-check readiness.
-- `PromotionDecision` and `PromotionCommitmentProfile` own human authorization and commitment freezing.
-- `PaperProjectBridge` owns downstream handoff refs, snapshot hashes, created/linked state, and working-copy text.
-- Downstream feedback/recheck owns bridge consumption issues, project execution discoveries, and research-argument/writing objections that need upstream review.
+## 2026-05-16 Stage Closure
+- `T-061` through `T-067` are implemented and verified.
+- T-046 is closed as the v1c stage package: it starts from `TopicSelectionV1bToV1cInputBundle`, creates promotion input/gate/support records, requires human promotion authorization, creates `PaperProjectBridge` only for promote-class decisions, and routes downstream issues into feedback/recheck records.
+- Full PaperProject execution, writing agents, experiment planning, and research-argument runtime remain outside v1c stage scope.
 
 ## Watch Points
 - Do not let `TopicPackage(draft)` directly create a paper project.

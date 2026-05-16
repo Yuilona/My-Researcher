@@ -218,6 +218,11 @@
 - Keep legacy refs. New authority objects should preserve FunctionalRef, TraceSnapshot, legacy_ref/sourceRecordIds, and artifact refs so old UI/API surfaces can progressively adapt without destructive table renames.
 - Keep v1 UI focused on the existing desktop shell plus a title-card reviewer workbench. Define UI as six surface categories: App Shell / Navigation, Workspace / Title-card Workbench, Decision Review Surfaces, Queue Surfaces, Trace / Evidence Drilldown, and Settings / Policy Surfaces.
 - Decision Review Surfaces should make confirmation scope, evidence, challenge, blockers, accepted risks, required actions, and downstream effects visible. They must not reduce research judgment to a score or recommendation button.
+
+## 2026-05-16 Governance Scope Closure
+- T-042 is closed as the parent architecture/governance package after v1a/v1b/v1c child package completion and scope review.
+- `07-governance-scope-acceptance.md` records the accepted boundary and current implementation gap map.
+- Backend decision-chain acceptance is intentionally split into a follow-up task so it can verify the implemented backend chain without expanding this parent package.
 - Queue Surfaces should handle human review, recheck, blockers, accepted risk expiry, and failed/partial workflows as focused work queues that link back to decision review or trace drilldown.
 - New UI must stay on the data-ui/token/contract path and must not expand the frozen legacy compatibility layer.
 - Split TopicValueAssessment into ValueReasoningMemo and ValueDispositionDecision. Use advance_to_package/refine_question/refine_slice/park/drop for value disposition; reserve promote for PromotionDecision.

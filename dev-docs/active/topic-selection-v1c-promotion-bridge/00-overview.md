@@ -1,8 +1,8 @@
 # 00 Overview
 
 ## Status
-- State: planned
-- Next step: Execute `T-067 topic-selection-v1c-http-api-closure`.
+- State: done
+- Next step: v1c stage governance is closed; backend decision-chain acceptance should verify the full implemented chain in a separate task.
 
 ## Parent Package
 - Parent: `dev-docs/active/topic-selection-decision-chain-redesign/`
@@ -37,7 +37,7 @@
 - `T-064 topic-selection-v1c-paper-project-bridge` - done
 - `T-065 topic-selection-v1c-downstream-feedback-recheck` - done
 - `T-066 topic-selection-v1c-offline-evaluation-replay` - done
-- `T-067 topic-selection-v1c-http-api-closure` - planned
+- `T-067 topic-selection-v1c-http-api-closure` - done
 
 ## Acceptance Criteria
 - [x] v1b produces a package with explicit readiness state.
@@ -47,5 +47,5 @@
 - [x] non-promote promotion outcomes have typed loopback targets and required actions.
 - [x] `PaperProjectBridge` preserves refs, snapshot hashes, conditions, and editable working-copy text.
 - [x] downstream feedback creates feedback/recheck records instead of mutating upstream authority.
-- [ ] v1c API can drive `v1c input bundle -> promotion input -> gate support -> human decision -> bridge -> downstream feedback/recheck`.
-- [ ] each step has explicit pre-next review inputs, closure status, and stop conditions.
+- [x] v1c API can drive `v1c input bundle -> promotion input -> gate support -> human decision -> bridge -> downstream feedback/recheck`.
+- [x] each step has explicit pre-next review inputs, closure status, and stop conditions.

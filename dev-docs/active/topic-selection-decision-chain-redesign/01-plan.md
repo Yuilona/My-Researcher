@@ -8,7 +8,7 @@
 Acceptance:
 - [x] Task bundle exists.
 - [x] Design spec exists.
-- [ ] Project governance sync completes.
+- [x] Project governance sync completes.
 
 ## Phase 2 - Design Discussion Loop
 - Use `06-design-spec.md` as the canonical discussion artifact.
@@ -18,8 +18,8 @@ Acceptance:
   - `03-implementation-notes.md` for rationale and change notes.
 
 Acceptance:
-- [ ] New decisions are reflected in docs during the discussion.
-- [ ] Open questions are either resolved or explicitly parked.
+- [x] New decisions are reflected in docs during the discussion.
+- [x] Open questions are either resolved or explicitly parked.
 
 ## Phase 3 - Object And Gate Finalization
 - Finalize the target chain:
@@ -36,9 +36,9 @@ Acceptance:
 - Define required fields, states, source attribution, and loopback rules.
 
 Acceptance:
-- [ ] Each object has a purpose, required inputs, required outputs, and invalid states.
-- [ ] Each gate has pass/fail/refine/park/drop semantics.
-- [ ] Human checkpoints are explicit and not merely ceremonial.
+- [x] Each object has a purpose, required inputs, required outputs, and invalid states.
+- [x] Each gate has pass/fail/refine/park/drop semantics.
+- [x] Human checkpoints are explicit and not merely ceremonial.
 
 ## Phase 4 - Current Implementation Gap Map
 - Compare the target design against current title-card backend/UI behavior.
@@ -50,8 +50,8 @@ Acceptance:
   - research-argument bridge dependency
 
 Acceptance:
-- [ ] Gap map identifies existing coverage and missing capabilities.
-- [ ] Implementation risks and dependencies are documented.
+- [x] Gap map identifies existing coverage and missing capabilities.
+- [x] Implementation risks and dependencies are documented.
 
 ## Phase 5 - Implementation Roadmap
 - Split follow-up implementation into executable tasks.
@@ -59,8 +59,8 @@ Acceptance:
 - Define verification per phase.
 
 Acceptance:
-- [ ] Roadmap has phased implementation tasks.
-- [ ] Each phase has a clear verification story.
+- [x] Roadmap has phased implementation tasks.
+- [x] Each phase has a clear verification story.
 
 ## Phase 6 - Stage Package Split
 - Treat this package as the parent architecture package.
@@ -75,9 +75,15 @@ Acceptance:
 - [x] v1a stage package exists.
 - [x] v1b stage package exists.
 - [x] v1c stage package exists.
-- [ ] v1a implementation child packages are created.
+- [x] v1a implementation child packages are created.
+
+## Closure - Governance And Scope Acceptance
+- T-042 closes as the parent architecture/governance package.
+- v1a, v1b, and v1c child packages are split and represented in project governance.
+- The current implementation gap map is captured in `07-governance-scope-acceptance.md`.
+- Backend decision-chain acceptance is explicitly split into a follow-up task; it should verify the implemented service/API/DB chain without reopening T-042.
+- Desktop reviewer UI, PaperProject execution, writing/research-argument runtime, curated real replay datasets, and production rollout remain outside T-042 scope.
 
 ## Working Protocol
-- Keep this task package current while discussing.
-- Prefer updating `06-design-spec.md` over adding scattered ad hoc notes.
-- Do not modify product code from this task until the design and implementation roadmap are accepted.
+- Keep `06-design-spec.md` and `07-governance-scope-acceptance.md` as the durable T-042 records after closure.
+- New implementation or acceptance work should use separate task packages rather than adding scope to T-042.
