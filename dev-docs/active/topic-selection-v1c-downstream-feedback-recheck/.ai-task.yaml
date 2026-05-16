@@ -2,8 +2,8 @@ version: 1
 task_id: T-065
 project: main
 slug: topic-selection-v1c-downstream-feedback-recheck
-status: planned
-updated: "2026-05-15"
+status: done
+updated: "2026-05-16"
 keywords:
   - topic-selection
   - v1c

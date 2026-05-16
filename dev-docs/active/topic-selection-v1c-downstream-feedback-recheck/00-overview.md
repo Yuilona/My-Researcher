@@ -1,8 +1,8 @@
 # 00 Overview
 
 ## Status
-- State: planned
-- Next step: Implement after T-064 exposes stable bridge refs.
+- State: done
+- Next step: T-066 offline replay can consume frozen downstream feedback/recheck snapshots.
 
 ## Parent Package
 - Stage parent: `dev-docs/active/topic-selection-v1c-promotion-bridge/`
@@ -26,7 +26,7 @@
 - feedback-to-topic-selection impact summary
 
 ## Acceptance Criteria
-- [ ] Feedback source and bridge lineage are required.
-- [ ] Loopback target is typed: package, value assessment, question, slice, need, evidence/search, promotion, bridge, merge candidate, or paper-project intake.
-- [ ] Recheck requests are explicit and preserve source feedback refs.
-- [ ] Existing v1b/v1c authority objects remain immutable from this service.
+- [x] Feedback source and bridge lineage are required.
+- [x] Loopback target is typed: package, value assessment, question, slice, need, evidence/search, promotion, bridge, merge candidate, or paper-project intake.
+- [x] Recheck requests are explicit and preserve source feedback refs.
+- [x] Existing v1b/v1c authority objects remain immutable from this service.

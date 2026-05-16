@@ -427,9 +427,15 @@ test('downstream feedback creates derived queue state through policy interpretat
     reason_codes: ['DOWNSTREAM_COUNTER_EVIDENCE'],
     summary: 'Promotion bridge found counter-evidence that invalidates v1a readiness.',
     impact_level: 'invalidated',
+    severity: 'critical',
+    policy_version_id: 'policy_v1',
+    payload: { downstream_topic_feedback_id: 'downstream_topic_feedback_001' },
   });
 
   assert.equal(interpreted.event?.event_type, 'downstream_feedback');
+  assert.equal(interpreted.event?.severity, 'critical');
+  assert.equal(interpreted.event?.policy_version_id, 'policy_v1');
+  assert.equal(interpreted.event?.payload.downstream_topic_feedback_id, 'downstream_topic_feedback_001');
   assert.equal(interpreted.impact?.impact_level, 'invalidated');
   assert.equal(interpreted.queue_item?.queue_item_type, 'downstream_feedback');
   assert.equal(interpreted.queue_item?.handler_key, 'human_review');

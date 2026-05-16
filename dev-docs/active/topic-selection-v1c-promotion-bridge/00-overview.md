@@ -2,7 +2,7 @@
 
 ## Status
 - State: planned
-- Next step: Execute `T-065 topic-selection-v1c-downstream-feedback-recheck`.
+- Next step: Execute `T-067 topic-selection-v1c-http-api-closure`.
 
 ## Parent Package
 - Parent: `dev-docs/active/topic-selection-decision-chain-redesign/`
@@ -35,8 +35,8 @@
 - `T-062 topic-selection-v1c-promotion-gate-support` - done
 - `T-063 topic-selection-v1c-human-promotion-decision-profile` - done
 - `T-064 topic-selection-v1c-paper-project-bridge` - done
-- `T-065 topic-selection-v1c-downstream-feedback-recheck` - planned
-- `T-066 topic-selection-v1c-offline-evaluation-replay` - planned
+- `T-065 topic-selection-v1c-downstream-feedback-recheck` - done
+- `T-066 topic-selection-v1c-offline-evaluation-replay` - done
 - `T-067 topic-selection-v1c-http-api-closure` - planned
 
 ## Acceptance Criteria
@@ -46,6 +46,6 @@
 - [x] promotion cannot bypass human confirmation.
 - [x] non-promote promotion outcomes have typed loopback targets and required actions.
 - [x] `PaperProjectBridge` preserves refs, snapshot hashes, conditions, and editable working-copy text.
-- [ ] downstream feedback creates feedback/recheck records instead of mutating upstream authority.
+- [x] downstream feedback creates feedback/recheck records instead of mutating upstream authority.
 - [ ] v1c API can drive `v1c input bundle -> promotion input -> gate support -> human decision -> bridge -> downstream feedback/recheck`.
 - [ ] each step has explicit pre-next review inputs, closure status, and stop conditions.

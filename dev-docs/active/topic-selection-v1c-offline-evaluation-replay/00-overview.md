@@ -1,8 +1,8 @@
 # 00 Overview
 
 ## Status
-- State: planned
-- Next step: Implement after T-061 through T-065 define stable v1c artifacts.
+- State: done
+- Next step: Hand off to `T-067 topic-selection-v1c-http-api-closure`.
 
 ## Parent Package
 - Stage parent: `dev-docs/active/topic-selection-v1c-promotion-bridge/`
@@ -26,7 +26,7 @@
 - isolation tests proving replay uses frozen payloads only
 
 ## Acceptance Criteria
-- [ ] Synthetic v1c baseline covers promotion input staleness, gate blocker false-pass, human bypass, promotion false-pass, bridge trace, commitment profile, loopback routing, and downstream mutation guard cases.
-- [ ] Metrics include numerator, denominator, case refs, and notes.
-- [ ] Replay diffs record changed dimensions in generic replay diff records.
-- [ ] Runtime service does not import production v1c authority services or repositories.
+- [x] Synthetic v1c baseline covers promotion input staleness, gate blocker false-pass, human bypass, promotion false-pass, bridge trace, commitment profile, loopback routing, and downstream mutation guard cases.
+- [x] Metrics include numerator, denominator, case refs, and notes.
+- [x] Replay diffs record changed dimensions in generic replay diff records.
+- [x] Runtime service does not import production v1c authority services or repositories.

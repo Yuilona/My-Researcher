@@ -30,8 +30,8 @@ Acceptance:
 - [x] `T-062` produces support/dossier/gate artifacts without human authorization.
 - [x] `T-063` persists human promotion decisions and commitment profiles.
 - [x] `T-064` creates `PaperProjectBridge` only after human-confirmed promotion.
-- [ ] `T-065` routes downstream issues into feedback/recheck records.
-- [ ] `T-066` evaluates frozen v1c snapshots without writing production authority state.
+- [x] `T-065` routes downstream issues into feedback/recheck records.
+- [x] `T-066` evaluates frozen v1c snapshots without writing production authority state.
 - [ ] `T-067` closes HTTP/API after service/repository contracts stabilize.
 - [ ] each child package documents its pre-next review checklist and stop conditions.
 
@@ -41,4 +41,4 @@ Acceptance:
 
 Acceptance:
 - [x] Bridge trace can be followed back to package, question, slice, need, evidence, and search refs.
-- [ ] Downstream feedback creates feedback/recheck events rather than mutating upstream authority.
+- [x] Downstream feedback creates feedback/recheck events rather than mutating upstream authority.

@@ -7,6 +7,8 @@ import {
   TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_METRIC_KEYS,
   TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_METRIC_KEYS,
   TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_CASE_TYPES,
+  TOPIC_SELECTION_V1C_OFFLINE_EVALUATION_CASE_TYPES,
+  TOPIC_SELECTION_V1C_OFFLINE_EVALUATION_METRIC_KEYS,
   createTopicSelectionOfflineFrozenInputBundle,
   type TopicSelectionOfflineEvaluationCaseRecord,
   type TopicSelectionOfflineEvaluationCaseResultRecord,
@@ -231,6 +233,71 @@ export class TopicSelectionOfflineEvaluationReplayService {
     };
   }
 
+  async createSyntheticV1cBaselineDataset(input: CreateDatasetInput = {}): Promise<{
+    dataset: TopicSelectionOfflineEvaluationDatasetRecord;
+    cases: TopicSelectionOfflineEvaluationCaseRecord[];
+  }> {
+    const dataset = await this.createDataset({
+      ...input,
+      dataset_key: input.dataset_key ?? 'topic-selection-v1c-synthetic-baseline',
+      stage: 'v1c',
+      source: 'synthetic_fixture',
+      status: input.status ?? 'active',
+      description: input.description ?? 'Synthetic v1c offline evaluation baseline covering promotion and bridge quality risks.',
+      payload: {
+        fixture_family: 'topic-selection-v1c-minimum',
+        replay_mode: 'frozen_snapshot_evaluation',
+        ...(input.payload ?? {}),
+      },
+    });
+    const specs = this.syntheticV1cCaseSpecs(this.now());
+    for (const spec of specs) {
+      await this.addCase({
+        workspace_id: input.workspace_id ?? null,
+        dataset_id: dataset.offline_evaluation_dataset_id,
+        title_card_id: `title_card_${spec.case_key}`,
+        case_key: spec.case_key,
+        case_type: spec.case_type,
+        tags: spec.tags,
+        gold_expectation: spec.gold,
+        frozen_input_bundle: createTopicSelectionOfflineFrozenInputBundle({
+          stage: 'v1c',
+          frozen_at: this.now(),
+          source_refs: this.uniqueRefs([
+            ...spec.gold.required_trace_refs,
+            ...(spec.gold.required_package_trace_refs ?? []),
+            ...(spec.gold.required_bridge_trace_refs ?? []),
+            ...spec.gold.expected_recheck_action_refs,
+          ]),
+          stage_snapshots: {
+            promotion_input_snapshot: { fixture_case_key: spec.case_key },
+            promotion_decision_support: { fixture_case_key: spec.case_key },
+            promotion_dossier: { fixture_case_key: spec.case_key },
+            promotion_gate_check: { fixture_case_key: spec.case_key },
+            argument_readiness_mini_check: { fixture_case_key: spec.case_key },
+            human_promotion_decision: { fixture_case_key: spec.case_key },
+            promotion_decision: { fixture_case_key: spec.case_key },
+            promotion_commitment_profile: { fixture_case_key: spec.case_key },
+            paper_project_bridge: { fixture_case_key: spec.case_key },
+            downstream_feedback: {
+              loopback_target: spec.gold.expected_loopback_target ?? null,
+              loopback_cause: spec.gold.expected_loopback_cause ?? null,
+            },
+            downstream_recheck: { fixture_case_key: spec.case_key },
+          },
+          payload: {
+            fixture_observed_output: spec.observed,
+          },
+        }),
+      });
+    }
+
+    return {
+      dataset: await this.requireDataset(dataset.offline_evaluation_dataset_id),
+      cases: await this.repository.listCasesByDatasetId(dataset.offline_evaluation_dataset_id),
+    };
+  }
+
   async addCase(input: AddCaseInput): Promise<TopicSelectionOfflineEvaluationCaseRecord> {
     const dataset = await this.requireDataset(input.dataset_id);
     this.assertCaseCompatibleWithDataset(dataset, input);
@@ -293,6 +360,21 @@ export class TopicSelectionOfflineEvaluationReplayService {
     return this.repository.createRun(record);
   }
 
+  async startRunForStage(
+    input: StartRunInput,
+    stage: TopicSelectionOfflineEvaluationStage,
+  ): Promise<TopicSelectionOfflineEvaluationRunRecord> {
+    const dataset = await this.requireDataset(input.dataset_id);
+    if (dataset.stage !== stage) {
+      throw new AppError(
+        404,
+        'NOT_FOUND',
+        `OfflineEvaluationDataset ${input.dataset_id} not found for stage ${stage}.`,
+      );
+    }
+    return this.startRun(input);
+  }
+
   async recordFrozenCaseResult(input: {
     workspace_id?: string | null;
     run_id: string;
@@ -347,6 +429,17 @@ export class TopicSelectionOfflineEvaluationReplayService {
     });
 
     return { case_result: caseResult, replay_diff: replayDiff };
+  }
+
+  async recordFrozenCaseResultForStage(
+    input: Parameters<TopicSelectionOfflineEvaluationReplayService['recordFrozenCaseResult']>[0],
+    stage: TopicSelectionOfflineEvaluationStage,
+  ): Promise<{
+    case_result: TopicSelectionOfflineEvaluationCaseResultRecord;
+    replay_diff: TopicSelectionReplayDiffRecord;
+  }> {
+    await this.requireRunForStage(input.run_id, stage);
+    return this.recordFrozenCaseResult(input);
   }
 
   async completeRunAndCalculateMetrics(input: { run_id: string }): Promise<{
@@ -427,12 +520,39 @@ export class TopicSelectionOfflineEvaluationReplayService {
     return { run: completedRun, metric_results: persisted };
   }
 
+  async completeRunAndCalculateMetricsForStage(input: {
+    run_id: string;
+    stage: TopicSelectionOfflineEvaluationStage;
+  }): Promise<{
+    run: TopicSelectionOfflineEvaluationRunRecord;
+    metric_results: TopicSelectionOfflineEvaluationMetricResultRecord[];
+  }> {
+    const run = await this.requireRunForStage(input.run_id, input.stage);
+    return this.completeRunAndCalculateMetrics({ run_id: run.offline_evaluation_run_id });
+  }
+
   async listMetricResults(runId: string): Promise<TopicSelectionOfflineEvaluationMetricResultRecord[]> {
     return this.repository.listMetricResultsByRunId(runId);
   }
 
+  async listMetricResultsForStage(
+    runId: string,
+    stage: TopicSelectionOfflineEvaluationStage,
+  ): Promise<TopicSelectionOfflineEvaluationMetricResultRecord[]> {
+    const run = await this.requireRunForStage(runId, stage);
+    return this.repository.listMetricResultsByRunId(run.offline_evaluation_run_id);
+  }
+
   async listReplayDiffs(runId: string): Promise<TopicSelectionReplayDiffRecord[]> {
     return this.repository.listReplayDiffsByRunId(runId);
+  }
+
+  async listReplayDiffsForStage(
+    runId: string,
+    stage: TopicSelectionOfflineEvaluationStage,
+  ): Promise<TopicSelectionReplayDiffRecord[]> {
+    const run = await this.requireRunForStage(runId, stage);
+    return this.repository.listReplayDiffsByRunId(run.offline_evaluation_run_id);
   }
 
   private async requireDataset(datasetId: string): Promise<TopicSelectionOfflineEvaluationDatasetRecord> {
@@ -455,6 +575,22 @@ export class TopicSelectionOfflineEvaluationReplayService {
     const run = await this.repository.findRunById(runId);
     if (!run) {
       throw new AppError(404, 'NOT_FOUND', `OfflineEvaluationRun ${runId} not found.`);
+    }
+    return run;
+  }
+
+  private async requireRunForStage(
+    runId: string,
+    expectedStage: TopicSelectionOfflineEvaluationStage,
+  ): Promise<TopicSelectionOfflineEvaluationRunRecord> {
+    const run = await this.requireRun(runId);
+    const dataset = await this.requireDataset(run.dataset_id);
+    if (dataset.stage !== expectedStage) {
+      throw new AppError(
+        404,
+        'NOT_FOUND',
+        `OfflineEvaluationRun ${runId} not found for stage ${expectedStage}.`,
+      );
     }
     return run;
   }
@@ -484,6 +620,21 @@ export class TopicSelectionOfflineEvaluationReplayService {
       && gold.expected_package_ready !== null
       && this.observedPackageReady(observed) !== gold.expected_package_ready;
     const loopbackCauseChanged = this.loopbackCauseChanged(gold, observed);
+    const promotionInputCurrentnessChanged = this.promotionInputCurrentnessChanged(gold, observed);
+    const promotionGateBlockerChanged = gold.expected_promotion_gate_promote_allowed === false
+      && this.observedPromotionGateReady(observed);
+    const humanAuthorizationChanged = gold.expected_human_authorized !== undefined
+      && gold.expected_human_authorized !== null
+      && (observed.human_promotion_authorized ?? null) !== gold.expected_human_authorized;
+    const promotionGateChanged = gold.expected_promotion_bridge_eligible !== undefined
+      && gold.expected_promotion_bridge_eligible !== null
+      && this.observedPromotionBridgeEligible(observed) !== gold.expected_promotion_bridge_eligible;
+    const bridgeTraceChanged = this.isV1cCase(input.evaluationCase)
+      && !this.bridgeTraceComplete(gold, observed);
+    const commitmentProfileChanged = this.isV1cCase(input.evaluationCase)
+      && !this.commitmentProfileComplete(gold, observed);
+    const loopbackTargetChanged = this.loopbackTargetChanged(gold, observed);
+    const downstreamFeedbackChanged = this.downstreamFeedbackChanged(gold, observed);
     const changedDimensions: TopicSelectionReplayDiffDimension[] = [];
     if (finalDecisionChanged) changedDimensions.push('final_decision');
     if (keyEvidenceSetChanged) changedDimensions.push('key_evidence_set');
@@ -495,6 +646,14 @@ export class TopicSelectionOfflineEvaluationReplayService {
     if (packageTraceChanged) changedDimensions.push('package_trace');
     if (packageReadinessChanged) changedDimensions.push('package_readiness');
     if (loopbackCauseChanged) changedDimensions.push('loopback_cause');
+    if (promotionInputCurrentnessChanged) changedDimensions.push('promotion_input_currentness');
+    if (promotionGateBlockerChanged) changedDimensions.push('promotion_gate_blocker');
+    if (humanAuthorizationChanged) changedDimensions.push('human_authorization');
+    if (promotionGateChanged) changedDimensions.push('promotion_gate');
+    if (bridgeTraceChanged) changedDimensions.push('bridge_trace');
+    if (commitmentProfileChanged) changedDimensions.push('commitment_profile');
+    if (loopbackTargetChanged) changedDimensions.push('loopback_target');
+    if (downstreamFeedbackChanged) changedDimensions.push('downstream_feedback');
 
     return {
       replay_diff_id: this.idFactory('replay_diff'),
@@ -521,6 +680,17 @@ export class TopicSelectionOfflineEvaluationReplayService {
         expected_package_ready: gold.expected_package_ready ?? null,
         expected_package_readiness_status: gold.expected_package_readiness_status ?? null,
         expected_downstream_loopback_causes: gold.expected_downstream_loopback_causes ?? [],
+        expected_promotion_input_current: gold.expected_promotion_input_current ?? null,
+        expected_promotion_input_closure_status: gold.expected_promotion_input_closure_status ?? null,
+        expected_promotion_gate_disposition: gold.expected_promotion_gate_disposition ?? null,
+        expected_promotion_gate_promote_allowed: gold.expected_promotion_gate_promote_allowed ?? null,
+        expected_human_authorized: gold.expected_human_authorized ?? null,
+        expected_promotion_bridge_eligible: gold.expected_promotion_bridge_eligible ?? null,
+        required_bridge_trace_refs: gold.required_bridge_trace_refs ?? [],
+        required_commitment_profile_fields: gold.required_commitment_profile_fields ?? [],
+        expected_loopback_target: gold.expected_loopback_target ?? null,
+        expected_loopback_cause: gold.expected_loopback_cause ?? null,
+        expected_downstream_mutation_blocked: gold.expected_downstream_mutation_blocked ?? null,
       },
       observed_snapshot: observed,
       baseline_snapshot: observed.baseline_observed_output ?? null,
@@ -531,9 +701,17 @@ export class TopicSelectionOfflineEvaluationReplayService {
         unexpected_slice_boundary_drift_codes: this.unexpectedSliceBoundaryDriftCodes(input.evaluationCase, observed),
         unexpected_value_overclaim_codes: this.unexpectedValueOverclaimCodes(input.evaluationCase, observed),
         package_trace_complete: this.packageTraceComplete(gold, observed),
+        bridge_trace_complete: this.bridgeTraceComplete(gold, observed),
+        commitment_profile_complete: this.commitmentProfileComplete(gold, observed),
         observed_package_readiness_passed: this.observedPackageReady(observed),
+        observed_promotion_gate_ready: this.observedPromotionGateReady(observed),
+        observed_promotion_bridge_eligible: this.observedPromotionBridgeEligible(observed),
         observed_answerability_passed: this.observedAnswerabilityPassed(observed),
         observed_downstream_loopback_causes: observed.downstream_loopback_causes ?? [],
+        observed_loopback_target: observed.loopback_target ?? null,
+        observed_loopback_cause: observed.loopback_cause ?? null,
+        downstream_mutation_attempted: observed.downstream_mutation_attempted ?? null,
+        downstream_mutation_blocked: observed.downstream_mutation_blocked ?? null,
       },
       created_at: input.created_at,
     };
@@ -649,6 +827,61 @@ export class TopicSelectionOfflineEvaluationReplayService {
         );
       case 'downstream_loopback_cause_distribution':
         return this.computeDownstreamLoopbackCause(cases, resultByCaseId);
+      case 'promotion_input_staleness_false_pass_rate':
+        return this.computeCaseRateMetric(
+          cases.filter((record) => record.gold_expectation.expected_promotion_input_current === false),
+          resultByCaseId,
+          (_evaluationCase, observed) => this.observedPromotionInputReadyForGate(observed),
+          'v1c stale or non-current promotion inputs that replay passed as ready_for_gate.',
+        );
+      case 'promotion_gate_blocker_false_pass_rate':
+        return this.computeCaseRateMetric(
+          cases.filter((record) => record.gold_expectation.expected_promotion_gate_promote_allowed === false),
+          resultByCaseId,
+          (_evaluationCase, observed) => this.observedPromotionGateReady(observed),
+          'v1c blocked promotion gates that replay allowed human promotion decision.',
+        );
+      case 'human_promotion_bypass_rate':
+        return this.computeCaseRateMetric(
+          cases.filter((record) => this.isV1cCase(record)),
+          resultByCaseId,
+          (_evaluationCase, observed) => this.observedPromotedWithoutHumanAuthorization(observed),
+          'v1c cases where bridge-eligible promotion appeared without explicit human authorization.',
+        );
+      case 'promotion_false_pass_rate':
+        return this.computeCaseRateMetric(
+          cases.filter((record) => record.gold_expectation.expected_promotion_bridge_eligible === false),
+          resultByCaseId,
+          (_evaluationCase, observed) => this.observedPromotionBridgeEligible(observed),
+          'v1c gold non-promote cases that replay became bridge eligible.',
+        );
+      case 'bridge_trace_completeness':
+        return this.computeRefRecallMetric(
+          cases.filter((record) => this.isV1cCase(record)),
+          resultByCaseId,
+          (evaluationCase) => evaluationCase.gold_expectation.required_bridge_trace_refs ?? [],
+          (observed) => observed.bridge_trace_refs ?? [],
+          'Required v1c bridge lineage refs recovered by frozen replay.',
+        );
+      case 'commitment_profile_completeness':
+        return this.computeStringRecallMetric(
+          cases.filter((record) => this.isV1cCase(record)),
+          resultByCaseId,
+          (evaluationCase) => evaluationCase.gold_expectation.required_commitment_profile_fields ?? [],
+          (observed) => observed.commitment_profile_fields ?? [],
+          'Required v1c commitment profile fields recovered by frozen replay.',
+        );
+      case 'loopback_target_accuracy':
+        return this.computeLoopbackTargetAccuracy(cases, resultByCaseId);
+      case 'downstream_mutation_guard_rate':
+        return this.computeCaseRateMetric(
+          cases.filter((record) => record.gold_expectation.expected_downstream_mutation_blocked !== undefined
+            && record.gold_expectation.expected_downstream_mutation_blocked !== null),
+          resultByCaseId,
+          (_evaluationCase, observed) => observed.downstream_mutation_blocked === true,
+          'v1c downstream mutation attempts blocked by replay guard expectations.',
+          { predicate_indicates_failure: false },
+        );
     }
   }
 
@@ -747,6 +980,42 @@ export class TopicSelectionOfflineEvaluationReplayService {
       numerator += matched;
       denominator += observedValues.size;
       if (matched < observedValues.size) {
+        failures.push(this.caseRef(evaluationCase));
+      }
+    }
+    return {
+      numerator,
+      denominator,
+      contributing_case_refs: contributing,
+      failure_case_refs: failures,
+      notes: [note],
+      metric_payload: {},
+    };
+  }
+
+  private computeStringRecallMetric(
+    cases: TopicSelectionOfflineEvaluationCaseRecord[],
+    resultByCaseId: Map<string, { observed_output: TopicSelectionOfflineEvaluationObservedOutput }>,
+    expectedValues: (evaluationCase: TopicSelectionOfflineEvaluationCaseRecord) => string[],
+    observedValues: (observed: TopicSelectionOfflineEvaluationObservedOutput) => string[],
+    note: string,
+  ): MetricComputation {
+    let numerator = 0;
+    let denominator = 0;
+    const contributing: TopicSelectionFunctionalRef[] = [];
+    const failures: TopicSelectionFunctionalRef[] = [];
+    for (const evaluationCase of cases) {
+      const expected = expectedValues(evaluationCase);
+      if (expected.length === 0) continue;
+      const observed = resultByCaseId.get(evaluationCase.offline_evaluation_case_id)?.observed_output;
+      if (!observed) continue;
+      contributing.push(this.caseRef(evaluationCase));
+      const expectedSet = new Set(expected);
+      const observedSet = new Set(observedValues(observed));
+      const found = [...expectedSet].filter((record) => observedSet.has(record)).length;
+      numerator += found;
+      denominator += expectedSet.size;
+      if (found < expectedSet.size) {
         failures.push(this.caseRef(evaluationCase));
       }
     }
@@ -872,6 +1141,45 @@ export class TopicSelectionOfflineEvaluationReplayService {
     };
   }
 
+  private computeLoopbackTargetAccuracy(
+    cases: TopicSelectionOfflineEvaluationCaseRecord[],
+    resultByCaseId: Map<string, { observed_output: TopicSelectionOfflineEvaluationObservedOutput }>,
+  ): MetricComputation {
+    let numerator = 0;
+    let denominator = 0;
+    const contributing: TopicSelectionFunctionalRef[] = [];
+    const failures: TopicSelectionFunctionalRef[] = [];
+    const targetDistribution: Record<string, number> = {};
+    for (const evaluationCase of cases) {
+      const gold = evaluationCase.gold_expectation;
+      const hasLoopbackExpectation = gold.expected_loopback_target !== undefined
+        && gold.expected_loopback_target !== null;
+      if (!hasLoopbackExpectation) continue;
+      const observed = resultByCaseId.get(evaluationCase.offline_evaluation_case_id)?.observed_output;
+      if (!observed) continue;
+      contributing.push(this.caseRef(evaluationCase));
+      denominator += 1;
+      const target = observed.loopback_target ?? 'none';
+      targetDistribution[target] = (targetDistribution[target] ?? 0) + 1;
+      if (
+        (observed.loopback_target ?? null) === (gold.expected_loopback_target ?? null)
+        && (observed.loopback_cause ?? null) === (gold.expected_loopback_cause ?? null)
+      ) {
+        numerator += 1;
+      } else {
+        failures.push(this.caseRef(evaluationCase));
+      }
+    }
+    return {
+      numerator,
+      denominator,
+      contributing_case_refs: contributing,
+      failure_case_refs: failures,
+      notes: ['v1c downstream loopback target and cause accuracy for feedback/recheck snapshots.'],
+      metric_payload: { target_distribution: targetDistribution },
+    };
+  }
+
   private caseContributionPayload(
     evaluationCase: TopicSelectionOfflineEvaluationCaseRecord,
     observed: TopicSelectionOfflineEvaluationObservedOutput,
@@ -891,6 +1199,19 @@ export class TopicSelectionOfflineEvaluationReplayService {
       package_readiness_false_pass: evaluationCase.gold_expectation.expected_package_ready === false
         && this.observedPackageReady(observed),
       downstream_loopback_causes: observed.downstream_loopback_causes ?? [],
+      promotion_input_staleness_false_pass: evaluationCase.gold_expectation.expected_promotion_input_current === false
+        && this.observedPromotionInputReadyForGate(observed),
+      promotion_gate_blocker_false_pass: evaluationCase.gold_expectation.expected_promotion_gate_promote_allowed === false
+        && this.observedPromotionGateReady(observed),
+      human_promotion_bypass: this.observedPromotedWithoutHumanAuthorization(observed),
+      promotion_false_pass: evaluationCase.gold_expectation.expected_promotion_bridge_eligible === false
+        && this.observedPromotionBridgeEligible(observed),
+      bridge_trace_complete: this.bridgeTraceComplete(evaluationCase.gold_expectation, observed),
+      commitment_profile_complete: this.commitmentProfileComplete(evaluationCase.gold_expectation, observed),
+      loopback_target: observed.loopback_target ?? null,
+      loopback_cause: observed.loopback_cause ?? null,
+      downstream_mutation_attempted: observed.downstream_mutation_attempted ?? null,
+      downstream_mutation_blocked: observed.downstream_mutation_blocked ?? null,
       replay_diff_status: replayDiff.status,
       changed_dimensions: replayDiff.changed_dimensions,
     };
@@ -908,6 +1229,12 @@ export class TopicSelectionOfflineEvaluationReplayService {
     }
     if (!evaluationCase.gold_expectation.expected_unmet_need && this.observedSuggestsValidatedNeed(observed)) {
       examples.push(`${evaluationCase.case_key}:false_gap_candidate`);
+    }
+    if (this.observedPromotedWithoutHumanAuthorization(observed)) {
+      examples.push(`${evaluationCase.case_key}:human_promotion_bypass`);
+    }
+    if (observed.downstream_mutation_attempted === true && observed.downstream_mutation_blocked !== true) {
+      examples.push(`${evaluationCase.case_key}:downstream_mutation_not_blocked`);
     }
     return examples;
   }
@@ -930,7 +1257,17 @@ export class TopicSelectionOfflineEvaluationReplayService {
       || !this.sameStringSet(observed.value_overclaim_codes ?? [], baseline.value_overclaim_codes ?? [])
       || !this.sameRefSet(observed.package_trace_refs ?? [], baseline.package_trace_refs ?? [])
       || (observed.package_readiness_status ?? null) !== (baseline.package_readiness_status ?? null)
-      || !this.sameStringSet(observed.downstream_loopback_causes ?? [], baseline.downstream_loopback_causes ?? []);
+      || !this.sameStringSet(observed.downstream_loopback_causes ?? [], baseline.downstream_loopback_causes ?? [])
+      || (observed.promotion_input_closure_status ?? null) !== (baseline.promotion_input_closure_status ?? null)
+      || (observed.promotion_gate_disposition ?? null) !== (baseline.promotion_gate_disposition ?? null)
+      || (observed.promotion_gate_promote_allowed ?? null) !== (baseline.promotion_gate_promote_allowed ?? null)
+      || (observed.human_promotion_authorized ?? null) !== (baseline.human_promotion_authorized ?? null)
+      || (observed.promotion_decision_bridge_eligible ?? null) !== (baseline.promotion_decision_bridge_eligible ?? null)
+      || !this.sameRefSet(observed.bridge_trace_refs ?? [], baseline.bridge_trace_refs ?? [])
+      || !this.sameStringSet(observed.commitment_profile_fields ?? [], baseline.commitment_profile_fields ?? [])
+      || (observed.loopback_target ?? null) !== (baseline.loopback_target ?? null)
+      || (observed.loopback_cause ?? null) !== (baseline.loopback_cause ?? null)
+      || (observed.downstream_mutation_blocked ?? null) !== (baseline.downstream_mutation_blocked ?? null);
   }
 
   private traceComplete(
@@ -950,6 +1287,23 @@ export class TopicSelectionOfflineEvaluationReplayService {
     return this.includesEveryRef(observed.package_trace_refs ?? [], gold.required_package_trace_refs ?? []);
   }
 
+  private bridgeTraceComplete(
+    gold: TopicSelectionOfflineEvaluationGoldExpectation,
+    observed: TopicSelectionOfflineEvaluationObservedOutput,
+  ): boolean {
+    return this.includesEveryRef(observed.bridge_trace_refs ?? [], gold.required_bridge_trace_refs ?? []);
+  }
+
+  private commitmentProfileComplete(
+    gold: TopicSelectionOfflineEvaluationGoldExpectation,
+    observed: TopicSelectionOfflineEvaluationObservedOutput,
+  ): boolean {
+    const required = gold.required_commitment_profile_fields ?? [];
+    if (required.length === 0) return true;
+    if (observed.commitment_profile_present === false) return false;
+    return this.includesEveryString(observed.commitment_profile_fields ?? [], required);
+  }
+
   private observedAnswerabilityPassed(observed: TopicSelectionOfflineEvaluationObservedOutput): boolean {
     return observed.answerability_passed === true
       || observed.answerability_verdict === 'answerable'
@@ -959,6 +1313,27 @@ export class TopicSelectionOfflineEvaluationReplayService {
   private observedPackageReady(observed: TopicSelectionOfflineEvaluationObservedOutput): boolean {
     return observed.package_readiness_passed === true
       || observed.package_readiness_status === 'ready_for_promotion_review';
+  }
+
+  private observedPromotionInputReadyForGate(observed: TopicSelectionOfflineEvaluationObservedOutput): boolean {
+    return observed.promotion_input_current === true
+      || observed.promotion_input_closure_status === 'ready_for_gate';
+  }
+
+  private observedPromotionGateReady(observed: TopicSelectionOfflineEvaluationObservedOutput): boolean {
+    return observed.promotion_gate_promote_allowed === true
+      || observed.promotion_gate_disposition === 'ready_for_human_decision';
+  }
+
+  private observedPromotionBridgeEligible(observed: TopicSelectionOfflineEvaluationObservedOutput): boolean {
+    return observed.promotion_decision_bridge_eligible === true;
+  }
+
+  private observedPromotedWithoutHumanAuthorization(
+    observed: TopicSelectionOfflineEvaluationObservedOutput,
+  ): boolean {
+    return this.observedPromotionBridgeEligible(observed)
+      && observed.human_promotion_authorized !== true;
   }
 
   private unexpectedSliceBoundaryDriftCodes(
@@ -986,6 +1361,41 @@ export class TopicSelectionOfflineEvaluationReplayService {
     return expected.length > 0 || actual.length > 0
       ? !this.sameStringSet(expected, actual)
       : false;
+  }
+
+  private promotionInputCurrentnessChanged(
+    gold: TopicSelectionOfflineEvaluationGoldExpectation,
+    observed: TopicSelectionOfflineEvaluationObservedOutput,
+  ): boolean {
+    const currentChanged = gold.expected_promotion_input_current !== undefined
+      && gold.expected_promotion_input_current !== null
+      && (observed.promotion_input_current ?? null) !== gold.expected_promotion_input_current;
+    const closureChanged = gold.expected_promotion_input_closure_status !== undefined
+      && (observed.promotion_input_closure_status ?? null) !== (gold.expected_promotion_input_closure_status ?? null);
+    return currentChanged || closureChanged;
+  }
+
+  private loopbackTargetChanged(
+    gold: TopicSelectionOfflineEvaluationGoldExpectation,
+    observed: TopicSelectionOfflineEvaluationObservedOutput,
+  ): boolean {
+    const hasTarget = gold.expected_loopback_target !== undefined || observed.loopback_target !== undefined;
+    const hasCause = gold.expected_loopback_cause !== undefined || observed.loopback_cause !== undefined;
+    return hasTarget || hasCause
+      ? (observed.loopback_target ?? null) !== (gold.expected_loopback_target ?? null)
+        || (observed.loopback_cause ?? null) !== (gold.expected_loopback_cause ?? null)
+      : false;
+  }
+
+  private downstreamFeedbackChanged(
+    gold: TopicSelectionOfflineEvaluationGoldExpectation,
+    observed: TopicSelectionOfflineEvaluationObservedOutput,
+  ): boolean {
+    const hasExpectation = gold.expected_downstream_mutation_blocked !== undefined
+      && gold.expected_downstream_mutation_blocked !== null;
+    return hasExpectation
+      ? (observed.downstream_mutation_blocked ?? null) !== gold.expected_downstream_mutation_blocked
+      : observed.downstream_mutation_attempted === true && observed.downstream_mutation_blocked !== true;
   }
 
   private caseTypeCoverage(cases: TopicSelectionOfflineEvaluationCaseRecord[]): TopicSelectionOfflineEvaluationCaseType[] {
@@ -1031,25 +1441,40 @@ export class TopicSelectionOfflineEvaluationReplayService {
   private defaultMetricKeysForStage(
     stage: TopicSelectionOfflineEvaluationStage,
   ): TopicSelectionOfflineEvaluationMetricKey[] {
-    return stage === 'v1b'
-      ? [...TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_METRIC_KEYS]
-      : [...TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_METRIC_KEYS];
+    switch (stage) {
+      case 'v1a':
+        return [...TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_METRIC_KEYS];
+      case 'v1b':
+        return [...TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_METRIC_KEYS];
+      case 'v1c':
+        return [...TOPIC_SELECTION_V1C_OFFLINE_EVALUATION_METRIC_KEYS];
+    }
   }
 
   private caseTypesForStage(
     stage: TopicSelectionOfflineEvaluationStage,
   ): readonly TopicSelectionOfflineEvaluationCaseType[] {
-    return stage === 'v1b'
-      ? TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_CASE_TYPES
-      : TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_CASE_TYPES;
+    switch (stage) {
+      case 'v1a':
+        return TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_CASE_TYPES;
+      case 'v1b':
+        return TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_CASE_TYPES;
+      case 'v1c':
+        return TOPIC_SELECTION_V1C_OFFLINE_EVALUATION_CASE_TYPES;
+    }
   }
 
   private metricKeysForStage(
     stage: TopicSelectionOfflineEvaluationStage,
   ): readonly TopicSelectionOfflineEvaluationMetricKey[] {
-    return stage === 'v1b'
-      ? TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_METRIC_KEYS
-      : TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_METRIC_KEYS;
+    switch (stage) {
+      case 'v1a':
+        return TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_METRIC_KEYS;
+      case 'v1b':
+        return TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_METRIC_KEYS;
+      case 'v1c':
+        return TOPIC_SELECTION_V1C_OFFLINE_EVALUATION_METRIC_KEYS;
+    }
   }
 
   private assertCaseCompatibleWithDataset(
@@ -1092,6 +1517,10 @@ export class TopicSelectionOfflineEvaluationReplayService {
     return evaluationCase.frozen_input_bundle.stage === 'v1b';
   }
 
+  private isV1cCase(evaluationCase: TopicSelectionOfflineEvaluationCaseRecord): boolean {
+    return evaluationCase.frozen_input_bundle.stage === 'v1c';
+  }
+
   private caseRef(evaluationCase: TopicSelectionOfflineEvaluationCaseRecord): TopicSelectionFunctionalRef {
     return this.ref(
       'offline_evaluation_case',
@@ -1115,6 +1544,263 @@ export class TopicSelectionOfflineEvaluationReplayService {
       ref.version_id ?? '',
       ref.title_card_id ?? '',
     ].join(':');
+  }
+
+  private syntheticV1cCaseSpecs(frozenAt: string): SyntheticCaseSpec[] {
+    const makeRef = (caseKey: string, refType: string, suffix: string): TopicSelectionFunctionalRef => ({
+      ref_type: refType,
+      ref_id: `${caseKey}_${suffix}`,
+      title_card_id: `title_card_${caseKey}`,
+    });
+    const bridgeTraceRefs = (caseKey: string): TopicSelectionFunctionalRef[] => [
+      makeRef(caseKey, 'promotion_input_snapshot', 'input'),
+      makeRef(caseKey, 'promotion_gate_check', 'gate'),
+      makeRef(caseKey, 'human_promotion_decision', 'human'),
+      makeRef(caseKey, 'promotion_decision', 'decision'),
+      makeRef(caseKey, 'promotion_commitment_profile', 'commitment'),
+      makeRef(caseKey, 'paper_project_bridge', 'bridge'),
+      makeRef(caseKey, 'topic_package', 'draft'),
+      makeRef(caseKey, 'validated_need', 'need'),
+      makeRef(caseKey, 'evidence_unit', 'support'),
+    ];
+    const commitmentFields = [
+      'scope',
+      'claim_ceiling',
+      'accepted_risk_refs',
+      'conditions',
+      'early_check_obligations',
+      'stop_conditions',
+      'reopen_conditions',
+    ];
+    const observed = (
+      caseKey: string,
+      overrides: Partial<TopicSelectionOfflineEvaluationObservedOutput>,
+    ): TopicSelectionOfflineEvaluationObservedOutput => ({
+      final_decision: null,
+      readiness_recommendation: null,
+      readiness_passed: null,
+      key_evidence_refs: [],
+      counter_evidence_refs: [],
+      evidence_refs: [],
+      blocker_codes: [],
+      trace_refs: [],
+      trace_verdict: null,
+      human_override_refs: [],
+      recheck_action_refs: [],
+      memory_refs: [],
+      memory_used_as_evidence_refs: [],
+      downstream_rework_causes: [],
+      slice_boundary_drift_codes: [],
+      answerability_verdict: null,
+      answerability_passed: null,
+      value_overclaim_codes: [],
+      package_trace_refs: [],
+      package_trace_verdict: null,
+      package_readiness_status: null,
+      package_readiness_passed: null,
+      downstream_loopback_causes: [],
+      promotion_input_current: true,
+      promotion_input_closure_status: 'ready_for_gate',
+      promotion_gate_disposition: 'ready_for_human_decision',
+      promotion_gate_promote_allowed: true,
+      human_promotion_authorized: true,
+      human_promotion_decision: 'promote_to_paper_project',
+      promotion_decision_bridge_eligible: true,
+      bridge_trace_refs: bridgeTraceRefs(caseKey),
+      bridge_trace_verdict: 'complete',
+      commitment_profile_present: true,
+      commitment_profile_fields: commitmentFields,
+      loopback_target: null,
+      loopback_cause: null,
+      downstream_mutation_attempted: false,
+      downstream_mutation_blocked: true,
+      payload: { frozen_at: frozenAt, stage: 'v1c' },
+      ...overrides,
+    });
+    const gold = (
+      caseKey: string,
+      overrides: Partial<TopicSelectionOfflineEvaluationGoldExpectation>,
+    ): TopicSelectionOfflineEvaluationGoldExpectation => ({
+      expected_unmet_need: true,
+      expected_final_decision: null,
+      expected_readiness_passed: null,
+      expected_key_evidence_refs: [],
+      expected_counter_evidence_refs: [],
+      expected_blocker_codes: [],
+      required_trace_refs: [],
+      expected_trace_verdict: null,
+      expected_recheck_action_refs: [],
+      expected_negative_memory_refs: [],
+      expected_downstream_rework_causes: [],
+      expected_baseline_solved: false,
+      allowed_slice_boundary_drift_codes: [],
+      expected_answerability_passed: null,
+      allowed_value_overclaim_codes: [],
+      required_package_trace_refs: [],
+      expected_package_ready: null,
+      expected_package_readiness_status: null,
+      expected_downstream_loopback_causes: [],
+      expected_promotion_input_current: true,
+      expected_promotion_input_closure_status: 'ready_for_gate',
+      expected_promotion_gate_disposition: 'ready_for_human_decision',
+      expected_promotion_gate_promote_allowed: true,
+      expected_human_authorized: true,
+      expected_promotion_bridge_eligible: true,
+      required_bridge_trace_refs: bridgeTraceRefs(caseKey),
+      required_commitment_profile_fields: commitmentFields,
+      expected_loopback_target: null,
+      expected_loopback_cause: null,
+      notes: [],
+      ...overrides,
+    });
+
+    return [
+      {
+        case_key: 'promotion_input_staleness_false_pass',
+        case_type: 'promotion_input_staleness_false_pass',
+        tags: ['synthetic', 'v1c', 'input-currentness'],
+        gold: gold('promotion_input_staleness_false_pass', {
+          expected_promotion_input_current: false,
+          expected_promotion_input_closure_status: 'needs_upstream_refresh',
+          expected_promotion_gate_promote_allowed: false,
+          expected_promotion_bridge_eligible: false,
+          notes: ['Stale v1c input snapshots must not pass into promotion gate support.'],
+        }),
+        observed: observed('promotion_input_staleness_false_pass', {
+          promotion_input_current: true,
+          promotion_input_closure_status: 'ready_for_gate',
+          promotion_gate_disposition: 'blocked',
+          promotion_gate_promote_allowed: false,
+          promotion_decision_bridge_eligible: false,
+        }),
+      },
+      {
+        case_key: 'promotion_gate_blocker_false_pass',
+        case_type: 'promotion_gate_blocker_false_pass',
+        tags: ['synthetic', 'v1c', 'gate'],
+        gold: gold('promotion_gate_blocker_false_pass', {
+          expected_promotion_gate_disposition: 'blocked',
+          expected_promotion_gate_promote_allowed: false,
+          expected_promotion_bridge_eligible: false,
+          notes: ['Blocking promotion gate checks must not become ready_for_human_decision.'],
+        }),
+        observed: observed('promotion_gate_blocker_false_pass', {
+          promotion_gate_disposition: 'ready_for_human_decision',
+          promotion_gate_promote_allowed: true,
+          promotion_decision_bridge_eligible: false,
+          blocker_codes: ['gate_blocker_ignored'],
+        }),
+      },
+      {
+        case_key: 'human_promotion_bypass',
+        case_type: 'human_promotion_bypass',
+        tags: ['synthetic', 'v1c', 'human-authorization'],
+        gold: gold('human_promotion_bypass', {
+          notes: ['Bridge-eligible promotion must have explicit human authorization.'],
+        }),
+        observed: observed('human_promotion_bypass', {
+          human_promotion_authorized: false,
+          human_promotion_decision: null,
+          promotion_decision_bridge_eligible: true,
+        }),
+      },
+      {
+        case_key: 'promotion_false_pass',
+        case_type: 'promotion_false_pass',
+        tags: ['synthetic', 'v1c', 'promotion'],
+        gold: gold('promotion_false_pass', {
+          expected_promotion_bridge_eligible: false,
+          notes: ['Gold non-promote or blocked promotion cases must not become bridge eligible.'],
+        }),
+        observed: observed('promotion_false_pass', {
+          human_promotion_authorized: true,
+          human_promotion_decision: 'promote_to_paper_project',
+          promotion_decision_bridge_eligible: true,
+        }),
+      },
+      {
+        case_key: 'bridge_trace_gap',
+        case_type: 'bridge_trace_gap',
+        tags: ['synthetic', 'v1c', 'bridge-trace'],
+        gold: gold('bridge_trace_gap', {
+          notes: ['PaperProjectBridge must preserve promotion, package, need, and evidence lineage.'],
+        }),
+        observed: observed('bridge_trace_gap', {
+          bridge_trace_refs: bridgeTraceRefs('bridge_trace_gap').filter((ref) => ref.ref_type !== 'evidence_unit'),
+          bridge_trace_verdict: 'incomplete',
+        }),
+      },
+      {
+        case_key: 'commitment_profile_gap',
+        case_type: 'commitment_profile_gap',
+        tags: ['synthetic', 'v1c', 'commitment'],
+        gold: gold('commitment_profile_gap', {
+          notes: ['PromotionCommitmentProfile must freeze claim ceiling and early checks.'],
+        }),
+        observed: observed('commitment_profile_gap', {
+          commitment_profile_fields: commitmentFields.filter((field) => field !== 'claim_ceiling'),
+        }),
+      },
+      {
+        case_key: 'loopback_target_misroute',
+        case_type: 'loopback_target_misroute',
+        tags: ['synthetic', 'v1c', 'loopback'],
+        gold: gold('loopback_target_misroute', {
+          expected_loopback_target: 'topic_question',
+          expected_loopback_cause: 'unanswerable_question',
+          notes: ['Downstream feedback must preserve typed loopback target and cause.'],
+        }),
+        observed: observed('loopback_target_misroute', {
+          loopback_target: 'research_slice',
+          loopback_cause: 'boundary_drift',
+          baseline_observed_output: {
+            final_decision: null,
+            readiness_recommendation: null,
+            readiness_passed: null,
+            key_evidence_refs: [],
+            counter_evidence_refs: [],
+            evidence_refs: [],
+            blocker_codes: [],
+            trace_refs: [],
+            trace_verdict: null,
+            human_override_refs: [],
+            recheck_action_refs: [],
+            memory_refs: [],
+            memory_used_as_evidence_refs: [],
+            downstream_rework_causes: [],
+            promotion_input_current: true,
+            promotion_input_closure_status: 'ready_for_gate',
+            promotion_gate_disposition: 'ready_for_human_decision',
+            promotion_gate_promote_allowed: true,
+            human_promotion_authorized: true,
+            human_promotion_decision: 'promote_to_paper_project',
+            promotion_decision_bridge_eligible: true,
+            bridge_trace_refs: bridgeTraceRefs('loopback_target_misroute'),
+            bridge_trace_verdict: 'complete',
+            commitment_profile_present: true,
+            commitment_profile_fields: commitmentFields,
+            loopback_target: 'topic_question',
+            loopback_cause: 'unanswerable_question',
+            downstream_mutation_attempted: false,
+            downstream_mutation_blocked: true,
+            payload: { frozen_at: frozenAt, stage: 'v1c', prior_run: true },
+          },
+        }),
+      },
+      {
+        case_key: 'downstream_mutation_attempt',
+        case_type: 'downstream_mutation_attempt',
+        tags: ['synthetic', 'v1c', 'downstream-guard'],
+        gold: gold('downstream_mutation_attempt', {
+          expected_downstream_mutation_blocked: true,
+          notes: ['Downstream feedback/recheck must not mutate upstream authority artifacts.'],
+        }),
+        observed: observed('downstream_mutation_attempt', {
+          downstream_mutation_attempted: true,
+          downstream_mutation_blocked: false,
+        }),
+      },
+    ];
   }
 
   private syntheticV1bCaseSpecs(frozenAt: string): SyntheticCaseSpec[] {

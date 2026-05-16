@@ -388,8 +388,11 @@ export class TopicSelectionRecheckRiskMemoryService {
     reason_codes: string[];
     summary: string;
     impact_level?: TopicSelectionImpactLevel;
+    severity?: TopicSelectionSeverity;
     required_actions?: string[];
     artifact_refs?: TopicSelectionFunctionalRef[];
+    policy_version_id?: string | null;
+    payload?: Record<string, unknown>;
   }): Promise<InterpretationResult> {
     return this.recordSignalDrivenInterpretation({
       workspace_id: input.workspace_id ?? null,
@@ -400,7 +403,7 @@ export class TopicSelectionRecheckRiskMemoryService {
       affected_ref: input.affected_ref,
       affected_stage: this.stageForRef(input.affected_ref),
       impact_level: input.impact_level ?? 'recheck_required',
-      severity: input.impact_level === 'invalidated' ? 'critical' : 'blocking',
+      severity: input.severity ?? (input.impact_level === 'invalidated' ? 'critical' : 'blocking'),
       reason_codes: input.reason_codes,
       required_actions: input.required_actions ?? ['review_downstream_feedback'],
       summary: input.summary,
@@ -411,8 +414,11 @@ export class TopicSelectionRecheckRiskMemoryService {
       queue_item_type: 'downstream_feedback',
       handler_key: 'human_review',
       priority: input.impact_level === 'invalidated' ? 100 : 85,
-      policy_version_id: null,
-      payload: { feedback_type: input.feedback_type },
+      policy_version_id: input.policy_version_id ?? null,
+      payload: {
+        feedback_type: input.feedback_type,
+        ...(input.payload ?? {}),
+      },
     });
   }
 
