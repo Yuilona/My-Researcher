@@ -28,6 +28,7 @@ import * as topicSelectionV1bValueAssessmentContracts from './topic-selection-v1
 import * as topicSelectionV1cPromotionGateContracts from './topic-selection-v1c-promotion-gate-contracts.js';
 import * as topicSelectionV1cHumanPromotionDecisionContracts from './topic-selection-v1c-human-promotion-decision-contracts.js';
 import * as topicSelectionV1cPaperProjectBridgeContracts from './topic-selection-v1c-paper-project-bridge-contracts.js';
+import * as topicSelectionV1cDownstreamFeedbackRecheckContracts from './topic-selection-v1c-downstream-feedback-recheck-contracts.js';
 import * as topicSelectionV1cPromotionInputContracts from './topic-selection-v1c-promotion-input-contracts.js';
 import type {
   ReleaseGateReviewResponse,
@@ -211,6 +212,16 @@ test('topic-selection offline-evaluation/replay schemas load through direct and 
     'package_readiness_false_pass',
     'downstream_loopback_feedback',
   ]);
+  assert.deepEqual(topicSelectionOfflineEvaluationReplayContracts.TOPIC_SELECTION_V1C_OFFLINE_EVALUATION_CASE_TYPES, [
+    'promotion_input_staleness_false_pass',
+    'promotion_gate_blocker_false_pass',
+    'human_promotion_bypass',
+    'promotion_false_pass',
+    'bridge_trace_gap',
+    'commitment_profile_gap',
+    'loopback_target_misroute',
+    'downstream_mutation_attempt',
+  ]);
   assert.deepEqual(topicSelectionOfflineEvaluationReplayContracts.TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_METRIC_KEYS, [
     'false_gap_rate',
     'baseline_miss_rate',
@@ -231,9 +242,22 @@ test('topic-selection offline-evaluation/replay schemas load through direct and 
     'package_readiness_false_pass_rate',
     'downstream_loopback_cause_distribution',
   ]);
+  assert.deepEqual(topicSelectionOfflineEvaluationReplayContracts.TOPIC_SELECTION_V1C_OFFLINE_EVALUATION_METRIC_KEYS, [
+    'promotion_input_staleness_false_pass_rate',
+    'promotion_gate_blocker_false_pass_rate',
+    'human_promotion_bypass_rate',
+    'promotion_false_pass_rate',
+    'bridge_trace_completeness',
+    'commitment_profile_completeness',
+    'loopback_target_accuracy',
+    'downstream_mutation_guard_rate',
+  ]);
   assert.equal(topicSelectionOfflineEvaluationReplayContracts.TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_TYPES.includes('package_trace_gap'), true);
+  assert.equal(topicSelectionOfflineEvaluationReplayContracts.TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_TYPES.includes('promotion_false_pass'), true);
   assert.equal(topicSelectionOfflineEvaluationReplayContracts.TOPIC_SELECTION_OFFLINE_EVALUATION_METRIC_KEYS.includes('package_trace_completeness'), true);
+  assert.equal(topicSelectionOfflineEvaluationReplayContracts.TOPIC_SELECTION_OFFLINE_EVALUATION_METRIC_KEYS.includes('bridge_trace_completeness'), true);
   assert.equal(topicSelectionOfflineEvaluationReplayContracts.TOPIC_SELECTION_REPLAY_DIFF_DIMENSIONS.includes('package_readiness'), true);
+  assert.equal(topicSelectionOfflineEvaluationReplayContracts.TOPIC_SELECTION_REPLAY_DIFF_DIMENSIONS.includes('downstream_feedback'), true);
   assert.ok(researchLifecycleContracts.topicSelectionOfflineEvaluationDatasetRecordSchema);
   assert.ok(researchLifecycleContracts.topicSelectionReplayDiffRecordSchema);
 });
@@ -1382,6 +1406,213 @@ test('topic-selection v1c paper-project-bridge schemas validate bridge handoff i
   assert.equal(invalidCreatedBy.statusCode, 400);
 });
 
+test('topic-selection v1c downstream-feedback/recheck schemas load through direct and aggregate exports', () => {
+  assert.ok(topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionDownstreamTopicFeedbackCreateInputSchema);
+  assert.ok(topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionDownstreamTopicFeedbackRecordSchema);
+  assert.ok(topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionLoopbackClassificationSchema);
+  assert.ok(topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionDownstreamRecheckRequestSchema);
+  assert.ok(topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionDownstreamFeedbackImpactSummarySchema);
+  assert.deepEqual(
+    [...topicSelectionV1cDownstreamFeedbackRecheckContracts.TOPIC_SELECTION_DOWNSTREAM_FEEDBACK_SOURCE_KINDS],
+    ['paper_project', 'writing', 'research_argument', 'reviewer_check', 'manual'],
+  );
+  assert.deepEqual(
+    [...topicSelectionV1cDownstreamFeedbackRecheckContracts.TOPIC_SELECTION_DOWNSTREAM_LOOPBACK_TARGETS],
+    [
+      'package',
+      'value_assessment',
+      'topic_question',
+      'research_slice',
+      'validated_need',
+      'evidence_or_search',
+      'promotion',
+      'paper_project_bridge',
+      'merge_candidate',
+      'paper_project_intake',
+    ],
+  );
+  assert.ok(researchLifecycleContracts.topicSelectionDownstreamTopicFeedbackCreateInputSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionDownstreamTopicFeedbackRecordSchema);
+});
+
+test('topic-selection v1c downstream-feedback/recheck schemas validate typed feedback artifacts', async () => {
+  const app = Fastify();
+  app.post('/create', {
+    schema: {
+      body: topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionDownstreamTopicFeedbackCreateInputSchema,
+    },
+  }, async () => ({ ok: true }));
+  app.post('/classification', {
+    schema: {
+      body: topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionLoopbackClassificationSchema,
+    },
+  }, async () => ({ ok: true }));
+  app.post('/recheck', {
+    schema: {
+      body: topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionDownstreamRecheckRequestSchema,
+    },
+  }, async () => ({ ok: true }));
+  app.post('/impact', {
+    schema: {
+      body: topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionDownstreamFeedbackImpactSummarySchema,
+    },
+  }, async () => ({ ok: true }));
+  app.post('/record', {
+    schema: {
+      body: topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionDownstreamTopicFeedbackRecordSchema,
+    },
+  }, async () => ({ ok: true }));
+  await app.ready();
+
+  const now = '2026-05-16T00:00:00.000Z';
+  const bridgeRef = functionalRefForSchema('paper_project_bridge', 'paper_project_bridge_001');
+  const sourceRef = functionalRefForSchema('reviewer_check', 'reviewer_check_001');
+  const feedbackRef = functionalRefForSchema('downstream_topic_feedback', 'downstream_topic_feedback_001');
+  const affectedRef = functionalRefForSchema('validated_need', 'validated_need_001');
+  const recheckEventRef = functionalRefForSchema('recheck_event', 'recheck_event_001');
+  const recheckImpactRef = functionalRefForSchema('recheck_impact', 'recheck_impact_001');
+  const queueRef = functionalRefForSchema('decision_work_queue_item', 'decision_work_queue_item_001');
+  const classification = {
+    loopback_target: 'validated_need',
+    loopback_cause: 'need_invalidated',
+    severity: 'critical',
+    requires_recheck: true,
+    affected_ref: affectedRef,
+    affected_stage: 'validated_need',
+    source_refs: [bridgeRef, sourceRef],
+    rationale: 'Need invalidation must route back to the validated need authority.',
+    required_actions: ['Recheck the validated need against downstream counter-evidence.'],
+  };
+  const recheckRequest = {
+    downstream_recheck_request_id: 'downstream_recheck_request_001',
+    feedback_ref: feedbackRef,
+    loopback_target: 'validated_need',
+    loopback_cause: 'need_invalidated',
+    affected_ref: affectedRef,
+    required_actions: ['Recheck the validated need against downstream counter-evidence.'],
+    reason_codes: ['need_invalidated'],
+    source_refs: [bridgeRef, sourceRef],
+    created_at: now,
+  };
+  const impactSummary = {
+    impact_level: 'invalidated',
+    severity: 'critical',
+    loopback_target: 'validated_need',
+    loopback_cause: 'need_invalidated',
+    requires_recheck: true,
+    affected_ref: affectedRef,
+    recheck_event_ref: recheckEventRef,
+    recheck_impact_ref: recheckImpactRef,
+    decision_work_queue_item_ref: queueRef,
+    summary: 'Downstream reviewer check invalidated the claimed need.',
+  };
+  const record = {
+    downstream_topic_feedback_id: 'downstream_topic_feedback_001',
+    feedback_fingerprint: 'feedback_fingerprint_001',
+    workspace_id: 'workspace_001',
+    title_card_id: 'title_card_001',
+    paper_project_bridge_id: 'paper_project_bridge_001',
+    paper_project_bridge_ref: bridgeRef,
+    source_promotion_decision_ref: functionalRefForSchema('promotion_decision', 'promotion_decision_001'),
+    promotion_commitment_profile_ref: functionalRefForSchema('promotion_commitment_profile', 'promotion_commitment_profile_001'),
+    promotion_input_snapshot_id: 'promotion_input_snapshot_001',
+    promotion_input_snapshot_ref: functionalRefForSchema('promotion_input_snapshot', 'promotion_input_snapshot_001'),
+    promotion_input_snapshot_hash: 'promotion_input_snapshot_hash_001',
+    topic_package_id: 'topic_package_001',
+    package_version: 'v1',
+    downstream_source_kind: 'reviewer_check',
+    downstream_source_ref: sourceRef,
+    source_feedback_refs: [sourceRef],
+    observed_blocker_refs: [],
+    feedback_signal: 'need_invalidated',
+    severity: 'critical',
+    summary: 'Downstream reviewer check invalidated the claimed need.',
+    required_action: 'Recheck the validated need against downstream counter-evidence.',
+    classification,
+    recheck_request: recheckRequest,
+    impact_summary: impactSummary,
+    recheck_event_ref: recheckEventRef,
+    recheck_impact_ref: recheckImpactRef,
+    decision_work_queue_item_ref: queueRef,
+    artifact_refs: [functionalRefForSchema('artifact_ref', 'artifact_ref_001')],
+    payload: { quoted_feedback: 'Counter-evidence changes the need status.' },
+    policy_version_id: 'policy_v1',
+    created_by: 'system',
+    created_at: now,
+  };
+
+  const validCreate = await app.inject({
+    method: 'POST',
+    url: '/create',
+    payload: {
+      paper_project_bridge_id: 'paper_project_bridge_001',
+      workspace_id: 'workspace_001',
+      downstream_source_kind: 'reviewer_check',
+      downstream_source_ref: sourceRef,
+      source_feedback_refs: [sourceRef],
+      feedback_signal: 'need_invalidated',
+      severity: 'critical',
+      summary: 'Downstream reviewer check invalidated the claimed need.',
+      required_action: 'Recheck the validated need against downstream counter-evidence.',
+    },
+  });
+  const validClassification = await app.inject({ method: 'POST', url: '/classification', payload: classification });
+  const validRecheck = await app.inject({ method: 'POST', url: '/recheck', payload: recheckRequest });
+  const validImpact = await app.inject({ method: 'POST', url: '/impact', payload: impactSummary });
+  const validRecord = await app.inject({ method: 'POST', url: '/record', payload: record });
+  const invalidFreeTextOnly = await app.inject({
+    method: 'POST',
+    url: '/create',
+    payload: { summary: 'Free-text feedback without typed source is not sufficient.' },
+  });
+  const invalidSourceKind = await app.inject({
+    method: 'POST',
+    url: '/create',
+    payload: {
+      paper_project_bridge_id: 'paper_project_bridge_001',
+      downstream_source_kind: 'email',
+      downstream_source_ref: sourceRef,
+      feedback_signal: 'need_invalidated',
+      severity: 'critical',
+      summary: 'Unknown source kind should fail.',
+    },
+  });
+  const invalidTarget = await app.inject({
+    method: 'POST',
+    url: '/classification',
+    payload: { ...classification, loopback_target: 'unknown_target' },
+  });
+  const invalidCause = await app.inject({
+    method: 'POST',
+    url: '/classification',
+    payload: { ...classification, loopback_cause: 'unknown_cause' },
+  });
+  const invalidSourceRef = await app.inject({
+    method: 'POST',
+    url: '/create',
+    payload: {
+      paper_project_bridge_id: 'paper_project_bridge_001',
+      downstream_source_kind: 'reviewer_check',
+      downstream_source_ref: { ref_type: 'reviewer_check' },
+      feedback_signal: 'need_invalidated',
+      severity: 'critical',
+      summary: 'Malformed source ref should fail.',
+    },
+  });
+  await app.close();
+
+  assert.equal(validCreate.statusCode, 200);
+  assert.equal(validClassification.statusCode, 200);
+  assert.equal(validRecheck.statusCode, 200);
+  assert.equal(validImpact.statusCode, 200);
+  assert.equal(validRecord.statusCode, 200);
+  assert.equal(invalidFreeTextOnly.statusCode, 400);
+  assert.equal(invalidSourceKind.statusCode, 400);
+  assert.equal(invalidTarget.statusCode, 400);
+  assert.equal(invalidCause.statusCode, 400);
+  assert.equal(invalidSourceRef.statusCode, 400);
+});
+
 test('topic-selection v1b constraint profile schema accepts draft constraint gaps', async () => {
   const app = Fastify();
   app.post('/v', {
@@ -1560,6 +1791,135 @@ test('topic-selection offline-evaluation schemas accept v1b frozen replay payloa
   await app.close();
 
   assert.equal(res.statusCode, 200);
+});
+
+test('topic-selection offline-evaluation schemas accept v1c frozen replay payloads', async () => {
+  const app = Fastify();
+  app.post(
+    '/v',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['bundle', 'gold', 'observed'],
+          properties: {
+            bundle: topicSelectionOfflineEvaluationReplayContracts.topicSelectionOfflineFrozenInputBundleSchema,
+            gold: topicSelectionOfflineEvaluationReplayContracts.topicSelectionOfflineEvaluationGoldExpectationSchema,
+            observed: topicSelectionOfflineEvaluationReplayContracts.topicSelectionOfflineEvaluationObservedOutputSchema,
+          },
+        },
+      },
+    },
+    async () => ({ ok: true }),
+  );
+  await app.ready();
+  const bridgeRef = functionalRefForSchema('paper_project_bridge', 'bridge_001');
+  const evidenceRef = functionalRefForSchema('evidence_unit', 'evidence_001');
+  const payload = {
+    bundle: {
+      stage: 'v1c',
+      frozen_at: '2026-05-16T00:00:00.000Z',
+      source_refs: [bridgeRef, evidenceRef],
+      artifact_refs: [],
+      stage_snapshots: {
+        promotion_input_snapshot: {},
+        promotion_decision_support: {},
+        promotion_dossier: {},
+        promotion_gate_check: {},
+        argument_readiness_mini_check: {},
+        human_promotion_decision: {},
+        promotion_decision: {},
+        promotion_commitment_profile: {},
+        paper_project_bridge: {},
+        downstream_feedback: {},
+        downstream_recheck: {},
+      },
+      payload: {},
+    },
+    gold: {
+      expected_unmet_need: true,
+      expected_key_evidence_refs: [],
+      expected_counter_evidence_refs: [],
+      expected_blocker_codes: [],
+      required_trace_refs: [],
+      expected_recheck_action_refs: [],
+      expected_negative_memory_refs: [],
+      expected_downstream_rework_causes: [],
+      expected_promotion_input_current: true,
+      expected_promotion_input_closure_status: 'ready_for_gate',
+      expected_promotion_gate_disposition: 'ready_for_human_decision',
+      expected_promotion_gate_promote_allowed: true,
+      expected_human_authorized: true,
+      expected_promotion_bridge_eligible: true,
+      required_bridge_trace_refs: [bridgeRef, evidenceRef],
+      required_commitment_profile_fields: ['scope', 'claim_ceiling', 'conditions'],
+      expected_loopback_target: 'topic_question',
+      expected_loopback_cause: 'unanswerable_question',
+      expected_downstream_mutation_blocked: true,
+      notes: ['v1c frozen replay fixture'],
+    },
+    observed: {
+      key_evidence_refs: [],
+      counter_evidence_refs: [],
+      evidence_refs: [],
+      blocker_codes: [],
+      trace_refs: [],
+      human_override_refs: [],
+      recheck_action_refs: [],
+      memory_refs: [],
+      memory_used_as_evidence_refs: [],
+      downstream_rework_causes: [],
+      promotion_input_current: true,
+      promotion_input_closure_status: 'ready_for_gate',
+      promotion_gate_disposition: 'ready_for_human_decision',
+      promotion_gate_promote_allowed: true,
+      human_promotion_authorized: true,
+      human_promotion_decision: 'promote_to_paper_project',
+      promotion_decision_bridge_eligible: true,
+      bridge_trace_refs: [bridgeRef, evidenceRef],
+      bridge_trace_verdict: 'complete',
+      commitment_profile_present: true,
+      commitment_profile_fields: ['scope', 'claim_ceiling', 'conditions'],
+      loopback_target: 'topic_question',
+      loopback_cause: 'unanswerable_question',
+      downstream_mutation_attempted: true,
+      downstream_mutation_blocked: true,
+      payload: {},
+    },
+  };
+  const res = await app.inject({
+    method: 'POST',
+    url: '/v',
+    payload,
+  });
+  const invalidDecision = await app.inject({
+    method: 'POST',
+    url: '/v',
+    payload: {
+      ...payload,
+      observed: {
+        ...payload.observed,
+        human_promotion_decision: 'auto_promote',
+      },
+    },
+  });
+  const invalidLoopbackCause = await app.inject({
+    method: 'POST',
+    url: '/v',
+    payload: {
+      ...payload,
+      gold: {
+        ...payload.gold,
+        expected_loopback_cause: 'generic_rework',
+      },
+    },
+  });
+  await app.close();
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(invalidDecision.statusCode, 400);
+  assert.equal(invalidLoopbackCause.statusCode, 400);
 });
 
 test('topic-selection evidence locator schema requires source_ref provenance', async () => {
@@ -2100,6 +2460,7 @@ test('research-lifecycle barrel re-exports the runtime value surface of split mo
     ...Object.keys(topicSelectionV1cPromotionGateContracts),
     ...Object.keys(topicSelectionV1cHumanPromotionDecisionContracts),
     ...Object.keys(topicSelectionV1cPaperProjectBridgeContracts),
+    ...Object.keys(topicSelectionV1cDownstreamFeedbackRecheckContracts),
   ]);
 
   assert.deepEqual(Object.keys(researchLifecycleContracts).sort(), [...expectedKeys].sort());

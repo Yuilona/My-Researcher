@@ -3694,6 +3694,49 @@ model TopicSelectionPaperProjectBridge {
   @@index([policyVersionId], map: "tsppb_policy_version_idx")
 }
 
+model TopicSelectionDownstreamTopicFeedback {
+  id                            String   @id
+  feedbackFingerprint           String
+  workspaceId                   String?
+  titleCardId                   String?
+  paperProjectBridgeId          String
+  paperProjectBridgeRef         Json     @default("{}")
+  sourcePromotionDecisionRef    Json     @default("{}")
+  promotionCommitmentProfileRef Json     @default("{}")
+  promotionInputSnapshotId      String
+  promotionInputSnapshotRef     Json     @default("{}")
+  promotionInputSnapshotHash    String
+  topicPackageId                String
+  packageVersion                String
+  downstreamSourceKind          String
+  downstreamSourceRef           Json     @default("{}")
+  sourceFeedbackRefs            Json     @default("[]")
+  observedBlockerRefs           Json     @default("[]")
+  feedbackSignal                String
+  severity                      String
+  summary                       String
+  requiredAction                String?
+  classification                Json     @default("{}")
+  recheckRequest                Json?
+  impactSummary                 Json     @default("{}")
+  recheckEventRef               Json?
+  recheckImpactRef              Json?
+  decisionWorkQueueItemRef      Json?
+  artifactRefs                  Json     @default("[]")
+  payload                       Json     @default("{}")
+  policyVersionId               String?
+  createdBy                     String
+  createdAt                     DateTime @db.Timestamptz(6)
+
+  @@index([paperProjectBridgeId, createdAt(sort: Desc)], map: "tsdtf_bridge_created_idx")
+  @@index([feedbackFingerprint], map: "tsdtf_fingerprint_idx")
+  @@index([feedbackSignal], map: "tsdtf_signal_idx")
+  @@index([downstreamSourceKind, createdAt(sort: Desc)], map: "tsdtf_source_kind_created_idx")
+  @@index([severity], map: "tsdtf_severity_idx")
+  @@index([topicPackageId], map: "tsdtf_topic_package_idx")
+  @@index([policyVersionId], map: "tsdtf_policy_version_idx")
+}
+
 model TopicSelectionRecheckEvent {
   id                String    @id
   workspaceId       String?

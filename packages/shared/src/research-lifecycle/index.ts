@@ -19,3 +19,4 @@ export * from './topic-selection-v1c-promotion-input-contracts.js';
 export * from './topic-selection-v1c-promotion-gate-contracts.js';
 export * from './topic-selection-v1c-human-promotion-decision-contracts.js';
 export * from './topic-selection-v1c-paper-project-bridge-contracts.js';
+export * from './topic-selection-v1c-downstream-feedback-recheck-contracts.js';

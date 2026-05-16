@@ -10,8 +10,26 @@ import {
   type TopicSelectionNeedAdjudicationDecision,
   type TopicSelectionNeedReadinessRecommendation,
 } from './topic-selection-need-validation-contracts.js';
+import {
+  TOPIC_SELECTION_DOWNSTREAM_LOOPBACK_CAUSES,
+  TOPIC_SELECTION_DOWNSTREAM_LOOPBACK_TARGETS,
+  type TopicSelectionDownstreamLoopbackCause,
+  type TopicSelectionDownstreamLoopbackTarget,
+} from './topic-selection-v1c-downstream-feedback-recheck-contracts.js';
+import {
+  TOPIC_SELECTION_HUMAN_PROMOTION_DECISIONS,
+  type TopicSelectionHumanPromotionDecisionKind,
+} from './topic-selection-v1c-human-promotion-decision-contracts.js';
+import {
+  TOPIC_SELECTION_PROMOTION_GATE_DISPOSITIONS,
+  type TopicSelectionPromotionGateDisposition,
+} from './topic-selection-v1c-promotion-gate-contracts.js';
+import {
+  TOPIC_SELECTION_PROMOTION_INPUT_SNAPSHOT_CLOSURE_STATUSES,
+  type TopicSelectionPromotionInputSnapshotClosureStatus,
+} from './topic-selection-v1c-promotion-input-contracts.js';
 
-export const TOPIC_SELECTION_OFFLINE_EVALUATION_STAGES = ['v1a', 'v1b'] as const;
+export const TOPIC_SELECTION_OFFLINE_EVALUATION_STAGES = ['v1a', 'v1b', 'v1c'] as const;
 export type TopicSelectionOfflineEvaluationStage =
   (typeof TOPIC_SELECTION_OFFLINE_EVALUATION_STAGES)[number];
 
@@ -36,9 +54,21 @@ export const TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_CASE_TYPES = [
   'downstream_loopback_feedback',
 ] as const;
 
+export const TOPIC_SELECTION_V1C_OFFLINE_EVALUATION_CASE_TYPES = [
+  'promotion_input_staleness_false_pass',
+  'promotion_gate_blocker_false_pass',
+  'human_promotion_bypass',
+  'promotion_false_pass',
+  'bridge_trace_gap',
+  'commitment_profile_gap',
+  'loopback_target_misroute',
+  'downstream_mutation_attempt',
+] as const;
+
 export const TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_TYPES = [
   ...TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_CASE_TYPES,
   ...TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_CASE_TYPES,
+  ...TOPIC_SELECTION_V1C_OFFLINE_EVALUATION_CASE_TYPES,
 ] as const;
 export type TopicSelectionOfflineEvaluationCaseType =
   (typeof TOPIC_SELECTION_OFFLINE_EVALUATION_CASE_TYPES)[number];
@@ -105,9 +135,21 @@ export const TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_METRIC_KEYS = [
   'downstream_loopback_cause_distribution',
 ] as const;
 
+export const TOPIC_SELECTION_V1C_OFFLINE_EVALUATION_METRIC_KEYS = [
+  'promotion_input_staleness_false_pass_rate',
+  'promotion_gate_blocker_false_pass_rate',
+  'human_promotion_bypass_rate',
+  'promotion_false_pass_rate',
+  'bridge_trace_completeness',
+  'commitment_profile_completeness',
+  'loopback_target_accuracy',
+  'downstream_mutation_guard_rate',
+] as const;
+
 export const TOPIC_SELECTION_OFFLINE_EVALUATION_METRIC_KEYS = [
   ...TOPIC_SELECTION_V1A_OFFLINE_EVALUATION_METRIC_KEYS,
   ...TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_METRIC_KEYS,
+  ...TOPIC_SELECTION_V1C_OFFLINE_EVALUATION_METRIC_KEYS,
 ] as const;
 export type TopicSelectionOfflineEvaluationMetricKey =
   (typeof TOPIC_SELECTION_OFFLINE_EVALUATION_METRIC_KEYS)[number];
@@ -126,6 +168,14 @@ export const TOPIC_SELECTION_REPLAY_DIFF_DIMENSIONS = [
   'package_trace',
   'package_readiness',
   'loopback_cause',
+  'promotion_input_currentness',
+  'promotion_gate_blocker',
+  'human_authorization',
+  'promotion_gate',
+  'bridge_trace',
+  'commitment_profile',
+  'loopback_target',
+  'downstream_feedback',
 ] as const;
 export type TopicSelectionReplayDiffDimension = (typeof TOPIC_SELECTION_REPLAY_DIFF_DIMENSIONS)[number];
 
@@ -147,6 +197,16 @@ export interface TopicSelectionOfflineFrozenInputBundle {
     topic_value_assessment?: Record<string, unknown>;
     topic_package?: Record<string, unknown>;
     v1c_input_bundle?: Record<string, unknown>;
+    promotion_input_snapshot?: Record<string, unknown>;
+    promotion_decision_support?: Record<string, unknown>;
+    promotion_dossier?: Record<string, unknown>;
+    promotion_gate_check?: Record<string, unknown>;
+    argument_readiness_mini_check?: Record<string, unknown>;
+    human_promotion_decision?: Record<string, unknown>;
+    promotion_decision?: Record<string, unknown>;
+    promotion_commitment_profile?: Record<string, unknown>;
+    paper_project_bridge?: Record<string, unknown>;
+    downstream_recheck?: Record<string, unknown>;
   };
   payload: Record<string, unknown>;
 }
@@ -171,6 +231,17 @@ export interface TopicSelectionOfflineEvaluationGoldExpectation {
   expected_package_ready?: boolean | null;
   expected_package_readiness_status?: string | null;
   expected_downstream_loopback_causes?: string[];
+  expected_promotion_input_current?: boolean | null;
+  expected_promotion_input_closure_status?: TopicSelectionPromotionInputSnapshotClosureStatus | null;
+  expected_promotion_gate_disposition?: TopicSelectionPromotionGateDisposition | null;
+  expected_promotion_gate_promote_allowed?: boolean | null;
+  expected_human_authorized?: boolean | null;
+  expected_promotion_bridge_eligible?: boolean | null;
+  required_bridge_trace_refs?: TopicSelectionFunctionalRef[];
+  required_commitment_profile_fields?: string[];
+  expected_loopback_target?: TopicSelectionDownstreamLoopbackTarget | null;
+  expected_loopback_cause?: TopicSelectionDownstreamLoopbackCause | null;
+  expected_downstream_mutation_blocked?: boolean | null;
   notes: string[];
 }
 
@@ -198,6 +269,21 @@ export interface TopicSelectionOfflineEvaluationObservedSnapshot {
   package_readiness_status?: string | null;
   package_readiness_passed?: boolean | null;
   downstream_loopback_causes?: string[];
+  promotion_input_current?: boolean | null;
+  promotion_input_closure_status?: TopicSelectionPromotionInputSnapshotClosureStatus | null;
+  promotion_gate_disposition?: TopicSelectionPromotionGateDisposition | null;
+  promotion_gate_promote_allowed?: boolean | null;
+  human_promotion_authorized?: boolean | null;
+  human_promotion_decision?: TopicSelectionHumanPromotionDecisionKind | null;
+  promotion_decision_bridge_eligible?: boolean | null;
+  bridge_trace_refs?: TopicSelectionFunctionalRef[];
+  bridge_trace_verdict?: string | null;
+  commitment_profile_present?: boolean | null;
+  commitment_profile_fields?: string[];
+  loopback_target?: TopicSelectionDownstreamLoopbackTarget | null;
+  loopback_cause?: TopicSelectionDownstreamLoopbackCause | null;
+  downstream_mutation_attempted?: boolean | null;
+  downstream_mutation_blocked?: boolean | null;
   payload: Record<string, unknown>;
 }
 
@@ -335,6 +421,21 @@ const nullableNeedAdjudicationDecision = {
 const nullableNeedReadinessRecommendation = {
   anyOf: [{ enum: [...TOPIC_SELECTION_NEED_READINESS_RECOMMENDATIONS] }, { type: 'null' }],
 } as const;
+const nullablePromotionInputClosureStatus = {
+  anyOf: [{ enum: [...TOPIC_SELECTION_PROMOTION_INPUT_SNAPSHOT_CLOSURE_STATUSES] }, { type: 'null' }],
+} as const;
+const nullablePromotionGateDisposition = {
+  anyOf: [{ enum: [...TOPIC_SELECTION_PROMOTION_GATE_DISPOSITIONS] }, { type: 'null' }],
+} as const;
+const nullableHumanPromotionDecision = {
+  anyOf: [{ enum: [...TOPIC_SELECTION_HUMAN_PROMOTION_DECISIONS] }, { type: 'null' }],
+} as const;
+const nullableDownstreamLoopbackTarget = {
+  anyOf: [{ enum: [...TOPIC_SELECTION_DOWNSTREAM_LOOPBACK_TARGETS] }, { type: 'null' }],
+} as const;
+const nullableDownstreamLoopbackCause = {
+  anyOf: [{ enum: [...TOPIC_SELECTION_DOWNSTREAM_LOOPBACK_CAUSES] }, { type: 'null' }],
+} as const;
 
 export const topicSelectionOfflineFrozenInputBundleSchema = {
   type: 'object',
@@ -384,6 +485,17 @@ export const topicSelectionOfflineEvaluationGoldExpectationSchema = {
     expected_package_ready: { anyOf: [booleanValue, { type: 'null' }] },
     expected_package_readiness_status: nullableStringId,
     expected_downstream_loopback_causes: stringArray,
+    expected_promotion_input_current: { anyOf: [booleanValue, { type: 'null' }] },
+    expected_promotion_input_closure_status: nullablePromotionInputClosureStatus,
+    expected_promotion_gate_disposition: nullablePromotionGateDisposition,
+    expected_promotion_gate_promote_allowed: { anyOf: [booleanValue, { type: 'null' }] },
+    expected_human_authorized: { anyOf: [booleanValue, { type: 'null' }] },
+    expected_promotion_bridge_eligible: { anyOf: [booleanValue, { type: 'null' }] },
+    required_bridge_trace_refs: functionalRefArray,
+    required_commitment_profile_fields: stringArray,
+    expected_loopback_target: nullableDownstreamLoopbackTarget,
+    expected_loopback_cause: nullableDownstreamLoopbackCause,
+    expected_downstream_mutation_blocked: { anyOf: [booleanValue, { type: 'null' }] },
     notes: stringArray,
   },
 } as const;
@@ -426,6 +538,21 @@ const topicSelectionOfflineEvaluationObservedSnapshotProperties = {
   package_readiness_status: nullableStringId,
   package_readiness_passed: { anyOf: [booleanValue, { type: 'null' }] },
   downstream_loopback_causes: stringArray,
+  promotion_input_current: { anyOf: [booleanValue, { type: 'null' }] },
+  promotion_input_closure_status: nullablePromotionInputClosureStatus,
+  promotion_gate_disposition: nullablePromotionGateDisposition,
+  promotion_gate_promote_allowed: { anyOf: [booleanValue, { type: 'null' }] },
+  human_promotion_authorized: { anyOf: [booleanValue, { type: 'null' }] },
+  human_promotion_decision: nullableHumanPromotionDecision,
+  promotion_decision_bridge_eligible: { anyOf: [booleanValue, { type: 'null' }] },
+  bridge_trace_refs: functionalRefArray,
+  bridge_trace_verdict: nullableStringId,
+  commitment_profile_present: { anyOf: [booleanValue, { type: 'null' }] },
+  commitment_profile_fields: stringArray,
+  loopback_target: nullableDownstreamLoopbackTarget,
+  loopback_cause: nullableDownstreamLoopbackCause,
+  downstream_mutation_attempted: { anyOf: [booleanValue, { type: 'null' }] },
+  downstream_mutation_blocked: { anyOf: [booleanValue, { type: 'null' }] },
   payload: objectPayload,
 } as const;
 
