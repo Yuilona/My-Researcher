@@ -1,5 +1,81 @@
 # 03 Implementation Notes
 
+## T-077 execution adapters landing - 2026-05-18
+- Completed `T-077 experiment-foundation-execution-adapters`.
+- Added minimum execution backend closure: `ExternalTrainingJob` shared/API contracts, dedicated external job persistence, memory/Prisma repositories, service/controller/routes, LocalScript execution, mockable Aliyun PAI-DLC boundary, readiness/materialization/idempotency gates, cancellation, stage events, partial refs, result validation, and evidence candidate creation.
+- LocalScript stays safe by default: auto-enabled only under `NODE_ENV=test`, explicit opt-in outside tests, `shell=false`, execution-root containment, and command allowlist.
+- Aliyun remains SDK-free and credential-free in this slice; it validates `DatasetMirror` refs for readiness, freshness, provider, checksum, and policy approval before mocked submit.
+- Mainline next owner is `T-078 experiment-foundation-desktop-workbench`.
+
+## T-076 persistence/api/readiness landing - 2026-05-18
+- Completed `T-076 experiment-foundation-persistence-api-readiness`.
+- Added minimum backend closure for experiment foundation: generic registry/readiness persistence, shared API wrappers, repositories, services, REST routes, readiness gates, candidate promotion persistence, DB context refresh, and targeted backend tests.
+- Repo migration was generated only; no live database migration was applied.
+- Mainline next owner is `T-077 experiment-foundation-execution-adapters`.
+
+## T-075 candidate promotion contract landing - 2026-05-18
+- Completed `T-075 experiment-foundation-candidate-promotion-contracts`.
+- Added shared contracts for literature/manual asset candidates, source/provenance traces, duplicate/completeness/policy/risk checks, deterministic rule traces, triage reports, promotion requests, and promotion results.
+- Candidate status remains separate from canonical asset lifecycle; canonical asset/protocol/method schemas now explicitly reject candidate lifecycle fields.
+- Auto-promotion is gated by grounded source/provenance, confidence >= `0.8`, low risk, no duplicate, complete fields, clear policy, and deterministic rule trace refs.
+- Promotion outputs canonical refs/hashes only; no canonical DTOs, execution payloads, result/evidence records, paper claims, or platform-private fields are allowed in candidate/promotion contracts.
+- Boundary remains product-layer incomplete: no candidate import/extraction service, Prisma/API/UI, or actual canonical asset creation logic was added in T-075.
+- Mainline next owner is `T-076 experiment-foundation-persistence-api-readiness`.
+
+## T-074 result/evidence/sidecar contract landing - 2026-05-17
+- Completed `T-074 experiment-foundation-result-evidence-sidecar-contracts`.
+- Added shared contracts for `ExperimentResult`, `FineTuningResult`, `ResultValidationReport`, `EvaluationFact`, `MetricObservation`, `ComparisonObservation`, `ImplementationDecisionSignal`, `PaperTableFactSet`, `EvidenceCandidate`, and `PaperExperimentSidecar`.
+- The result chain now has shared-contract coverage from T-073 materialized task outputs to validated facts, evidence candidates, and paper sidecar refs.
+- Boundary remains product-layer incomplete: no persistence/API/UI/adapters/result collection services were added in T-074.
+- Mainline next owner is `T-075 experiment-foundation-candidate-promotion-contracts`.
+
+## T-073 materialization/adapter boundary contract landing - 2026-05-17
+- Completed `T-073 experiment-foundation-materialization-adapter-contracts`.
+- Added shared contracts for `MaterializeTrainingTaskSpecRequest`, `TrainingTaskSpec`, `FineTuningTaskProfile`, `TrainingTaskMaterializationResult`, `ExperimentFoundationAdapterMetadataRef`, and execution hook refs.
+- Preserved T-072 semantics: `RunRecipe` remains locked and platform-neutral; T-073 only consumes it when materializing a normalized task spec.
+- Fine-tuning remains a specialized `TrainingTaskSpec` profile and cannot bypass `RecipeDraft -> RunRecipe -> TrainingTaskSpec`.
+- Mainline next owner is `T-074 experiment-foundation-result-evidence-sidecar-contracts`.
+
+## T-071 benchmark/protocol/baseline contract landing - 2026-05-17
+- Completed `T-071 experiment-foundation-benchmark-protocol-contracts`.
+- Added shared contracts for benchmark identity, evaluation protocol, metric definition, baseline identity, baseline implementation version, and narrow lock inputs for T-072.
+- Boundary now has executable contract support:
+  - `BenchmarkAsset` is identity/testbed level and references protocol refs.
+  - `EvaluationProtocol` owns version/hash plus metric/evaluator/reporting/comparison/statistics/budget/tuning rules.
+  - `BaselineAsset` is method/model identity only.
+  - `BaselineImplementationVersion` owns code/runtime/entrypoint/version fields.
+  - `research-argument.baseline_set` remains a workspace selection and is not canonical baseline metadata.
+- Mainline next owner is `T-072 experiment-foundation-version-lock-recipe-contracts`.
+
+## T-070 dataset registry contract landing - 2026-05-17
+- Completed `T-070 experiment-foundation-dataset-registry-contracts`.
+- Added the first experiment-foundation shared contract module for dataset registry boundaries.
+- Dataset boundary now has executable contract support:
+  - `DatasetAsset` is identity only.
+  - `DatasetVersion` owns version, manifest, split, policy, processing, locations, access, and readiness refs.
+  - `DatasetMirror` is non-canonical execution mirror metadata tied to source checksum manifest hash.
+  - `DatasetVersionLock` gives later `RunRecipe` work the dataset version/hash/policy lock input without storage paths or mirror refs.
+- Mainline next owner is `T-071 experiment-foundation-benchmark-protocol-contracts`.
+
+## Semantic drift cleanup and closure review - 2026-05-17
+- Rechecked the mother package and child packages against `/Users/yurui/Downloads/experiment-foundation-v1-design-review.md`.
+- Tightened remaining wording drift:
+  - platform selection is now consistently placed at `MaterializeTrainingTaskSpecRequest.platform_id`
+  - `RunRecipe` remains platform-neutral and only carries locks plus capability-oriented execution requirements
+  - fine-tuning no longer appears as a standalone execution spec path
+  - adapter-private payloads are barred from `RunRecipe` and public domain DTOs
+- Added `07-quality-closure-review.md` to separate two conclusions:
+  - T-069 design/governance closure is complete
+  - product-level experiment-foundation functionality is not closed because contracts, DB/API, UI, adapters, and evidence sidecar are still unimplemented
+- Next owner remains `T-070 experiment-foundation-dataset-registry-contracts`.
+
+## Child task split and design review coverage - 2026-05-17
+- Created child task packages under `dev-docs/active/experiment-foundation-*` while keeping this package as parent `T-043`.
+- Added `06-child-task-review.md` to map design review issues to child task owners and implementation order.
+- Updated the parent overview and plan to include `S0` design review sync and split `S1` into S1-A minimum closed-loop contracts plus S1-B extension shells.
+- Synced parent architecture wording for the highest-risk conflicts: DatasetAsset no longer owns version/checksum/storage fields, BenchmarkAsset now references versioned EvaluationProtocol rules, canonical asset lifecycle no longer uses `candidate`, and fine-tuning is a `TrainingTaskSpec` profile rather than a standalone execution bypass.
+- Initial closure result: no high-risk review issue remains unmapped; implementation order now requires dataset and benchmark/protocol contracts before version locks, version locks before materialization, and materialization/result contracts before adapters/UI.
+
 ## Initial planning notes - 2026-05-12
 - Task package created to plan `experiment-foundation-v1`.
 - User intent:
@@ -75,7 +151,7 @@
   - `ComparisonPolicy`
   - `ExecutionPlatform`
   - `TrainingTaskSpec`
-  - `FineTuningTaskSpec`
+  - `FineTuningTaskProfile`
   - `ExternalTrainingJob`
   - `ExperimentResult`
   - `FineTuningResult`
@@ -181,7 +257,7 @@
   - `RecipeDraft` is editable and may be incomplete; it is for interactive selection and planning.
   - `RunRecipe` locks asset refs, versions, protocol hashes, method params, readiness result, and traceability refs.
   - `RunRecipe` remains platform-neutral and deterministic from locked inputs.
-  - `TrainingTaskSpec` is materialized from a valid `RunRecipe` plus a selected `ExecutionPlatform`.
+  - `TrainingTaskSpec` is materialized from a valid `RunRecipe` plus `MaterializeTrainingTaskSpecRequest.platform_id`.
   - Adapter-private fields such as PAI-DLC-specific request shape stay in adapter metadata.
 - Implementation implication:
   - Readiness checks should block direct submission of `RecipeDraft`.
@@ -248,7 +324,7 @@
   - `BaseModelAsset`
   - `FineTuningDatasetAsset`
   - `FineTuningStrategy`
-  - `FineTuningTaskSpec`
+  - `FineTuningTaskProfile`
   - `FineTuningResult`
   - readiness gate
   - artifact collection for adapter/checkpoint/metrics/logs/model card

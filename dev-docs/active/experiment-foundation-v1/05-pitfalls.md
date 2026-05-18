@@ -10,7 +10,7 @@
 - Do not duplicate `research-argument.baseline_set`; reusable assets and workspace selections are different concepts.
 - Do not conflate baseline and benchmark; baseline is the comparison implementation, benchmark is the comparison protocol.
 - Do not require full benchmark reproduction before a baseline can enter the reusable catalog.
-- Do not treat a benchmark as proven just because it contains known leaderboard or reported baseline refs.
+- Do not treat a benchmark as proven just because it contains published result refs or leaderboard links.
 - Do not turn `RunRecipe` into a loose static config with unresolved refs.
 - Do not turn `RunRecipe` into a platform-specific executable script or adapter request body.
 - Do not submit `RecipeDraft` directly; materialize a valid `RunRecipe` into `TrainingTaskSpec`.
@@ -30,7 +30,7 @@
 - Do not add `CustomHttpAdapter` in V1; keep the first adapter scope limited to `LocalScriptAdapter` and `AliyunPaiDlcAdapter`.
 - Do not let Aliyun PAI-DLC request fields leak into core `TrainingTaskSpec`.
 - Do not turn LLM fine-tuning support into an in-repo LLMOps platform.
-- Do not let platform-specific fields leak into core contracts unless the team explicitly promotes them.
+- Do not let adapter-private payloads leak into `RunRecipe` or public domain DTOs; normalized platform refs belong at the materialization/adapter boundary.
 - Do not convert external job metrics directly into paper claims; write them as evidence candidates first.
 - Do not accept loose result files as a complete result; require metrics, artifacts, logs, config snapshot, and validation report.
 - Do not store evaluation output as loose metric scalars; create structured facts with context, validation status, and provenance.

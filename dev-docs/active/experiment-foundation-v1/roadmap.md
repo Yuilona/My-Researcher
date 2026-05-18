@@ -3,6 +3,25 @@
 ## Goal
 - 建立一个位于桌面信息架构中“文献管理”下方的 `experiment-foundation` 模块，用可复用的 dataset、benchmark、baseline、evaluation protocol、run recipe 与外部训练平台控制管道支撑论文实施阶段。
 
+## Parent / child execution plan
+- `T-043 experiment-foundation-v1` is the parent package for V1.
+- Child packages own executable slices and all map back to `R-012`.
+- `S0` closes design review incorporation and child task coverage before shared contracts begin.
+- `S1-A` freezes the minimum closed-loop contracts: assets, dataset versions, baseline implementation versions, benchmark/protocol versions, version locks, readiness, RecipeDraft, RunRecipe, materialization boundary, result validation, EvidenceCandidate, and PaperExperimentSidecar.
+- `S1-B` freezes extension shells for method components, fine-tuning profiles, tuning records, evaluation fact extensions, comparison observations, implementation decision signals, and paper-table-ready fact grouping.
+
+## Child task sequence
+1. `experiment-foundation-design-review-sync`
+2. `experiment-foundation-dataset-registry-contracts`
+3. `experiment-foundation-benchmark-protocol-contracts`
+4. `experiment-foundation-version-lock-recipe-contracts`
+5. `experiment-foundation-materialization-adapter-contracts`
+6. `experiment-foundation-result-evidence-sidecar-contracts`
+7. `experiment-foundation-candidate-promotion-contracts`
+8. `experiment-foundation-persistence-api-readiness`
+9. `experiment-foundation-execution-adapters`
+10. `experiment-foundation-desktop-workbench`
+
 ## Consensus capability model
 ```text
 experiment-foundation
@@ -247,7 +266,8 @@ This section is a non-binding, early hypothesis to help confirm expected project
   - `ComparisonObservation`
   - `ImplementationDecisionSignal`
   - `PaperTableFactSet`
-  - `FineTuningTaskSpec`
+  - `FineTuningTaskProfile`
+  - `TrainingTaskMaterializationResult`
   - `FineTuningResult`
   - `ResultArtifact`
   - `ResultValidationReport`
@@ -377,7 +397,7 @@ This section is a non-binding, early hypothesis to help confirm expected project
 - Non-goals:
   - No cloud canonical dataset metadata.
   - No `CustomHttpAdapter`.
-  - No platform-private fields in core `TrainingTaskSpec`.
+  - No platform-private adapter payloads in `RunRecipe`; `TrainingTaskSpec` only carries normalized materialized fields.
 - Acceptance:
   - Mocked Aliyun tests cover submit/status/log/result/cancel behavior.
   - Mirror tests block stale checksum and policy-disallowed mirroring.
@@ -413,7 +433,7 @@ This section is a non-binding, early hypothesis to help confirm expected project
 - Deliverables:
   - candidate import from literature key-content categories
   - provenance-preserving source refs
-  - triage states: `candidate`, `auto_promoted`, `manual_review_required`, `accepted`, `rejected`, `merged`, `needs_info`
+  - candidate review states: `needs_info`, `manual_review_required`, `ready_for_promotion`, `promoted`, `rejected`
   - deterministic auto-promotion checks
 - Verification:
   - unit tests proving source refs survive candidate promotion

@@ -13,6 +13,7 @@
 ## Execution slices
 | Slice | Scope | Owns | Must not do | Exit criteria |
 |---|---|---|---|---|
+| S0 | Design review sync + child task split | parent/child task map, review coverage, S1-A/S1-B boundary repair | product code, Prisma, API, UI | child packages exist; coverage matrix has no high-risk gaps; governance lint passes |
 | S1 | Shared contracts + schema tests | DTOs, const enums, JSON schemas, exports, canonical/negative schema tests | Prisma, backend routes, UI, adapters, execution | shared typecheck/test pass; contract boundaries express DP-01 to DP-11 |
 | S2 | Persistence + repository/service skeleton | Prisma via DB SSOT if approved, repositories returning domain DTOs, service skeletons | UI, adapter execution, candidate automation | DB/context sync if schema changes; repository/service tests pass |
 | S3 | Asset CRUD/search/readiness API | dataset/baseline/benchmark/protocol APIs, search filters, readiness blockers | literature import, training submission | API/service tests cover CRUD/search/readiness and stale/broken assets |
@@ -39,9 +40,21 @@
   - research-argument bridge `baseline_set_ids`
   - lifecycle `dataset_protocol_hash` / `evaluation_protocol_hash`
 - Produce a short ownership matrix.
+- Maintain child task coverage matrix in `06-child-task-review.md`.
+- Close `S0` before starting shared contract implementation.
 
 ### Phase 2 - Contracts and data model
-- First implementation slice `S1`:
+- First implementation slice `S1` is split into:
+  - `S1-A`: minimum closed-loop contracts: reusable assets, dataset version/storage refs, baseline implementation version, benchmark/protocol version, version locks, readiness, RecipeDraft, RunRecipe, materialization boundary, result validation, EvidenceCandidate, and PaperExperimentSidecar.
+  - `S1-B`: extension shells: method components, fine-tuning profile, tuning session/proposal/decision/trial, evaluation fact extensions, comparison observations, implementation decision signals, and paper-table-ready fact grouping.
+- First implementation child packages:
+  - `experiment-foundation-dataset-registry-contracts`
+  - `experiment-foundation-benchmark-protocol-contracts`
+  - `experiment-foundation-version-lock-recipe-contracts`
+  - `experiment-foundation-materialization-adapter-contracts`
+  - `experiment-foundation-result-evidence-sidecar-contracts`
+  - `experiment-foundation-candidate-promotion-contracts`
+- Shared contract implementation scope:
   - Scope: shared contracts + schema tests only.
   - Primary file: `packages/shared/src/research-lifecycle/experiment-foundation-contracts.ts`.
   - Export updates:
@@ -67,7 +80,8 @@
   - training task materialization payload
   - paper experiment sidecar trace payload
 - Define status enums:
-  - asset lifecycle: `candidate | active | deprecated | rejected`
+  - canonical asset lifecycle: `registered | active | deprecated | archived`
+  - candidate review state: `needs_info | manual_review_required | ready_for_promotion | promoted | rejected`
   - baseline verification: `unknown | metadata_complete | reachable | smoke_verified | protocol_compatible | benchmark_verified | broken`
   - benchmark verification: `unknown | protocol_complete | assets_reachable | evaluator_smoke_verified | reproducible_protocol | comparison_certified | broken`
   - access: `available | restricted | missing | unknown`
@@ -92,7 +106,7 @@
   - `RecipeDraft` MAY be incomplete and editable, but MUST NOT be submitted.
   - `RunRecipe` MUST lock selected refs, versions, protocol hashes, method params, and readiness results.
   - `RunRecipe` MUST remain platform-neutral and MUST NOT contain adapter-private fields.
-  - `TrainingTaskSpec` MUST be materialized from a valid `RunRecipe` plus a selected execution platform.
+  - `TrainingTaskSpec` MUST be materialized from a valid `RunRecipe` plus `MaterializeTrainingTaskSpecRequest.platform_id`.
   - method recipe records MAY feed a `TuningSession`, but MUST NOT execute by themselves.
   - `TuningProposal` MAY be authored by human, LLM, or system rule, but MUST produce a recorded `TuningDecision` before execution.
   - accepted tuning decisions MAY update `RecipeDraft` or produce a new recipe revision; they MUST NOT bypass readiness checks.
@@ -102,6 +116,16 @@
 - Add shared schema tests.
   - positive canonical payload tests for assets, recipes, execution/result packets, tuning, evaluation facts, and sidecar trace refs
   - negative tests for direct `RecipeDraft` execution, adapter-private fields in `RunRecipe`, missing tuning decision, missing sidecar locks/hashes, and loose metric facts
+  - negative tests from `06-child-task-review.md` owner packages before entering S2
+
+### Phase 2 Review Close
+- Before moving from S1-A to S1-B, review:
+  - `DatasetAsset` has no version/checksum/storage fields.
+  - `BenchmarkAsset` references protocol versions rather than embedding full rules.
+  - `RunRecipe` locks refs/hashes and remains platform-neutral.
+  - `TrainingTaskSpec` profile supports fine-tuning without a bypass path.
+  - `EvidenceCandidate` blocks invalid result-to-claim flow.
+- Before moving from S1-B to S2, review all child task `04-verification.md` planned checks and ensure contract tests cover negative cases.
 
 ### Phase 3 - Persistence and backend API
 - Decide whether V1 needs Prisma tables immediately.
@@ -139,8 +163,9 @@
   - fixed assets
   - method recipe objects
   - evaluation protocol objects
-  - execution target/platform choice
+  - capability-oriented execution profile requirements
 - Materialize `TrainingTaskSpec` from `RunRecipe` only at execution boundary.
+  - platform selection belongs to `MaterializeTrainingTaskSpecRequest`, not `RunRecipe`.
 - Compute compatibility inputs:
   - dataset protocol hash
   - evaluation protocol hash
@@ -157,7 +182,8 @@
 - Add shared contracts for:
   - `ExecutionPlatform`
   - `TrainingTaskSpec`
-  - `FineTuningTaskSpec`
+  - `FineTuningTaskProfile`
+  - `TrainingTaskMaterializationResult`
   - `ExternalTrainingJob`
   - `ExperimentResult`
   - `FineTuningResult`

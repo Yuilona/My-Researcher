@@ -1,5 +1,171 @@
 # 04 Verification
 
+## 2026-05-18 - T-077 landing verification
+- Scope: execution adapters minimum backend closure.
+- Commands:
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared typecheck`
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared test`
+  - [pass] `pnpm --filter @paper-engineering-assistant/backend prisma:format`
+  - [pass] `DATABASE_URL='postgresql://user:pass@localhost:5432/paper_engineering_assistant' pnpm --filter @paper-engineering-assistant/backend prisma:validate`
+  - [pass] `pnpm --filter @paper-engineering-assistant/backend prisma:generate`
+  - [pass] `node .ai/scripts/ctl-db-ssot.mjs sync-to-context`
+  - [pass] `pnpm --filter @paper-engineering-assistant/backend typecheck`
+  - [pass] `cd apps/backend && node --test --loader ts-node/esm src/services/experiment-foundation-execution-service.unit.test.ts`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+  - [pass] `git diff --check`
+  - [blocked external] `pnpm --filter @paper-engineering-assistant/backend test` because existing T-054/T-067 Prisma HTTP smoke tests require a real `DATABASE_URL` and migrated Postgres DB; T-077 intentionally did not apply live migrations.
+- Result:
+  - [pass] `T-077` marked done; next owner is `T-078`
+  - [pass] LocalScript execution, mocked Aliyun mirror/policy gates, idempotency, cancellation, collect, validation, and evidence flow have targeted backend coverage.
+  - [pass] no live DB migration was applied
+  - [pass] desktop UI remains open
+
+## 2026-05-18 - T-076 landing verification
+- Scope: persistence/API/readiness minimum backend closure.
+- Commands:
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared typecheck`
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared test`
+  - [pass] `pnpm --filter @paper-engineering-assistant/backend prisma:format`
+  - [pass] `pnpm --filter @paper-engineering-assistant/backend prisma:validate` with dummy Postgres URL for Prisma config validation
+  - [pass] `pnpm --filter @paper-engineering-assistant/backend prisma:generate` with dummy Postgres URL
+  - [pass] `node .ai/scripts/ctl-db-ssot.mjs sync-to-context`
+  - [pass] `pnpm --filter @paper-engineering-assistant/backend typecheck`
+  - [pass] `cd apps/backend && node --test --loader ts-node/esm src/services/experiment-foundation-service.unit.test.ts`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+  - [pass] `git diff --check`
+  - [blocked] `pnpm --filter @paper-engineering-assistant/backend test` because pre-existing T-054/T-067 Prisma HTTP smoke tests require a reachable migrated Postgres DB; T-076 intentionally did not apply live migrations.
+- Result:
+  - [pass] `T-076` marked done; next owner is `T-077`
+  - [pass] minimum DB/API/readiness backend loop exists for experiment-foundation records
+  - [pass] no live DB migration was applied
+  - [pass] adapters and desktop UI remain open
+
+## 2026-05-18 - T-075 landing verification
+- Scope: candidate promotion shared contracts and schema tests.
+- Post-review fixes:
+  - [pass] candidate and promotion contracts now reject DTO alias leakage under the repo Fastify/Ajv behavior.
+  - [pass] promoted results now require non-empty canonical asset/version/protocol/policy refs.
+- Commands:
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared typecheck`
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared test`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+  - [pass] `git diff --check`
+- Result:
+  - [pass] `T-075` marked done; next owner is `T-076`
+  - [pass] candidate payloads, candidate support checks, triage reports, promotion requests, and promotion results are frozen as shared contracts
+  - [pass] auto-promotion cannot pass without source/provenance refs, confidence threshold, no-duplicate status, complete fields, clear policy, low risk, and deterministic rule traces
+  - [pass] canonical asset/protocol/method schemas reject candidate lifecycle drift
+  - [pass] product-layer implementation remains open for persistence/API/readiness, adapters, and UI
+
+## 2026-05-17 - T-074 landing verification
+- Scope: result/evidence/evaluation-fact/paper-sidecar shared contracts.
+- Commands:
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared typecheck`
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared test`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+  - [pass] `git diff --check`
+- Result:
+  - [pass] `T-074` marked done; next owner is `T-075`
+  - [pass] result packets, validation reports, facts/observations, evidence candidates, table fact sets, and paper sidecars are frozen as shared contracts
+  - [pass] invalid/partial/unvalidated result status cannot create evidence candidates
+  - [pass] sidecar contracts reject full reusable DTO copies
+  - [pass] product-layer implementation remains open for later persistence/API/adapters/UI tasks
+
+## 2026-05-17 - T-073 landing verification
+- Scope: materialization and adapter-boundary shared contracts.
+- Commands:
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared typecheck`
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared test`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+  - [pass] `git diff --check`
+- Result:
+  - [pass] `T-073` marked done; next owner is `T-074`
+  - [pass] `RunRecipe` remains platform-neutral and T-073 consumes it only through `MaterializeTrainingTaskSpecRequest`
+  - [pass] fine-tuning remains a `TrainingTaskSpec(profile_kind = llm_fine_tuning)` profile
+  - [pass] adapter-private payloads are represented only by refs/hashes
+
+## 2026-05-17 - T-071 landing verification
+- Scope: benchmark/protocol/baseline shared contracts and schema tests.
+- Expected:
+  - `BenchmarkAsset` / `EvaluationProtocol` ownership split is represented in shared contracts
+  - `BaselineAsset` / `BaselineImplementationVersion` ownership split is represented in shared contracts
+  - negative tests reject evaluation-rule leakage into `BenchmarkAsset`
+  - negative tests reject implementation/baseline-set leakage into `BaselineAsset`
+  - shared typecheck/test and governance sync/lint pass
+- Actual:
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared typecheck`
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared test`
+  - [pass] shared test suite reports 57 passing tests
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+  - [pass] `T-071` marked done; next owner is `T-072`
+
+## 2026-05-17 - T-070 landing verification
+- Scope: dataset registry shared contracts and schema tests.
+- Expected:
+  - `DatasetAsset` / `DatasetVersion` ownership split is represented in shared contracts
+  - negative tests reject checksum/storage/path/uri/location/mirror leakage on `DatasetAsset`
+  - `DatasetVersionLock` supports downstream RunRecipe dataset locks without storage/mirror refs
+  - shared typecheck/test and governance sync/lint pass
+- Actual:
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared typecheck`
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared test`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+  - [pass] `T-070` marked done; next owner is `T-071`
+
+## 2026-05-17 - T-069/T-070 review fix verification
+- Scope: code-quality review findings after T-070 landing.
+- Expected:
+  - all review findings are fixed
+  - shared typecheck/test pass
+  - governance sync/lint pass
+- Actual:
+  - [pass] `DatasetLocation` now requires resolvable local or remote refs by location kind
+  - [pass] `LocalFileRef.relative_path` rejects absolute and parent-traversal paths
+  - [pass] parent quality review no longer describes T-070 as documentation-only
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared typecheck`
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared test`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+
+## 2026-05-17 - Semantic drift and closure review
+- Scope: mother package and child packages after design-review sync.
+- Expected:
+  - no remaining wording that implies `DatasetAsset` owns version/checksum/storage/mirror fields
+  - no remaining wording that implies `RunRecipe` chooses a concrete platform or owns adapter-private payloads
+  - no remaining standalone fine-tuning execution object path
+  - repo-state closure review records whether product functionality is actually implemented
+  - governance sync/lint passes
+- Actual:
+  - [pass] removed stale fine-tuning object naming, selected-platform wording, platform-specific leakage wording, old candidate lifecycle, and old benchmark leaderboard-ref wording from active experiment-foundation docs
+  - [pass] added `07-quality-closure-review.md`
+  - [pass] repo scan confirms product functionality is not yet closed: shared contracts/tests, DB/API, UI, adapters, and result/evidence sidecar are not implemented
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+
+## 2026-05-17 - Child package split verification plan
+- Scope: parent package + child task packages for experiment-foundation V1.
+- Expected:
+  - child packages exist under `dev-docs/active/experiment-foundation-*`
+  - each child package has standard dev-docs files
+  - parent package maps review issues and child responsibilities
+  - project governance sync/lint passes
+- Actual:
+  - [pass] created 10 child packages from `T-069` through `T-078`
+  - [pass] parent package now contains child task index and `06-child-task-review.md`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+  - [pass] child tasks mapped to `M-001 > F-001 > R-012`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+  - [pass] reran `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` after adding per-flow contract closure checklist
+  - [pass] removed parent-doc conflicts for DatasetAsset checksum/storage ownership, BenchmarkAsset protocol-rule ownership, canonical `candidate` lifecycle state, and standalone fine-tuning execution specs
+  - [pass] final `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+
 ## Planned verification
 ### Governance
 - `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`

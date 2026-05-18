@@ -1,5 +1,14 @@
 # 02 Architecture
 
+## Design Review Supersession - 2026-05-17
+- The child packages created under `dev-docs/active/experiment-foundation-*` supersede older broad field lists in this file where the review found boundary conflicts.
+- `DatasetAsset` must not own version, checksum, storage path, URI, location, or mirror fields; those belong to `DatasetVersion`, `ChecksumManifest`, `DatasetLocation`, and `DatasetMirror`.
+- `BenchmarkAsset` must reference versioned/hashable `EvaluationProtocol` records instead of embedding full metric, evaluator, reporting, statistical, tuning, and comparison rules.
+- Canonical asset lifecycle must not use `candidate`; candidate review state lives in separate candidate objects.
+- Fine-tuning must flow through `RecipeDraft -> RunRecipe -> TrainingTaskSpec(profile = llm_fine_tuning)` and must not use a standalone execution bypass.
+- Platform-private adapter metadata must not live in `RunRecipe`; materialization produces normalized `TrainingTaskSpec` plus adapter metadata refs/hashes.
+- `06-child-task-review.md` is the implementation-order and coverage SSOT for the post-review task split.
+
 ## Ownership split
 | Bounded context | Owns | Does not own |
 |---|---|---|
@@ -65,26 +74,26 @@ experiment-foundation
 
 ## Core objects
 ### `DatasetAsset`
-- Represents a reusable dataset reference.
+- Represents a reusable dataset identity in the catalog.
 - Minimum fields:
   - id, name, aliases
   - source refs and source literature refs
-  - version, checksum, storage ref
-  - license/access status
   - task types and schema summary
-  - split protocol refs
-  - verification status and last checked timestamp
+  - default dataset version id if selected
+  - catalog status and last reviewed timestamp
+- MUST NOT contain version, checksum, storage path, URI, location, or mirror fields.
 
 ### `DatasetVersion`
 - Represents a canonical version of a dataset in the local registry.
 - Minimum fields:
   - id, dataset asset id
   - version label
-  - local root ref
   - checksum manifest id
-  - split protocol id
+  - checksum manifest hash
+  - split protocol id and hash
   - processing recipe id if applicable
   - license policy id
+  - location ids
   - access status
 
 ### `DatasetLocation`
@@ -104,6 +113,7 @@ experiment-foundation
   - provider: local, aliyun_oss, pai_dataset, custom
   - uri
   - mirror status: not mirrored, syncing, ready, stale, failed
+  - source checksum manifest hash
   - checksum verified
   - created for run recipe id if run-scoped
 
@@ -112,7 +122,9 @@ experiment-foundation
 - Minimum fields:
   - id, dataset version id
   - algorithm
-  - entries or manifest path
+  - manifest hash
+  - manifest file ref or summary entries
+  - entry count and total bytes if known
   - generated at
 
 ### `SplitProtocol`
@@ -120,8 +132,10 @@ experiment-foundation
 - Minimum fields:
   - id, dataset version id
   - split names and sizes
+  - split file refs if materialized
   - generation method
   - seed if generated
+  - protocol hash
   - leakage/contamination notes
 
 ### `DataProcessingRecipe`
@@ -145,19 +159,17 @@ experiment-foundation
   - retention/deletion notes
 
 ### `BenchmarkAsset`
-- Represents a reusable comparison protocol/testbed, usually binding dataset + task + split + metric + evaluator.
+- Represents a reusable comparison testbed identity, usually naming a task/domain and default dataset/protocol refs.
 - It answers “怎么比” and MUST NOT be bound to one specific baseline.
 - Minimum fields:
   - id, name, dataset asset ids
   - task definition
   - official split/protocol refs
-  - metric refs
-  - evaluator or evaluation script refs
-  - reporting protocol refs
-  - comparison policy refs
+  - default evaluation protocol version refs
   - target communities/venues if known
-  - known leaderboard or reported baseline refs
+  - known published result refs if available
   - benchmark verification status and blockers
+- Full metric, evaluator, reporting, statistical, budget, tuning, and comparison rules belong to versioned `EvaluationProtocol`.
 
 ### `BaselineAsset`
 - Represents a reusable comparison method/model/implementation or reproducible baseline recipe.
@@ -178,8 +190,8 @@ experiment-foundation
 | Question | Object | Owns | Must not own |
 |---|---|---|---|
 | 和谁比？ | `BaselineAsset` | method/model identity, implementation refs, entrypoints, runtime, default params, resource estimate, supported task/benchmark ids | canonical dataset split, metric definition, reporting/comparison policy |
-| 怎么比？ | `BenchmarkAsset` | task definition, dataset/split refs, metric refs, evaluator, reporting protocol, comparison policy | one baseline implementation, paper-specific run config, external job lifecycle |
-| 怎么跑？ | `RunRecipe` / `TrainingTaskSpec` | selected asset refs, effective config, execution target, output contract | reusable asset canonical metadata |
+| 怎么比？ | `BenchmarkAsset` + `EvaluationProtocol` | benchmark/testbed identity, dataset/split refs, versioned/hashable evaluation protocol refs | one baseline implementation, paper-specific run config, external job lifecycle |
+| 怎么跑？ | `RunRecipe` / `TrainingTaskSpec` | selected asset refs, effective config, capability-oriented execution profile, output contract | reusable asset canonical metadata, adapter-private payloads, or platform selection inside `RunRecipe` |
 | 跑出什么？ | `ExperimentResult` / `FineTuningResult` | metrics, artifacts, logs, config snapshot, validation report | paper claim acceptance |
 | 能否写进论文？ | `EvidenceCandidate` | validated result refs and evidence provenance | claim finalization without review |
 
@@ -200,7 +212,7 @@ Composition rule:
 ```text
 BaselineAsset can be registered without full benchmark reproduction.
 BenchmarkAsset can be registered without any specific baseline result.
-BaselineAsset + BenchmarkAsset + DatasetAsset + RunRecipe + ExperimentResult create comparable evidence.
+BaselineImplementationVersion + BenchmarkAsset + EvaluationProtocol + DatasetVersion + RunRecipe + ExperimentResult create comparable evidence.
 ```
 
 ### `RecipeDraft`
@@ -266,8 +278,8 @@ BaselineAsset + BenchmarkAsset + DatasetAsset + RunRecipe + ExperimentResult cre
   - evaluation protocol id
   - dataset protocol hash
   - evaluation protocol hash
-  - intended execution target kind
-  - generated platform-neutral config payload
+  - capability-oriented execution profile requirements
+  - effective platform-neutral config snapshot
   - readiness report id
   - traceability refs
   - lock timestamp
@@ -276,7 +288,7 @@ BaselineAsset + BenchmarkAsset + DatasetAsset + RunRecipe + ExperimentResult cre
 ```text
 RecipeDraft = editable and possibly incomplete planning state.
 RunRecipe = locked, versioned, platform-neutral experiment plan.
-TrainingTaskSpec = platform submission payload materialized from RunRecipe.
+TrainingTaskSpec = normalized execution payload materialized from RunRecipe.
 ```
 
 Rules:
@@ -285,7 +297,7 @@ Rules:
 - `RunRecipe` MUST be generated only after required asset refs, versions, method params, evaluation protocol, and readiness result are available.
 - `RunRecipe` MUST be deterministic from locked inputs, except for explicitly recorded generated timestamps/ids.
 - `RunRecipe` MUST NOT include PAI-DLC, Slurm, Kubernetes, or custom adapter private fields.
-- `TrainingTaskSpec` MUST be generated from a valid `RunRecipe` plus selected `ExecutionPlatform`.
+- `TrainingTaskSpec` MUST be generated from a valid `RunRecipe` plus `MaterializeTrainingTaskSpecRequest.platform_id`.
 - `TrainingTaskSpec` MAY include platform-normalized resource and output-contract fields, but platform-private fields stay in adapter metadata.
 
 ### `TrainingStrategy`
@@ -459,7 +471,7 @@ Rules:
 ### `TrainingTaskSpec`
 - Represents the normalized task payload submitted to a platform adapter.
 - Minimum fields:
-  - id, run recipe id, platform id
+  - id, run recipe id, materialization request id, selected platform ref
   - image or runtime ref
   - command and arguments
   - env refs without secret values
@@ -467,14 +479,16 @@ Rules:
   - resource request
   - timeout and retry policy requested at the control-plane level
 
-### `FineTuningTaskSpec`
-- Represents a specialized `TrainingTaskSpec` profile for LLM fine-tuning.
-- It is submitted through the same platform adapter boundary.
+### `FineTuningTaskProfile`
+- Represents a specialized profile embedded in `TrainingTaskSpec` for LLM fine-tuning.
+- It is materialized only from a locked `RunRecipe` and submitted through the same platform adapter boundary.
 - Minimum fields:
   - base model id
-  - fine-tuning dataset asset ids
+  - fine-tuning dataset version refs and policy refs
   - fine-tuning strategy id
-  - training config
+  - prompt/template/context policy refs
+  - training config and resource budget
+  - evaluation protocol version/hash
   - output contract: adapter path, checkpoint path, merged model path if applicable, metrics path, logs path, model card path
 
 ### `FineTuningResult`
@@ -546,6 +560,13 @@ Rules:
 ### `EvidenceCandidate`
 - Represents a result item that may later support a claim.
 - It is not a paper claim and MUST NOT bypass claim-evidence review.
+- Minimum fields:
+  - id, status, source result refs, validation report refs
+  - run recipe id and lock hash
+  - evaluation protocol version/hash
+  - metric observation refs and artifact refs
+  - caveats, blockers, provenance refs, created_by, created_at
+- MUST NOT contain final paper claim text, claim acceptance, or publication-ready wording.
 
 ### `PaperExperimentSidecar`
 - Represents the trace attachment between a paper project and experiment-foundation evidence.
@@ -581,11 +602,18 @@ PaperProject
 ```
 
 ## Lifecycle states
-### Asset lifecycle
-- `candidate`: discovered from literature or manual draft; pending deterministic triage
-- `active`: available for reuse after auto-promotion or manual acceptance
+### Canonical asset lifecycle
+- `registered`: canonical asset exists but is not selected by default
+- `active`: available for reuse after readiness or policy checks pass
 - `deprecated`: retained for traceability but hidden from default selection
-- `rejected`: explicitly not promoted
+- `archived`: retained for historical traceability and excluded from default search
+
+### Candidate review status
+- `needs_info`
+- `manual_review_required`
+- `ready_for_promotion`
+- `promoted`
+- `rejected`
 
 ### Baseline verification status
 - `unknown`: no verification beyond metadata
@@ -598,20 +626,12 @@ PaperProject
 
 ### Benchmark verification status
 - `unknown`: no verification beyond draft metadata
-- `protocol_complete`: task definition, dataset/split refs, metrics, evaluator, reporting protocol, and comparison policy exist
-- `assets_reachable`: dataset refs, evaluator refs, and metric implementations can be resolved and version locked
+- `protocol_complete`: task definition, dataset/split refs, and default `EvaluationProtocol` version/hash exist
+- `assets_reachable`: dataset refs and protocol/evaluator/metric refs can be resolved and version locked
 - `evaluator_smoke_verified`: evaluator runs on small sample predictions and produces the expected metric shape
 - `reproducible_protocol`: fixed seed/split/version rules produce stable comparable outputs
 - `comparison_certified`: protocol is strong enough for paper-grade fair comparison, including required disclosure and statistical/reporting rules
 - `broken`: refs, environment, or evaluator fails
-
-### Candidate triage status
-- `needs_info`
-- `auto_promoted`
-- `accepted`
-- `rejected`
-- `merged`
-- `manual_review_required`
 
 ## Primary flows
 ### Literature-derived candidate flow
@@ -620,13 +640,14 @@ flowchart TD
   A["Literature key-content dossier"] --> B["Extract asset candidate signals"]
   B --> C["Create candidate with source refs"]
   C --> D["Deterministic triage"]
-  D -->|low risk complete| E["Auto-promote to reusable asset"]
-  D -->|duplicate| F["Merge candidate"]
+  D -->|low risk complete| E["Mark ready_for_promotion"]
+  E --> J["Promote to canonical asset"]
+  D -->|duplicate| F["Merge or reject candidate"]
   D -->|missing info| G["Mark needs_info"]
   D -->|high risk| H["Manual review required"]
   D -->|invalid| I["Reject with reason"]
   E --> J["Searchable experiment foundation catalog"]
-  H -->|accepted| J
+  H -->|approved| E
 ```
 
 ### Implementation-stage reuse flow
@@ -707,13 +728,14 @@ flowchart TD
 ### LLM fine-tuning flow
 ```mermaid
 flowchart TD
-  A["BaseModelAsset"] --> C["FineTuningTaskSpec"]
-  B["FineTuningDatasetAsset"] --> C
-  D["FineTuningStrategy"] --> C
-  C --> E["Fine-tuning readiness gate"]
-  E -->|pass| F["Submit via PlatformAdapter"]
-  E -->|blocker| G["Return blockers"]
-  F --> H["ExternalTrainingJob"]
+  A["BaseModelAsset"] --> D["RecipeDraft"]
+  B["FineTuningDatasetAsset / DatasetVersion"] --> D
+  C["FineTuningStrategy + EvaluationProtocol"] --> D
+  D --> E["Fine-tuning readiness gate"]
+  E -->|pass| F["RunRecipe lock"]
+  F --> G["TrainingTaskSpec profile = llm_fine_tuning"]
+  E -->|blocker| M["Return blockers"]
+  G --> H["ExternalTrainingJob"]
   H --> I["Collect adapters / checkpoints / metrics / model card"]
   I --> J["FineTuningResult"]
   J --> K["EvaluationProtocol"]
@@ -739,7 +761,7 @@ flowchart TD
    - Check license/access, data reachability, baseline entrypoints, resource request, and evaluation protocol compatibility.
    - For LLM fine-tuning, also check base model license, fine-tuning dataset policy, tokenizer/chat template, context length, contamination risk, and resource estimate.
 3. `Mirror`
-   - If the selected execution platform cannot access the local dataset, create or reuse a cloud execution mirror such as Aliyun OSS or PAI Dataset.
+   - If the platform selected by `MaterializeTrainingTaskSpecRequest.platform_id` cannot access the local dataset, create or reuse a cloud execution mirror such as Aliyun OSS or PAI Dataset.
    - Validate mirror checksums against the local `ChecksumManifest`.
    - Block restricted data mirroring unless `DataPolicy` allows it or an approval reference exists.
 4. `Materialize`
@@ -895,11 +917,11 @@ interface TrainingPlatformAdapter {
 - `TuningDecision` MUST be recorded before a proposal can alter a recipe that reaches execution.
 - Accepted tuning decisions update a `RecipeDraft` or create a new recipe revision; readiness checks still apply.
 - `RunRecipe` is the locked, deterministic, platform-neutral plan; it is not an adapter request body.
-- `TrainingTaskSpec` is the materialized execution payload derived from `RunRecipe` and a selected `ExecutionPlatform`.
+- `TrainingTaskSpec` is the materialized execution payload derived from `RunRecipe` and `MaterializeTrainingTaskSpecRequest.platform_id`.
 - Method recipe objects MUST be instantiated into `RunRecipe`; they are not executable by themselves.
 - Evaluation layer objects MUST gate result validity before evidence candidates are created.
 - `TrainingTaskSpec` is the bridge from `RunRecipe` to an external training platform.
-- `FineTuningTaskSpec` is a specialized training task profile, not a separate platform or bypass.
+- `FineTuningTaskProfile` is a specialized training task profile embedded in `TrainingTaskSpec`, not a separate platform or bypass.
 - `ExperimentResult` is the bridge from external platform output back into experiment foundation.
 - `FineTuningResult` is the bridge from LLM fine-tuning output back into experiment foundation.
 - `EvaluationFact` is the bridge from validated result packets to table-ready facts and implementation judgement.

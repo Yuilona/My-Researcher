@@ -1,0 +1,12 @@
+version: 1
+task_id: T-078
+project: main
+slug: experiment-foundation-desktop-workbench
+status: planned
+updated: "2026-05-17"
+keywords:
+  - experiment-foundation
+  - parent-task:T-043
+  - desktop
+  - ui-workbench
+  - data-ui

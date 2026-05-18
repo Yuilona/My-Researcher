@@ -2,7 +2,29 @@
 
 ## Status
 - State: planned
-- Next step: 首批实现切片固定为 S1 shared contracts + schema tests；下一步可开始实现合同层。
+- Next step: 开始 `T-078 experiment-foundation-desktop-workbench`，消费 T-076 registry/readiness API、T-077 execution job/result/evidence APIs 和 shared contracts 落地桌面实验基座工作台。
+
+## Parent / Child Task Model
+- This package is the parent package for experiment-foundation V1.
+- Child packages are active task bundles under `dev-docs/active/experiment-foundation-*`.
+- The parent owns the V1 goal, bounded-context narrative, cross-child coverage, and final completeness review.
+- Child packages own executable design/implementation slices with explicit boundaries.
+- Project governance has no native parent-child edge, so child packages identify this parent through task docs and keywords while mapping to `R-012`.
+- Mother-package closure evidence is tracked in `07-quality-closure-review.md`.
+
+## Child Task Index
+| Child task | Owns | Must close before |
+|---|---|---|
+| `experiment-foundation-design-review-sync` | review-report incorporation, S1-A/S1-B split, coverage matrix | all implementation children |
+| `experiment-foundation-dataset-registry-contracts` | DatasetAsset / DatasetVersion / storage refs / mirror contracts | version locks, persistence, adapters |
+| `experiment-foundation-benchmark-protocol-contracts` | BenchmarkAsset / EvaluationProtocol / BaselineAsset contracts | version locks, result validation |
+| `experiment-foundation-version-lock-recipe-contracts` | version locks, RecipeDraft, RunRecipe, method/fine-tuning recipe path | materialization, persistence, sidecar |
+| `experiment-foundation-materialization-adapter-contracts` | TrainingTaskSpec, materialization result, adapter metadata boundary | execution adapters |
+| `experiment-foundation-result-evidence-sidecar-contracts` | result validation, evaluation facts, EvidenceCandidate, PaperExperimentSidecar | paper bridge UI and evidence views |
+| `experiment-foundation-candidate-promotion-contracts` | literature/manual asset candidates and promotion gates | candidate API/import |
+| `experiment-foundation-persistence-api-readiness` | DB SSOT, repositories, services, REST, readiness gates | adapters and UI |
+| `experiment-foundation-execution-adapters` | LocalScript and Aliyun PAI-DLC execution pipeline | desktop operational job/result views |
+| `experiment-foundation-desktop-workbench` | desktop `实验基座` workbench | final V1 user-facing validation |
 
 ## Goal
 - 新增 `experiment-foundation`（实验基座）模块，以可复用 dataset、benchmark、baseline、evaluation protocol、run recipe 和外部训练平台控制管道支撑论文实施阶段，减少重复准备数据、复现 baseline 和提交训练任务的成本。
@@ -37,20 +59,22 @@
   - `DataPolicy`
   - `BenchmarkAsset`
   - `BaselineAsset`
+  - `BaselineImplementationVersion`
   - `BaseModelAsset`
   - `FineTuningDatasetAsset`
-  - `EvaluationProtocol`
-  - `RunRecipe`
 - Layer 2 - method recipe layer:
   - `TrainingStrategy`
   - `InferenceStrategy`
   - `OptimizerPreset`
   - `ArchitectureTemplate`
+  - `MethodRecipeComponent`
   - `ExperimentHypothesis`
   - `HyperparameterSpace`
   - `AblationPlan`
   - `FineTuningStrategy`
   - `RecipeDraft`
+  - `RunRecipe`
+  - `ExperimentFoundationVersionLock`
   - `TuningSession`
   - `TuningProposal`
   - `TuningDecision`
@@ -70,7 +94,8 @@
 - Layer 4 - external execution control layer:
   - `ExecutionPlatform`
   - `TrainingTaskSpec`
-  - `FineTuningTaskSpec`
+  - `FineTuningTaskProfile`
+  - `TrainingTaskMaterializationResult`
   - `ExternalTrainingJob`
   - `ExperimentResult`
   - `FineTuningResult`
@@ -110,7 +135,7 @@
 - `DP-05` is fixed as: V1 uses a materializable recipe model, not a loose static config and not a platform-specific executable script.
 - `RecipeDraft` is the editable planning layer; it MAY be incomplete and MUST NOT be submitted to a platform.
 - `RunRecipe` is the locked experiment plan; it MUST lock asset refs, versions, method params, evaluation protocol, readiness result, and traceability refs while staying platform-neutral.
-- `TrainingTaskSpec` is the materialized execution payload generated from a valid `RunRecipe` for a selected external platform adapter.
+- `TrainingTaskSpec` is the materialized execution payload generated from a valid `RunRecipe` plus `MaterializeTrainingTaskSpecRequest.platform_id`.
 - Platform-private fields MUST stay in adapter metadata, not in `RunRecipe`.
 
 ## Confirmed PaperProject integration decision
