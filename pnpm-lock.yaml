@@ -27,6 +27,9 @@ importers:
       '@prisma/client':
         specifier: ^5.22.0
         version: 5.22.0(prisma@5.22.0)
+      ajv:
+        specifier: ^8.18.0
+        version: 8.18.0
       fast-xml-parser:
         specifier: ^5.7.3
         version: 5.7.3

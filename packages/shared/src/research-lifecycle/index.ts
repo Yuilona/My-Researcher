@@ -4,6 +4,7 @@ export * from './literature-contracts.js';
 export * from './auto-pull-contracts.js';
 export * from './title-card-management-contracts.js';
 export * from './research-argument-contracts.js';
+export * from './experiment-foundation-contracts.js';
 export * from './topic-selection-control-plane-contracts.js';
 export * from './topic-selection-search-resource-contracts.js';
 export * from './topic-selection-evidence-map-contracts.js';

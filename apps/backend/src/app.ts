@@ -1,5 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { AutoPullController } from './controllers/auto-pull-controller.js';
+import { ExperimentFoundationExecutionController } from './controllers/experiment-foundation-execution-controller.js';
+import { ExperimentFoundationController } from './controllers/experiment-foundation-controller.js';
 import { LiteratureAcquisitionSettingsController } from './controllers/literature-acquisition-settings-controller.js';
 import { LiteratureBackfillController } from './controllers/literature-backfill-controller.js';
 import { LiteratureContentProcessingSettingsController } from './controllers/literature-content-processing-settings-controller.js';
@@ -11,6 +13,8 @@ import { TopicSelectionV1bController } from './controllers/topic-selection-v1b-c
 import { TopicSelectionV1cController } from './controllers/topic-selection-v1c-controller.js';
 import { InMemoryApplicationSettingsRepository } from './repositories/in-memory-application-settings-repository.js';
 import { InMemoryAutoPullRepository } from './repositories/in-memory-auto-pull-repository.js';
+import { InMemoryExperimentFoundationExecutionRepository } from './repositories/in-memory-experiment-foundation-execution-repository.js';
+import { InMemoryExperimentFoundationRepository } from './repositories/in-memory-experiment-foundation-repository.js';
 import { InMemoryLiteratureRepository } from './repositories/in-memory-literature-repository.js';
 import { ResearchLifecycleController } from './controllers/research-lifecycle-controller.js';
 import { InMemoryResearchLifecycleRepository } from './repositories/in-memory-research-lifecycle-repository.js';
@@ -33,6 +37,8 @@ import { InMemoryTopicSelectionV1cPromotionInputRepository } from './repositorie
 import { getPrismaClient } from './repositories/prisma/prisma-client.js';
 import { PrismaApplicationSettingsRepository } from './repositories/prisma/prisma-application-settings-repository.js';
 import { PrismaAutoPullRepository } from './repositories/prisma/prisma-auto-pull-repository.js';
+import { PrismaExperimentFoundationExecutionRepository } from './repositories/prisma/prisma-experiment-foundation-execution-repository.js';
+import { PrismaExperimentFoundationRepository } from './repositories/prisma/prisma-experiment-foundation-repository.js';
 import { PrismaLiteratureRepository } from './repositories/prisma/prisma-literature-repository.js';
 import { PrismaResearchLifecycleRepository } from './repositories/prisma/prisma-research-lifecycle-repository.js';
 import { InMemoryTitleCardManagementRepository } from './repositories/title-card-management.repository.js';
@@ -54,6 +60,8 @@ import { PrismaTopicSelectionV1cPaperProjectBridgeRepository } from './repositor
 import { PrismaTopicSelectionV1cPromotionGateRepository } from './repositories/prisma/prisma-topic-selection-v1c-promotion-gate-repository.js';
 import { PrismaTopicSelectionV1cPromotionInputRepository } from './repositories/prisma/prisma-topic-selection-v1c-promotion-input-repository.js';
 import { registerAutoPullRoutes } from './routes/auto-pull-routes.js';
+import { registerExperimentFoundationExecutionRoutes } from './routes/experiment-foundation-execution-routes.js';
+import { registerExperimentFoundationRoutes } from './routes/experiment-foundation-routes.js';
 import { registerLiteratureAcquisitionSettingsRoutes } from './routes/literature-acquisition-settings-routes.js';
 import { registerLiteratureBackfillRoutes } from './routes/literature-backfill-routes.js';
 import { registerLiteratureContentProcessingSettingsRoutes } from './routes/literature-content-processing-settings-routes.js';
@@ -67,6 +75,8 @@ import { registerTopicSelectionV1bRoutes } from './routes/topic-selection-v1b-ro
 import { registerTopicSelectionV1cRoutes } from './routes/topic-selection-v1c-routes.js';
 import type { ApplicationSettingsRepository } from './repositories/application-settings-repository.js';
 import type { AutoPullRepository } from './repositories/auto-pull-repository.js';
+import type { ExperimentFoundationExecutionRepository } from './repositories/experiment-foundation-execution.repository.js';
+import type { ExperimentFoundationRepository } from './repositories/experiment-foundation.repository.js';
 import type { LiteratureRepository } from './repositories/literature-repository.js';
 import type { ResearchLifecycleRepository } from './repositories/research-lifecycle-repository.js';
 import type { TitleCardManagementRepository } from './repositories/title-card-management.repository.js';
@@ -88,6 +98,8 @@ import type { TopicSelectionV1cPromotionGateRepository } from './repositories/to
 import type { TopicSelectionV1cPromotionInputRepository } from './repositories/topic-selection-v1c-promotion-input.repository.js';
 import { AutoPullScheduler } from './services/auto-pull-scheduler.js';
 import { AutoPullService } from './services/auto-pull-service.js';
+import { ExperimentFoundationExecutionService } from './services/experiment-foundation-execution-service.js';
+import { ExperimentFoundationService } from './services/experiment-foundation-service.js';
 import { LiteratureBackfillService } from './services/literature-backfill-service.js';
 import { LiteratureAcquisitionSettingsService } from './services/literature-acquisition-settings-service.js';
 import { LiteratureClusterService } from './services/literature-cluster-service.js';
@@ -136,6 +148,7 @@ export function resolveTitleCardManagementStoreConfig(): {
   autoPullStrategy: RepositoryStrategy;
   titleCardStrategy: RepositoryStrategy;
   applicationSettingsStrategy: RepositoryStrategy;
+  experimentFoundationStrategy: RepositoryStrategy;
 } {
   const titleCardStrategy = resolveRepositoryStrategy(
     process.env.TITLE_CARD_REPOSITORY,
@@ -159,6 +172,11 @@ export function resolveTitleCardManagementStoreConfig(): {
     process.env.TITLE_CARD_REPOSITORY,
     process.env.RESEARCH_LIFECYCLE_REPOSITORY,
   );
+  const experimentFoundationStrategy = resolveRepositoryStrategy(
+    process.env.EXPERIMENT_FOUNDATION_REPOSITORY,
+    process.env.RESEARCH_LIFECYCLE_REPOSITORY,
+    process.env.TITLE_CARD_REPOSITORY,
+  );
 
   return {
     researchLifecycleStrategy,
@@ -166,6 +184,7 @@ export function resolveTitleCardManagementStoreConfig(): {
     autoPullStrategy,
     titleCardStrategy,
     applicationSettingsStrategy,
+    experimentFoundationStrategy,
   };
 }
 
@@ -182,6 +201,12 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const autoPullRepository = createAutoPullRepository(storeConfig.autoPullStrategy);
   const applicationSettingsRepository = createApplicationSettingsRepository(storeConfig.applicationSettingsStrategy);
   const titleCardManagementRepository = createTitleCardManagementRepository(storeConfig.titleCardStrategy);
+  const experimentFoundationRepository = createExperimentFoundationRepository(
+    storeConfig.experimentFoundationStrategy,
+  );
+  const experimentFoundationExecutionRepository = createExperimentFoundationExecutionRepository(
+    storeConfig.experimentFoundationStrategy,
+  );
   const topicSelectionControlPlaneRepository = createTopicSelectionControlPlaneRepository(storeConfig.titleCardStrategy);
   const topicSelectionSearchResourceRepository = createTopicSelectionSearchResourceRepository(storeConfig.titleCardStrategy);
   const topicSelectionEvidenceMapRepository = createTopicSelectionEvidenceMapRepository(storeConfig.titleCardStrategy);
@@ -233,6 +258,15 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     listPipelineStatesByLiteratureIds: (literatureIds) => literatureRepository.listPipelineStatesByLiteratureIds(literatureIds),
   });
   const titleCardManagementController = new TitleCardManagementController(titleCardManagementService);
+  const experimentFoundationService = new ExperimentFoundationService(experimentFoundationRepository);
+  const experimentFoundationController = new ExperimentFoundationController(experimentFoundationService);
+  const experimentFoundationExecutionService = new ExperimentFoundationExecutionService(
+    experimentFoundationExecutionRepository,
+    experimentFoundationService,
+  );
+  const experimentFoundationExecutionController = new ExperimentFoundationExecutionController(
+    experimentFoundationExecutionService,
+  );
   const topicSelectionControlPlaneService = new TopicSelectionControlPlaneService(topicSelectionControlPlaneRepository);
   const topicSelectionSearchResourceService = new TopicSelectionSearchResourceService(
     topicSelectionSearchResourceRepository,
@@ -435,6 +469,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(async (instance) => {
     await registerResearchLifecycleRoutes(instance, researchLifecycleController);
     await registerTitleCardManagementRoutes(instance, titleCardManagementController);
+    await registerExperimentFoundationRoutes(instance, experimentFoundationController);
+    await registerExperimentFoundationExecutionRoutes(instance, experimentFoundationExecutionController);
     await registerTopicSelectionV1aRoutes(instance, topicSelectionV1aController);
     await registerTopicSelectionV1bRoutes(instance, topicSelectionV1bController);
     await registerTopicSelectionV1cRoutes(instance, topicSelectionV1cController);
@@ -534,6 +570,26 @@ function createTitleCardManagementRepository(strategy: RepositoryStrategy): Titl
   }
 
   return new InMemoryTitleCardManagementRepository();
+}
+
+function createExperimentFoundationRepository(strategy: RepositoryStrategy): ExperimentFoundationRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaExperimentFoundationRepository(prisma);
+  }
+
+  return new InMemoryExperimentFoundationRepository();
+}
+
+function createExperimentFoundationExecutionRepository(
+  strategy: RepositoryStrategy,
+): ExperimentFoundationExecutionRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaExperimentFoundationExecutionRepository(prisma);
+  }
+
+  return new InMemoryExperimentFoundationExecutionRepository();
 }
 
 function createTopicSelectionControlPlaneRepository(
@@ -754,6 +810,7 @@ function assertTitleCardManagementStoreCompatibility(config: {
   autoPullStrategy: RepositoryStrategy;
   titleCardStrategy: RepositoryStrategy;
   applicationSettingsStrategy: RepositoryStrategy;
+  experimentFoundationStrategy: RepositoryStrategy;
 }) {
   if (config.titleCardStrategy !== 'prisma') {
     return;
@@ -764,9 +821,10 @@ function assertTitleCardManagementStoreCompatibility(config: {
     || config.titleCardStrategy !== config.literatureStrategy
     || config.titleCardStrategy !== config.autoPullStrategy
     || config.titleCardStrategy !== config.applicationSettingsStrategy
+    || config.titleCardStrategy !== config.experimentFoundationStrategy
   ) {
     throw new Error(
-      'When title-card management uses Prisma, TITLE_CARD_REPOSITORY, RESEARCH_LIFECYCLE_REPOSITORY, AUTO_PULL_REPOSITORY, and APPLICATION_SETTINGS_REPOSITORY must resolve to the same strategy.',
+      'When title-card management uses Prisma, TITLE_CARD_REPOSITORY, RESEARCH_LIFECYCLE_REPOSITORY, AUTO_PULL_REPOSITORY, APPLICATION_SETTINGS_REPOSITORY, and EXPERIMENT_FOUNDATION_REPOSITORY must resolve to the same strategy.',
     );
   }
 }

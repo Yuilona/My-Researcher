@@ -4259,3 +4259,81 @@ model ResearchArgumentReportProjection {
   @@unique([workspaceId, branchId, reportKind])
   @@index([workspaceId, updatedAt(sort: Desc)])
 }
+
+model ExperimentFoundationRecord {
+  id               String   @id
+  recordKind       String
+  recordId         String
+  recordHash       String?
+  status           String?
+  family           String?
+  parentRecordKind String?
+  parentRecordId   String?
+  ownerRefType     String?
+  ownerRefId       String?
+  payload          Json     @default("{}")
+  sourceRefs       Json     @default("[]")
+  traceabilityRefs Json     @default("[]")
+  createdAt        DateTime @db.Timestamptz(6)
+  updatedAt        DateTime @db.Timestamptz(6)
+
+  @@unique([recordKind, recordId])
+  @@index([recordKind, status])
+  @@index([recordKind, recordHash])
+  @@index([parentRecordKind, parentRecordId])
+  @@index([ownerRefType, ownerRefId])
+  @@index([updatedAt(sort: Desc)])
+}
+
+model ExperimentFoundationReadinessReport {
+  id              String   @id
+  targetKind      String
+  targetId        String
+  readinessStatus String
+  readinessHash   String
+  blockers        Json     @default("[]")
+  warnings        Json     @default("[]")
+  requiredActions Json     @default("[]")
+  sourceRefs      Json     @default("[]")
+  checkedAt       DateTime @db.Timestamptz(6)
+  createdAt       DateTime @db.Timestamptz(6)
+
+  @@index([targetKind, targetId, createdAt(sort: Desc)])
+  @@index([readinessStatus])
+  @@index([readinessHash])
+}
+
+model ExperimentFoundationExternalTrainingJob {
+  id                        String    @id
+  externalJobId             String    @unique
+  trainingTaskSpecId        String
+  trainingTaskSpecHash      String
+  materializationResultId   String
+  materializationResultHash String
+  adapterKind               String
+  adapterVersion            String
+  platformKind              String
+  platformId                String
+  idempotencyKey            String    @unique
+  externalJobRef            Json      @default("{}")
+  externalJobHash           String
+  jobStatus                 String
+  submittedAt               DateTime  @db.Timestamptz(6)
+  lastSyncedAt              DateTime? @db.Timestamptz(6)
+  completedAt               DateTime? @db.Timestamptz(6)
+  stageEventRefs            Json      @default("[]")
+  partialResultRefs         Json      @default("[]")
+  resultRefs                Json      @default("[]")
+  adapterMetadataRefs       Json      @default("[]")
+  adapterMetadataHashes     Json      @default("[]")
+  traceabilityRefs          Json      @default("[]")
+  payload                   Json      @default("{}")
+  createdAt                 DateTime  @db.Timestamptz(6)
+  updatedAt                 DateTime  @db.Timestamptz(6)
+
+  @@index([trainingTaskSpecId])
+  @@index([materializationResultId])
+  @@index([adapterKind, jobStatus])
+  @@index([jobStatus])
+  @@index([updatedAt(sort: Desc)])
+}
