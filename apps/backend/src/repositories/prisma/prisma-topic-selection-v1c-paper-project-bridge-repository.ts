@@ -17,6 +17,8 @@ import type {
   TopicSelectionPromotionStopOrReopenCondition,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1c-human-promotion-decision-contracts';
 import {
+  TopicSelectionV1cPaperProjectBridgeAttachmentConflictError,
+  TopicSelectionV1cPaperProjectBridgeHashConflictError,
   type TopicSelectionV1cPaperProjectBridgeControlPlanePersistence,
   type TopicSelectionV1cPaperProjectBridgePersistence,
   type TopicSelectionV1cPaperProjectBridgeRepository,
@@ -136,6 +138,37 @@ implements TopicSelectionV1cPaperProjectBridgeRepository {
       where: { sourcePromotionDecisionId },
     });
     return row ? toBridgeRecord(row) : null;
+  }
+
+  async attachPaperProjectRefs(
+    paperProjectBridgeId: string,
+    input: {
+      expected_bridge_payload_hash: string;
+      paper_project_intake_ref: TopicSelectionFunctionalRef;
+      target_paper_project_ref: TopicSelectionFunctionalRef;
+    },
+  ): Promise<TopicSelectionPaperProjectBridgeRecord> {
+    const existing = await this.prisma.topicSelectionPaperProjectBridge.findUnique({
+      where: { id: paperProjectBridgeId },
+    });
+    if (!existing) {
+      throw new Error(`PaperProjectBridge ${paperProjectBridgeId} not found.`);
+    }
+    if (existing.bridgePayloadHash !== input.expected_bridge_payload_hash) {
+      throw new TopicSelectionV1cPaperProjectBridgeHashConflictError(paperProjectBridgeId);
+    }
+    if (existing.paperProjectIntakeRef || existing.targetPaperProjectRef) {
+      throw new TopicSelectionV1cPaperProjectBridgeAttachmentConflictError(paperProjectBridgeId);
+    }
+
+    const updated = await this.prisma.topicSelectionPaperProjectBridge.update({
+      where: { id: paperProjectBridgeId },
+      data: {
+        paperProjectIntakeRef: toJsonValue(input.paper_project_intake_ref),
+        targetPaperProjectRef: toJsonValue(input.target_paper_project_ref),
+      },
+    });
+    return toBridgeRecord(updated);
   }
 
   private async createControlPlaneRecords(

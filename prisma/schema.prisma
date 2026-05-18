@@ -1454,6 +1454,90 @@ model TopicSelectionLiteratureResourcePoolSnapshot {
   @@index([blockedCount])
 }
 
+model TopicSelectionResourceSampleSet {
+  id              String   @id
+  workspaceId     String?
+  titleCardId     String?
+  topicId         String
+  sampleSize      Int
+  policyVersion   String
+  status          String
+  roleTargets     Json     @default("{}")
+  roleCounts      Json     @default("{}")
+  warnings        String[] @default([])
+  sampleHash      String
+  model           Json     @default("{}")
+  inputSnapshotId String?
+  workflowRunId   String?
+  gateResultId    String?
+  auditRef        Json?
+  createdBy       String
+  createdAt       DateTime @db.Timestamptz(6)
+
+  items  TopicSelectionResourceSampleItem[]
+  audits TopicSelectionResourceSamplingAudit[]
+
+  @@index([topicId, createdAt(sort: Desc)])
+  @@index([titleCardId, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([sampleHash])
+}
+
+model TopicSelectionResourceSampleItem {
+  id                      String   @id
+  sampleSetId             String
+  workspaceId             String?
+  titleCardId             String?
+  topicId                 String
+  literatureId            String
+  literatureRef           Json     @default("{}")
+  selectedRole            String
+  selected                Boolean  @default(false)
+  rank                    Int
+  topicRelevance          Float
+  evidencePolarity        String
+  roleScores              Json     @default("{}")
+  confidence              Float
+  classificationRationale String
+  exclusionReason         String?
+  reviewReason            String?
+  guardrailCodes          String[] @default([])
+  methodFamilies          String[] @default([])
+  createdAt               DateTime @db.Timestamptz(6)
+
+  sampleSet TopicSelectionResourceSampleSet @relation(fields: [sampleSetId], references: [id], onDelete: Cascade)
+
+  @@index([sampleSetId, selected, rank])
+  @@index([topicId, selectedRole])
+  @@index([literatureId])
+}
+
+model TopicSelectionResourceSamplingAudit {
+  id                    String   @id
+  sampleSetId           String
+  workspaceId           String?
+  titleCardId           String?
+  topicId               String
+  policyVersion         String
+  promptTemplateId      String?
+  promptTemplateVersion String?
+  model                 Json     @default("{}")
+  candidateCount        Int
+  eligibleCount         Int
+  selectedCount         Int
+  excludedCount         Int
+  warningCodes          String[] @default([])
+  guardrailSummary      Json     @default("{}")
+  artifactRefs          Json     @default("[]")
+  llmStructuredOutput   Json     @default("{}")
+  createdAt             DateTime @db.Timestamptz(6)
+
+  sampleSet TopicSelectionResourceSampleSet @relation(fields: [sampleSetId], references: [id], onDelete: Cascade)
+
+  @@index([sampleSetId])
+  @@index([topicId, createdAt(sort: Desc)])
+}
+
 model TopicSelectionSearchPlan {
   id                    String   @id
   workspaceId           String?

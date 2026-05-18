@@ -26,6 +26,33 @@ const EXTRACTION_KEY = 'extraction';
 const STORAGE_ROOTS_KEY = 'storage_roots';
 const FULLTEXT_PARSER_KEY = 'fulltext_parser';
 const DEFAULT_GROBID_ENDPOINT_URL = 'http://localhost:8070';
+export const PAPER_ENGINEER_LOCAL_DATA_ROOT_ENV = 'PAPER_ENGINEER_LOCAL_DATA_ROOT';
+export const LITERATURE_CONTENT_PROCESSING_ROOT_ENV = 'LITERATURE_CONTENT_PROCESSING_ROOT';
+export const DEFAULT_PAPER_ENGINEER_LOCAL_DATA_ROOT = '/Volumes/DataDisk/Data/PaperEngineer';
+
+export function resolveDefaultPaperEngineerLocalDataRoot(): string {
+  return resolveConfiguredFilesystemPath(process.env[PAPER_ENGINEER_LOCAL_DATA_ROOT_ENV])
+    ?? DEFAULT_PAPER_ENGINEER_LOCAL_DATA_ROOT;
+}
+
+export function resolveDefaultLiteratureContentProcessingRoot(): string {
+  return resolveConfiguredFilesystemPath(process.env[LITERATURE_CONTENT_PROCESSING_ROOT_ENV])
+    ?? path.join(resolveDefaultPaperEngineerLocalDataRoot(), 'literature-content-processing');
+}
+
+function resolveConfiguredFilesystemPath(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (trimmed === '~') {
+    return os.homedir();
+  }
+  if (trimmed.startsWith('~/')) {
+    return path.join(os.homedir(), trimmed.slice(2));
+  }
+  return path.resolve(trimmed);
+}
 
 const DEFAULT_EMBEDDING_PROFILES: LiteratureEmbeddingProfileDTO[] = [
   {
@@ -795,7 +822,7 @@ export class LiteratureContentProcessingSettingsService {
   private resolveEffectiveStorageRoots(
     configured: LiteratureContentProcessingStorageRootsDTO,
   ): LiteratureContentProcessingStorageRootsDTO {
-    const base = path.join(os.homedir(), '.paper-engineering-assistant', 'literature-content-processing');
+    const base = resolveDefaultLiteratureContentProcessingRoot();
     return {
       raw_files: configured.raw_files ?? path.join(base, 'raw'),
       normalized_text: configured.normalized_text ?? path.join(base, 'normalized'),

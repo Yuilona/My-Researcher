@@ -1193,6 +1193,10 @@ export class TopicSelectionV1cPromotionGateService {
           ['package_payload', 'prohibited_claims'],
           ['topic_question_contract', 'prohibited_claims'],
         ]),
+        selected_literature_evidence_ids: this.readStringArrayAtAnyPath(packageSnapshot, [
+          ['selected_literature_evidence_ids'],
+          ['package_payload', 'selected_literature_evidence_ids'],
+        ]),
         selected_evidence_refs: handoff.evidence_refs,
       },
       source_snapshot_hashes: handoff.snapshot_hashes,

@@ -17,6 +17,7 @@ import type {
   TopicSelectionV1bToV1cInputBundleRecord,
   TopicSelectionV1bTopicPackageCreationResult,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-topic-package-contracts';
+import { AppError } from '../../errors/app-error.js';
 import type {
   TopicSelectionV1bTopicPackageControlPlanePersistence,
   TopicSelectionV1bTopicPackagePersistence,
@@ -202,64 +203,85 @@ implements TopicSelectionV1bTopicPackageRepository {
   async createDraftPackage(
     persistence: TopicSelectionV1bTopicPackagePersistence,
   ): Promise<TopicSelectionV1bTopicPackageCreationResult> {
-    await this.prisma.$transaction(async (tx) => {
-      await this.createControlPlaneRecords(tx, persistence.control_plane);
-      await tx.titleCardResearchRecord.create({
-        data: {
-          id: persistence.topic_package.research_record_id,
-          titleCardId: persistence.topic_package.title_card_id,
-          recordType: 'package',
-          recordStatus: persistence.topic_package.package_readiness_status === 'ready_for_promotion_review'
-            ? 'completed'
-            : 'draft',
-          parentRecordId: null,
-          supersededByRecordId: null,
-          sourceRecordIds: toJsonValue([
-            persistence.topic_package.topic_question_id,
-            persistence.topic_package.topic_value_assessment_id,
-            persistence.topic_package.value_disposition_decision_id,
-          ]),
-          lineage: toJsonValue({
-            source: 'topic_selection_v1b_topic_package_draft',
-            value_disposition_decision_id: persistence.topic_package.value_disposition_decision_id,
-            topic_question_contract_id: persistence.topic_package.topic_question_contract_id,
-            research_slice_id: persistence.topic_package.research_slice_id,
-          }),
-          summary: persistence.topic_package.contribution_summary,
-          confidence: new Prisma.Decimal(1),
-          blockingIssues: toJsonValue(persistence.topic_package.blocker_refs),
-          missingInformation: toJsonValue(persistence.topic_package.key_risks),
-          nextActions: toJsonValue(
-            persistence.package_readiness_assessment.required_actions,
-          ),
-          evidenceRefs: toJsonValue(persistence.topic_package.selected_evidence_refs),
-          payload: toJsonValue(persistence.topic_package),
-          createdBy: persistence.topic_package.created_by,
-          createdAt: new Date(persistence.topic_package.created_at),
-          updatedAt: new Date(persistence.topic_package.updated_at),
-          deletedAt: null,
-        },
-      });
-      await tx.titleCardPackage.create({
-        data: this.toPackageCreateInput(persistence.topic_package),
-      });
-      await tx.topicSelectionPackageTraceBoundaryCheck.create({
-        data: this.toTraceBoundaryCheckCreateInput(persistence.package_trace_boundary_check),
-      });
-      await tx.topicSelectionTopicPackageReadinessAssessment.create({
-        data: this.toReadinessAssessmentCreateInput(persistence.package_readiness_assessment),
-      });
-      if (persistence.v1c_input_bundle) {
-        await tx.topicSelectionV1bToV1cInputBundle.create({
-          data: this.toV1cInputBundleCreateInput(persistence.v1c_input_bundle),
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await this.createControlPlaneRecords(tx, persistence.control_plane);
+        await tx.titleCardResearchRecord.create({
+          data: {
+            id: persistence.topic_package.research_record_id,
+            titleCardId: persistence.topic_package.title_card_id,
+            recordType: 'package',
+            recordStatus: persistence.topic_package.package_readiness_status === 'ready_for_promotion_review'
+              ? 'completed'
+              : 'draft',
+            parentRecordId: null,
+            supersededByRecordId: null,
+            sourceRecordIds: toJsonValue([
+              persistence.topic_package.topic_question_id,
+              persistence.topic_package.topic_value_assessment_id,
+              persistence.topic_package.value_disposition_decision_id,
+            ]),
+            lineage: toJsonValue({
+              source: 'topic_selection_v1b_topic_package_draft',
+              value_disposition_decision_id: persistence.topic_package.value_disposition_decision_id,
+              topic_question_contract_id: persistence.topic_package.topic_question_contract_id,
+              research_slice_id: persistence.topic_package.research_slice_id,
+            }),
+            summary: persistence.topic_package.contribution_summary,
+            confidence: new Prisma.Decimal(1),
+            blockingIssues: toJsonValue(persistence.topic_package.blocker_refs),
+            missingInformation: toJsonValue(persistence.topic_package.key_risks),
+            nextActions: toJsonValue(
+              persistence.package_readiness_assessment.required_actions,
+            ),
+            evidenceRefs: toJsonValue(persistence.topic_package.selected_evidence_refs),
+            payload: toJsonValue(persistence.topic_package),
+            createdBy: persistence.topic_package.created_by,
+            createdAt: new Date(persistence.topic_package.created_at),
+            updatedAt: new Date(persistence.topic_package.updated_at),
+            deletedAt: null,
+          },
         });
-      }
-      await tx.topicSelectionValueDispositionDecision.update({
-        where: { id: persistence.topic_package.value_disposition_decision_id },
-        data: { outputTopicPackageId: persistence.topic_package.topic_package_id },
+        await tx.titleCardPackage.create({
+          data: this.toPackageCreateInput(persistence.topic_package),
+        });
+        await tx.topicSelectionPackageTraceBoundaryCheck.create({
+          data: this.toTraceBoundaryCheckCreateInput(persistence.package_trace_boundary_check),
+        });
+        await tx.topicSelectionTopicPackageReadinessAssessment.create({
+          data: this.toReadinessAssessmentCreateInput(persistence.package_readiness_assessment),
+        });
+        if (persistence.v1c_input_bundle) {
+          await tx.topicSelectionV1bToV1cInputBundle.create({
+            data: this.toV1cInputBundleCreateInput(persistence.v1c_input_bundle),
+          });
+        }
+        await tx.topicSelectionValueDispositionDecision.update({
+          where: { id: persistence.topic_package.value_disposition_decision_id },
+          data: { outputTopicPackageId: persistence.topic_package.topic_package_id },
+        });
       });
-    });
+    } catch (error) {
+      if (this.isValueDispositionDecisionUniqueConflict(error)) {
+        throw new AppError(
+          409,
+          'VERSION_CONFLICT',
+          'TopicPackage already exists for this ValueDispositionDecision.',
+        );
+      }
+      throw error;
+    }
     return persistence;
+  }
+
+  private isValueDispositionDecisionUniqueConflict(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+      return false;
+    }
+    const target = error.meta?.target;
+    return Array.isArray(target)
+      ? target.includes('v1bSourceValueDispositionDecisionId')
+      : target === 'v1bSourceValueDispositionDecisionId';
   }
 
   private async createControlPlaneRecords(

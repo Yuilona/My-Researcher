@@ -384,6 +384,20 @@ export const topicSelectionTopicValueDimensionScoreSchema = {
   },
 } as const;
 
+const topicSelectionTopicValueGateResultArraySchema = {
+  type: 'array',
+  minItems: TOPIC_SELECTION_VALUE_GATE_KEYS.length,
+  maxItems: TOPIC_SELECTION_VALUE_GATE_KEYS.length,
+  items: topicSelectionTopicValueGateResultSchema,
+} as const;
+
+const topicSelectionTopicValueDimensionScoreArraySchema = {
+  type: 'array',
+  minItems: TOPIC_SELECTION_VALUE_DIMENSIONS.length,
+  maxItems: TOPIC_SELECTION_VALUE_DIMENSIONS.length,
+  items: topicSelectionTopicValueDimensionScoreSchema,
+} as const;
+
 export const topicSelectionAssessTopicValueRunRecordSchema = {
   type: 'object',
   additionalProperties: false,
@@ -564,8 +578,8 @@ export const topicSelectionTopicValueAssessmentRecordSchema = {
     freshness_status: { enum: ['current', 'recheck_required', 'stale', 'superseded'] },
     strongest_claim_if_success: stringId,
     fallback_claim_if_success: { anyOf: [stringValue, { type: 'null' }] },
-    hard_gates: { type: 'array', items: topicSelectionTopicValueGateResultSchema },
-    dimension_scores: { type: 'array', items: topicSelectionTopicValueDimensionScoreSchema },
+    hard_gates: topicSelectionTopicValueGateResultArraySchema,
+    dimension_scores: topicSelectionTopicValueDimensionScoreArraySchema,
     risk_penalty: objectPayload,
     reviewer_objections: stringArray,
     ceiling_case: stringId,
@@ -797,8 +811,8 @@ export const topicSelectionAssessTopicValueLlmOutputSchema = {
     readiness_status: { enum: [...TOPIC_SELECTION_TOPIC_VALUE_READINESS_STATUSES] },
     strongest_claim_if_success: stringId,
     fallback_claim_if_success: { anyOf: [stringValue, { type: 'null' }] },
-    hard_gates: { type: 'array', items: topicSelectionTopicValueGateResultSchema },
-    dimension_scores: { type: 'array', items: topicSelectionTopicValueDimensionScoreSchema },
+    hard_gates: topicSelectionTopicValueGateResultArraySchema,
+    dimension_scores: topicSelectionTopicValueDimensionScoreArraySchema,
     risk_penalty: objectPayload,
     reviewer_objections: stringArray,
     ceiling_case: stringId,

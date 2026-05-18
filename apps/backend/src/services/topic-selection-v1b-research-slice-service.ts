@@ -203,6 +203,8 @@ export class TopicSelectionV1bResearchSliceService {
                 'Plan bounded v1b ResearchSlice options from the supplied ready intake handoff.',
                 'Do not create TopicQuestion, value assessment, package, promotion, or PaperProject bridge objects.',
                 'Copy upstream refs exactly; do not introduce new unmet-need proof.',
+                'Use hard_blockers only for absolute impossibility; put ordinary risks or caveats in dependency_risks and main_risks.',
+                'For every option, copy each planning_input.non_goals string verbatim into excluded_boundaries.',
               ].join(' '),
             },
             {

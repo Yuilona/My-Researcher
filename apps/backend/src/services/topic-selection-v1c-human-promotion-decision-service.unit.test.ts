@@ -122,6 +122,7 @@ function makeGateHandoff(
         evaluation_plan: 'A bounded evaluation plan.',
         claim_ceiling: 'Correlation and mechanism claims only.',
         prohibited_claims: ['Do not claim causal proof.'],
+        selected_literature_evidence_ids: ['literature_evidence_001'],
         selected_evidence_refs: [ref('evidence_unit', 'evidence_unit_001')],
       },
     },
@@ -333,6 +334,10 @@ test('ready gate and human promote decision create commitment profile and T-064 
 
   assert.equal(result.promotion_decision.bridge_eligible, true);
   assert.equal(result.promotion_commitment_profile?.claim_ceiling, 'Correlation and mechanism claims only.');
+  assert.deepEqual(
+    result.promotion_commitment_profile?.scope.selected_literature_evidence_ids,
+    ['literature_evidence_001'],
+  );
   assert.equal(result.bridge_handoff?.promotion_decision_id, result.promotion_decision.promotion_decision_id);
   assert.equal(bridgeHandoff.topic_package_id, 'topic_package_001');
   assert.equal(stored?.human_promotion_decision.human_confirmed_decision_id, 'human_confirmed_decision_001');

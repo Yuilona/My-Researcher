@@ -50,6 +50,103 @@ test('LLM gateway maps structured Responses output and telemetry', async () => {
   assert.equal(calls[0]?.model, 'gpt-test');
 });
 
+test('LLM gateway normalizes OpenAI structured output schemas to strict objects', async () => {
+  const calls: Array<Record<string, unknown>> = [];
+  const gateway = new BackendLlmGateway({
+    settingsService: createSettingsService(),
+    fetchImpl: (async (_input, init) => {
+      calls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response(JSON.stringify({
+        output_text: JSON.stringify({ items: [{ ref: { id: 'ref-1', legacy: {} } }] }),
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch,
+  });
+
+  await gateway.createStructuredOutput<{ items: Array<{ ref: { id: string; legacy: Record<string, unknown> } }> }>({
+    executionContext: { feature: 'test', operation: 'strict-schema' },
+    model: { providerId: 'openai', modelId: 'gpt-test', profileId: 'test-profile' },
+    prompt: { promptTemplateId: 'test-prompt', version: 'v1' },
+    messages: [{ role: 'user', content: 'return ok' }],
+    schemaName: 'strict_schema',
+    schema: {
+      type: 'object',
+      required: ['items'],
+      properties: {
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['ref'],
+            properties: {
+              ref: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string' },
+                  legacy: { anyOf: [{ type: 'object', additionalProperties: true }, { type: 'null' }] },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const body = calls[0] as {
+    text?: { format?: { schema?: Record<string, unknown> } };
+  };
+  const schema = body.text?.format?.schema as {
+    additionalProperties?: boolean;
+    required?: string[];
+    properties?: {
+      items?: {
+        items?: {
+          additionalProperties?: boolean;
+          required?: string[];
+          properties?: {
+            ref?: {
+              additionalProperties?: boolean;
+              required?: string[];
+              properties?: {
+                legacy?: {
+                  anyOf?: Array<{
+                    additionalProperties?: boolean;
+                    properties?: Record<string, unknown>;
+                    required?: string[];
+                  }>;
+                };
+              };
+            };
+          };
+        };
+      };
+    };
+  };
+
+  assert.equal(schema.additionalProperties, false);
+  assert.deepEqual(schema.required, ['items']);
+  assert.equal(schema.properties?.items?.items?.additionalProperties, false);
+  assert.deepEqual(schema.properties?.items?.items?.required, ['ref']);
+  assert.equal(schema.properties?.items?.items?.properties?.ref?.additionalProperties, false);
+  assert.deepEqual(schema.properties?.items?.items?.properties?.ref?.required, ['id', 'legacy']);
+  assert.equal(
+    schema.properties?.items?.items?.properties?.ref?.properties?.legacy?.anyOf?.[0]?.additionalProperties,
+    false,
+  );
+  assert.deepEqual(
+    schema.properties?.items?.items?.properties?.ref?.properties?.legacy?.anyOf?.[0]?.required,
+    [],
+  );
+  assert.deepEqual(
+    schema.properties?.items?.items?.properties?.ref?.properties?.legacy?.anyOf?.[0]?.properties,
+    {},
+  );
+});
+
 test('LLM gateway parses embedding vectors from OpenAI data shape', async () => {
   const gateway = new BackendLlmGateway({
     settingsService: createSettingsService(),

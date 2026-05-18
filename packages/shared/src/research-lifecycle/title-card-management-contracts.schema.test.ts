@@ -8,6 +8,7 @@ import {
   createTitleCardRequestSchema,
 } from './title-card-management-contracts.js';
 import * as autoPullContracts from './auto-pull-contracts.js';
+import * as experimentFoundationContracts from './experiment-foundation-contracts.js';
 import * as literatureContracts from './literature-contracts.js';
 import * as paperProjectContracts from './paper-project-contracts.js';
 import * as researchArgumentContracts from './research-argument-contracts.js';
@@ -19,6 +20,7 @@ import * as topicSelectionEvidenceMapContracts from './topic-selection-evidence-
 import * as topicSelectionNeedValidationContracts from './topic-selection-need-validation-contracts.js';
 import * as topicSelectionOfflineEvaluationReplayContracts from './topic-selection-offline-evaluation-replay-contracts.js';
 import * as topicSelectionRecheckRiskMemoryContracts from './topic-selection-recheck-risk-memory-contracts.js';
+import * as topicSelectionResourceSamplingContracts from './topic-selection-resource-sampling-contracts.js';
 import * as topicSelectionSearchResourceContracts from './topic-selection-search-resource-contracts.js';
 import * as topicSelectionV1bIntakeContracts from './topic-selection-v1b-intake-contracts.js';
 import * as topicSelectionV1bResearchSliceContracts from './topic-selection-v1b-research-slice-contracts.js';
@@ -134,6 +136,16 @@ test('topic-selection search/resource schemas load through direct and aggregate 
   assert.ok(topicSelectionSearchResourceContracts.topicSelectionSearchPlanCoverageMatrixSchema);
   assert.ok(researchLifecycleContracts.topicSelectionSearchRunRecordSchema);
   assert.ok(researchLifecycleContracts.topicSelectionSearchPlanCoverageMatrixSchema);
+});
+
+test('topic-selection resource sampling schemas load through direct and aggregate exports', () => {
+  assert.ok(topicSelectionResourceSamplingContracts.topicSelectionResourceSampleSetRecordSchema);
+  assert.ok(topicSelectionResourceSamplingContracts.topicSelectionResourceSampleItemRecordSchema);
+  assert.ok(topicSelectionResourceSamplingContracts.topicSelectionResourceSamplingAuditRecordSchema);
+  assert.ok(topicSelectionResourceSamplingContracts.createTopicSelectionResourceSampleRequestSchema);
+  assert.ok(topicSelectionResourceSamplingContracts.topicSelectionResourceSampleResultSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionResourceSampleSetRecordSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionResourceSampleResultSchema);
 });
 
 test('topic-selection evidence-map schemas load through direct and aggregate exports', () => {
@@ -356,6 +368,24 @@ test('topic-selection v1b value-assessment schemas load through direct and aggre
     'strategic_fit',
     'negative_memory_check',
   ]);
+  const assessmentSchemaProperties = topicSelectionV1bValueAssessmentContracts
+    .topicSelectionAssessTopicValueLlmOutputSchema.properties as Record<string, { minItems?: number; maxItems?: number }>;
+  assert.equal(
+    assessmentSchemaProperties.hard_gates?.minItems,
+    topicSelectionV1bValueAssessmentContracts.TOPIC_SELECTION_VALUE_GATE_KEYS.length,
+  );
+  assert.equal(
+    assessmentSchemaProperties.hard_gates?.maxItems,
+    topicSelectionV1bValueAssessmentContracts.TOPIC_SELECTION_VALUE_GATE_KEYS.length,
+  );
+  assert.equal(
+    assessmentSchemaProperties.dimension_scores?.minItems,
+    topicSelectionV1bValueAssessmentContracts.TOPIC_SELECTION_VALUE_DIMENSIONS.length,
+  );
+  assert.equal(
+    assessmentSchemaProperties.dimension_scores?.maxItems,
+    topicSelectionV1bValueAssessmentContracts.TOPIC_SELECTION_VALUE_DIMENSIONS.length,
+  );
   assert.ok(researchLifecycleContracts.topicSelectionTopicValueAssessmentRecordSchema);
   assert.ok(researchLifecycleContracts.topicSelectionV1bPackageDraftInputSchema);
 });
@@ -1086,14 +1116,18 @@ test('topic-selection v1c human-promotion-decision schemas validate decisions an
 test('topic-selection v1c paper-project-bridge schemas load through direct and aggregate exports', () => {
   assert.ok(topicSelectionV1cPaperProjectBridgeContracts.topicSelectionPaperProjectBridgeWorkingCopyPayloadSchema);
   assert.ok(topicSelectionV1cPaperProjectBridgeContracts.topicSelectionPaperProjectBridgeCreateInputSchema);
+  assert.ok(topicSelectionV1cPaperProjectBridgeContracts.topicSelectionPaperProjectBridgeIntakeBodySchema);
   assert.ok(topicSelectionV1cPaperProjectBridgeContracts.topicSelectionPaperProjectBridgeRecordSchema);
   assert.ok(topicSelectionV1cPaperProjectBridgeContracts.topicSelectionPaperProjectBridgeHandoffSchema);
+  assert.ok(topicSelectionV1cPaperProjectBridgeContracts.topicSelectionPaperProjectBridgeIntakeResultSchema);
   assert.deepEqual(
     [...topicSelectionV1cPaperProjectBridgeContracts.TOPIC_SELECTION_PAPER_PROJECT_BRIDGE_STATUSES],
     ['active', 'blocked', 'superseded', 'archived'],
   );
   assert.ok(researchLifecycleContracts.topicSelectionPaperProjectBridgeRecordSchema);
   assert.ok(researchLifecycleContracts.topicSelectionPaperProjectBridgeHandoffSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionPaperProjectBridgeIntakeBodySchema);
+  assert.ok(researchLifecycleContracts.topicSelectionPaperProjectBridgeIntakeResultSchema);
 });
 
 test('topic-selection v1c paper-project-bridge schemas validate bridge handoff invariants', async () => {
@@ -1113,6 +1147,16 @@ test('topic-selection v1c paper-project-bridge schemas validate bridge handoff i
       body: topicSelectionV1cPaperProjectBridgeContracts.topicSelectionPaperProjectBridgeHandoffSchema,
     },
   }, async () => ({ ok: true }));
+  app.post('/intake-body', {
+    schema: {
+      body: topicSelectionV1cPaperProjectBridgeContracts.topicSelectionPaperProjectBridgeIntakeBodySchema,
+    },
+  }, async () => ({ ok: true }));
+  app.post('/intake-result', {
+    schema: {
+      body: topicSelectionV1cPaperProjectBridgeContracts.topicSelectionPaperProjectBridgeIntakeResultSchema,
+    },
+  }, async () => ({ ok: true }));
   await app.ready();
 
   const now = '2026-05-15T00:00:00.000Z';
@@ -1124,6 +1168,8 @@ test('topic-selection v1c paper-project-bridge schemas validate bridge handoff i
   const decisionRef = functionalRefForSchema('promotion_decision', 'promotion_decision_001');
   const commitmentRef = functionalRefForSchema('promotion_commitment_profile', 'promotion_commitment_profile_001');
   const bridgeRef = functionalRefForSchema('paper_project_bridge', 'paper_project_bridge_001');
+  const paperProjectIntakeRef = functionalRefForSchema('paper_project_intake', 'paper_project_intake_001');
+  const paperProjectRef = functionalRefForSchema('paper_project', 'paper_project_001');
   const acceptedRiskRef = functionalRefForSchema('accepted_risk', 'accepted_risk_001');
   const packageRef = functionalRefForSchema('topic_package', 'topic_package_001');
   const snapshotHashes = {
@@ -1341,6 +1387,28 @@ test('topic-selection v1c paper-project-bridge schemas validate bridge handoff i
     bridge,
     source_promotion_handoff: sourcePromotionHandoff,
   };
+  const consumedBridge = {
+    ...bridge,
+    paper_project_intake_ref: paperProjectIntakeRef,
+    target_paper_project_ref: paperProjectRef,
+  };
+  const consumedHandoff = {
+    ...handoff,
+    paper_project_intake_ref: paperProjectIntakeRef,
+    target_paper_project_ref: paperProjectRef,
+    bridge: consumedBridge,
+  };
+  const intakeResult = {
+    paper_project_bridge: consumedBridge,
+    handoff: consumedHandoff,
+    paper_project_id: paperProjectRef.ref_id,
+    paper_project_ref: paperProjectRef,
+    paper_project_intake_ref: paperProjectIntakeRef,
+    paper_project_created: true,
+    carried_literature_evidence_ids: ['literature_evidence_001'],
+    carried_accepted_risk_refs: [acceptedRiskRef],
+    carried_condition_refs: [packageRef],
+  };
 
   const validCreate = await app.inject({
     method: 'POST',
@@ -1349,6 +1417,21 @@ test('topic-selection v1c paper-project-bridge schemas validate bridge handoff i
   });
   const validRecord = await app.inject({ method: 'POST', url: '/record', payload: bridge });
   const validHandoff = await app.inject({ method: 'POST', url: '/handoff', payload: handoff });
+  const validIntakeBody = await app.inject({
+    method: 'POST',
+    url: '/intake-body',
+    payload: {
+      bridge_payload_hash: bridge.bridge_payload_hash,
+      title: 'Paper title from bridge intake',
+      research_direction: 'paper engineering',
+      created_by: 'hybrid',
+    },
+  });
+  const validIntakeResult = await app.inject({
+    method: 'POST',
+    url: '/intake-result',
+    payload: intakeResult,
+  });
   const invalidNestedDecision = await app.inject({
     method: 'POST',
     url: '/handoff',
@@ -1395,15 +1478,43 @@ test('topic-selection v1c paper-project-bridge schemas validate bridge handoff i
       created_by: 'automation',
     },
   });
+  const invalidIntakeMissingHash = await app.inject({
+    method: 'POST',
+    url: '/intake-body',
+    payload: {
+      created_by: 'hybrid',
+    },
+  });
+  const invalidIntakeActor = await app.inject({
+    method: 'POST',
+    url: '/intake-body',
+    payload: {
+      bridge_payload_hash: bridge.bridge_payload_hash,
+      created_by: 'system',
+    },
+  });
+  const invalidIntakeResult = await app.inject({
+    method: 'POST',
+    url: '/intake-result',
+    payload: {
+      ...intakeResult,
+      paper_project_id: '',
+    },
+  });
   await app.close();
 
   assert.equal(validCreate.statusCode, 200);
   assert.equal(validRecord.statusCode, 200);
   assert.equal(validHandoff.statusCode, 200);
+  assert.equal(validIntakeBody.statusCode, 200);
+  assert.equal(validIntakeResult.statusCode, 200);
   assert.equal(invalidNestedDecision.statusCode, 400);
   assert.equal(invalidWorkingCopy.statusCode, 400);
   assert.equal(invalidSourceHash.statusCode, 400);
   assert.equal(invalidCreatedBy.statusCode, 400);
+  assert.equal(invalidIntakeMissingHash.statusCode, 400);
+  assert.equal(invalidIntakeActor.statusCode, 400);
+  assert.equal(invalidIntakeResult.statusCode, 400);
 });
 
 test('topic-selection v1c downstream-feedback/recheck schemas load through direct and aggregate exports', () => {
@@ -2443,10 +2554,12 @@ test('research-lifecycle barrel re-exports the runtime value surface of split mo
     ...Object.keys(paperProjectContracts),
     ...Object.keys(literatureContracts),
     ...Object.keys(autoPullContracts),
+    ...Object.keys(experimentFoundationContracts),
     ...Object.keys(titleCardManagementContracts),
     ...Object.keys(researchArgumentContracts),
     ...Object.keys(topicSelectionControlPlaneContracts),
     ...Object.keys(topicSelectionSearchResourceContracts),
+    ...Object.keys(topicSelectionResourceSamplingContracts),
     ...Object.keys(topicSelectionEvidenceMapContracts),
     ...Object.keys(topicSelectionNeedValidationContracts),
     ...Object.keys(topicSelectionRecheckRiskMemoryContracts),
@@ -2468,6 +2581,53 @@ test('research-lifecycle barrel re-exports the runtime value surface of split mo
 
 test('research-lifecycle barrel keeps key contract helpers and schemas reachable', () => {
   assert.equal([...researchLifecycleContracts.AUTO_PULL_SOURCES].includes('ZOTERO'), true);
+  assert.equal(
+    [...researchLifecycleContracts.EXPERIMENT_FOUNDATION_DATASET_CATALOG_STATUSES].includes('active'),
+    true,
+  );
+  assert.equal(
+    [...researchLifecycleContracts.EXPERIMENT_FOUNDATION_EXECUTION_PROFILE_KINDS].includes('llm_fine_tuning'),
+    true,
+  );
+  assert.ok(researchLifecycleContracts.experimentFoundationRunRecipeSchema);
+  assert.ok(researchLifecycleContracts.experimentFoundationMaterializeTrainingTaskSpecRequestSchema);
+  assert.ok(researchLifecycleContracts.experimentFoundationTrainingTaskSpecSchema);
+  assert.ok(researchLifecycleContracts.experimentFoundationTrainingTaskMaterializationResultSchema);
+  assert.equal(
+    [...researchLifecycleContracts.EXPERIMENT_FOUNDATION_RESULT_VALIDATION_STATUSES].includes('accepted_partial'),
+    true,
+  );
+  assert.ok(researchLifecycleContracts.experimentFoundationExperimentResultSchema);
+  assert.ok(researchLifecycleContracts.experimentFoundationResultValidationReportSchema);
+  assert.ok(researchLifecycleContracts.experimentFoundationEvidenceCandidateSchema);
+  assert.ok(researchLifecycleContracts.experimentFoundationPaperExperimentSidecarSchema);
+  assert.equal(
+    [...researchLifecycleContracts.EXPERIMENT_FOUNDATION_ASSET_CANDIDATE_FAMILIES].includes('dataset'),
+    true,
+  );
+  assert.ok(researchLifecycleContracts.experimentFoundationDatasetAssetCandidateSchema);
+  assert.ok(researchLifecycleContracts.experimentFoundationAssetPromotionRequestSchema);
+  assert.ok(researchLifecycleContracts.experimentFoundationAssetPromotionResultSchema);
+  assert.equal(
+    [...researchLifecycleContracts.EXPERIMENT_FOUNDATION_RECORD_KINDS].includes('dataset_asset'),
+    true,
+  );
+  assert.equal(
+    [...researchLifecycleContracts.EXPERIMENT_FOUNDATION_RECORD_KINDS].includes('external_training_job'),
+    true,
+  );
+  assert.equal(
+    [...researchLifecycleContracts.EXPERIMENT_FOUNDATION_EXTERNAL_TRAINING_JOB_STATUSES].includes('running'),
+    true,
+  );
+  assert.ok(researchLifecycleContracts.createExperimentFoundationRecordRequestSchema);
+  assert.ok(researchLifecycleContracts.experimentFoundationStoredRecordSchema);
+  assert.ok(researchLifecycleContracts.experimentFoundationReadinessCheckRequestSchema);
+  assert.ok(researchLifecycleContracts.experimentFoundationPromotionDecisionRequestSchema);
+  assert.ok(researchLifecycleContracts.experimentFoundationExternalTrainingJobSchema);
+  assert.ok(researchLifecycleContracts.submitExternalTrainingJobRequestSchema);
+  assert.ok(researchLifecycleContracts.externalTrainingJobResponseSchema);
+  assert.ok(researchLifecycleContracts.collectExternalTrainingJobRequestSchema);
   assert.equal([...researchLifecycleContracts.LITERATURE_CONTENT_PROCESSING_STAGE_CODES].includes('INDEXED'), true);
   assert.deepEqual([...researchLifecycleContracts.LITERATURE_CONTENT_PROCESSING_STAGE_CODES], [
     'CITATION_NORMALIZED',

@@ -601,6 +601,7 @@ export class TopicSelectionV1cHumanPromotionDecisionService {
         package_version: input.gateHandoff.package_version,
         contribution_summary: this.readString(excerpt, 'contribution_summary'),
         evaluation_plan: this.readString(excerpt, 'evaluation_plan'),
+        selected_literature_evidence_ids: this.asStringArray(excerpt.selected_literature_evidence_ids),
         selected_evidence_refs: input.gateHandoff.dossier.dossier_payload
           ? this.asArray(excerpt.selected_evidence_refs)
           : [],

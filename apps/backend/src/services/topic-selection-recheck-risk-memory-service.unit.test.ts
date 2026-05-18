@@ -441,6 +441,43 @@ test('downstream feedback creates derived queue state through policy interpretat
   assert.equal(interpreted.queue_item?.handler_key, 'human_review');
 });
 
+test('downstream feedback preserves actionable stage routing for v1a v1b and v1c refs', async () => {
+  const cases: Array<[string, string, string]> = [
+    ['evidence_unit', 'evidence_or_search', 'stale_evidence'],
+    ['validated_need', 'validated_need', 'need_invalidated'],
+    ['research_slice', 'research_slice', 'boundary_drift'],
+    ['topic_question', 'topic_question', 'unanswerable_question'],
+    ['topic_value_assessment', 'value_assessment', 'overclaim'],
+    ['topic_package', 'topic_package', 'package_narrative_gap'],
+    ['promotion_decision', 'promotion', 'promotion_authorization_gap'],
+    ['paper_project_bridge', 'paper_project_bridge', 'bridge_trace_gap'],
+    ['merge_candidate', 'merge_candidate', 'merge_candidate_conflict'],
+    ['paper_project_intake', 'paper_project_intake', 'paper_project_constraint_conflict'],
+  ];
+
+  for (const [refType, expectedStage, reasonCode] of cases) {
+    const ctx = makeContext();
+    const affectedRef = ref(refType, `${refType}_001`);
+    const interpreted = await ctx.service.recordDownstreamFeedback({
+      source_ref: ref('downstream_topic_feedback', `feedback_${refType}`),
+      affected_ref: affectedRef,
+      feedback_type: `reviewer_check:${reasonCode}`,
+      reason_codes: [reasonCode],
+      summary: `Downstream feedback should route to ${expectedStage}.`,
+      impact_level: 'recheck_required',
+      severity: 'blocking',
+      required_actions: [`recheck_${expectedStage}`],
+      policy_version_id: 'policy_v1',
+    });
+
+    assert.equal(interpreted.event?.origin_stage, 'downstream');
+    assert.equal(interpreted.impact?.affected_stage, expectedStage);
+    assert.deepEqual(interpreted.impact?.required_actions, [`recheck_${expectedStage}`]);
+    assert.equal(interpreted.queue_item?.target_ref.ref_type, refType);
+    assert.equal(interpreted.queue_item?.required_actions[0], `recheck_${expectedStage}`);
+  }
+});
+
 test('accepted-risk impact resolution requires and records the accepted risk ref', async () => {
   const ctx = makeContext();
   const signal = await ctx.controlPlane.emitQualitySignal({

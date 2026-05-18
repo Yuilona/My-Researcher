@@ -8,6 +8,7 @@ import { LiteratureContentProcessingSettingsController } from './controllers/lit
 import { LiteratureFulltextAcquisitionController } from './controllers/literature-fulltext-acquisition-controller.js';
 import { LiteratureController } from './controllers/literature-controller.js';
 import { TopicSettingsController } from './controllers/topic-settings-controller.js';
+import { TopicSelectionResourceSamplingController } from './controllers/topic-selection-resource-sampling-controller.js';
 import { TopicSelectionV1aController } from './controllers/topic-selection-v1a-controller.js';
 import { TopicSelectionV1bController } from './controllers/topic-selection-v1b-controller.js';
 import { TopicSelectionV1cController } from './controllers/topic-selection-v1c-controller.js';
@@ -23,6 +24,7 @@ import { InMemoryTopicSelectionEvidenceMapRepository } from './repositories/in-m
 import { InMemoryTopicSelectionNeedValidationRepository } from './repositories/in-memory-topic-selection-need-validation-repository.js';
 import { InMemoryTopicSelectionOfflineEvaluationReplayRepository } from './repositories/in-memory-topic-selection-offline-evaluation-replay-repository.js';
 import { InMemoryTopicSelectionRecheckRiskMemoryRepository } from './repositories/in-memory-topic-selection-recheck-risk-memory-repository.js';
+import { InMemoryTopicSelectionResourceSamplingRepository } from './repositories/in-memory-topic-selection-resource-sampling-repository.js';
 import { InMemoryTopicSelectionSearchResourceRepository } from './repositories/in-memory-topic-selection-search-resource-repository.js';
 import { InMemoryTopicSelectionV1bIntakeRepository } from './repositories/in-memory-topic-selection-v1b-intake-repository.js';
 import { InMemoryTopicSelectionV1bResearchSliceRepository } from './repositories/in-memory-topic-selection-v1b-research-slice-repository.js';
@@ -48,6 +50,7 @@ import { PrismaTopicSelectionEvidenceMapRepository } from './repositories/prisma
 import { PrismaTopicSelectionNeedValidationRepository } from './repositories/prisma/prisma-topic-selection-need-validation-repository.js';
 import { PrismaTopicSelectionOfflineEvaluationReplayRepository } from './repositories/prisma/prisma-topic-selection-offline-evaluation-replay-repository.js';
 import { PrismaTopicSelectionRecheckRiskMemoryRepository } from './repositories/prisma/prisma-topic-selection-recheck-risk-memory-repository.js';
+import { PrismaTopicSelectionResourceSamplingRepository } from './repositories/prisma/prisma-topic-selection-resource-sampling-repository.js';
 import { PrismaTopicSelectionSearchResourceRepository } from './repositories/prisma/prisma-topic-selection-search-resource-repository.js';
 import { PrismaTopicSelectionV1bIntakeRepository } from './repositories/prisma/prisma-topic-selection-v1b-intake-repository.js';
 import { PrismaTopicSelectionV1bResearchSliceRepository } from './repositories/prisma/prisma-topic-selection-v1b-research-slice-repository.js';
@@ -85,6 +88,7 @@ import type { TopicSelectionEvidenceMapRepository } from './repositories/topic-s
 import type { TopicSelectionNeedValidationRepository } from './repositories/topic-selection-need-validation.repository.js';
 import type { TopicSelectionOfflineEvaluationReplayRepository } from './repositories/topic-selection-offline-evaluation-replay.repository.js';
 import type { TopicSelectionRecheckRiskMemoryRepository } from './repositories/topic-selection-recheck-risk-memory.repository.js';
+import type { TopicSelectionResourceSamplingRepository } from './repositories/topic-selection-resource-sampling.repository.js';
 import type { TopicSelectionSearchResourceRepository } from './repositories/topic-selection-search-resource.repository.js';
 import type { TopicSelectionV1bIntakeRepository } from './repositories/topic-selection-v1b-intake.repository.js';
 import type { TopicSelectionV1bResearchSliceRepository } from './repositories/topic-selection-v1b-research-slice.repository.js';
@@ -119,6 +123,7 @@ import { TopicSelectionEvidenceMapService } from './services/topic-selection-evi
 import { TopicSelectionNeedValidationService } from './services/topic-selection-need-validation-service.js';
 import { TopicSelectionOfflineEvaluationReplayService } from './services/topic-selection-offline-evaluation-replay-service.js';
 import { TopicSelectionRecheckRiskMemoryService } from './services/topic-selection-recheck-risk-memory-service.js';
+import { TopicSelectionResourceSamplingService } from './services/topic-selection-resource-sampling-service.js';
 import { TopicSelectionSearchResourceService } from './services/topic-selection-search-resource-service.js';
 import { TopicSelectionV1bIntakeService } from './services/topic-selection-v1b-intake-service.js';
 import { TopicSelectionV1bResearchSliceService } from './services/topic-selection-v1b-research-slice-service.js';
@@ -138,6 +143,7 @@ import { DurableOutboxGovernanceEventDeliveryAdapter } from './services/event-de
 type RepositoryStrategy = 'memory' | 'prisma';
 
 export type BuildAppOptions = {
+  topicSelectionResourceSamplingLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
   topicSelectionV1bLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
   topicSelectionV1cPromotionGateLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
 };
@@ -208,6 +214,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     storeConfig.experimentFoundationStrategy,
   );
   const topicSelectionControlPlaneRepository = createTopicSelectionControlPlaneRepository(storeConfig.titleCardStrategy);
+  const topicSelectionResourceSamplingRepository = createTopicSelectionResourceSamplingRepository(storeConfig.titleCardStrategy);
   const topicSelectionSearchResourceRepository = createTopicSelectionSearchResourceRepository(storeConfig.titleCardStrategy);
   const topicSelectionEvidenceMapRepository = createTopicSelectionEvidenceMapRepository(storeConfig.titleCardStrategy);
   const topicSelectionNeedValidationRepository = createTopicSelectionNeedValidationRepository(storeConfig.titleCardStrategy);
@@ -307,6 +314,16 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const llmGateway = new BackendLlmGateway({
     settingsService: literatureContentProcessingSettingsService,
   });
+  const topicSelectionResourceSamplingLlmGateway = options.topicSelectionResourceSamplingLlmGateway ?? llmGateway;
+  const topicSelectionResourceSamplingService = new TopicSelectionResourceSamplingService({
+    repository: topicSelectionResourceSamplingRepository,
+    literatureRepository,
+    controlPlaneService: topicSelectionControlPlaneService,
+    llmGateway: topicSelectionResourceSamplingLlmGateway,
+  });
+  const topicSelectionResourceSamplingController = new TopicSelectionResourceSamplingController(
+    topicSelectionResourceSamplingService,
+  );
   const topicSelectionV1bLlmGateway = options.topicSelectionV1bLlmGateway ?? llmGateway;
   const topicSelectionV1cPromotionGateLlmGateway = options.topicSelectionV1cPromotionGateLlmGateway ?? llmGateway;
   const topicSelectionV1bIntakeService = new TopicSelectionV1bIntakeService(
@@ -364,6 +381,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const topicSelectionV1cPaperProjectBridgeService = new TopicSelectionV1cPaperProjectBridgeService({
     repository: topicSelectionV1cPaperProjectBridgeRepository,
     humanPromotionDecisionService: topicSelectionV1cHumanPromotionDecisionService,
+    paperProjectGateway: {
+      createPaperProject: (input) => researchLifecycleService.createPaperProject(input),
+      deletePaperProject: (paperId) => researchLifecycleService.deletePaperProject(paperId),
+    },
   });
   const topicSelectionV1cDownstreamFeedbackRecheckService = new TopicSelectionV1cDownstreamFeedbackRecheckService({
     repository: topicSelectionV1cDownstreamFeedbackRecheckRepository,
@@ -471,7 +492,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     await registerTitleCardManagementRoutes(instance, titleCardManagementController);
     await registerExperimentFoundationRoutes(instance, experimentFoundationController);
     await registerExperimentFoundationExecutionRoutes(instance, experimentFoundationExecutionController);
-    await registerTopicSelectionV1aRoutes(instance, topicSelectionV1aController);
+    await registerTopicSelectionV1aRoutes(instance, topicSelectionV1aController, topicSelectionResourceSamplingController);
     await registerTopicSelectionV1bRoutes(instance, topicSelectionV1bController);
     await registerTopicSelectionV1cRoutes(instance, topicSelectionV1cController);
     await registerLiteratureAcquisitionSettingsRoutes(instance, literatureAcquisitionSettingsController);
@@ -601,6 +622,17 @@ function createTopicSelectionControlPlaneRepository(
   }
 
   return new InMemoryTopicSelectionControlPlaneRepository();
+}
+
+function createTopicSelectionResourceSamplingRepository(
+  strategy: RepositoryStrategy,
+): TopicSelectionResourceSamplingRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaTopicSelectionResourceSamplingRepository(prisma);
+  }
+
+  return new InMemoryTopicSelectionResourceSamplingRepository();
 }
 
 function createTopicSelectionSearchResourceRepository(

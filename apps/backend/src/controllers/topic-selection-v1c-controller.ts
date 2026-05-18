@@ -14,6 +14,10 @@ type PromotionInputSnapshotBody = Parameters<TopicSelectionV1cPromotionInputServ
 type PromotionGateSupportBody = Parameters<TopicSelectionV1cPromotionGateService['createPromotionGateSupport']>[0];
 type HumanPromotionDecisionBody = Parameters<TopicSelectionV1cHumanPromotionDecisionService['recordHumanPromotionDecision']>[0];
 type PaperProjectBridgeBody = Parameters<TopicSelectionV1cPaperProjectBridgeService['createPaperProjectBridge']>[0];
+type PaperProjectBridgeIntakeBody = Omit<
+  Parameters<TopicSelectionV1cPaperProjectBridgeService['createPaperProjectIntakeFromBridge']>[0],
+  'paper_project_bridge_id'
+>;
 type DownstreamFeedbackBody = Parameters<TopicSelectionV1cDownstreamFeedbackRecheckService['recordDownstreamTopicFeedback']>[0];
 export type V1cOfflineDatasetBody = Parameters<TopicSelectionOfflineEvaluationReplayService['createDataset']>[0];
 type OfflineCaseBody = Parameters<TopicSelectionOfflineEvaluationReplayService['addCase']>[0];
@@ -224,6 +228,21 @@ export class TopicSelectionV1cController {
     try {
       const result = await this.paperProjectBridge.getPaperProjectBridge(request.params.bridgeId);
       return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createPaperProjectIntakeFromBridge = async (
+    request: FastifyRequest<{ Params: { bridgeId: string }; Body: PaperProjectBridgeIntakeBody }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.paperProjectBridge.createPaperProjectIntakeFromBridge({
+        ...request.body,
+        paper_project_bridge_id: request.params.bridgeId,
+      });
+      return reply.status(result.paper_project_created ? 201 : 200).send(result);
     } catch (error) {
       return handleError(reply, error);
     }

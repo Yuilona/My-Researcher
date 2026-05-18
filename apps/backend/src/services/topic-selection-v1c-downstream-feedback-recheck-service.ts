@@ -520,7 +520,7 @@ export class TopicSelectionV1cDownstreamFeedbackRecheckService {
     bridgeHandoff: TopicSelectionPaperProjectBridgeHandoff,
   ): TopicSelectionFunctionalRef | null {
     return bridgeHandoff.source_refs.find((sourceRef) =>
-      sourceRef.ref_type.includes('evidence') || sourceRef.ref_type.includes('search')) ?? null;
+      sourceRef.ref_type.includes('evidence') || this.isSearchRefType(sourceRef.ref_type)) ?? null;
   }
 
   private requireEvidenceOrSearchRef(
@@ -585,6 +585,13 @@ export class TopicSelectionV1cDownstreamFeedbackRecheckService {
       case 'paper_project_intake':
         return 'paper_project_intake';
     }
+  }
+
+  private isSearchRefType(refType: string): boolean {
+    return refType === 'search'
+      || refType.startsWith('search_')
+      || refType.endsWith('_search')
+      || refType.includes('_search_');
   }
 
   private assertRef(ref: TopicSelectionFunctionalRef | undefined, label: string): void {

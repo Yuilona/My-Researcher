@@ -130,6 +130,45 @@ type RetryTelemetryState = {
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_RETRIES = 1;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function normalizeOpenAiStructuredOutputSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) {
+    return schema.map((item) => normalizeOpenAiStructuredOutputSchema(item));
+  }
+  if (!isRecord(schema)) {
+    return schema;
+  }
+
+  const normalized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === 'properties' && isRecord(value)) {
+      normalized.properties = Object.fromEntries(
+        Object.entries(value).map(([propertyKey, propertySchema]) => [
+          propertyKey,
+          normalizeOpenAiStructuredOutputSchema(propertySchema),
+        ]),
+      );
+      continue;
+    }
+    normalized[key] = normalizeOpenAiStructuredOutputSchema(value);
+  }
+
+  if (normalized.type === 'object' || isRecord(normalized.properties)) {
+    if (!isRecord(normalized.properties)) {
+      normalized.properties = {};
+    }
+    normalized.additionalProperties = false;
+    normalized.required = isRecord(normalized.properties)
+      ? Object.keys(normalized.properties)
+      : [];
+  }
+
+  return normalized;
+}
+
 export class BackendLlmGateway {
   constructor(
     private readonly options: {
@@ -339,7 +378,7 @@ export class BackendLlmGateway {
               type: 'json_schema',
               name: request.schemaName,
               strict: true,
-              schema: request.schema,
+              schema: normalizeOpenAiStructuredOutputSchema(request.schema),
             },
           },
         }),

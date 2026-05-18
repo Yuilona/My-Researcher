@@ -19,12 +19,20 @@ import type {
 import type {
   TopicSelectionPaperProjectBridgeRecord,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1c-paper-project-bridge-contracts';
+import type {
+  CreatePaperProjectRequest,
+  CreatePaperProjectResponse,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-project-contracts';
 
 import { AppError } from '../errors/app-error.js';
 import { InMemoryTopicSelectionV1cPaperProjectBridgeRepository } from '../repositories/in-memory-topic-selection-v1c-paper-project-bridge-repository.js';
 import { PrismaTopicSelectionV1cPaperProjectBridgeRepository } from '../repositories/prisma/prisma-topic-selection-v1c-paper-project-bridge-repository.js';
 import type {
   TopicSelectionV1cPaperProjectBridgePersistence,
+} from '../repositories/topic-selection-v1c-paper-project-bridge.repository.js';
+import {
+  TopicSelectionV1cPaperProjectBridgeAttachmentConflictError,
+  TopicSelectionV1cPaperProjectBridgeHashConflictError,
 } from '../repositories/topic-selection-v1c-paper-project-bridge.repository.js';
 import {
   TopicSelectionV1cPaperProjectBridgeService,
@@ -246,15 +254,60 @@ class StubHumanPromotionDecisionService {
   }
 }
 
+class RecordingPaperProjectGateway {
+  readonly createCalls: CreatePaperProjectRequest[] = [];
+  readonly deleteCalls: string[] = [];
+  private readonly papers = new Map<string, CreatePaperProjectResponse>();
+
+  async createPaperProject(input: CreatePaperProjectRequest): Promise<CreatePaperProjectResponse> {
+    this.createCalls.push(input);
+    const paperId = `paper_project_${String(this.createCalls.length).padStart(3, '0')}`;
+    const response: CreatePaperProjectResponse = {
+      paper_id: paperId,
+      status: 'active',
+      paper_active_sp_full: null,
+      paper_active_sp_partial: null,
+      created_at: NOW,
+    };
+    this.papers.set(paperId, response);
+    return response;
+  }
+
+  async deletePaperProject(paperId: string): Promise<void> {
+    this.deleteCalls.push(paperId);
+    this.papers.delete(paperId);
+  }
+
+  hasPaperProject(paperId: string): boolean {
+    return this.papers.has(paperId);
+  }
+}
+
+class AttachConflictPaperProjectBridgeRepository extends InMemoryTopicSelectionV1cPaperProjectBridgeRepository {
+  override async attachPaperProjectRefs(
+    paperProjectBridgeId: string,
+    _input: {
+      expected_bridge_payload_hash: string;
+      paper_project_intake_ref: TopicSelectionFunctionalRef;
+      target_paper_project_ref: TopicSelectionFunctionalRef;
+    },
+  ): Promise<TopicSelectionPaperProjectBridgeRecord> {
+    throw new TopicSelectionV1cPaperProjectBridgeAttachmentConflictError(paperProjectBridgeId);
+  }
+}
+
 function makeSubject(sourceHandoff: TopicSelectionPromotionBridgeHandoff = makeSourceHandoff()) {
   const repository = new InMemoryTopicSelectionV1cPaperProjectBridgeRepository();
+  const paperProjectGateway = new RecordingPaperProjectGateway();
   const service = new TopicSelectionV1cPaperProjectBridgeService({
     repository,
     humanPromotionDecisionService: new StubHumanPromotionDecisionService(sourceHandoff),
+    paperProjectGateway,
     idFactory: makeIdFactory(),
     now: () => NOW,
   });
   return {
+    paperProjectGateway,
     repository,
     service,
   };
@@ -301,6 +354,198 @@ test('promote_with_conditions carries conditions and duplicate creation is idemp
     second.handoff.early_check_obligations.includes('Re-check contribution claim before outline lock.'),
     true,
   );
+});
+
+test('paper project intake consumes active bridge once and preserves carried evidence and obligations', async () => {
+  const { service, repository, paperProjectGateway } = makeSubject();
+  const bridgeResult = await service.createPaperProjectBridge({
+    promotion_decision_id: 'promotion_decision_001',
+  });
+
+  const intake = await service.createPaperProjectIntakeFromBridge({
+    paper_project_bridge_id: bridgeResult.paper_project_bridge.paper_project_bridge_id,
+    bridge_payload_hash: bridgeResult.paper_project_bridge.bridge_payload_hash,
+    workspace_id: 'workspace_001',
+    title: 'Paper title from explicit intake request',
+    research_direction: 'RAG',
+    created_by: 'human',
+  });
+
+  assert.equal(intake.paper_project_created, true);
+  assert.equal(intake.paper_project_id, 'paper_project_001');
+  assert.equal(intake.paper_project_ref.ref_type, 'paper_project');
+  assert.equal(intake.paper_project_ref.ref_id, 'paper_project_001');
+  assert.equal(intake.paper_project_ref.version_id, bridgeResult.paper_project_bridge.bridge_payload_hash);
+  assert.equal(intake.paper_project_intake_ref.ref_type, 'paper_project_intake');
+  assert.equal(intake.paper_project_intake_ref.version_id, bridgeResult.paper_project_bridge.bridge_payload_hash);
+  assert.deepEqual(intake.carried_literature_evidence_ids, ['evidence_unit_001']);
+  assert.deepEqual(intake.carried_accepted_risk_refs, [ref('accepted_risk', 'accepted_risk_001')]);
+  assert.equal(
+    intake.carried_condition_refs.some((conditionRef) =>
+      conditionRef.ref_type === 'topic_package' && conditionRef.ref_id === 'topic_package_001'),
+    true,
+  );
+  assert.equal(paperProjectGateway.createCalls.length, 1);
+  assert.equal(paperProjectGateway.createCalls[0]?.title, 'Paper title from explicit intake request');
+  assert.equal(paperProjectGateway.createCalls[0]?.research_direction, 'RAG');
+  assert.equal(paperProjectGateway.createCalls[0]?.created_by, 'human');
+  assert.deepEqual(paperProjectGateway.createCalls[0]?.initial_context.literature_evidence_ids, [
+    'evidence_unit_001',
+  ]);
+
+  const stored = await repository.findBridgeById(bridgeResult.paper_project_bridge.paper_project_bridge_id);
+  assert.deepEqual(stored?.paper_project_intake_ref, intake.paper_project_intake_ref);
+  assert.deepEqual(stored?.target_paper_project_ref, intake.paper_project_ref);
+  assert.equal(stored?.bridge_payload_hash, bridgeResult.paper_project_bridge.bridge_payload_hash);
+  assert.equal(stored?.working_copy_payload_hash, bridgeResult.paper_project_bridge.working_copy_payload_hash);
+  assert.equal(stored?.promotion_input_snapshot_hash, bridgeResult.paper_project_bridge.promotion_input_snapshot_hash);
+
+  const duplicate = await service.createPaperProjectIntakeFromBridge({
+    paper_project_bridge_id: bridgeResult.paper_project_bridge.paper_project_bridge_id,
+    bridge_payload_hash: bridgeResult.paper_project_bridge.bridge_payload_hash,
+    title: 'Ignored duplicate intake title',
+    research_direction: 'ignored',
+    created_by: 'hybrid',
+  });
+
+  assert.equal(duplicate.paper_project_created, false);
+  assert.equal(duplicate.paper_project_id, intake.paper_project_id);
+  assert.deepEqual(duplicate.paper_project_ref, intake.paper_project_ref);
+  assert.deepEqual(duplicate.paper_project_intake_ref, intake.paper_project_intake_ref);
+  assert.equal(paperProjectGateway.createCalls.length, 1);
+
+  await assert.rejects(
+    () => service.createPaperProjectIntakeFromBridge({
+      paper_project_bridge_id: bridgeResult.paper_project_bridge.paper_project_bridge_id,
+      bridge_payload_hash: 'stale_after_intake_hash',
+      title: 'Stale duplicate must not be accepted',
+      created_by: 'hybrid',
+    }),
+    (error) => error instanceof AppError && error.errorCode === 'VERSION_CONFLICT',
+  );
+  assert.equal(paperProjectGateway.createCalls.length, 1);
+});
+
+test('paper project intake prefers explicit selected literature ids and blocks empty evidence baskets', async () => {
+  const explicitSource = makeSourceHandoff();
+  const explicitScope = explicitSource.promotion_commitment_profile.scope as Record<string, unknown>;
+  const explicitExcerpt = explicitScope.source_snapshot_excerpt as Record<string, unknown>;
+  explicitExcerpt.selected_literature_evidence_ids = [
+    'literature_evidence_explicit_001',
+    'literature_evidence_explicit_001',
+    'literature_evidence_explicit_002',
+  ];
+  const explicitSubject = makeSubject(explicitSource);
+  const explicitBridge = await explicitSubject.service.createPaperProjectBridge({
+    promotion_decision_id: 'promotion_decision_001',
+  });
+
+  const explicitIntake = await explicitSubject.service.createPaperProjectIntakeFromBridge({
+    paper_project_bridge_id: explicitBridge.paper_project_bridge.paper_project_bridge_id,
+    bridge_payload_hash: explicitBridge.paper_project_bridge.bridge_payload_hash,
+    created_by: 'hybrid',
+  });
+
+  assert.deepEqual(explicitIntake.carried_literature_evidence_ids, [
+    'literature_evidence_explicit_001',
+    'literature_evidence_explicit_002',
+  ]);
+  assert.deepEqual(
+    explicitSubject.paperProjectGateway.createCalls[0]?.initial_context.literature_evidence_ids,
+    ['literature_evidence_explicit_001', 'literature_evidence_explicit_002'],
+  );
+
+  const emptySource = makeSourceHandoff();
+  const emptyScope = emptySource.promotion_commitment_profile.scope as Record<string, unknown>;
+  const emptyExcerpt = emptyScope.source_snapshot_excerpt as Record<string, unknown>;
+  emptyExcerpt.selected_literature_evidence_ids = [];
+  emptyExcerpt.selected_evidence_refs = [];
+  const emptySubject = makeSubject(emptySource);
+  const emptyBridge = await emptySubject.service.createPaperProjectBridge({
+    promotion_decision_id: 'promotion_decision_001',
+  });
+
+  await assert.rejects(
+    () => emptySubject.service.createPaperProjectIntakeFromBridge({
+      paper_project_bridge_id: emptyBridge.paper_project_bridge.paper_project_bridge_id,
+      bridge_payload_hash: emptyBridge.paper_project_bridge.bridge_payload_hash,
+      created_by: 'hybrid',
+    }),
+    (error) => error instanceof AppError && error.errorCode === 'GATE_CONSTRAINT_FAILED',
+  );
+  assert.equal(emptySubject.paperProjectGateway.createCalls.length, 0);
+});
+
+test('paper project intake rejects stale preconditions before creating downstream project', async () => {
+  const { service, paperProjectGateway } = makeSubject();
+  const bridgeResult = await service.createPaperProjectBridge({
+    promotion_decision_id: 'promotion_decision_001',
+  });
+
+  await assert.rejects(
+    () => service.createPaperProjectIntakeFromBridge({
+      paper_project_bridge_id: bridgeResult.paper_project_bridge.paper_project_bridge_id,
+      bridge_payload_hash: 'stale_hash',
+      created_by: 'hybrid',
+    }),
+    (error) => error instanceof AppError && error.errorCode === 'VERSION_CONFLICT',
+  );
+  await assert.rejects(
+    () => service.createPaperProjectIntakeFromBridge({
+      paper_project_bridge_id: bridgeResult.paper_project_bridge.paper_project_bridge_id,
+      bridge_payload_hash: bridgeResult.paper_project_bridge.bridge_payload_hash,
+      workspace_id: 'workspace_other',
+      created_by: 'hybrid',
+    }),
+    (error) => error instanceof AppError && error.errorCode === 'VERSION_CONFLICT',
+  );
+  assert.equal(paperProjectGateway.createCalls.length, 0);
+});
+
+test('paper project intake requires gateway and rolls back PaperProject on attach conflict', async () => {
+  const repository = new InMemoryTopicSelectionV1cPaperProjectBridgeRepository();
+  const noGatewayService = new TopicSelectionV1cPaperProjectBridgeService({
+    repository,
+    humanPromotionDecisionService: new StubHumanPromotionDecisionService(makeSourceHandoff()),
+    idFactory: makeIdFactory(),
+    now: () => NOW,
+  });
+  const noGatewayBridge = await noGatewayService.createPaperProjectBridge({
+    promotion_decision_id: 'promotion_decision_001',
+  });
+
+  await assert.rejects(
+    () => noGatewayService.createPaperProjectIntakeFromBridge({
+      paper_project_bridge_id: noGatewayBridge.paper_project_bridge.paper_project_bridge_id,
+      bridge_payload_hash: noGatewayBridge.paper_project_bridge.bridge_payload_hash,
+      created_by: 'hybrid',
+    }),
+    (error) => error instanceof AppError && error.errorCode === 'GATE_CONSTRAINT_FAILED',
+  );
+
+  const conflictRepository = new AttachConflictPaperProjectBridgeRepository();
+  const paperProjectGateway = new RecordingPaperProjectGateway();
+  const service = new TopicSelectionV1cPaperProjectBridgeService({
+    repository: conflictRepository,
+    humanPromotionDecisionService: new StubHumanPromotionDecisionService(makeSourceHandoff()),
+    paperProjectGateway,
+    idFactory: makeIdFactory(),
+    now: () => NOW,
+  });
+  const bridgeResult = await service.createPaperProjectBridge({
+    promotion_decision_id: 'promotion_decision_001',
+  });
+
+  await assert.rejects(
+    () => service.createPaperProjectIntakeFromBridge({
+      paper_project_bridge_id: bridgeResult.paper_project_bridge.paper_project_bridge_id,
+      bridge_payload_hash: bridgeResult.paper_project_bridge.bridge_payload_hash,
+      created_by: 'hybrid',
+    }),
+    (error) => error instanceof AppError && error.errorCode === 'VERSION_CONFLICT',
+  );
+  assert.deepEqual(paperProjectGateway.deleteCalls, ['paper_project_001']);
+  assert.equal(paperProjectGateway.hasPaperProject('paper_project_001'), false);
 });
 
 test('non-promote, superseded, missing commitment, and workspace drift are rejected', async () => {
@@ -438,6 +683,58 @@ test('Prisma bridge repository round-trips bridge and control-plane records', as
   ]) {
     assert.equal(objectRefKeys.has(expectedRef), true, `${expectedRef} missing from trace objectRefs`);
   }
+});
+
+test('Prisma bridge repository attaches downstream PaperProject refs with hash guard', async () => {
+  const fake = new FakePaperProjectBridgePrismaClient();
+  const repository = new PrismaTopicSelectionV1cPaperProjectBridgeRepository(fake.client);
+  const service = new TopicSelectionV1cPaperProjectBridgeService({
+    repository,
+    humanPromotionDecisionService: new StubHumanPromotionDecisionService(makeSourceHandoff()),
+    idFactory: makeIdFactory(),
+    now: () => NOW,
+  });
+  const result = await service.createPaperProjectBridge({
+    promotion_decision_id: 'promotion_decision_001',
+  });
+  const bridgeId = result.paper_project_bridge.paper_project_bridge_id;
+
+  await assert.rejects(
+    () => repository.attachPaperProjectRefs(bridgeId, {
+      expected_bridge_payload_hash: 'stale_hash',
+      paper_project_intake_ref: ref('paper_project_intake', 'paper_project_intake_stale'),
+      target_paper_project_ref: ref('paper_project', 'paper_project_stale'),
+    }),
+    (error) => error instanceof TopicSelectionV1cPaperProjectBridgeHashConflictError,
+  );
+
+  const attached = await repository.attachPaperProjectRefs(bridgeId, {
+    expected_bridge_payload_hash: result.paper_project_bridge.bridge_payload_hash,
+    paper_project_intake_ref: ref(
+      'paper_project_intake',
+      'paper_project_intake_001',
+      result.paper_project_bridge.bridge_payload_hash,
+    ),
+    target_paper_project_ref: ref(
+      'paper_project',
+      'paper_project_001',
+      result.paper_project_bridge.bridge_payload_hash,
+    ),
+  });
+
+  assert.equal(attached.paper_project_intake_ref?.ref_id, 'paper_project_intake_001');
+  assert.equal(attached.target_paper_project_ref?.ref_id, 'paper_project_001');
+  const found = await repository.findBridgeById(bridgeId);
+  assert.deepEqual(found?.paper_project_intake_ref, attached.paper_project_intake_ref);
+  assert.deepEqual(found?.target_paper_project_ref, attached.target_paper_project_ref);
+  await assert.rejects(
+    () => repository.attachPaperProjectRefs(bridgeId, {
+      expected_bridge_payload_hash: result.paper_project_bridge.bridge_payload_hash,
+      paper_project_intake_ref: ref('paper_project_intake', 'paper_project_intake_duplicate'),
+      target_paper_project_ref: ref('paper_project', 'paper_project_duplicate'),
+    }),
+    (error) => error instanceof TopicSelectionV1cPaperProjectBridgeAttachmentConflictError,
+  );
 });
 
 test('Prisma bridge repository maps source promotion unique race to existing bridge', async () => {
@@ -640,6 +937,19 @@ class FakeModel {
     return [...this.rows.values()].find((row) => this.matches(row, where)) ?? null;
   }
 
+  async update({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) {
+    const current = await this.findUnique({ where });
+    if (!current) {
+      throw new Error(`No row matched ${JSON.stringify(where)}.`);
+    }
+    const updated = {
+      ...current,
+      ...data,
+    };
+    this.rows.set(String(updated.id), updated);
+    return updated;
+  }
+
   private matches(row: Record<string, unknown>, where: Record<string, unknown>): boolean {
     return Object.entries(where).every(([key, value]) => row[key] === value);
   }
@@ -697,6 +1007,8 @@ class FakePaperProjectBridgePrismaClient {
       topicSelectionPaperProjectBridge: {
         create: async ({ data }: { data: Record<string, unknown> }) => this.bridgeModel.create({ data }),
         findUnique: async ({ where }: { where: Record<string, unknown> }) => this.bridgeModel.findUnique({ where }),
+        update: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) =>
+          this.bridgeModel.update({ where, data }),
       },
     };
   }

@@ -52,6 +52,8 @@ const DEFAULT_MODEL: LlmModelRef = {
   modelId: 'gpt-5.4-mini',
   profileId: WORKFLOW_PROFILE_KEY,
 };
+const ADMITTABLE_ANSWERABILITY_VERDICTS = new Set(['answerable', 'answerable_with_risk']);
+const REQUIRED_TRACEABILITY_EVIDENCE_ROLES = ['support', 'challenge', 'baseline', 'context'] as const;
 
 type IdFactory = (prefix: string) => string;
 
@@ -213,6 +215,15 @@ export class TopicSelectionV1bTopicQuestionService {
                 'Form bounded, answerable v1b TopicQuestion candidates from the supplied selected ResearchSlice handoff.',
                 'Do not create value assessment, package, promotion, PaperProject, or new unmet-need evidence.',
                 'Copy upstream refs exactly and keep evidence separate from assumptions.',
+                'For assumption_refs, use only refs from topic_question_formation_input_json.assumptions; never cite the research_slice_ref as an assumption.',
+                'For boundary_check.preserved_boundary_refs and boundary_check.excluded_boundary_refs, cite only ref_type research_slice_boundary refs built from topic_question_formation_input_json.boundaries[*].research_slice_boundary_id; never cite the research_slice_ref as a boundary.',
+                'For all evidence ref fields, cite only the nested evidence_ref values from topic_question_formation_input_json.evidence_refs[*].evidence_ref; do not cite research_slice_boundary or research_slice_assumption refs as evidence.',
+                'Never invent placeholder refs or synthetic IDs; every ref_id in every evidence field must match one supplied upstream ref_id exactly.',
+                'For every answerable or answerable_with_risk candidate, make main_question specific, scoped, and phrased as a question; broad questions like "How can AI improve research?" are invalid.',
+                'Keep every main_question, expected_claim_shape, and falsification condition inside the included ResearchSlice boundaries and outside excluded boundaries; do not report boundary_violations for a candidate you expect to be admitted.',
+                'For every answerable or answerable_with_risk candidate, populate support_evidence_refs, challenge_evidence_refs, baseline_evidence_refs, and context_evidence_refs with inherited evidence refs where the handoff provides those roles.',
+                'For every answerable or answerable_with_risk candidate, include observable_success_criteria and actionable falsification_conditions with trigger refs, related contract fields, and expected actions.',
+                'Use blockers only for hard answerability failures or boundary violations; put ordinary evidence sufficiency uncertainty in risk_notes or human_review_triggers.',
               ].join(' '),
             },
             {
@@ -244,6 +255,7 @@ export class TopicSelectionV1bTopicQuestionService {
 
     let validation: CandidateValidationResult;
     try {
+      llmOutput = this.normalizeSliceBoundaryRefs(llmOutput, formationInput);
       validation = this.validateAndBuildCandidates({
         output: llmOutput,
         formationInput,
@@ -415,6 +427,7 @@ export class TopicSelectionV1bTopicQuestionService {
       candidateSet.topic_question_candidate_set_id,
       titleCardId,
     );
+    this.assertAcceptedRiskRefTypes(input.accepted_risk_refs ?? []);
 
     if (!this.isAdmitDecision(input.decision)) {
       const { workflow, gate, transition } = await this.recordSelectionControlPlane({
@@ -890,6 +903,250 @@ export class TopicSelectionV1bTopicQuestionService {
     };
   }
 
+  private normalizeSliceBoundaryRefs(
+    output: TopicSelectionFormTopicQuestionLlmOutput,
+    formationInput: TopicSelectionV1bTopicQuestionFormationInput,
+  ): TopicSelectionFormTopicQuestionLlmOutput {
+    return {
+      ...output,
+      question_frame: {
+        ...output.question_frame,
+        assumption_refs: this.normalizeAssumptionRefs(output.question_frame.assumption_refs, formationInput),
+        evidence_refs: this.normalizeEvidenceRefs(output.question_frame.evidence_refs, formationInput),
+      },
+      candidates: output.candidates.map((candidate) => {
+        const riskNormalized = this.normalizeCandidateRiskFields(candidate);
+        return {
+          ...riskNormalized,
+          answerability_plan: {
+            ...riskNormalized.answerability_plan,
+            required_evidence_refs: this.normalizeEvidenceRefs(
+              riskNormalized.answerability_plan.required_evidence_refs,
+              formationInput,
+            ),
+          },
+          boundary_check: {
+            ...riskNormalized.boundary_check,
+            preserved_boundary_refs: this.normalizeBoundaryRefsForKind(
+              riskNormalized.boundary_check.preserved_boundary_refs,
+              formationInput,
+              'included',
+            ),
+            excluded_boundary_refs: this.normalizeBoundaryRefsForKind(
+              riskNormalized.boundary_check.excluded_boundary_refs,
+              formationInput,
+              'excluded',
+            ),
+          },
+          traceability_check: {
+            ...riskNormalized.traceability_check,
+            support_evidence_refs: this.normalizeEvidenceRefs(
+              riskNormalized.traceability_check.support_evidence_refs,
+              formationInput,
+            ),
+            challenge_evidence_refs: this.normalizeEvidenceRefs(
+              riskNormalized.traceability_check.challenge_evidence_refs,
+              formationInput,
+            ),
+            baseline_evidence_refs: this.normalizeEvidenceRefs(
+              riskNormalized.traceability_check.baseline_evidence_refs,
+              formationInput,
+            ),
+            context_evidence_refs: this.normalizeEvidenceRefs(
+              riskNormalized.traceability_check.context_evidence_refs,
+              formationInput,
+            ),
+            mapped_evidence_refs: this.normalizeEvidenceRefs(
+              riskNormalized.traceability_check.mapped_evidence_refs,
+              formationInput,
+            ),
+          },
+          falsification_conditions: riskNormalized.falsification_conditions.map((condition) => ({
+            ...condition,
+            trigger_evidence_refs: this.normalizeEvidenceRefs(condition.trigger_evidence_refs, formationInput),
+            trigger_source_refs: this.normalizeSourceRefs(condition.trigger_source_refs, formationInput),
+          })),
+        };
+      }),
+    };
+  }
+
+  private normalizeCandidateRiskFields(
+    candidate: TopicSelectionFormTopicQuestionLlmOutput['candidates'][number],
+  ): TopicSelectionFormTopicQuestionLlmOutput['candidates'][number] {
+    const nonBlockingRiskNotes = candidate.blockers.filter((blocker) => this.isNonBlockingRiskNote(blocker));
+    if (nonBlockingRiskNotes.length === 0) {
+      return candidate;
+    }
+    return {
+      ...candidate,
+      blockers: candidate.blockers.filter((blocker) => !this.isNonBlockingRiskNote(blocker)),
+      risk_notes: this.uniqueStrings([...candidate.risk_notes, ...nonBlockingRiskNotes]),
+      human_review_triggers: this.uniqueStrings([
+        ...candidate.human_review_triggers,
+        'non_blocking_risk_note_demoted_from_blocker',
+      ]),
+    };
+  }
+
+  private isNonBlockingRiskNote(value: string): boolean {
+    const text = this.normalize(value);
+    return text.includes('no blocker is explicit')
+      || text.includes('no hard blocker')
+      || (
+        text.includes('open risk')
+        && text.includes('sufficiency')
+        && !/missing|required|violat|not answerable|cannot|impossible|out of scope|blocked/u.test(text)
+      );
+  }
+
+  private normalizeEvidenceRefs(
+    refs: TopicSelectionFunctionalRef[],
+    formationInput: TopicSelectionV1bTopicQuestionFormationInput,
+  ): TopicSelectionFunctionalRef[] {
+    const aliases = this.evidenceRefAliases(formationInput);
+    return this.uniqueRefs(refs.flatMap((ref) =>
+      aliases.get(this.refKey(ref))
+        ?? aliases.get(this.looseRefKey(ref))
+        ?? [ref],
+    ));
+  }
+
+  private normalizeAssumptionRefs(
+    refs: TopicSelectionFunctionalRef[],
+    formationInput: TopicSelectionV1bTopicQuestionFormationInput,
+  ): TopicSelectionFunctionalRef[] {
+    const aliases = this.assumptionRefAliases(formationInput);
+    return this.uniqueRefs(refs.flatMap((ref) => {
+      if (this.isSliceAggregateAlias(ref, formationInput)) {
+        return formationInput.assumptions.map((assumption) =>
+          this.ref('research_slice_assumption', assumption.research_slice_assumption_id, assumption.title_card_id),
+        );
+      }
+      return aliases.get(this.refKey(ref))
+        ?? aliases.get(this.looseRefKey(ref))
+        ?? aliases.get(this.relaxedSourceRefKey(ref))
+        ?? [ref];
+    }));
+  }
+
+  private normalizeSourceRefs(
+    refs: TopicSelectionFunctionalRef[],
+    formationInput: TopicSelectionV1bTopicQuestionFormationInput,
+  ): TopicSelectionFunctionalRef[] {
+    const aliases = this.sourceRefAliases(formationInput);
+    return this.uniqueRefs(refs.flatMap((ref) =>
+      aliases.get(this.refKey(ref))
+        ?? aliases.get(this.relaxedSourceRefKey(ref))
+        ?? [ref],
+    ));
+  }
+
+  private sourceRefAliases(
+    formationInput: TopicSelectionV1bTopicQuestionFormationInput,
+  ): Map<string, TopicSelectionFunctionalRef[]> {
+    const aliases = new Map<string, TopicSelectionFunctionalRef[]>();
+    for (const ref of this.compileFormationSourceRefs(formationInput)) {
+      aliases.set(this.refKey(ref), [ref]);
+      aliases.set(this.relaxedSourceRefKey(ref), [ref]);
+    }
+    return aliases;
+  }
+
+  private assumptionRefAliases(
+    formationInput: TopicSelectionV1bTopicQuestionFormationInput,
+  ): Map<string, TopicSelectionFunctionalRef[]> {
+    const aliases = new Map<string, TopicSelectionFunctionalRef[]>();
+    for (const assumption of formationInput.assumptions) {
+      const assumptionRef = this.ref(
+        'research_slice_assumption',
+        assumption.research_slice_assumption_id,
+        assumption.title_card_id,
+      );
+      aliases.set(this.refKey(assumptionRef), [assumptionRef]);
+      aliases.set(this.looseRefKey(assumptionRef), [assumptionRef]);
+      aliases.set(this.relaxedSourceRefKey(assumptionRef), [assumptionRef]);
+    }
+    return aliases;
+  }
+
+  private relaxedSourceRefKey(ref: TopicSelectionFunctionalRef): string {
+    return [
+      ref.ref_type,
+      this.relaxedSourceRefId(ref),
+      ref.title_card_id ?? '',
+      ref.version_id ?? '',
+    ].join(':');
+  }
+
+  private relaxedSourceRefId(ref: TopicSelectionFunctionalRef): string {
+    if (ref.ref_type === 'research_slice_boundary') {
+      return ref.ref_id
+        .replace(/^research_slice_boundary_/, '')
+        .replace(/^research_slice_/, '');
+    }
+    if (ref.ref_type === 'research_slice_assumption') {
+      return ref.ref_id
+        .replace(/^research_slice_assumption_/, '')
+        .replace(/^research_slice_/, '');
+    }
+    return ref.ref_id;
+  }
+
+  private evidenceRefAliases(
+    formationInput: TopicSelectionV1bTopicQuestionFormationInput,
+  ): Map<string, TopicSelectionFunctionalRef[]> {
+    const aliases = new Map<string, TopicSelectionFunctionalRef[]>();
+    for (const evidenceRef of formationInput.evidence_refs) {
+      aliases.set(this.refKey(evidenceRef.evidence_ref), [evidenceRef.evidence_ref]);
+      aliases.set(this.looseRefKey(evidenceRef.evidence_ref), [evidenceRef.evidence_ref]);
+      aliases.set(
+        this.refKey(this.ref('research_slice_evidence_ref', evidenceRef.research_slice_evidence_ref_id, evidenceRef.title_card_id)),
+        [evidenceRef.evidence_ref],
+      );
+    }
+    for (const boundary of formationInput.boundaries) {
+      aliases.set(
+        this.refKey(this.ref('research_slice_boundary', boundary.research_slice_boundary_id, boundary.title_card_id)),
+        boundary.evidence_refs,
+      );
+    }
+    for (const assumption of formationInput.assumptions) {
+      aliases.set(
+        this.refKey(this.ref('research_slice_assumption', assumption.research_slice_assumption_id, assumption.title_card_id)),
+        assumption.evidence_refs,
+      );
+    }
+    return aliases;
+  }
+
+  private looseRefKey(ref: TopicSelectionFunctionalRef): string {
+    return [ref.ref_type, ref.ref_id].join(':');
+  }
+
+  private normalizeBoundaryRefsForKind(
+    refs: TopicSelectionFunctionalRef[],
+    formationInput: TopicSelectionV1bTopicQuestionFormationInput,
+    boundaryKind: 'included' | 'excluded',
+  ): TopicSelectionFunctionalRef[] {
+    return this.uniqueRefs(refs.flatMap((ref) => {
+      if (!this.isSliceAggregateAlias(ref, formationInput)) {
+        return [ref];
+      }
+      return formationInput.boundaries
+        .filter((boundary) => boundary.boundary_kind === boundaryKind)
+        .map((boundary) => this.ref('research_slice_boundary', boundary.research_slice_boundary_id, boundary.title_card_id));
+    }));
+  }
+
+  private isSliceAggregateAlias(
+    ref: TopicSelectionFunctionalRef,
+    formationInput: TopicSelectionV1bTopicQuestionFormationInput,
+  ): boolean {
+    return this.refKey(ref) === this.refKey(formationInput.research_slice_ref)
+      || ref.ref_id === formationInput.research_slice_ref.ref_id;
+  }
+
   private validateFrame(frame: TopicSelectionFormTopicQuestionLlmOutput['question_frame'], context: QuestionContext): void {
     if (!this.aligns(frame.target_community, context.formationInput.target_community)) {
       throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'QuestionFrame target community drifts from ResearchSlice.');
@@ -951,6 +1208,64 @@ export class TopicSelectionV1bTopicQuestionService {
     if (claimViolations.length > 0) {
       throw new AppError(409, 'GATE_CONSTRAINT_FAILED', `TopicQuestion candidate ${ordinal} exceeds the ResearchSlice claim ceiling.`);
     }
+    this.validateCandidateQuality(candidate, ordinal);
+  }
+
+  private validateCandidateQuality(
+    candidate: TopicSelectionFormTopicQuestionLlmOutput['candidates'][number],
+    ordinal: number,
+  ): void {
+    if (!ADMITTABLE_ANSWERABILITY_VERDICTS.has(candidate.answerability_verdict)) {
+      return;
+    }
+    if (candidate.blockers.length > 0 || candidate.boundary_check.boundary_violations.length > 0) {
+      return;
+    }
+    if (!this.isSpecificQuestion(candidate.main_question)) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        `TopicQuestion candidate ${ordinal} is too broad or underspecified for v1b admission.`,
+      );
+    }
+    const missingEvidenceRoles = this.missingTraceabilityEvidenceRoles(candidate);
+    if (missingEvidenceRoles.length > 0) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        `TopicQuestion candidate ${ordinal} is missing required traceability evidence roles.`,
+        { missing_evidence_roles: missingEvidenceRoles },
+      );
+    }
+    if (candidate.observable_success_criteria.length === 0) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        `TopicQuestion candidate ${ordinal} must define observable success criteria.`,
+      );
+    }
+    if (candidate.falsification_conditions.length === 0) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        `TopicQuestion candidate ${ordinal} must define falsification conditions.`,
+      );
+    }
+    const weakFalsification = candidate.falsification_conditions.find((condition) =>
+      condition.statement.trim().length < 24
+      || (
+        condition.trigger_evidence_refs.length === 0
+        && condition.trigger_source_refs.length === 0
+      )
+      || condition.related_contract_fields.length === 0
+      || condition.expected_action.trim().length === 0);
+    if (weakFalsification) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        `TopicQuestion candidate ${ordinal} has an underspecified falsification condition.`,
+      );
+    }
   }
 
   private admissionBlockers(
@@ -996,6 +1311,15 @@ export class TopicSelectionV1bTopicQuestionService {
       blockers.push(error instanceof Error ? error.message : `${candidate.topic_question_candidate_id}: invalid answerability plan`);
     }
     return this.uniqueStrings(blockers);
+  }
+
+  private assertAcceptedRiskRefTypes(refs: TopicSelectionFunctionalRef[]): void {
+    const invalid = refs.filter((ref) => ref.ref_type !== 'accepted_risk');
+    if (invalid.length > 0) {
+      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'accepted_risk_refs must use ref_type accepted_risk.', {
+        invalid_refs: invalid,
+      });
+    }
   }
 
   private materializeQuestion(input: {
@@ -1613,6 +1937,32 @@ export class TopicSelectionV1bTopicQuestionService {
   private requiredEvidenceCategories(evidenceRefs: TopicSelectionTopicQuestionEvidenceRefRecord[]): string[] {
     const roles = new Set(evidenceRefs.map((ref) => ref.evidence_role));
     return TOPIC_SELECTION_TOPIC_QUESTION_EVIDENCE_ROLES.filter((role) => roles.has(role));
+  }
+
+  private missingTraceabilityEvidenceRoles(
+    candidate: TopicSelectionFormTopicQuestionLlmOutput['candidates'][number],
+  ): string[] {
+    const trace = candidate.traceability_check;
+    const refsByRole = {
+      support: trace.support_evidence_refs,
+      challenge: trace.challenge_evidence_refs,
+      baseline: trace.baseline_evidence_refs,
+      context: trace.context_evidence_refs,
+    };
+    return REQUIRED_TRACEABILITY_EVIDENCE_ROLES.filter((role) => refsByRole[role].length === 0);
+  }
+
+  private isSpecificQuestion(question: string): boolean {
+    const normalized = question.trim().toLowerCase();
+    if (normalized.length < 40 || !normalized.endsWith('?')) {
+      return false;
+    }
+    const broadPatterns = [
+      /^how can (ai|llms?|rag|systems?) (help|improve|impact|benefit)\b/u,
+      /^what is the (impact|effect|role|future) of\b/u,
+      /^can (ai|llms?|rag|systems?) improve\b/u,
+    ];
+    return !broadPatterns.some((pattern) => pattern.test(normalized));
   }
 
   private minConfidence(candidates: TopicSelectionTopicQuestionCandidateRecord[]): number | null {

@@ -367,6 +367,163 @@ test('T-057 handoff forms and persists trace-ready TopicQuestion candidates', as
   assert.equal(result.candidates[0]!.source_validated_need_refs[0]!.ref_id, 'validated_need_1');
 });
 
+test('prompt directs topic-question formation to cite boundary ids, not research_slice_ref', async () => {
+  const ctx = makeContext();
+
+  await formOnce(ctx);
+
+  const systemMessage = ctx.llmCalls[0]?.messages.find((message) => message.role === 'system')?.content ?? '';
+  assert.match(systemMessage, /boundary_check\.preserved_boundary_refs/);
+  assert.match(systemMessage, /research_slice_boundary/);
+  assert.match(systemMessage, /never cite the research_slice_ref as a boundary/);
+  assert.match(systemMessage, /For assumption_refs/);
+  assert.match(systemMessage, /never cite the research_slice_ref as an assumption/);
+  assert.match(systemMessage, /do not cite research_slice_boundary or research_slice_assumption refs as evidence/);
+  assert.match(systemMessage, /Use blockers only for hard answerability failures or boundary violations/);
+});
+
+test('known research_slice boundary placeholders are normalized by boundary kind before validation', async () => {
+  const candidate = makeCandidateDraft('question-a', {
+    boundary_check: {
+      ...makeCandidateDraft().boundary_check,
+      preserved_boundary_refs: [ref('research_slice_boundary', RESEARCH_SLICE_ID)],
+      excluded_boundary_refs: [ref('research_slice', RESEARCH_SLICE_ID, 'v1')],
+    },
+  });
+  const ctx = makeContext({ llmOutput: makeLlmOutput(makeFormationInput(), [candidate]) });
+
+  const result = await formOnce(ctx);
+
+  assert.deepEqual(
+    result.candidates[0]!.boundary_check_payload.preserved_boundary_refs,
+    [ref('research_slice_boundary', 'boundary_include_1')],
+  );
+  assert.deepEqual(
+    result.candidates[0]!.boundary_check_payload.excluded_boundary_refs,
+    [ref('research_slice_boundary', 'boundary_exclude_1')],
+  );
+});
+
+test('known research_slice placeholders in assumption refs are normalized to inherited assumptions', async () => {
+  const formationInput = makeFormationInput();
+  const output = makeLlmOutput(formationInput);
+  output.question_frame = {
+    ...output.question_frame,
+    assumption_refs: [ref('research_slice_assumption', RESEARCH_SLICE_ID)],
+  };
+  const ctx = makeContext({ formationInput, llmOutput: output });
+
+  const result = await formOnce(ctx);
+
+  assert.deepEqual(result.question_frame.assumption_refs, [
+    ref('research_slice_assumption', 'assumption_resource_1'),
+  ]);
+});
+
+test('assumption refs with dropped assumption prefix are normalized to inherited assumptions', async () => {
+  const formationInput = makeFormationInput({
+    assumptions: [makeAssumption('research_slice_assumption_852e0b42-5609-42c3-80c0-e1424aaad89d')],
+  });
+  const output = makeLlmOutput(formationInput);
+  output.question_frame = {
+    ...output.question_frame,
+    assumption_refs: [ref('research_slice_assumption', 'research_slice_852e0b42-5609-42c3-80c0-e1424aaad89d')],
+  };
+  const ctx = makeContext({ formationInput, llmOutput: output });
+
+  const result = await formOnce(ctx);
+
+  assert.deepEqual(result.question_frame.assumption_refs, [
+    ref('research_slice_assumption', 'research_slice_assumption_852e0b42-5609-42c3-80c0-e1424aaad89d'),
+  ]);
+});
+
+test('known slice wrapper refs in evidence fields are normalized to inherited evidence refs', async () => {
+  const formationInput = makeFormationInput();
+  const candidate = makeCandidateDraft('question-a', {
+    answerability_plan: makeAnswerabilityPlan({
+      required_evidence_refs: [ref('research_slice_boundary', 'boundary_include_1')],
+    }),
+    traceability_check: {
+      ...makeCandidateDraft().traceability_check,
+      support_evidence_refs: [ref('research_slice_evidence_ref', 'slice_evidence_support_1')],
+      mapped_evidence_refs: [ref('research_slice_assumption', 'assumption_resource_1')],
+    },
+    falsification_conditions: [
+      {
+        ...makeCandidateDraft().falsification_conditions[0]!,
+        trigger_evidence_refs: [ref('research_slice_boundary', 'boundary_exclude_1')],
+      },
+    ],
+  });
+  const output = makeLlmOutput(formationInput, [candidate]);
+  output.question_frame = {
+    ...output.question_frame,
+    evidence_refs: [ref('research_slice_assumption', 'assumption_resource_1')],
+  };
+  const ctx = makeContext({ formationInput, llmOutput: output });
+
+  const result = await formOnce(ctx);
+
+  assert.deepEqual(result.question_frame.evidence_refs, [ref('evidence_unit', 'context_1')]);
+  assert.deepEqual(
+    result.candidates[0]!.answerability_plan_payload.required_evidence_refs,
+    [ref('evidence_unit', 'support_1')],
+  );
+  assert.deepEqual(
+    result.candidates[0]!.traceability_check_payload.support_evidence_refs,
+    [ref('evidence_unit', 'support_1')],
+  );
+  assert.deepEqual(
+    result.candidates[0]!.traceability_check_payload.mapped_evidence_refs,
+    [ref('evidence_unit', 'context_1')],
+  );
+  assert.deepEqual(
+    result.candidates[0]!.falsification_conditions_payload[0]!.trigger_evidence_refs,
+    [ref('evidence_unit', 'support_1')],
+  );
+});
+
+test('known evidence refs with drifted title_card_id are normalized to inherited refs', async () => {
+  const formationInput = makeFormationInput();
+  const candidate = makeCandidateDraft('question-a', {
+    traceability_check: {
+      ...makeCandidateDraft().traceability_check,
+      support_evidence_refs: [
+        {
+          ...ref('evidence_unit', 'support_1'),
+          title_card_id: 'wrong_title_card',
+        },
+      ],
+    },
+  });
+  const ctx = makeContext({ formationInput, llmOutput: makeLlmOutput(formationInput, [candidate]) });
+
+  const result = await formOnce(ctx);
+
+  assert.equal(result.form_topic_question_run.status, 'succeeded');
+  assert.deepEqual(
+    result.candidates[0]!.traceability_check_payload.support_evidence_refs,
+    [ref('evidence_unit', 'support_1')],
+  );
+});
+
+test('non-blocking blocker prose is demoted to risk notes before candidate status is computed', async () => {
+  const candidate = makeCandidateDraft('question-a', {
+    blockers: [
+      'No blocker is explicit from the slice metadata, but sufficiency of comparative evidence remains an open risk.',
+    ],
+  });
+  const ctx = makeContext({ llmOutput: makeLlmOutput(makeFormationInput(), [candidate]) });
+
+  const result = await formOnce(ctx);
+
+  assert.equal(result.candidates[0]!.status, 'recommended');
+  assert.deepEqual(result.candidates[0]!.blockers, []);
+  assert.ok(result.candidates[0]!.risk_notes.some((note) => /No blocker is explicit/.test(note)));
+  assert.ok(result.candidates[0]!.human_review_triggers.includes('non_blocking_risk_note_demoted_from_blocker'));
+});
+
 test('mismatched T-057 handoff blocks before any LLM call', async () => {
   const ctx = makeContext({
     formationInput: makeFormationInput({
@@ -396,6 +553,36 @@ test('falsification source refs may cite inherited non-evidence slice refs', asy
 
   assert.equal(result.form_topic_question_run.status, 'succeeded');
   assert.equal(result.candidates[0]!.falsification_conditions_payload[0]!.trigger_source_refs[0]!.ref_type, 'research_slice_boundary');
+});
+
+test('falsification source refs normalize copied boundary ids with missing boundary prefix', async () => {
+  const formationInput = makeFormationInput({
+    boundaries: [
+      makeBoundary('research_slice_boundary_real_boundary_1', 'excluded'),
+    ],
+  });
+  const candidate = makeCandidateDraft('question-a', {
+    boundary_check: {
+      ...makeCandidateDraft().boundary_check,
+      preserved_boundary_refs: [],
+      excluded_boundary_refs: [ref('research_slice_boundary', 'research_slice_boundary_real_boundary_1')],
+    },
+    falsification_conditions: [
+      {
+        ...makeCandidateDraft().falsification_conditions[0]!,
+        trigger_source_refs: [ref('research_slice_boundary', 'research_slice_real_boundary_1')],
+      },
+    ],
+  });
+  const ctx = makeContext({ formationInput, llmOutput: makeLlmOutput(formationInput, [candidate]) });
+
+  const result = await formOnce(ctx);
+
+  assert.equal(result.form_topic_question_run.status, 'succeeded');
+  assert.deepEqual(
+    result.candidates[0]!.falsification_conditions_payload[0]!.trigger_source_refs,
+    [ref('research_slice_boundary', 'research_slice_boundary_real_boundary_1')],
+  );
 });
 
 test('LLM failure records a failed formation run and creates no candidate set', async () => {
@@ -539,6 +726,58 @@ test('claims that exceed the inherited slice ceiling block candidate persistence
   );
 });
 
+test('broad underspecified topic questions are blocked before selection', async () => {
+  const candidate = makeCandidateDraft('question-a', {
+    main_question: 'How can AI improve research?',
+  });
+  const ctx = makeContext({ llmOutput: makeLlmOutput(makeFormationInput(), [candidate]) });
+
+  await assert.rejects(
+    () => formOnce(ctx),
+    (error) => error instanceof AppError && /too broad or underspecified/.test(error.message),
+  );
+});
+
+test('admittable topic questions require full support challenge baseline context traceability', async () => {
+  const candidate = makeCandidateDraft('question-a', {
+    traceability_check: {
+      ...makeCandidateDraft().traceability_check,
+      challenge_evidence_refs: [],
+      context_evidence_refs: [],
+    },
+  });
+  const ctx = makeContext({ llmOutput: makeLlmOutput(makeFormationInput(), [candidate]) });
+
+  await assert.rejects(
+    () => formOnce(ctx),
+    (error) => error instanceof AppError
+      && /missing required traceability evidence roles/.test(error.message)
+      && Array.isArray(error.details?.missing_evidence_roles)
+      && error.details.missing_evidence_roles.includes('challenge')
+      && error.details.missing_evidence_roles.includes('context'),
+  );
+});
+
+test('admittable topic questions require actionable falsification conditions', async () => {
+  const candidate = makeCandidateDraft('question-a', {
+    falsification_conditions: [
+      {
+        ...makeCandidateDraft().falsification_conditions[0]!,
+        statement: 'Check later.',
+        trigger_evidence_refs: [],
+        trigger_source_refs: [],
+        related_contract_fields: [],
+      },
+    ],
+  });
+  const ctx = makeContext({ llmOutput: makeLlmOutput(makeFormationInput(), [candidate]) });
+
+  await assert.rejects(
+    () => formOnce(ctx),
+    (error) => error instanceof AppError && /underspecified falsification/.test(error.message),
+  );
+});
+
 test('park decision records selection context but creates no TopicQuestion', async () => {
   const ctx = makeContext();
   const formed = await formOnce(ctx);
@@ -654,6 +893,23 @@ test('answerable_with_risk requires accepted risk refs for system admission', as
       decision_rationale: 'Risk still needs acceptance.',
     }),
     (error) => error instanceof AppError && /answerable_with_risk/.test(error.message),
+  );
+});
+
+test('answerable_with_risk admission rejects non-risk authority refs', async () => {
+  const candidate = makeCandidateDraft('question-a', { answerability_verdict: 'answerable_with_risk' });
+  const ctx = makeContext({ llmOutput: makeLlmOutput(makeFormationInput(), [candidate]) });
+  const formed = await formOnce(ctx);
+
+  await assert.rejects(
+    () => ctx.service.selectTopicQuestion({
+      candidate_set_id: formed.candidate_set.topic_question_candidate_set_id,
+      decision: 'admit',
+      admitted_candidate_ids: [formed.candidates[0]!.topic_question_candidate_id],
+      accepted_risk_refs: [ref('evidence_unit', 'support_1')],
+      decision_rationale: 'Wrong ref type should not satisfy accepted risk.',
+    }),
+    (error) => error instanceof AppError && /accepted_risk/.test(error.message),
   );
 });
 

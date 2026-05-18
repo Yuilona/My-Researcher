@@ -801,15 +801,45 @@ export class TopicSelectionRecheckRiskMemoryService {
   }
 
   private stageForRef(ref: TopicSelectionFunctionalRef): string {
-    if (
-      ref.ref_type.includes('search')
-      || ref.ref_type.includes('evidence')
-      || ref.ref_type.includes('need')
-      || ref.ref_type.includes('validation')
-    ) {
-      return 'v1a';
+    const refType = ref.ref_type;
+    if (refType.includes('research_slice')) {
+      return 'research_slice';
+    }
+    if (this.isSearchRefType(refType) || refType.includes('evidence')) {
+      return 'evidence_or_search';
+    }
+    if (refType.includes('need') || refType.includes('validation')) {
+      return 'validated_need';
+    }
+    if (refType.includes('topic_question')) {
+      return 'topic_question';
+    }
+    if (refType.includes('value_assessment') || refType.includes('topic_value_assessment')) {
+      return 'value_assessment';
+    }
+    if (refType.includes('topic_package') || refType === 'package') {
+      return 'topic_package';
+    }
+    if (refType.includes('promotion')) {
+      return 'promotion';
+    }
+    if (refType.includes('paper_project_bridge')) {
+      return 'paper_project_bridge';
+    }
+    if (refType.includes('merge_candidate')) {
+      return 'merge_candidate';
+    }
+    if (refType.includes('paper_project_intake')) {
+      return 'paper_project_intake';
     }
     return 'unknown';
+  }
+
+  private isSearchRefType(refType: string): boolean {
+    return refType === 'search'
+      || refType.startsWith('search_')
+      || refType.endsWith('_search')
+      || refType.includes('_search_');
   }
 
   private ref(refType: string, refId: string, titleCardId?: string | null): TopicSelectionFunctionalRef {

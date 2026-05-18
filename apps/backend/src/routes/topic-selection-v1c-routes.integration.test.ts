@@ -26,6 +26,10 @@ import type {
 import type {
   TopicSelectionPromotionGateRequiredAction,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1c-promotion-gate-contracts';
+import type {
+  CreatePaperProjectRequest,
+  CreatePaperProjectResponse,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-project-contracts';
 
 import { buildApp } from '../app.js';
 import { TopicSelectionV1cController } from '../controllers/topic-selection-v1c-controller.js';
@@ -157,6 +161,35 @@ class NullRecheckSink implements TopicSelectionDownstreamRecheckSink {
       impact: null,
       queue_item: null,
     };
+  }
+}
+
+class RecordingPaperProjectGateway {
+  readonly createCalls: CreatePaperProjectRequest[] = [];
+  readonly deleteCalls: string[] = [];
+  private readonly papers = new Map<string, CreatePaperProjectResponse>();
+
+  async createPaperProject(input: CreatePaperProjectRequest): Promise<CreatePaperProjectResponse> {
+    this.createCalls.push(input);
+    const paperId = `paper_project_route_${this.createCalls.length}`;
+    const response: CreatePaperProjectResponse = {
+      paper_id: paperId,
+      status: 'active',
+      paper_active_sp_full: null,
+      paper_active_sp_partial: null,
+      created_at: NOW,
+    };
+    this.papers.set(paperId, response);
+    return response;
+  }
+
+  async deletePaperProject(paperId: string): Promise<void> {
+    this.deleteCalls.push(paperId);
+    this.papers.delete(paperId);
+  }
+
+  hasPaperProject(paperId: string): boolean {
+    return this.papers.has(paperId);
   }
 }
 
@@ -689,6 +722,7 @@ async function seedReadyV1cInputBundleInPrisma(
 type V1cRouteHarness = {
   app: FastifyInstance;
   offlineReplayService: TopicSelectionOfflineEvaluationReplayService;
+  paperProjectGateway: RecordingPaperProjectGateway;
 };
 
 async function makeV1cRouteApp(
@@ -733,9 +767,11 @@ async function makeV1cRouteHarness(
     promotionGateService,
     now: () => NOW,
   });
+  const paperProjectGateway = new RecordingPaperProjectGateway();
   const paperProjectBridgeService = new TopicSelectionV1cPaperProjectBridgeService({
     repository: new InMemoryTopicSelectionV1cPaperProjectBridgeRepository(),
     humanPromotionDecisionService,
+    paperProjectGateway,
     now: () => NOW,
   });
   const downstreamFeedbackRecheckService = new TopicSelectionV1cDownstreamFeedbackRecheckService({
@@ -757,7 +793,7 @@ async function makeV1cRouteHarness(
     offlineReplayService,
   );
   await registerTopicSelectionV1cRoutes(app, controller);
-  return { app, offlineReplayService };
+  return { app, offlineReplayService, paperProjectGateway };
 }
 
 async function createReadyGate(app: FastifyInstance, v1cInputBundleId: string) {
@@ -802,6 +838,220 @@ async function createReadyGate(app: FastifyInstance, v1cInputBundleId: string) {
   assert.equal(gateBundle.promotion_gate_check.promote_allowed, true);
   return { snapshot, gateBundle };
 }
+
+async function createActiveBridge(app: FastifyInstance, v1cInputBundleId: string) {
+  const { snapshot, gateBundle } = await createReadyGate(app, v1cInputBundleId);
+  const humanRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1c/promotion-decisions',
+    payload: {
+      promotion_gate_check_id: gateBundle.promotion_gate_check.promotion_gate_check_id,
+      decision: 'promote_to_paper_project',
+      human_actor: { actor_type: 'human', actor_id: 'route-reviewer' },
+      rationale: 'Authorize promotion from the exact frozen promotion input snapshot.',
+      confirmed_snapshot_hash: gateBundle.promotion_gate_check.promotion_input_snapshot_hash,
+    },
+  });
+  assertStatus(humanRes, 201);
+  const human = humanRes.json() as {
+    promotion_decision: { promotion_decision_id: string; bridge_eligible: boolean };
+  };
+  assert.equal(human.promotion_decision.bridge_eligible, true);
+
+  const bridgeRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1c/paper-project-bridges',
+    payload: {
+      promotion_decision_id: human.promotion_decision.promotion_decision_id,
+      created_by: 'system',
+    },
+  });
+  assertStatus(bridgeRes, 201);
+  const bridge = bridgeRes.json() as {
+    paper_project_bridge: {
+      paper_project_bridge_id: string;
+      bridge_status: string;
+      bridge_payload_hash: string;
+      working_copy_payload_hash: string;
+      source_promotion_decision_id: string;
+      promotion_input_snapshot_id: string;
+      promotion_input_snapshot_hash: string;
+      paper_project_intake_ref: null;
+      target_paper_project_ref: null;
+    };
+  };
+  assert.equal(bridge.paper_project_bridge.bridge_status, 'active');
+  return { snapshot, gateBundle, human, bridge };
+}
+
+test('topic-selection v1c HTTP paper-project-intake consumes active bridge with idempotent PaperProject refs', async () => {
+  const repository = makeSeededTopicPackageRepository(uniqueId('bridge-intake'));
+  const { app, paperProjectGateway } = await makeV1cRouteHarness(repository);
+  try {
+    const { bridge } = await createActiveBridge(app, repository.v1cInputBundle.v1b_to_v1c_input_bundle_id);
+    const bridgeId = bridge.paper_project_bridge.paper_project_bridge_id;
+    const bridgePayloadHash = bridge.paper_project_bridge.bridge_payload_hash;
+    const bridgeStableBefore = {
+      bridge_status: bridge.paper_project_bridge.bridge_status,
+      bridge_payload_hash: bridge.paper_project_bridge.bridge_payload_hash,
+      working_copy_payload_hash: bridge.paper_project_bridge.working_copy_payload_hash,
+      source_promotion_decision_id: bridge.paper_project_bridge.source_promotion_decision_id,
+      promotion_input_snapshot_id: bridge.paper_project_bridge.promotion_input_snapshot_id,
+      promotion_input_snapshot_hash: bridge.paper_project_bridge.promotion_input_snapshot_hash,
+    };
+    const intakeUrl = `/topic-selection/v1c/paper-project-bridges/${encodeURIComponent(bridgeId)}/paper-project-intake`;
+
+    const malformedRes = await app.inject({
+      method: 'POST',
+      url: intakeUrl,
+      payload: {
+        created_by: 'human',
+      },
+    });
+    assert.equal(malformedRes.statusCode, 400);
+    assert.equal((malformedRes.json() as { error: { code: string } }).error.code, 'INVALID_PAYLOAD');
+
+    const staleHashRes = await app.inject({
+      method: 'POST',
+      url: intakeUrl,
+      payload: {
+        bridge_payload_hash: 'stale_bridge_payload_hash',
+        created_by: 'hybrid',
+      },
+    });
+    assert.equal(staleHashRes.statusCode, 409);
+    assert.equal((staleHashRes.json() as { error: { code: string } }).error.code, 'VERSION_CONFLICT');
+    assert.equal(paperProjectGateway.createCalls.length, 0);
+
+    const workspaceDriftRes = await app.inject({
+      method: 'POST',
+      url: intakeUrl,
+      payload: {
+        bridge_payload_hash: bridgePayloadHash,
+        workspace_id: 'workspace_other',
+        created_by: 'hybrid',
+      },
+    });
+    assert.equal(workspaceDriftRes.statusCode, 409);
+    assert.equal((workspaceDriftRes.json() as { error: { code: string } }).error.code, 'VERSION_CONFLICT');
+    assert.equal(paperProjectGateway.createCalls.length, 0);
+
+    const intakeRes = await app.inject({
+      method: 'POST',
+      url: intakeUrl,
+      payload: {
+        bridge_payload_hash: bridgePayloadHash,
+        title: 'Downstream paper title from bridge intake',
+        research_direction: 'paper engineering',
+        created_by: 'hybrid',
+      },
+    });
+    assertStatus(intakeRes, 201);
+    const intake = intakeRes.json() as {
+      paper_project_bridge: {
+        paper_project_bridge_id: string;
+        paper_project_intake_ref: TopicSelectionFunctionalRef;
+        target_paper_project_ref: TopicSelectionFunctionalRef;
+      };
+      handoff: {
+        paper_project_intake_ref: TopicSelectionFunctionalRef;
+        target_paper_project_ref: TopicSelectionFunctionalRef;
+      };
+      paper_project_id: string;
+      paper_project_ref: TopicSelectionFunctionalRef;
+      paper_project_intake_ref: TopicSelectionFunctionalRef;
+      paper_project_created: boolean;
+      carried_literature_evidence_ids: string[];
+      carried_accepted_risk_refs: TopicSelectionFunctionalRef[];
+      carried_condition_refs: TopicSelectionFunctionalRef[];
+    };
+    assert.equal(intake.paper_project_created, true);
+    assert.equal(intake.paper_project_bridge.paper_project_bridge_id, bridgeId);
+    assert.equal(intake.paper_project_ref.ref_type, 'paper_project');
+    assert.equal(intake.paper_project_ref.ref_id, intake.paper_project_id);
+    assert.equal(intake.paper_project_ref.version_id, bridgePayloadHash);
+    assert.equal(intake.paper_project_intake_ref.ref_type, 'paper_project_intake');
+    assert.equal(intake.paper_project_intake_ref.version_id, bridgePayloadHash);
+    assert.deepEqual(intake.carried_literature_evidence_ids, ['LIT-v1c-route']);
+    assert.equal(intake.carried_accepted_risk_refs.length, 0);
+    assert.equal(intake.carried_condition_refs.length, 0);
+    assert.equal(paperProjectGateway.createCalls.length, 1);
+    assert.equal(paperProjectGateway.deleteCalls.length, 0);
+    assert.equal(paperProjectGateway.createCalls[0]?.title, 'Downstream paper title from bridge intake');
+    assert.equal(paperProjectGateway.createCalls[0]?.research_direction, 'paper engineering');
+    assert.equal(paperProjectGateway.createCalls[0]?.created_by, 'hybrid');
+    assert.deepEqual(
+      paperProjectGateway.createCalls[0]?.initial_context.literature_evidence_ids,
+      ['LIT-v1c-route'],
+    );
+    assert.equal(paperProjectGateway.hasPaperProject(intake.paper_project_id), true);
+
+    const bridgeReadRes = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1c/paper-project-bridges/${encodeURIComponent(bridgeId)}`,
+    });
+    assertStatus(bridgeReadRes, 200);
+    const bridgeRead = bridgeReadRes.json() as {
+      bridge_status: string;
+      bridge_payload_hash: string;
+      working_copy_payload_hash: string;
+      source_promotion_decision_id: string;
+      promotion_input_snapshot_id: string;
+      promotion_input_snapshot_hash: string;
+      paper_project_intake_ref: TopicSelectionFunctionalRef;
+      target_paper_project_ref: TopicSelectionFunctionalRef;
+    };
+    assert.deepEqual(
+      {
+        bridge_status: bridgeRead.bridge_status,
+        bridge_payload_hash: bridgeRead.bridge_payload_hash,
+        working_copy_payload_hash: bridgeRead.working_copy_payload_hash,
+        source_promotion_decision_id: bridgeRead.source_promotion_decision_id,
+        promotion_input_snapshot_id: bridgeRead.promotion_input_snapshot_id,
+        promotion_input_snapshot_hash: bridgeRead.promotion_input_snapshot_hash,
+      },
+      bridgeStableBefore,
+    );
+    assert.deepEqual(bridgeRead.paper_project_intake_ref, intake.paper_project_intake_ref);
+    assert.deepEqual(bridgeRead.target_paper_project_ref, intake.paper_project_ref);
+    assert.deepEqual(intake.handoff.paper_project_intake_ref, intake.paper_project_intake_ref);
+    assert.deepEqual(intake.handoff.target_paper_project_ref, intake.paper_project_ref);
+
+    const duplicateRes = await app.inject({
+      method: 'POST',
+      url: intakeUrl,
+      payload: {
+        bridge_payload_hash: bridgePayloadHash,
+        title: 'Attempted duplicate intake title',
+        research_direction: 'should not create another project',
+        created_by: 'human',
+      },
+    });
+    assertStatus(duplicateRes, 200);
+    const duplicate = duplicateRes.json() as typeof intake;
+    assert.equal(duplicate.paper_project_created, false);
+    assert.equal(duplicate.paper_project_id, intake.paper_project_id);
+    assert.deepEqual(duplicate.paper_project_intake_ref, intake.paper_project_intake_ref);
+    assert.deepEqual(duplicate.paper_project_ref, intake.paper_project_ref);
+    assert.equal(paperProjectGateway.createCalls.length, 1);
+
+    const staleDuplicateRes = await app.inject({
+      method: 'POST',
+      url: intakeUrl,
+      payload: {
+        bridge_payload_hash: 'stale_after_consumed_hash',
+        title: 'Stale duplicate intake must not be accepted',
+        research_direction: 'ignored',
+        created_by: 'hybrid',
+      },
+    });
+    assert.equal(staleDuplicateRes.statusCode, 409);
+    assert.equal((staleDuplicateRes.json() as { error: { code: string } }).error.code, 'VERSION_CONFLICT');
+    assert.equal(paperProjectGateway.createCalls.length, 1);
+  } finally {
+    await app.close();
+  }
+});
 
 test('topic-selection v1c HTTP routes drive ready bundle to bridge and downstream recheck projection', async () => {
   const repository = makeSeededTopicPackageRepository(uniqueId('promote'));
@@ -935,10 +1185,71 @@ test('topic-selection v1c HTTP routes drive ready bundle to bridge and downstrea
         paper_project_bridge_id: string;
         bridge_status: string;
         paper_project_intake_ref: null;
+        target_paper_project_ref: null;
+        source_promotion_decision_id: string;
+        promotion_input_snapshot_id: string;
+        promotion_input_snapshot_hash: string;
+        conditions: Array<{ condition_code: string; early_check_obligations: string[] }>;
+        early_check_obligations: string[];
+        working_copy_payload: {
+          claim_ceiling: string;
+          conditions: Array<{ condition_code: string }>;
+          early_check_obligations: string[];
+          initial_planning_notes: string[];
+          source_lineage_summary: {
+            promotion_decision_id: string;
+            promotion_input_snapshot_id: string;
+            snapshot_hashes: { promotion_input_snapshot_hash: string };
+          };
+        };
+      };
+      handoff: {
+        paper_project_intake_ref: null;
+        target_paper_project_ref: null;
+        working_copy_payload_hash: string;
       };
     };
     assert.equal(bridge.paper_project_bridge.bridge_status, 'active');
     assert.equal(bridge.paper_project_bridge.paper_project_intake_ref, null);
+    assert.equal(bridge.paper_project_bridge.target_paper_project_ref, null);
+    assert.equal(bridge.paper_project_bridge.source_promotion_decision_id, human.promotion_decision.promotion_decision_id);
+    assert.equal(bridge.paper_project_bridge.promotion_input_snapshot_id, snapshot.promotion_input_snapshot_id);
+    assert.equal(bridge.paper_project_bridge.promotion_input_snapshot_hash, snapshot.promotion_input_snapshot_hash);
+    assert.equal(bridge.paper_project_bridge.conditions[0]?.condition_code, 'verify_claim_ceiling');
+    assert.equal(
+      bridge.paper_project_bridge.early_check_obligations.includes('Verify claim ceiling before outline lock.'),
+      true,
+    );
+    assert.equal(
+      bridge.paper_project_bridge.working_copy_payload.claim_ceiling,
+      'Can claim reviewer-aligned planning feasibility, not production superiority.',
+    );
+    assert.equal(bridge.paper_project_bridge.working_copy_payload.conditions[0]?.condition_code, 'verify_claim_ceiling');
+    assert.equal(
+      bridge.paper_project_bridge.working_copy_payload.early_check_obligations.includes(
+        'Verify claim ceiling before outline lock.',
+      ),
+      true,
+    );
+    assert.equal(
+      bridge.paper_project_bridge.working_copy_payload.initial_planning_notes.some((note) =>
+        note.includes('Condition verify_claim_ceiling')),
+      true,
+    );
+    assert.equal(
+      bridge.paper_project_bridge.working_copy_payload.source_lineage_summary.promotion_decision_id,
+      human.promotion_decision.promotion_decision_id,
+    );
+    assert.equal(
+      bridge.paper_project_bridge.working_copy_payload.source_lineage_summary.promotion_input_snapshot_id,
+      snapshot.promotion_input_snapshot_id,
+    );
+    assert.equal(
+      bridge.paper_project_bridge.working_copy_payload.source_lineage_summary.snapshot_hashes.promotion_input_snapshot_hash,
+      snapshot.promotion_input_snapshot_hash,
+    );
+    assert.equal(bridge.handoff.paper_project_intake_ref, null);
+    assert.equal(bridge.handoff.target_paper_project_ref, null);
 
     const bridgeReadRes = await app.inject({
       method: 'GET',
@@ -1047,6 +1358,399 @@ test('topic-selection v1c HTTP routes drive ready bundle to bridge and downstrea
     });
     assertStatus(listAfterNoRecheckRes, 200);
     assert.equal((listAfterNoRecheckRes.json() as { items: unknown[] }).items.length, 2);
+  } finally {
+    await app.close();
+  }
+});
+
+test('topic-selection v1c HTTP downstream feedback maps loopbacks append-only without mutating bridge', async () => {
+  const repository = makeSeededTopicPackageRepository(uniqueId('downstream-loopback'));
+  const app = await makeV1cRouteApp(repository);
+  try {
+    const { bridge } = await createActiveBridge(app, repository.v1cInputBundle.v1b_to_v1c_input_bundle_id);
+    const bridgeId = bridge.paper_project_bridge.paper_project_bridge_id;
+    const bridgeBeforeRes = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1c/paper-project-bridges/${encodeURIComponent(bridgeId)}`,
+    });
+    assertStatus(bridgeBeforeRes, 200);
+    const bridgeBefore = bridgeBeforeRes.json() as {
+      bridge_status: string;
+      bridge_payload_hash: string;
+      working_copy_payload_hash: string;
+      source_promotion_decision_id: string;
+      promotion_input_snapshot_id: string;
+      promotion_input_snapshot_hash: string;
+      paper_project_intake_ref: null;
+      target_paper_project_ref: null;
+    };
+    const bridgeBeforeStableFields = {
+      bridge_status: bridgeBefore.bridge_status,
+      bridge_payload_hash: bridgeBefore.bridge_payload_hash,
+      working_copy_payload_hash: bridgeBefore.working_copy_payload_hash,
+      source_promotion_decision_id: bridgeBefore.source_promotion_decision_id,
+      promotion_input_snapshot_id: bridgeBefore.promotion_input_snapshot_id,
+      promotion_input_snapshot_hash: bridgeBefore.promotion_input_snapshot_hash,
+      paper_project_intake_ref: bridgeBefore.paper_project_intake_ref,
+      target_paper_project_ref: bridgeBefore.target_paper_project_ref,
+    };
+
+    const missingActionRes = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1c/downstream-feedback',
+      payload: {
+        paper_project_bridge_id: bridgeId,
+        downstream_source_kind: 'reviewer_check',
+        downstream_source_ref: ref('reviewer_check', 'missing_required_action'),
+        feedback_signal: 'stale_evidence',
+        severity: 'blocking',
+        summary: 'A recheck-producing feedback signal must explain the required action.',
+        created_by: 'human',
+      },
+    });
+    assert.equal(missingActionRes.statusCode, 400);
+    assert.equal((missingActionRes.json() as { error: { code: string } }).error.code, 'INVALID_PAYLOAD');
+
+    const workspaceDriftRes = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1c/downstream-feedback',
+      payload: {
+        paper_project_bridge_id: bridgeId,
+        workspace_id: 'workspace_other',
+        downstream_source_kind: 'reviewer_check',
+        downstream_source_ref: ref('reviewer_check', 'workspace_drift'),
+        feedback_signal: 'stale_evidence',
+        severity: 'blocking',
+        summary: 'Workspace drift must not create feedback.',
+        required_action: 'Recheck evidence only inside the owning workspace.',
+        created_by: 'human',
+      },
+    });
+    assert.equal(workspaceDriftRes.statusCode, 409);
+    assert.equal((workspaceDriftRes.json() as { error: { code: string } }).error.code, 'VERSION_CONFLICT');
+
+    const cases = [
+      ['stale_evidence', 'evidence_or_search', 'warning', 'stale'],
+      ['overclaim', 'value_assessment', 'blocking', 'recheck_required'],
+      ['unanswerable_question', 'topic_question', 'blocking', 'recheck_required'],
+      ['boundary_drift', 'research_slice', 'blocking', 'recheck_required'],
+      ['need_invalidated', 'validated_need', 'critical', 'invalidated'],
+      ['package_narrative_gap', 'package', 'blocking', 'recheck_required'],
+      ['promotion_authorization_gap', 'promotion', 'blocking', 'recheck_required'],
+      ['bridge_trace_gap', 'paper_project_bridge', 'blocking', 'recheck_required'],
+      ['commitment_gap', 'paper_project_bridge', 'blocking', 'recheck_required'],
+      ['merge_candidate_conflict', 'merge_candidate', 'blocking', 'recheck_required'],
+      ['paper_project_constraint_conflict', 'paper_project_intake', 'blocking', 'recheck_required'],
+      ['downstream_mutation_attempt', 'paper_project_bridge', 'critical', 'invalidated'],
+      ['no_recheck_needed', 'paper_project_bridge', 'info', 'no_impact'],
+    ] as const;
+    const expectedAffectedRefTypes: Record<string, string> = {
+      evidence_or_search: 'evidence_unit',
+      value_assessment: 'topic_value_assessment',
+      topic_question: 'topic_question',
+      research_slice: 'research_slice',
+      validated_need: 'validated_need',
+      package: 'topic_package',
+      promotion: 'promotion_decision',
+      paper_project_bridge: 'paper_project_bridge',
+      merge_candidate: 'merge_candidate',
+      paper_project_intake: 'paper_project_intake',
+    };
+    const feedbackIds: string[] = [];
+    const recheckIds: string[] = [];
+
+    for (const [feedbackSignal, expectedTarget, severity, expectedImpact] of cases) {
+      const requiresRecheck = feedbackSignal !== 'no_recheck_needed';
+      const feedbackRes = await app.inject({
+        method: 'POST',
+        url: '/topic-selection/v1c/downstream-feedback',
+        payload: {
+          paper_project_bridge_id: bridgeId,
+          downstream_source_kind: 'reviewer_check',
+          downstream_source_ref: ref('reviewer_check', `reviewer_check_${feedbackSignal}`),
+          source_feedback_refs: [ref('review_comment', `review_comment_${feedbackSignal}`)],
+          observed_blocker_refs: [ref('topic_selection_blocker', `blocker_${feedbackSignal}`)],
+          feedback_signal: feedbackSignal,
+          severity,
+          summary: `Route-level downstream feedback for ${feedbackSignal}.`,
+          required_action: requiresRecheck
+            ? `Resolve ${feedbackSignal} before continuing PaperProject drafting.`
+            : null,
+          feedback_payload: {
+            route_test_signal: feedbackSignal,
+          },
+          created_by: 'human',
+        },
+      });
+      assertStatus(feedbackRes, 201);
+      const feedback = feedbackRes.json() as {
+        downstream_topic_feedback: {
+          downstream_topic_feedback_id: string;
+          paper_project_bridge_id: string;
+          source_promotion_decision_ref: TopicSelectionFunctionalRef;
+          promotion_input_snapshot_id: string;
+          promotion_input_snapshot_hash: string;
+          recheck_request: {
+            downstream_recheck_request_id: string;
+            loopback_target: string;
+            loopback_cause: string;
+            affected_ref: TopicSelectionFunctionalRef;
+            required_actions: string[];
+            reason_codes: string[];
+            source_refs: TopicSelectionFunctionalRef[];
+          } | null;
+        };
+        classification: {
+          loopback_target: string;
+          loopback_cause: string;
+          requires_recheck: boolean;
+          affected_ref: TopicSelectionFunctionalRef;
+          affected_stage: string;
+          required_actions: string[];
+        };
+        impact_summary: { impact_level: string; requires_recheck: boolean };
+        recheck_request: {
+          downstream_recheck_request_id: string;
+          loopback_target: string;
+          loopback_cause: string;
+          affected_ref: TopicSelectionFunctionalRef;
+          required_actions: string[];
+          reason_codes: string[];
+          source_refs: TopicSelectionFunctionalRef[];
+        } | null;
+      };
+
+      feedbackIds.push(feedback.downstream_topic_feedback.downstream_topic_feedback_id);
+      assert.equal(feedback.downstream_topic_feedback.paper_project_bridge_id, bridgeId);
+      assert.equal(
+        feedback.downstream_topic_feedback.source_promotion_decision_ref.ref_id,
+        bridge.paper_project_bridge.source_promotion_decision_id,
+      );
+      assert.equal(
+        feedback.downstream_topic_feedback.promotion_input_snapshot_id,
+        bridge.paper_project_bridge.promotion_input_snapshot_id,
+      );
+      assert.equal(
+        feedback.downstream_topic_feedback.promotion_input_snapshot_hash,
+        bridge.paper_project_bridge.promotion_input_snapshot_hash,
+      );
+      assert.equal(feedback.classification.loopback_target, expectedTarget);
+      assert.equal(feedback.classification.loopback_cause, feedbackSignal);
+      assert.equal(feedback.classification.requires_recheck, requiresRecheck);
+      assert.equal(feedback.classification.affected_ref.ref_type, expectedAffectedRefTypes[expectedTarget]);
+      assert.equal(feedback.impact_summary.impact_level, expectedImpact);
+      assert.equal(feedback.impact_summary.requires_recheck, requiresRecheck);
+      assert.equal(feedback.classification.required_actions.length, requiresRecheck ? 1 : 0);
+
+      const feedbackReadRes = await app.inject({
+        method: 'GET',
+        url: `/topic-selection/v1c/downstream-feedback/${encodeURIComponent(feedback.downstream_topic_feedback.downstream_topic_feedback_id)}`,
+      });
+      assertStatus(feedbackReadRes, 200);
+
+      const recheckByFeedbackRes = await app.inject({
+        method: 'GET',
+        url: `/topic-selection/v1c/downstream-feedback/${encodeURIComponent(feedback.downstream_topic_feedback.downstream_topic_feedback_id)}/recheck-request`,
+      });
+      if (requiresRecheck) {
+        assertStatus(recheckByFeedbackRes, 200);
+        assert.ok(feedback.recheck_request);
+        assert.equal(feedback.recheck_request.loopback_target, expectedTarget);
+        assert.equal(feedback.recheck_request.loopback_cause, feedbackSignal);
+        assert.equal(feedback.recheck_request.affected_ref.ref_type, expectedAffectedRefTypes[expectedTarget]);
+        assert.deepEqual(feedback.recheck_request.required_actions, feedback.classification.required_actions);
+        assert.deepEqual(feedback.recheck_request.reason_codes, [feedbackSignal]);
+        assert.ok(
+          feedback.recheck_request.source_refs.some((sourceRef) => sourceRef.ref_type === 'paper_project_bridge'),
+        );
+        assert.ok(
+          feedback.recheck_request.source_refs.some((sourceRef) => sourceRef.ref_type === 'promotion_decision'),
+        );
+        assert.ok(
+          feedback.recheck_request.source_refs.some((sourceRef) => sourceRef.ref_type === 'promotion_input_snapshot'),
+        );
+        recheckIds.push(feedback.recheck_request.downstream_recheck_request_id);
+        const recheckByFeedback = recheckByFeedbackRes.json() as {
+          recheck_request: {
+            downstream_recheck_request_id: string;
+            loopback_target: string;
+            affected_ref: TopicSelectionFunctionalRef;
+          };
+        };
+        assert.equal(
+          recheckByFeedback.recheck_request.downstream_recheck_request_id,
+          feedback.recheck_request.downstream_recheck_request_id,
+        );
+        assert.equal(recheckByFeedback.recheck_request.loopback_target, expectedTarget);
+        assert.equal(recheckByFeedback.recheck_request.affected_ref.ref_type, expectedAffectedRefTypes[expectedTarget]);
+        const recheckByIdRes = await app.inject({
+          method: 'GET',
+          url: `/topic-selection/v1c/recheck-requests/${encodeURIComponent(feedback.recheck_request.downstream_recheck_request_id)}`,
+        });
+        assertStatus(recheckByIdRes, 200);
+        const recheckById = recheckByIdRes.json() as typeof recheckByFeedback;
+        assert.equal(
+          recheckById.recheck_request.downstream_recheck_request_id,
+          feedback.recheck_request.downstream_recheck_request_id,
+        );
+        assert.equal(recheckById.recheck_request.loopback_target, expectedTarget);
+        assert.equal(recheckById.recheck_request.affected_ref.ref_type, expectedAffectedRefTypes[expectedTarget]);
+      } else {
+        assert.equal(recheckByFeedbackRes.statusCode, 404);
+        assert.equal(feedback.recheck_request, null);
+      }
+    }
+
+    assert.equal(feedbackIds.length, cases.length);
+    assert.equal(recheckIds.length, cases.length - 1);
+
+    const listRes = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1c/paper-project-bridges/${encodeURIComponent(bridgeId)}/downstream-feedback`,
+    });
+    assertStatus(listRes, 200);
+    const listed = listRes.json() as { items: Array<{ downstream_topic_feedback_id: string }> };
+    assert.equal(listed.items.length, cases.length);
+    assert.deepEqual(
+      new Set(listed.items.map((item) => item.downstream_topic_feedback_id)),
+      new Set(feedbackIds),
+    );
+
+    const bridgeAfterRes = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1c/paper-project-bridges/${encodeURIComponent(bridgeId)}`,
+    });
+    assertStatus(bridgeAfterRes, 200);
+    const bridgeAfter = bridgeAfterRes.json() as typeof bridgeBefore;
+    assert.deepEqual(
+      {
+        bridge_status: bridgeAfter.bridge_status,
+        bridge_payload_hash: bridgeAfter.bridge_payload_hash,
+        working_copy_payload_hash: bridgeAfter.working_copy_payload_hash,
+        source_promotion_decision_id: bridgeAfter.source_promotion_decision_id,
+        promotion_input_snapshot_id: bridgeAfter.promotion_input_snapshot_id,
+        promotion_input_snapshot_hash: bridgeAfter.promotion_input_snapshot_hash,
+        paper_project_intake_ref: bridgeAfter.paper_project_intake_ref,
+        target_paper_project_ref: bridgeAfter.target_paper_project_ref,
+      },
+      bridgeBeforeStableFields,
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test('topic-selection v1c HTTP routes enforce frozen snapshot and single-current promotion boundaries', async () => {
+  const repository = makeSeededTopicPackageRepository(uniqueId('frozen-boundary'));
+  const app = await makeV1cRouteApp(repository);
+  try {
+    const { gateBundle } = await createReadyGate(app, repository.v1cInputBundle.v1b_to_v1c_input_bundle_id);
+    const actionRefs = [gateBundle.promotion_gate_check.promotion_input_snapshot_ref];
+
+    const staleDecisionRes = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1c/promotion-decisions',
+      payload: {
+        promotion_gate_check_id: gateBundle.promotion_gate_check.promotion_gate_check_id,
+        decision: 'promote_to_paper_project',
+        human_actor: { actor_type: 'human', actor_id: 'route-reviewer' },
+        rationale: 'This should not pass because the confirmed snapshot hash is stale.',
+        confirmed_snapshot_hash: 'stale_snapshot_hash',
+      },
+    });
+    assert.equal(staleDecisionRes.statusCode, 409);
+    assert.equal((staleDecisionRes.json() as { error: { code: string } }).error.code, 'VERSION_CONFLICT');
+
+    const malformedConditionRes = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1c/promotion-decisions',
+      payload: {
+        promotion_gate_check_id: gateBundle.promotion_gate_check.promotion_gate_check_id,
+        decision: 'promote_with_conditions',
+        human_actor: { actor_type: 'human', actor_id: 'route-reviewer' },
+        rationale: 'This should not pass because the condition is not human-verifiable.',
+        confirmed_snapshot_hash: gateBundle.promotion_gate_check.promotion_input_snapshot_hash,
+        conditions: [
+          {
+            condition_id: 'condition_route_malformed',
+            condition_code: 'verify_claim_ceiling',
+            owner: { actor_type: 'human', actor_id: 'paper-owner' },
+            required_action: requiredAction('verify_claim_ceiling', actionRefs),
+            refs: actionRefs,
+          },
+        ],
+      },
+    });
+    assert.equal(malformedConditionRes.statusCode, 400);
+    assert.equal((malformedConditionRes.json() as { error: { code: string } }).error.code, 'INVALID_PAYLOAD');
+
+    const humanRes = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1c/promotion-decisions',
+      payload: {
+        promotion_gate_check_id: gateBundle.promotion_gate_check.promotion_gate_check_id,
+        decision: 'promote_to_paper_project',
+        human_actor: { actor_type: 'human', actor_id: 'route-reviewer' },
+        rationale: 'Authorize promotion from the exact frozen promotion input snapshot.',
+        confirmed_snapshot_hash: gateBundle.promotion_gate_check.promotion_input_snapshot_hash,
+      },
+    });
+    assertStatus(humanRes, 201);
+    const human = humanRes.json() as {
+      promotion_decision: { promotion_decision_id: string; bridge_eligible: boolean };
+    };
+    assert.equal(human.promotion_decision.bridge_eligible, true);
+
+    const secondDecisionRes = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1c/promotion-decisions',
+      payload: {
+        promotion_gate_check_id: gateBundle.promotion_gate_check.promotion_gate_check_id,
+        decision: 'park',
+        human_actor: { actor_type: 'human', actor_id: 'route-reviewer' },
+        rationale: 'A second current decision for the same snapshot must not overwrite promotion authority.',
+        confirmed_snapshot_hash: gateBundle.promotion_gate_check.promotion_input_snapshot_hash,
+      },
+    });
+    assert.equal(secondDecisionRes.statusCode, 409);
+    assert.equal((secondDecisionRes.json() as { error: { code: string } }).error.code, 'VERSION_CONFLICT');
+
+    const workspaceDriftBridgeRes = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1c/paper-project-bridges',
+      payload: {
+        promotion_decision_id: human.promotion_decision.promotion_decision_id,
+        workspace_id: 'workspace_other',
+        created_by: 'system',
+      },
+    });
+    assert.equal(workspaceDriftBridgeRes.statusCode, 409);
+    assert.equal(
+      (workspaceDriftBridgeRes.json() as { error: { code: string } }).error.code,
+      'VERSION_CONFLICT',
+    );
+
+    const bridgeRes = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1c/paper-project-bridges',
+      payload: {
+        promotion_decision_id: human.promotion_decision.promotion_decision_id,
+        created_by: 'system',
+      },
+    });
+    assertStatus(bridgeRes, 201);
+    const bridge = bridgeRes.json() as {
+      paper_project_bridge: {
+        bridge_status: string;
+        paper_project_intake_ref: null;
+        target_paper_project_ref: null;
+        source_promotion_decision_id: string;
+      };
+    };
+    assert.equal(bridge.paper_project_bridge.bridge_status, 'active');
+    assert.equal(bridge.paper_project_bridge.paper_project_intake_ref, null);
+    assert.equal(bridge.paper_project_bridge.target_paper_project_ref, null);
+    assert.equal(bridge.paper_project_bridge.source_promotion_decision_id, human.promotion_decision.promotion_decision_id);
   } finally {
     await app.close();
   }
@@ -1353,11 +2057,54 @@ test('T-067 Prisma HTTP smoke requires DATABASE_URL and drives v1c routes agains
       paper_project_bridge: {
         paper_project_bridge_id: string;
         bridge_status: string;
+        bridge_payload_hash: string;
         promotion_input_snapshot_id: string;
       };
     };
     assert.equal(bridge.paper_project_bridge.bridge_status, 'active');
     assert.equal(bridge.paper_project_bridge.promotion_input_snapshot_id, snapshot.promotion_input_snapshot_id);
+
+    const intakeRes = await app.inject({
+      method: 'POST',
+      url: `/topic-selection/v1c/paper-project-bridges/${encodeURIComponent(bridge.paper_project_bridge.paper_project_bridge_id)}/paper-project-intake`,
+      payload: {
+        bridge_payload_hash: bridge.paper_project_bridge.bridge_payload_hash,
+        title: `Prisma-backed PaperProject from ${suffix}`,
+        research_direction: 'paper engineering',
+        created_by: 'hybrid',
+      },
+    });
+    assertStatus(intakeRes, 201);
+    const intake = intakeRes.json() as {
+      paper_project_id: string;
+      paper_project_created: boolean;
+      paper_project_ref: TopicSelectionFunctionalRef;
+      paper_project_intake_ref: TopicSelectionFunctionalRef;
+      carried_literature_evidence_ids: string[];
+    };
+    assert.equal(intake.paper_project_created, true);
+    assert.equal(intake.paper_project_ref.ref_id, intake.paper_project_id);
+    assert.equal(intake.paper_project_ref.version_id, bridge.paper_project_bridge.bridge_payload_hash);
+    assert.equal(intake.paper_project_intake_ref.version_id, bridge.paper_project_bridge.bridge_payload_hash);
+    assert.deepEqual(
+      intake.carried_literature_evidence_ids,
+      repository.topicPackage.selected_literature_evidence_ids,
+    );
+
+    const duplicateIntakeRes = await app.inject({
+      method: 'POST',
+      url: `/topic-selection/v1c/paper-project-bridges/${encodeURIComponent(bridge.paper_project_bridge.paper_project_bridge_id)}/paper-project-intake`,
+      payload: {
+        bridge_payload_hash: bridge.paper_project_bridge.bridge_payload_hash,
+        title: `Duplicate intake should not create another paper ${suffix}`,
+        research_direction: 'ignored',
+        created_by: 'human',
+      },
+    });
+    assertStatus(duplicateIntakeRes, 200);
+    const duplicateIntake = duplicateIntakeRes.json() as typeof intake;
+    assert.equal(duplicateIntake.paper_project_created, false);
+    assert.equal(duplicateIntake.paper_project_id, intake.paper_project_id);
 
     const feedbackRes = await app.inject({
       method: 'POST',
@@ -1365,7 +2112,7 @@ test('T-067 Prisma HTTP smoke requires DATABASE_URL and drives v1c routes agains
       payload: {
         paper_project_bridge_id: bridge.paper_project_bridge.paper_project_bridge_id,
         downstream_source_kind: 'paper_project',
-        downstream_source_ref: ref('paper_project_section', `introduction_${suffix}`, repository.topicPackage.title_card_id),
+        downstream_source_ref: ref('paper_project', intake.paper_project_id, repository.topicPackage.title_card_id),
         feedback_signal: 'overclaim',
         severity: 'blocking',
         summary: 'Prisma-backed draft introduction exceeds the frozen promotion claim ceiling.',
@@ -1396,6 +2143,14 @@ test('T-067 Prisma HTTP smoke requires DATABASE_URL and drives v1c routes agains
         where: { id: bridge.paper_project_bridge.paper_project_bridge_id },
       });
       assert.ok(persistedBridge);
+      assert.ok(persistedBridge.paperProjectIntakeRef);
+      assert.ok(persistedBridge.targetPaperProjectRef);
+      const persistedPaper = await persisted.paperProject.findUnique({
+        where: { id: intake.paper_project_id },
+      });
+      assert.ok(persistedPaper);
+      assert.equal(persistedPaper.title, `Prisma-backed PaperProject from ${suffix}`);
+      assert.equal(persistedPaper.researchDirection, 'paper engineering');
       const persistedFeedback = await persisted.topicSelectionDownstreamTopicFeedback.findUnique({
         where: { id: feedback.downstream_topic_feedback.downstream_topic_feedback_id },
       });

@@ -60,7 +60,10 @@ import { LiteratureFlowService } from './literature-flow-service.js';
 import { LiteratureEvidenceActivationService } from './literature-evidence-activation-service.js';
 import type { EvidenceActivationClassification } from './literature-evidence-activation-service.js';
 import type { LiteratureAcquisitionSettingsService } from './literature-acquisition-settings-service.js';
-import type { LiteratureContentProcessingSettingsService } from './literature-content-processing-settings-service.js';
+import {
+  resolveDefaultLiteratureContentProcessingRoot,
+  type LiteratureContentProcessingSettingsService,
+} from './literature-content-processing-settings-service.js';
 import { LiteratureRetrievalService } from './literature-retrieval-service.js';
 import {
   buildLiteratureDedupCandidate,
@@ -1707,8 +1710,7 @@ export class LiteratureService {
     if (this.contentProcessingSettingsService) {
       return this.contentProcessingSettingsService.resolveStorageRoot('raw_files');
     }
-    const os = await import('node:os');
-    return path.join(os.homedir(), '.paper-engineering-assistant', 'literature-content-processing', 'raw');
+    return path.join(resolveDefaultLiteratureContentProcessingRoot(), 'raw');
   }
 
   private buildDownloadedFileName(input: {

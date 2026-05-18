@@ -28,6 +28,7 @@ import {
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1c-promotion-gate-contracts';
 import {
   topicSelectionPaperProjectBridgeCreateInputSchema,
+  topicSelectionPaperProjectBridgeIntakeBodySchema,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1c-paper-project-bridge-contracts';
 import {
   TopicSelectionV1cController,
@@ -146,6 +147,10 @@ const humanPromotionDecisionParams = paramsSchema({ humanPromotionDecisionId: st
 const promotionDecisionParams = paramsSchema({ promotionDecisionId: stringId });
 const commitmentProfileParams = paramsSchema({ commitmentProfileId: stringId });
 const bridgeParams = paramsSchema({ bridgeId: stringId });
+const paperProjectBridgeIntakeBody = {
+  ...bridgeParams,
+  body: topicSelectionPaperProjectBridgeIntakeBodySchema,
+};
 const feedbackParams = paramsSchema({ feedbackId: stringId });
 const recheckRequestParams = paramsSchema({ recheckRequestId: stringId });
 const runParams = paramsSchema({ runId: stringId });
@@ -289,6 +294,11 @@ export async function registerTopicSelectionV1cRoutes(
     '/topic-selection/v1c/paper-project-bridges/:bridgeId',
     { schema: bridgeParams },
     controller.getPaperProjectBridge,
+  );
+  fastify.post(
+    '/topic-selection/v1c/paper-project-bridges/:bridgeId/paper-project-intake',
+    { schema: paperProjectBridgeIntakeBody },
+    controller.createPaperProjectIntakeFromBridge,
   );
   fastify.post(
     '/topic-selection/v1c/downstream-feedback',

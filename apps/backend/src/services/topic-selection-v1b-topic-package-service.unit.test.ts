@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import test from 'node:test';
+import { Prisma } from '@prisma/client';
 
 import type {
   TopicSelectionFunctionalRef,
@@ -441,6 +442,48 @@ function makeSubject(decision: TopicSelectionValueDispositionDecisionRecord) {
   return { service, valueRepository };
 }
 
+class RaceGuardedTopicPackageRepository extends InMemoryTopicSelectionV1bTopicPackageRepository {
+  private createCallCount = 0;
+  private releaseCreateBarrier: (() => void) | null = null;
+  private readonly createBarrier = new Promise<void>((resolve) => {
+    this.releaseCreateBarrier = resolve;
+  });
+  private readonly reservedDecisionIds = new Set<string>();
+
+  async createDraftPackage(
+    persistence: Parameters<InMemoryTopicSelectionV1bTopicPackageRepository['createDraftPackage']>[0],
+  ): ReturnType<InMemoryTopicSelectionV1bTopicPackageRepository['createDraftPackage']> {
+    this.createCallCount += 1;
+    if (this.createCallCount >= 2) {
+      this.releaseCreateBarrier?.();
+    }
+    await this.createBarrier;
+    const decisionId = persistence.topic_package.value_disposition_decision_id;
+    if (this.reservedDecisionIds.has(decisionId)) {
+      throw new AppError(409, 'VERSION_CONFLICT', 'TopicPackage already exists for this ValueDispositionDecision.');
+    }
+    this.reservedDecisionIds.add(decisionId);
+    try {
+      return await super.createDraftPackage(persistence);
+    } catch (error) {
+      this.reservedDecisionIds.delete(decisionId);
+      throw error;
+    }
+  }
+}
+
+function makeRaceSubject(decision: TopicSelectionValueDispositionDecisionRecord) {
+  const valueRepository = new StubValueAssessmentRepository([decision]);
+  const packageRepository = new RaceGuardedTopicPackageRepository(valueRepository);
+  const service = new TopicSelectionV1bTopicPackageService({
+    repository: packageRepository,
+    valueAssessmentRepository: valueRepository,
+    idFactory: makeIdFactory(),
+    now: () => NOW,
+  });
+  return { service, valueRepository };
+}
+
 type FakeRow = Record<string, unknown>;
 type FakeCreateArgs = { data: FakeRow };
 type FakeFindArgs = { where: Record<string, unknown> };
@@ -476,6 +519,7 @@ type FakeTopicPackagePrismaShape = {
 
 class FakeTopicPackagePrismaClient {
   failOnTitleCardPackageCreate = false;
+  failOnTitleCardPackageValueDispositionUnique = false;
   readonly inputSnapshots = new Map<string, FakeRow>();
   readonly workflowRuns = new Map<string, FakeRow>();
   readonly artifactRefs = new Map<string, FakeRow>();
@@ -547,6 +591,16 @@ class FakeTopicPackagePrismaClient {
         create: async ({ data }: FakeCreateArgs): Promise<FakeRow> => {
           if (this.failOnTitleCardPackageCreate) {
             throw new Error('injected title card package failure');
+          }
+          if (this.failOnTitleCardPackageValueDispositionUnique) {
+            throw new Prisma.PrismaClientKnownRequestError(
+              'duplicate v1bSourceValueDispositionDecisionId',
+              {
+                clientVersion: 'test',
+                code: 'P2002',
+                meta: { target: ['v1bSourceValueDispositionDecisionId'] },
+              },
+            );
           }
           this.titleCardPackages.set(String(data.id), data);
           return data;
@@ -728,6 +782,38 @@ test('duplicate package creation for one value disposition is rejected', async (
   );
 });
 
+test('concurrent duplicate package creation returns one success and one VERSION_CONFLICT', async () => {
+  const packageInput = makePackageDraftInput();
+  const decision = makeDecision(packageInput);
+  const { service, valueRepository } = makeRaceSubject(decision);
+
+  const results = await Promise.allSettled([
+    service.createDraftPackage({
+      value_disposition_decision_id: decision.value_disposition_decision_id,
+    }),
+    service.createDraftPackage({
+      value_disposition_decision_id: decision.value_disposition_decision_id,
+    }),
+  ]);
+
+  const fulfilled = results.filter(
+    (result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof service.createDraftPackage>>> =>
+      result.status === 'fulfilled',
+  );
+  const rejected = results.filter(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  );
+  assert.equal(fulfilled.length, 1);
+  assert.equal(rejected.length, 1);
+  assert.ok(rejected[0]?.reason instanceof AppError);
+  assert.equal((rejected[0].reason as AppError).errorCode, 'VERSION_CONFLICT');
+  assert.equal(
+    (await valueRepository.findDispositionDecisionById(decision.value_disposition_decision_id))
+      ?.output_topic_package_id,
+    fulfilled[0]?.value.topic_package.topic_package_id,
+  );
+});
+
 test('workspace drift is rejected before package creation', async () => {
   const packageInput = makePackageDraftInput({
     topic_value_assessment: {
@@ -849,6 +935,26 @@ test('Prisma package creation rolls back control-plane records on persistence fa
   assert.equal(fakePrisma.traceChecks.size, 0);
   assert.equal(fakePrisma.readinessAssessments.size, 0);
   assert.equal(fakePrisma.v1cBundles.size, 0);
+  assert.equal(fakePrisma.valueDecisionOutputs.size, 0);
+});
+
+test('Prisma duplicate value disposition unique conflict maps to VERSION_CONFLICT', async () => {
+  const packageInput = makePackageDraftInput();
+  const decision = makeDecision(packageInput);
+  const { service, fakePrisma } = makePrismaSubject(decision);
+  fakePrisma.failOnTitleCardPackageValueDispositionUnique = true;
+
+  await assert.rejects(
+    () => service.createDraftPackage({
+      value_disposition_decision_id: decision.value_disposition_decision_id,
+    }),
+    (error) => error instanceof AppError
+      && error.errorCode === 'VERSION_CONFLICT'
+      && /already exists/.test(error.message),
+  );
+
+  assert.equal(fakePrisma.inputSnapshots.size, 0);
+  assert.equal(fakePrisma.titleCardPackages.size, 0);
   assert.equal(fakePrisma.valueDecisionOutputs.size, 0);
 });
 

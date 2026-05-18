@@ -2,7 +2,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { LiteratureContentProcessingStorageRootsDTO } from '@paper-engineering-assistant/shared/research-lifecycle/literature-contracts';
 import { sha256Text } from '../literature-content-processing-utils.js';
-import type { LiteratureContentProcessingSettingsService } from '../literature-content-processing-settings-service.js';
+import {
+  resolveDefaultLiteratureContentProcessingRoot,
+  type LiteratureContentProcessingSettingsService,
+} from '../literature-content-processing-settings-service.js';
 
 export type StoredContentArtifact = {
   path: string;
@@ -49,8 +52,7 @@ export class LiteratureContentProcessingFileStore {
     if (this.settingsService) {
       return this.settingsService.resolveStorageRoot(root);
     }
-    const os = await import('node:os');
-    return path.join(os.homedir(), '.paper-engineering-assistant', 'literature-content-processing', this.defaultRootSegment(root));
+    return path.join(resolveDefaultLiteratureContentProcessingRoot(), this.defaultRootSegment(root));
   }
 
   private defaultRootSegment(root: keyof LiteratureContentProcessingStorageRootsDTO): string {

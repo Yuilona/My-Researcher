@@ -119,6 +119,7 @@ function makeHandoff(
       contribution_summary: 'A focused contribution summary.',
       evaluation_plan: 'A bounded evaluation plan.',
       claim_ceiling: 'Correlation and mechanism claims only.',
+      selected_literature_evidence_ids: ['literature_evidence_001'],
       selected_evidence_refs: [ref('evidence_unit', 'evidence_unit_001')],
       package_payload: {
         claim_ceiling_summary: 'Correlation and mechanism claims only.',
@@ -231,6 +232,12 @@ test('ready T-061 handoff creates support, dossier, mini-check, gate, and T-063 
   assert.equal(handoff.disposition, 'ready_for_human_decision');
   assert.equal(result.promotion_decision_support.workflow_run_id, 'workflow_run_001');
   assert.equal(result.promotion_gate_check.gate_result_id, 'readiness_gate_result_001');
+  assert.deepEqual(
+    (result.promotion_dossier.dossier_payload.source_snapshot_excerpt as {
+      selected_literature_evidence_ids?: string[];
+    }).selected_literature_evidence_ids,
+    ['literature_evidence_001'],
+  );
 });
 
 test('accepted risks are warnings and do not block promote handoff', async () => {

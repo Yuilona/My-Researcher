@@ -210,6 +210,17 @@ export class TopicSelectionV1bValueAssessmentService {
                 'Assess v1b topic value from the active TopicQuestionContract and selected ResearchSlice handoff.',
                 'Do not prove a new unmet need, create new evidence authority, rewrite the question, expand the slice, create packages, create promotions, or create PaperProject records.',
                 'Cite only inherited refs and keep advance_to_package separate from promotion readiness.',
+                'When citing evidence, use only the nested evidence_ref functional refs from topic_value_assessment_input_json.evidence_refs[*].evidence_ref or research_slice_snapshot_json.evidence_refs[*].evidence_ref.',
+                'Treat allowed_functional_refs_json as the complete copy list for refs; if a ref_id is not listed there, do not output it.',
+                'Do not cite wrapper ids such as topic_question_evidence_ref_id or research_slice_evidence_ref_id as functional refs, and do not output ref_type topic_question_evidence_ref or research_slice_evidence_ref.',
+                'Never invent placeholder refs or synthetic evidence_unit ids; every ref_id in cited_refs, blocker_refs, gate refs, and dimension refs must match one supplied upstream ref_id exactly.',
+                'When citing the selected research slice, use the inherited research_slice_ref exactly; do not output ref_type research_slice_ref.',
+                'accepted_risk_refs must contain only inherited ref_type accepted_risk authority refs; if no accepted_risk refs are provided, return an empty array and keep ordinary evidence in cited_refs or risk_notes.',
+                'Assess package-drafting readiness, not promotion readiness: when the question is answerable, support/challenge/baseline/context evidence is present, and residual risks are explicit, prefer ready_with_accepted_risk plus advance_to_package over refine_slice.',
+                `Return exactly ${TOPIC_SELECTION_VALUE_GATE_KEYS.length} hard_gates, one for each gate_key in this exact order: ${TOPIC_SELECTION_VALUE_GATE_KEYS.join(', ')}. Do not collapse multiple gates into one result.`,
+                `Return exactly ${TOPIC_SELECTION_VALUE_DIMENSIONS.length} dimension_scores, one for each dimension_key in this exact order: ${TOPIC_SELECTION_VALUE_DIMENSIONS.join(', ')}.`,
+                'Use readiness_status ready or ready_with_accepted_risk only when recommended_disposition is advance_to_package, total_score is at least 70, and all dimension scores are at least 60.',
+                'If readiness_status is needs_refinement, recheck_required, blocked, parked, or dropped, do not recommend advance_to_package.',
               ].join(' '),
             },
             {
@@ -217,6 +228,7 @@ export class TopicSelectionV1bValueAssessmentService {
               content: JSON.stringify({
                 topic_value_assessment_input_json: valueInput,
                 research_slice_snapshot_json: formationInput,
+                allowed_functional_refs_json: this.allowedFunctionalRefsForPrompt(valueInput, formationInput),
               }, null, 2),
             },
           ],
@@ -243,6 +255,9 @@ export class TopicSelectionV1bValueAssessmentService {
     }
 
     const context = this.buildContext(valueInput, formationInput, titleCardId, workspaceId);
+    llmOutput = this.normalizeEvidenceWrapperRefs(llmOutput, context);
+    llmOutput = this.normalizeAcceptedRiskRefs(llmOutput, context);
+    llmOutput = this.dropUnknownEvidenceRefs(llmOutput, context);
     try {
       this.validateLlmOutput(llmOutput, context);
     } catch (error) {
@@ -702,6 +717,141 @@ export class TopicSelectionV1bValueAssessmentService {
     this.validateOutputRefs(output, context);
     this.validateClaimBoundaries(output, context);
     this.validateAnswerabilityConsistency(output, context);
+    this.validateReadinessDispositionConsistency(output);
+  }
+
+  private normalizeAcceptedRiskRefs(
+    output: TopicSelectionAssessTopicValueLlmOutput,
+    context: ValueAssessmentContext,
+  ): TopicSelectionAssessTopicValueLlmOutput {
+    if (output.readiness_status !== 'ready_with_accepted_risk' || output.accepted_risk_refs.length > 0) {
+      return output;
+    }
+    if (context.inheritedAcceptedRiskRefs.length === 0) {
+      return {
+        ...output,
+        readiness_status: 'ready',
+      };
+    }
+    return {
+      ...output,
+      accepted_risk_refs: context.inheritedAcceptedRiskRefs,
+    };
+  }
+
+  private allowedFunctionalRefsForPrompt(
+    valueInput: TopicSelectionV1bValueAssessmentInput,
+    formationInput: TopicSelectionV1bTopicQuestionFormationInput,
+  ): Record<string, TopicSelectionFunctionalRef[]> {
+    return {
+      evidence_refs: this.uniqueRefs([
+        ...valueInput.evidence_refs.map((item) => item.evidence_ref),
+        ...formationInput.evidence_refs.map((item) => item.evidence_ref),
+      ]),
+      accepted_risk_refs: this.uniqueRefs([
+        ...valueInput.accepted_risk_refs,
+        ...formationInput.accepted_risk_refs,
+      ]),
+      topic_question_refs: this.uniqueRefs([
+        valueInput.topic_question_ref,
+        valueInput.topic_question_contract_ref,
+        valueInput.answerability_plan_ref,
+      ]),
+      research_slice_refs: this.uniqueRefs([
+        valueInput.research_slice_ref,
+        formationInput.research_slice_ref,
+      ]),
+    };
+  }
+
+  private normalizeEvidenceWrapperRefs(
+    output: TopicSelectionAssessTopicValueLlmOutput,
+    context: ValueAssessmentContext,
+  ): TopicSelectionAssessTopicValueLlmOutput {
+    const aliases = this.evidenceWrapperAliases(context);
+    const normalizeRef = (ref: TopicSelectionFunctionalRef): TopicSelectionFunctionalRef => {
+      const evidenceAlias = aliases.get(this.refKey(ref));
+      if (evidenceAlias) {
+        return evidenceAlias;
+      }
+      if (this.isResearchSliceWrapperAlias(ref, context)) {
+        return context.valueInput.research_slice_ref;
+      }
+      return ref;
+    };
+    const normalizeRefs = (refs: TopicSelectionFunctionalRef[]): TopicSelectionFunctionalRef[] =>
+      refs.map((ref) => normalizeRef(ref));
+
+    return {
+      ...output,
+      hard_gates: output.hard_gates.map((gate) => ({
+        ...gate,
+        refs: normalizeRefs(gate.refs),
+      })),
+      dimension_scores: output.dimension_scores.map((score) => ({
+        ...score,
+        evidence_refs: normalizeRefs(score.evidence_refs),
+      })),
+      accepted_risk_refs: normalizeRefs(output.accepted_risk_refs).filter((ref) => ref.ref_type === 'accepted_risk'),
+      blocker_refs: normalizeRefs(output.blocker_refs),
+      reasoning_memo: {
+        ...output.reasoning_memo,
+        cited_refs: normalizeRefs(output.reasoning_memo.cited_refs),
+      },
+    };
+  }
+
+  private dropUnknownEvidenceRefs(
+    output: TopicSelectionAssessTopicValueLlmOutput,
+    context: ValueAssessmentContext,
+  ): TopicSelectionAssessTopicValueLlmOutput {
+    const keepKnownRef = (ref: TopicSelectionFunctionalRef): boolean =>
+      !this.isEvidenceRef(ref) || context.knownEvidenceRefKeys.has(this.refKey(ref));
+    const filterRefs = (refs: TopicSelectionFunctionalRef[]): TopicSelectionFunctionalRef[] =>
+      refs.filter((ref) => keepKnownRef(ref));
+
+    return {
+      ...output,
+      hard_gates: output.hard_gates.map((gate) => ({
+        ...gate,
+        refs: filterRefs(gate.refs),
+      })),
+      dimension_scores: output.dimension_scores.map((score) => ({
+        ...score,
+        evidence_refs: filterRefs(score.evidence_refs),
+      })),
+      blocker_refs: filterRefs(output.blocker_refs),
+      reasoning_memo: {
+        ...output.reasoning_memo,
+        cited_refs: filterRefs(output.reasoning_memo.cited_refs),
+      },
+    };
+  }
+
+  private isResearchSliceWrapperAlias(
+    ref: TopicSelectionFunctionalRef,
+    context: ValueAssessmentContext,
+  ): boolean {
+    return ref.ref_type === 'research_slice_ref'
+      && ref.ref_id === context.valueInput.research_slice_ref.ref_id
+      && (!ref.title_card_id || ref.title_card_id === context.titleCardId);
+  }
+
+  private evidenceWrapperAliases(context: ValueAssessmentContext): Map<string, TopicSelectionFunctionalRef> {
+    const aliases = new Map<string, TopicSelectionFunctionalRef>();
+    for (const evidenceRef of context.valueInput.evidence_refs) {
+      aliases.set(
+        this.refKey(this.ref('topic_question_evidence_ref', evidenceRef.topic_question_evidence_ref_id, context.titleCardId)),
+        evidenceRef.evidence_ref,
+      );
+    }
+    for (const evidenceRef of context.formationInput.evidence_refs) {
+      aliases.set(
+        this.refKey(this.ref('research_slice_evidence_ref', evidenceRef.research_slice_evidence_ref_id, context.titleCardId)),
+        evidenceRef.evidence_ref,
+      );
+    }
+    return aliases;
   }
 
   private requireUniqueEnumCoverage(
@@ -840,6 +990,31 @@ export class TopicSelectionV1bValueAssessmentService {
       && (output.readiness_status === 'ready' || output.readiness_status === 'ready_with_accepted_risk')
     ) {
       throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'Blocking value gates cannot produce ready assessment.');
+    }
+  }
+
+  private validateReadinessDispositionConsistency(output: TopicSelectionAssessTopicValueLlmOutput): void {
+    const readyStatus = output.readiness_status === 'ready' || output.readiness_status === 'ready_with_accepted_risk';
+    if (readyStatus && output.recommended_disposition !== 'advance_to_package') {
+      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'Ready value assessments must recommend advance_to_package.');
+    }
+    if (!readyStatus && output.recommended_disposition === 'advance_to_package') {
+      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'advance_to_package requires a ready value assessment.');
+    }
+    if (!readyStatus) {
+      return;
+    }
+    if (output.total_score < 70) {
+      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'Ready value assessments require total_score >= 70.');
+    }
+    const weakDimensions = output.dimension_scores.filter((score) => score.score < 60);
+    if (weakDimensions.length > 0) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        'Ready value assessments cannot contain weak dimension scores.',
+        { weak_dimensions: weakDimensions.map((score) => score.dimension_key) },
+      );
     }
   }
 

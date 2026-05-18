@@ -266,6 +266,19 @@ const EXPECTED_LOOPBACK_TARGETS: Record<
   no_recheck_needed: 'paper_project_bridge',
 };
 
+const EXPECTED_AFFECTED_REF_TYPES: Record<TopicSelectionDownstreamLoopbackTarget, string> = {
+  evidence_or_search: 'evidence_unit',
+  value_assessment: 'topic_value_assessment',
+  topic_question: 'topic_question',
+  research_slice: 'research_slice',
+  validated_need: 'validated_need',
+  package: 'topic_package',
+  promotion: 'promotion_decision',
+  paper_project_bridge: 'paper_project_bridge',
+  merge_candidate: 'merge_candidate',
+  paper_project_intake: 'paper_project_intake',
+};
+
 test('downstream feedback deterministically maps every loopback cause to its target', async () => {
   for (const [signal, expectedTarget] of Object.entries(EXPECTED_LOOPBACK_TARGETS) as Array<[
     TopicSelectionDownstreamLoopbackCause,
@@ -288,6 +301,39 @@ test('downstream feedback deterministically maps every loopback cause to its tar
       signal === 'no_recheck_needed' ? 0 : 1,
       `${signal} recheck call count`,
     );
+    assert.equal(result.classification.affected_ref.ref_type, EXPECTED_AFFECTED_REF_TYPES[expectedTarget]);
+
+    if (signal === 'no_recheck_needed') {
+      assert.equal(result.recheck_request, null);
+      continue;
+    }
+
+    assert.equal(result.recheck_request?.loopback_target, expectedTarget);
+    assert.equal(result.recheck_request?.loopback_cause, signal);
+    assert.equal(result.recheck_request?.affected_ref.ref_type, EXPECTED_AFFECTED_REF_TYPES[expectedTarget]);
+    assert.deepEqual(result.recheck_request?.required_actions, [
+      `Resolve ${signal} before continuing PaperProject intake.`,
+    ]);
+    assert.deepEqual(result.recheck_request?.reason_codes, [signal]);
+    assert.ok(
+      result.recheck_request?.source_refs.some((sourceRef) => sourceRef.ref_type === 'paper_project_bridge'),
+      `${signal} source refs include bridge`,
+    );
+    assert.ok(
+      result.recheck_request?.source_refs.some((sourceRef) => sourceRef.ref_type === 'promotion_decision'),
+      `${signal} source refs include promotion decision`,
+    );
+    assert.ok(
+      result.recheck_request?.source_refs.some((sourceRef) => sourceRef.ref_type === 'promotion_input_snapshot'),
+      `${signal} source refs include promotion input snapshot`,
+    );
+
+    const sinkCall = recheck.calls[0];
+    assert.ok(sinkCall);
+    assert.equal(sinkCall.affected_ref.ref_type, EXPECTED_AFFECTED_REF_TYPES[expectedTarget]);
+    const sinkClassification = sinkCall.payload?.classification as { affected_stage?: string; loopback_target?: string } | undefined;
+    assert.equal(sinkClassification?.loopback_target, expectedTarget);
+    assert.equal(sinkClassification?.affected_stage, result.classification.affected_stage);
   }
 });
 

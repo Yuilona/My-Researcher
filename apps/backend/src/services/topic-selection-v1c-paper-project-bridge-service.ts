@@ -14,11 +14,17 @@ import type {
   TopicSelectionTransitionResult,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-control-plane-contracts';
 import type {
+  CreatePaperProjectRequest,
+  CreatePaperProjectResponse,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-project-contracts';
+import type {
   TopicSelectionPromotionBridgeHandoff,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1c-human-promotion-decision-contracts';
 import type {
   TopicSelectionPaperProjectBridgeCreateInput,
   TopicSelectionPaperProjectBridgeHandoff,
+  TopicSelectionPaperProjectBridgeIntakeInput,
+  TopicSelectionPaperProjectBridgeIntakeResult,
   TopicSelectionPaperProjectBridgeRecord,
   TopicSelectionPaperProjectBridgeWorkingCopyPayload,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1c-paper-project-bridge-contracts';
@@ -27,6 +33,10 @@ import { AppError } from '../errors/app-error.js';
 import type {
   TopicSelectionV1cPaperProjectBridgeControlPlanePersistence,
   TopicSelectionV1cPaperProjectBridgeRepository,
+} from '../repositories/topic-selection-v1c-paper-project-bridge.repository.js';
+import {
+  TopicSelectionV1cPaperProjectBridgeAttachmentConflictError,
+  TopicSelectionV1cPaperProjectBridgeHashConflictError,
 } from '../repositories/topic-selection-v1c-paper-project-bridge.repository.js';
 import {
   sha256Text,
@@ -51,9 +61,15 @@ export type TopicSelectionV1cPaperProjectBridgeCreationResult = {
   handoff: TopicSelectionPaperProjectBridgeHandoff;
 };
 
+export type TopicSelectionPaperProjectIntakeGateway = {
+  createPaperProject(input: CreatePaperProjectRequest): Promise<CreatePaperProjectResponse>;
+  deletePaperProject(paperId: string): Promise<void>;
+};
+
 export type TopicSelectionV1cPaperProjectBridgeServiceOptions = {
   repository: TopicSelectionV1cPaperProjectBridgeRepository;
   humanPromotionDecisionService: TopicSelectionPromotionBridgeHandoffProvider;
+  paperProjectGateway?: TopicSelectionPaperProjectIntakeGateway;
   idFactory?: IdFactory;
   now?: () => string;
 };
@@ -61,12 +77,14 @@ export type TopicSelectionV1cPaperProjectBridgeServiceOptions = {
 export class TopicSelectionV1cPaperProjectBridgeService {
   private readonly repository: TopicSelectionV1cPaperProjectBridgeRepository;
   private readonly humanPromotionDecisionService: TopicSelectionPromotionBridgeHandoffProvider;
+  private readonly paperProjectGateway: TopicSelectionPaperProjectIntakeGateway | null;
   private readonly idFactory: IdFactory;
   private readonly now: () => string;
 
   constructor(options: TopicSelectionV1cPaperProjectBridgeServiceOptions) {
     this.repository = options.repository;
     this.humanPromotionDecisionService = options.humanPromotionDecisionService;
+    this.paperProjectGateway = options.paperProjectGateway ?? null;
     this.idFactory = options.idFactory ?? ((prefix) => `${prefix}_${crypto.randomUUID()}`);
     this.now = options.now ?? (() => new Date().toISOString());
   }
@@ -209,6 +227,90 @@ export class TopicSelectionV1cPaperProjectBridgeService {
     return this.toHandoff(await this.getPaperProjectBridge(paperProjectBridgeId));
   }
 
+  async createPaperProjectIntakeFromBridge(
+    input: TopicSelectionPaperProjectBridgeIntakeInput,
+  ): Promise<TopicSelectionPaperProjectBridgeIntakeResult> {
+    if (!this.paperProjectGateway) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        'PaperProjectBridge intake requires a configured PaperProject gateway.',
+      );
+    }
+    if (!this.hasText(input.paper_project_bridge_id)) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'PaperProjectBridge intake requires paper_project_bridge_id.');
+    }
+    if (!this.hasText(input.bridge_payload_hash)) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'PaperProjectBridge intake requires bridge_payload_hash.');
+    }
+    const bridge = await this.getPaperProjectBridge(input.paper_project_bridge_id);
+    this.assertConsumableBridge(bridge, input);
+
+    if (bridge.paper_project_intake_ref && bridge.target_paper_project_ref) {
+      return this.toIntakeResult({
+        bridge,
+        paperProjectCreated: false,
+        carriedLiteratureEvidenceIds: this.deriveLiteratureEvidenceIds(bridge),
+      });
+    }
+    if (bridge.paper_project_intake_ref || bridge.target_paper_project_ref) {
+      throw new AppError(
+        409,
+        'VERSION_CONFLICT',
+        `PaperProjectBridge ${bridge.paper_project_bridge_id} has incomplete downstream intake refs.`,
+      );
+    }
+
+    const carriedLiteratureEvidenceIds = this.deriveLiteratureEvidenceIds(bridge);
+    if (carriedLiteratureEvidenceIds.length === 0) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        `PaperProjectBridge ${bridge.paper_project_bridge_id} has no selected evidence refs for PaperProject intake.`,
+      );
+    }
+
+    const createdBy = input.created_by ?? 'hybrid';
+    const paperProject = await this.paperProjectGateway.createPaperProject({
+      title_card_id: bridge.title_card_id,
+      title: input.title?.trim() || bridge.working_copy_payload.editable_title,
+      research_direction: input.research_direction?.trim() || 'LLM',
+      created_by: createdBy,
+      initial_context: {
+        literature_evidence_ids: carriedLiteratureEvidenceIds,
+      },
+    });
+
+    const paperProjectRef = this.ref(
+      'paper_project',
+      paperProject.paper_id,
+      bridge.title_card_id,
+      bridge.bridge_payload_hash,
+    );
+    const intakeRef = this.ref(
+      'paper_project_intake',
+      this.idFactory('paper_project_intake'),
+      bridge.title_card_id,
+      bridge.bridge_payload_hash,
+    );
+
+    try {
+      const updated = await this.repository.attachPaperProjectRefs(bridge.paper_project_bridge_id, {
+        expected_bridge_payload_hash: input.bridge_payload_hash,
+        paper_project_intake_ref: intakeRef,
+        target_paper_project_ref: paperProjectRef,
+      });
+      return this.toIntakeResult({
+        bridge: updated,
+        paperProjectCreated: true,
+        carriedLiteratureEvidenceIds,
+      });
+    } catch (error) {
+      await this.rollbackPaperProject(paperProject.paper_id, error);
+      throw this.toAttachError(error, bridge.paper_project_bridge_id);
+    }
+  }
+
   private assertWorkspace(
     requestedWorkspaceId: string | null,
     sourceHandoff: TopicSelectionPromotionBridgeHandoff,
@@ -219,6 +321,41 @@ export class TopicSelectionV1cPaperProjectBridgeService {
         409,
         'VERSION_CONFLICT',
         `PromotionDecision workspace mismatch: requested ${requestedWorkspaceId}, source ${sourceWorkspaceId}.`,
+      );
+    }
+  }
+
+  private assertConsumableBridge(
+    bridge: TopicSelectionPaperProjectBridgeRecord,
+    input: TopicSelectionPaperProjectBridgeIntakeInput,
+  ): void {
+    if (bridge.bridge_status !== 'active') {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        `PaperProjectBridge ${bridge.paper_project_bridge_id} is not active.`,
+      );
+    }
+    if (bridge.bridge_payload_hash !== input.bridge_payload_hash) {
+      throw new AppError(
+        409,
+        'VERSION_CONFLICT',
+        `PaperProjectBridge ${bridge.paper_project_bridge_id} bridge_payload_hash is stale.`,
+      );
+    }
+    const requestedWorkspaceId = input.workspace_id ?? null;
+    if (requestedWorkspaceId && requestedWorkspaceId !== (bridge.workspace_id ?? null)) {
+      throw new AppError(
+        409,
+        'VERSION_CONFLICT',
+        `PaperProjectBridge workspace mismatch: requested ${requestedWorkspaceId}, bridge ${bridge.workspace_id ?? null}.`,
+      );
+    }
+    if (!bridge.source_promotion_decision_id || !bridge.promotion_input_snapshot_hash) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        `PaperProjectBridge ${bridge.paper_project_bridge_id} is missing promotion lineage.`,
       );
     }
   }
@@ -670,6 +807,108 @@ export class TopicSelectionV1cPaperProjectBridgeService {
       bridge,
       source_promotion_handoff: bridge.source_promotion_handoff,
     };
+  }
+
+  private toIntakeResult(input: {
+    bridge: TopicSelectionPaperProjectBridgeRecord;
+    paperProjectCreated: boolean;
+    carriedLiteratureEvidenceIds: string[];
+  }): TopicSelectionPaperProjectBridgeIntakeResult {
+    if (!input.bridge.paper_project_intake_ref || !input.bridge.target_paper_project_ref) {
+      throw new AppError(
+        409,
+        'VERSION_CONFLICT',
+        `PaperProjectBridge ${input.bridge.paper_project_bridge_id} has no downstream intake refs.`,
+      );
+    }
+    return {
+      paper_project_bridge: input.bridge,
+      handoff: this.toHandoff(input.bridge),
+      paper_project_id: input.bridge.target_paper_project_ref.ref_id,
+      paper_project_ref: input.bridge.target_paper_project_ref,
+      paper_project_intake_ref: input.bridge.paper_project_intake_ref,
+      paper_project_created: input.paperProjectCreated,
+      carried_literature_evidence_ids: input.carriedLiteratureEvidenceIds,
+      carried_accepted_risk_refs: input.bridge.accepted_risk_refs,
+      carried_condition_refs: this.conditionRefs(input.bridge),
+    };
+  }
+
+  private deriveLiteratureEvidenceIds(bridge: TopicSelectionPaperProjectBridgeRecord): string[] {
+    const handoff = this.asRecord(bridge.source_promotion_handoff);
+    const commitment = this.asRecord(handoff.promotion_commitment_profile);
+    const scope = this.asRecord(commitment.scope);
+    const excerpt = this.asRecord(scope.source_snapshot_excerpt);
+    const explicitIds = this.asArray(excerpt.selected_literature_evidence_ids)
+      .filter((value): value is string => this.hasText(value as string | null));
+    if (explicitIds.length > 0) {
+      return this.uniqueStrings(explicitIds);
+    }
+
+    const selectedEvidenceIds = this.asArray(excerpt.selected_evidence_refs)
+      .map((item) => this.asRecord(this.asRecord(item).evidence_ref).ref_id)
+      .filter((value): value is string => this.hasText(value as string | null));
+    if (selectedEvidenceIds.length > 0) {
+      return this.uniqueStrings(selectedEvidenceIds);
+    }
+
+    return this.uniqueStrings(
+      bridge.source_refs
+        .filter((ref) => this.isPaperProjectEvidenceRef(ref))
+        .map((ref) => ref.ref_id),
+    );
+  }
+
+  private isPaperProjectEvidenceRef(ref: TopicSelectionFunctionalRef): boolean {
+    return ref.ref_type === 'evidence_unit'
+      || ref.ref_type === 'literature'
+      || ref.ref_type === 'literature_record'
+      || ref.ref_type === 'literature_evidence';
+  }
+
+  private conditionRefs(bridge: TopicSelectionPaperProjectBridgeRecord): TopicSelectionFunctionalRef[] {
+    return this.uniqueRefs(bridge.conditions.flatMap((condition) => [
+      ...condition.refs,
+      ...condition.required_action.refs,
+    ]));
+  }
+
+  private async rollbackPaperProject(paperProjectId: string, originalError: unknown): Promise<void> {
+    if (!this.paperProjectGateway) {
+      return;
+    }
+    try {
+      await this.paperProjectGateway.deletePaperProject(paperProjectId);
+    } catch (rollbackError) {
+      throw new AppError(
+        500,
+        'INTERNAL_ERROR',
+        'PaperProjectBridge intake failed and rollback of the created PaperProject also failed.',
+        {
+          created_paper_id: paperProjectId,
+          original_error: originalError instanceof Error ? originalError.message : 'unknown',
+          rollback_error: rollbackError instanceof Error ? rollbackError.message : 'unknown',
+        },
+      );
+    }
+  }
+
+  private toAttachError(error: unknown, paperProjectBridgeId: string): AppError | unknown {
+    if (error instanceof TopicSelectionV1cPaperProjectBridgeHashConflictError) {
+      return new AppError(
+        409,
+        'VERSION_CONFLICT',
+        `PaperProjectBridge ${paperProjectBridgeId} bridge_payload_hash is stale.`,
+      );
+    }
+    if (error instanceof TopicSelectionV1cPaperProjectBridgeAttachmentConflictError) {
+      return new AppError(
+        409,
+        'VERSION_CONFLICT',
+        `PaperProjectBridge ${paperProjectBridgeId} already has downstream paper-project refs.`,
+      );
+    }
+    return error;
   }
 
   private toGateVerdict(bridge: TopicSelectionPaperProjectBridgeRecord): TopicSelectionGateVerdict {

@@ -1,4 +1,5 @@
 import type {
+  TopicSelectionFunctionalRef,
   TopicSelectionArtifactRefRecord,
   TopicSelectionChainTransitionAttemptRecord,
   TopicSelectionInputSnapshotRecord,
@@ -10,6 +11,8 @@ import type {
   TopicSelectionPaperProjectBridgeRecord,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1c-paper-project-bridge-contracts';
 import {
+  TopicSelectionV1cPaperProjectBridgeAttachmentConflictError,
+  TopicSelectionV1cPaperProjectBridgeHashConflictError,
   type TopicSelectionV1cPaperProjectBridgePersistence,
   type TopicSelectionV1cPaperProjectBridgeRepository,
 } from './topic-selection-v1c-paper-project-bridge.repository.js';
@@ -81,5 +84,32 @@ implements TopicSelectionV1cPaperProjectBridgeRepository {
   ): Promise<TopicSelectionPaperProjectBridgeRecord | null> {
     const bridgeId = this.bridgeIdsBySourcePromotionDecisionId.get(sourcePromotionDecisionId);
     return bridgeId ? this.bridges.get(bridgeId) ?? null : null;
+  }
+
+  async attachPaperProjectRefs(
+    paperProjectBridgeId: string,
+    input: {
+      expected_bridge_payload_hash: string;
+      paper_project_intake_ref: TopicSelectionFunctionalRef;
+      target_paper_project_ref: TopicSelectionFunctionalRef;
+    },
+  ): Promise<TopicSelectionPaperProjectBridgeRecord> {
+    const bridge = this.bridges.get(paperProjectBridgeId);
+    if (!bridge) {
+      throw new Error(`PaperProjectBridge ${paperProjectBridgeId} not found.`);
+    }
+    if (bridge.bridge_payload_hash !== input.expected_bridge_payload_hash) {
+      throw new TopicSelectionV1cPaperProjectBridgeHashConflictError(paperProjectBridgeId);
+    }
+    if (bridge.paper_project_intake_ref || bridge.target_paper_project_ref) {
+      throw new TopicSelectionV1cPaperProjectBridgeAttachmentConflictError(paperProjectBridgeId);
+    }
+    const updated: TopicSelectionPaperProjectBridgeRecord = {
+      ...bridge,
+      paper_project_intake_ref: input.paper_project_intake_ref,
+      target_paper_project_ref: input.target_paper_project_ref,
+    };
+    this.bridges.set(paperProjectBridgeId, updated);
+    return updated;
   }
 }

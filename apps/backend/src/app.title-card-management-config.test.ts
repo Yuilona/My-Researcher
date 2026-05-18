@@ -7,6 +7,7 @@ const STORE_ENV_KEYS = [
   'RESEARCH_LIFECYCLE_REPOSITORY',
   'AUTO_PULL_REPOSITORY',
   'APPLICATION_SETTINGS_REPOSITORY',
+  'EXPERIMENT_FOUNDATION_REPOSITORY',
 ] as const;
 
 function resetStoreEnv(snapshot: Record<string, string | undefined>) {
@@ -27,6 +28,7 @@ test('resolveTitleCardManagementStoreConfig cascades TITLE_CARD_REPOSITORY to de
     delete process.env.RESEARCH_LIFECYCLE_REPOSITORY;
     delete process.env.AUTO_PULL_REPOSITORY;
     delete process.env.APPLICATION_SETTINGS_REPOSITORY;
+    delete process.env.EXPERIMENT_FOUNDATION_REPOSITORY;
 
     assert.deepEqual(resolveTitleCardManagementStoreConfig(), {
       titleCardStrategy: 'prisma',
@@ -34,6 +36,7 @@ test('resolveTitleCardManagementStoreConfig cascades TITLE_CARD_REPOSITORY to de
       literatureStrategy: 'prisma',
       autoPullStrategy: 'prisma',
       applicationSettingsStrategy: 'prisma',
+      experimentFoundationStrategy: 'prisma',
     });
   } finally {
     resetStoreEnv(snapshot);

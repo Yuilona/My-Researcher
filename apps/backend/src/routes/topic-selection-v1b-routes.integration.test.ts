@@ -20,6 +20,7 @@ import type {
   TopicSelectionFormTopicQuestionLlmOutput,
   TopicSelectionTopicQuestionAnswerabilityPlanDraft,
   TopicSelectionTopicQuestionCandidateDraft,
+  TopicSelectionV1bTopicQuestionMaterialization,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-topic-question-contracts';
 import {
   TOPIC_SELECTION_VALUE_DIMENSIONS,
@@ -29,6 +30,13 @@ import {
 
 import { buildApp } from '../app.js';
 import type { LlmCallTelemetry, LlmStructuredOutputRequest } from '../services/llm-gateway.js';
+
+type ValueAssessmentFixtureMode =
+  | 'ready'
+  | 'needs_refinement'
+  | 'refine_slice'
+  | 'refine_question'
+  | 'recheck_required';
 
 function uniqueId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -135,6 +143,13 @@ function telemetry(schemaName: string): LlmCallTelemetry {
 
 class FakeTopicSelectionV1bLlmGateway {
   readonly calls: LlmStructuredOutputRequest[] = [];
+  private valueAssessmentCallCount = 0;
+
+  constructor(
+    private readonly options: {
+      valueAssessmentSequence?: ValueAssessmentFixtureMode[];
+    } = {},
+  ) {}
 
   async createStructuredOutput<T>(request: LlmStructuredOutputRequest) {
     this.calls.push(request);
@@ -165,9 +180,12 @@ class FakeTopicSelectionV1bLlmGateway {
       return makeQuestionOutput(payload.topic_question_formation_input_json);
     }
     if (schemaName === 'topic_selection_topic_value_assessment') {
+      const mode = this.options.valueAssessmentSequence?.[this.valueAssessmentCallCount] ?? 'ready';
+      this.valueAssessmentCallCount += 1;
       return makeValueOutput(
         payload.topic_value_assessment_input_json ?? {},
         payload.research_slice_snapshot_json,
+        mode,
       );
     }
     throw new Error(`Unexpected structured output schema ${schemaName}.`);
@@ -379,6 +397,7 @@ function makeQuestionOutput(
 function makeValueOutput(
   valueInput: Record<string, unknown>,
   formationInput: TopicSelectionV1bTopicQuestionFormationInput | undefined,
+  mode: ValueAssessmentFixtureMode = 'ready',
 ): TopicSelectionAssessTopicValueLlmOutput {
   const evidenceRecord = Array.isArray(valueInput.evidence_refs)
     ? valueInput.evidence_refs.find((record) => Boolean(record && typeof record === 'object'))
@@ -393,7 +412,7 @@ function makeValueOutput(
     valueInput.topic_question_contract_ref,
     ref('topic_question_contract', 'topic_question_contract_route', titleCardId),
   );
-  return {
+  const readyOutput: TopicSelectionAssessTopicValueLlmOutput = {
     readiness_status: 'ready',
     strongest_claim_if_success: 'The workflow improves trace completeness in offline replay.',
     fallback_claim_if_success: 'The workflow exposes trace gaps earlier than manual planning.',
@@ -440,6 +459,79 @@ function makeValueOutput(
       disposition_bridge: 'Advance only to draft package, not promotion.',
       requires_critic_review: false,
       critic_triggers: [],
+      cited_refs: [evidenceRef],
+    },
+  };
+  if (mode === 'ready') {
+    return readyOutput;
+  }
+  const effectiveMode = mode === 'needs_refinement' ? 'refine_slice' : mode;
+  const recommendedDisposition = effectiveMode === 'refine_question'
+    ? 'refine_question'
+    : effectiveMode === 'recheck_required'
+      ? 'recheck_evidence_or_search'
+      : 'refine_slice';
+  const failedGateKey = effectiveMode === 'refine_question' ? 'answerability_sanity' : 'evidence_sanity';
+  const readinessStatus = effectiveMode === 'recheck_required' ? 'recheck_required' : 'needs_refinement';
+  const failedGateRationale = effectiveMode === 'refine_question'
+    ? 'The question mixes workflow value and metric scope, so it must be reframed before package drafting.'
+    : effectiveMode === 'recheck_required'
+      ? 'Evidence freshness must be rechecked before package drafting.'
+      : 'Baseline and challenge evidence must be refreshed before package drafting.';
+  const weakDimension = effectiveMode === 'refine_question' ? 'claim_ceiling_fit' : 'reviewer_risk';
+  const summary = effectiveMode === 'refine_question'
+    ? 'The slice is promising, but the question contract must be refined before package drafting.'
+    : effectiveMode === 'recheck_required'
+      ? 'The topic is promising, but evidence/search freshness must be rechecked before package drafting.'
+      : 'The topic is promising but the current slice needs refinement before package drafting.';
+  return {
+    ...readyOutput,
+    readiness_status: readinessStatus,
+    hard_gates: readyOutput.hard_gates.map((gate) =>
+      gate.gate_key === failedGateKey
+        ? {
+          ...gate,
+          verdict: 'fail',
+          severity: 'blocking',
+          rationale: failedGateRationale,
+          refs: [evidenceRef],
+        }
+        : gate,
+    ),
+    dimension_scores: readyOutput.dimension_scores.map((score) =>
+      score.dimension_key === 'answerability' || score.dimension_key === weakDimension
+        ? {
+          ...score,
+          score: 56,
+          uncertainty: 'The current value path leaves too much uncertainty for package drafting.',
+        }
+        : score,
+    ),
+    recommended_disposition: recommendedDisposition,
+    total_score: 62,
+    value_summary: summary,
+    blocker_refs: [evidenceRef],
+    risk_notes: [
+      effectiveMode === 'recheck_required'
+        ? 'Refresh or recheck evidence before advancing.'
+        : 'Refine the value path before advancing.',
+    ],
+    reasoning_memo: {
+      ...readyOutput.reasoning_memo,
+      recommendation: recommendedDisposition,
+      evidence_backed_rationale: effectiveMode === 'refine_question'
+        ? 'The inherited evidence supports the slice but not the current question framing.'
+        : effectiveMode === 'recheck_required'
+          ? 'The inherited evidence must be rechecked before it can support package drafting.'
+          : 'The inherited evidence shows the slice needs a narrower baseline/challenge frame.',
+      uncertainty: effectiveMode === 'recheck_required'
+        ? 'Evidence freshness may invalidate the current value path.'
+        : 'The current value path may overstate answerability.',
+      disposition_bridge: effectiveMode === 'refine_question'
+        ? 'Return to TopicQuestionContract refinement before producing package input.'
+        : effectiveMode === 'recheck_required'
+          ? 'Return to evidence/search recheck before producing package input.'
+          : 'Return to ResearchSlice refinement before producing package input.',
       cited_refs: [evidenceRef],
     },
   };
@@ -723,14 +815,233 @@ type V1bFlowResult = {
     candidates: Array<{ topic_question_candidate_id: string }>;
   };
   questionSelection: {
-    materializations: Array<{
-      topic_question_contract: { topic_question_contract_id: string };
-    }>;
+    materializations: TopicSelectionV1bTopicQuestionMaterialization[];
   };
   valueAssessment: { topic_value_assessment: { topic_value_assessment_id: string } };
   disposition?: { value_disposition_decision_id: string; decision: string };
   draftPackage?: { topic_package: { topic_package_id: string; package_readiness_status: string } };
 };
+
+async function runV1bDraftingPassFromReadiness(
+  app: FastifyInstance,
+  readinessAssessmentId: string,
+): Promise<Pick<
+  V1bFlowResult,
+  'sliceOptionSet' | 'sliceSelection' | 'questionCandidateSet' | 'questionSelection' | 'valueAssessment' | 'disposition' | 'draftPackage'
+>> {
+  const sliceOptionsRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1b/research-slice-option-sets',
+    payload: {
+      readiness_assessment_id: readinessAssessmentId,
+      triggered_by: 'system',
+    },
+  });
+  assertStatus(sliceOptionsRes, 201);
+  const sliceOptionSet = sliceOptionsRes.json() as V1bFlowResult['sliceOptionSet'];
+  assert.ok(sliceOptionSet.options[0]?.research_slice_option_id);
+
+  const sliceSelectionRes = await app.inject({
+    method: 'POST',
+    url: `/topic-selection/v1b/research-slice-option-sets/${encodeURIComponent(sliceOptionSet.option_set.research_slice_option_set_id)}/selection-decisions`,
+    payload: {
+      option_set_id: 'ignored-by-path',
+      decision: 'select',
+      selected_option_id: sliceOptionSet.options[0].research_slice_option_id,
+      decided_by: 'human',
+      selection_rationale: 'Selected as the refined bounded option.',
+      confidence: 0.86,
+    },
+  });
+  assertStatus(sliceSelectionRes, 201);
+  const sliceSelection = sliceSelectionRes.json() as V1bFlowResult['sliceSelection'];
+  assert.ok(sliceSelection.research_slice?.research_slice_id);
+
+  const questionCandidateRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1b/topic-question-candidate-sets',
+    payload: {
+      research_slice_id: sliceSelection.research_slice.research_slice_id,
+      triggered_by: 'system',
+    },
+  });
+  assertStatus(questionCandidateRes, 201);
+  const questionCandidateSet = questionCandidateRes.json() as V1bFlowResult['questionCandidateSet'];
+  assert.ok(questionCandidateSet.candidates[0]?.topic_question_candidate_id);
+
+  const questionSelectionRes = await app.inject({
+    method: 'POST',
+    url: `/topic-selection/v1b/topic-question-candidate-sets/${encodeURIComponent(questionCandidateSet.candidate_set.topic_question_candidate_set_id)}/selection-decisions`,
+    payload: {
+      candidate_set_id: 'ignored-by-path',
+      decision: 'admit',
+      admitted_candidate_ids: [questionCandidateSet.candidates[0].topic_question_candidate_id],
+      decided_by: 'human',
+      decision_rationale: 'Refined question is answerable and within the selected slice.',
+      confidence: 0.87,
+    },
+  });
+  assertStatus(questionSelectionRes, 201);
+  const questionSelection = questionSelectionRes.json() as V1bFlowResult['questionSelection'];
+  const contractId = questionSelection.materializations[0]?.topic_question_contract.topic_question_contract_id;
+  assert.ok(contractId);
+
+  const valueAssessmentRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1b/topic-value-assessments',
+    payload: {
+      topic_question_contract_id: contractId,
+      triggered_by: 'system',
+    },
+  });
+  assertStatus(valueAssessmentRes, 201);
+  const valueAssessment = valueAssessmentRes.json() as V1bFlowResult['valueAssessment'];
+  assert.ok(valueAssessment.topic_value_assessment.topic_value_assessment_id);
+
+  const dispositionRes = await app.inject({
+    method: 'POST',
+    url: `/topic-selection/v1b/topic-value-assessments/${encodeURIComponent(valueAssessment.topic_value_assessment.topic_value_assessment_id)}/disposition-decisions`,
+    payload: {
+      topic_value_assessment_id: 'ignored-by-path',
+      decision: 'advance_to_package',
+      decided_by: 'human',
+      decision_rationale: 'Refined slice is now ready for draft package handoff.',
+    },
+  });
+  assertStatus(dispositionRes, 201);
+  const disposition = dispositionRes.json() as { value_disposition_decision_id: string; decision: string };
+  assert.equal(disposition.decision, 'advance_to_package');
+
+  const packageRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1b/topic-packages/drafts',
+    payload: {
+      value_disposition_decision_id: disposition.value_disposition_decision_id,
+      created_by: 'system',
+    },
+  });
+  assertStatus(packageRes, 201);
+  const draftPackage = packageRes.json() as {
+    topic_package: { topic_package_id: string; package_readiness_status: string };
+  };
+  assert.equal(draftPackage.topic_package.package_readiness_status, 'ready_for_promotion_review');
+
+  const bundleRes = await app.inject({
+    method: 'POST',
+    url: `/topic-selection/v1b/topic-packages/${encodeURIComponent(draftPackage.topic_package.topic_package_id)}/v1c-input-bundles`,
+  });
+  assertStatus(bundleRes, 200);
+
+  return {
+    sliceOptionSet,
+    sliceSelection,
+    questionCandidateSet,
+    questionSelection,
+    valueAssessment,
+    disposition,
+    draftPackage,
+  };
+}
+
+async function runV1bValuePassFromQuestionContract(
+  app: FastifyInstance,
+  contractId: string,
+): Promise<Pick<V1bFlowResult, 'valueAssessment' | 'disposition' | 'draftPackage'>> {
+  const valueAssessmentRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1b/topic-value-assessments',
+    payload: {
+      topic_question_contract_id: contractId,
+      triggered_by: 'system',
+    },
+  });
+  assertStatus(valueAssessmentRes, 201);
+  const valueAssessment = valueAssessmentRes.json() as V1bFlowResult['valueAssessment'];
+  assert.ok(valueAssessment.topic_value_assessment.topic_value_assessment_id);
+
+  const dispositionRes = await app.inject({
+    method: 'POST',
+    url: `/topic-selection/v1b/topic-value-assessments/${encodeURIComponent(valueAssessment.topic_value_assessment.topic_value_assessment_id)}/disposition-decisions`,
+    payload: {
+      topic_value_assessment_id: 'ignored-by-path',
+      decision: 'advance_to_package',
+      decided_by: 'human',
+      decision_rationale: 'Re-entered value path is ready for draft package handoff.',
+    },
+  });
+  assertStatus(dispositionRes, 201);
+  const disposition = dispositionRes.json() as { value_disposition_decision_id: string; decision: string };
+  assert.equal(disposition.decision, 'advance_to_package');
+
+  const packageRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1b/topic-packages/drafts',
+    payload: {
+      value_disposition_decision_id: disposition.value_disposition_decision_id,
+      created_by: 'system',
+    },
+  });
+  assertStatus(packageRes, 201);
+  const draftPackage = packageRes.json() as {
+    topic_package: { topic_package_id: string; package_readiness_status: string };
+  };
+  assert.equal(draftPackage.topic_package.package_readiness_status, 'ready_for_promotion_review');
+
+  const bundleRes = await app.inject({
+    method: 'POST',
+    url: `/topic-selection/v1b/topic-packages/${encodeURIComponent(draftPackage.topic_package.topic_package_id)}/v1c-input-bundles`,
+  });
+  assertStatus(bundleRes, 200);
+
+  return {
+    valueAssessment,
+    disposition,
+    draftPackage,
+  };
+}
+
+async function runV1bQuestionValuePassFromSlice(
+  app: FastifyInstance,
+  researchSliceId: string,
+): Promise<Pick<
+  V1bFlowResult,
+  'questionCandidateSet' | 'questionSelection' | 'valueAssessment' | 'disposition' | 'draftPackage'
+>> {
+  const questionCandidateRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1b/topic-question-candidate-sets',
+    payload: {
+      research_slice_id: researchSliceId,
+      triggered_by: 'system',
+    },
+  });
+  assertStatus(questionCandidateRes, 201);
+  const questionCandidateSet = questionCandidateRes.json() as V1bFlowResult['questionCandidateSet'];
+  assert.ok(questionCandidateSet.candidates[0]?.topic_question_candidate_id);
+
+  const questionSelectionRes = await app.inject({
+    method: 'POST',
+    url: `/topic-selection/v1b/topic-question-candidate-sets/${encodeURIComponent(questionCandidateSet.candidate_set.topic_question_candidate_set_id)}/selection-decisions`,
+    payload: {
+      candidate_set_id: 'ignored-by-path',
+      decision: 'admit',
+      admitted_candidate_ids: [questionCandidateSet.candidates[0].topic_question_candidate_id],
+      decided_by: 'human',
+      decision_rationale: 'Refined question is answerable within the existing slice.',
+      confidence: 0.87,
+    },
+  });
+  assertStatus(questionSelectionRes, 201);
+  const questionSelection = questionSelectionRes.json() as V1bFlowResult['questionSelection'];
+  const contractId = questionSelection.materializations[0]?.topic_question_contract.topic_question_contract_id;
+  assert.ok(contractId);
+
+  return {
+    questionCandidateSet,
+    questionSelection,
+    ...(await runV1bValuePassFromQuestionContract(app, contractId)),
+  };
+}
 
 async function runV1bHttpFlow(
   app: FastifyInstance,
@@ -935,6 +1246,333 @@ test('topic-selection v1b HTTP routes drive v1b input bundle to draft package an
       [
         'topic_selection_research_slice_option_set',
         'topic_selection_topic_question_candidate_set',
+        'topic_selection_topic_value_assessment',
+      ],
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test('topic-selection v1b HTTP loopback re-enters from refine_slice and advances after refinement', async () => {
+  const fakeLlmGateway = new FakeTopicSelectionV1bLlmGateway({
+    valueAssessmentSequence: ['needs_refinement', 'ready'],
+  });
+  const app = buildApp({ topicSelectionV1bLlmGateway: fakeLlmGateway });
+  try {
+    const firstPass = await runV1bHttpFlow(app, uniqueId('v1b-loopback'), { stopAtAssessment: true });
+    const firstAssessment = firstPass.valueAssessment.topic_value_assessment as unknown as {
+      topic_value_assessment_id: string;
+      readiness_status: string;
+    };
+    assert.equal(firstAssessment.readiness_status, 'needs_refinement');
+
+    const loopbackRes = await app.inject({
+      method: 'POST',
+      url: `/topic-selection/v1b/topic-value-assessments/${encodeURIComponent(firstAssessment.topic_value_assessment_id)}/disposition-decisions`,
+      payload: {
+        topic_value_assessment_id: 'ignored-by-path',
+        decision: 'refine_slice',
+        decided_by: 'human',
+        decision_rationale: 'Return to ResearchSlice because evidence sanity failed.',
+        required_actions: ['narrow slice and refresh baseline/challenge evidence'],
+      },
+    });
+    assertStatus(loopbackRes, 201);
+    const loopback = loopbackRes.json() as {
+      value_disposition_decision_id: string;
+      decision: string;
+      loopback_target_ref: TopicSelectionFunctionalRef;
+      package_draft_input: unknown;
+    };
+    assert.equal(loopback.decision, 'refine_slice');
+    assert.equal(loopback.loopback_target_ref.ref_type, 'research_slice');
+    assert.equal(
+      loopback.loopback_target_ref.ref_id,
+      firstPass.sliceSelection.research_slice?.research_slice_id,
+    );
+    assert.equal(loopback.package_draft_input, null);
+
+    const blockedPackageRes = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1b/topic-packages/drafts',
+      payload: {
+        value_disposition_decision_id: loopback.value_disposition_decision_id,
+        created_by: 'system',
+      },
+    });
+    assert.equal(blockedPackageRes.statusCode, 409);
+    const blockedPackage = blockedPackageRes.json() as { error: { code: string; message: string } };
+    assert.equal(blockedPackage.error.code, 'GATE_CONSTRAINT_FAILED');
+    assert.match(blockedPackage.error.message, /advance_to_package/);
+
+    const refinedPass = await runV1bDraftingPassFromReadiness(
+      app,
+      firstPass.readiness.v1b_intake_readiness_assessment_id,
+    );
+    const refinedAssessment = refinedPass.valueAssessment.topic_value_assessment as unknown as {
+      readiness_status: string;
+    };
+    assert.equal(refinedAssessment.readiness_status, 'ready');
+    assert.notEqual(
+      refinedPass.sliceSelection.research_slice?.research_slice_id,
+      firstPass.sliceSelection.research_slice?.research_slice_id,
+    );
+    assert.notEqual(
+      refinedPass.questionSelection.materializations[0]?.topic_question_contract.topic_question_contract_id,
+      firstPass.questionSelection.materializations[0]?.topic_question_contract.topic_question_contract_id,
+    );
+    assert.equal(refinedPass.disposition?.decision, 'advance_to_package');
+    assert.equal(refinedPass.draftPackage?.topic_package.package_readiness_status, 'ready_for_promotion_review');
+    assert.deepEqual(
+      fakeLlmGateway.calls.map((call) => call.schemaName),
+      [
+        'topic_selection_research_slice_option_set',
+        'topic_selection_topic_question_candidate_set',
+        'topic_selection_topic_value_assessment',
+        'topic_selection_research_slice_option_set',
+        'topic_selection_topic_question_candidate_set',
+        'topic_selection_topic_value_assessment',
+      ],
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test('topic-selection v1b HTTP loopback re-enters from refine_question and advances after reframing', async () => {
+  const fakeLlmGateway = new FakeTopicSelectionV1bLlmGateway({
+    valueAssessmentSequence: ['refine_question', 'ready'],
+  });
+  const app = buildApp({ topicSelectionV1bLlmGateway: fakeLlmGateway });
+  try {
+    const firstPass = await runV1bHttpFlow(app, uniqueId('v1b-refine-question'), { stopAtAssessment: true });
+    const firstAssessment = firstPass.valueAssessment.topic_value_assessment as unknown as {
+      topic_value_assessment_id: string;
+      readiness_status: string;
+    };
+    const firstContractId =
+      firstPass.questionSelection.materializations[0]?.topic_question_contract.topic_question_contract_id;
+    assert.ok(firstContractId);
+    assert.equal(firstAssessment.readiness_status, 'needs_refinement');
+
+    const loopbackRes = await app.inject({
+      method: 'POST',
+      url: `/topic-selection/v1b/topic-value-assessments/${encodeURIComponent(firstAssessment.topic_value_assessment_id)}/disposition-decisions`,
+      payload: {
+        topic_value_assessment_id: 'ignored-by-path',
+        decision: 'refine_question',
+        decided_by: 'human',
+        decision_rationale: 'Return to TopicQuestionContract because the question framing failed value checks.',
+        required_actions: ['separate workflow value from metric scope and regenerate the question contract'],
+      },
+    });
+    assertStatus(loopbackRes, 201);
+    const loopback = loopbackRes.json() as {
+      value_disposition_decision_id: string;
+      decision: string;
+      loopback_target_ref: TopicSelectionFunctionalRef;
+      package_draft_input: unknown;
+    };
+    assert.equal(loopback.decision, 'refine_question');
+    assert.equal(loopback.loopback_target_ref.ref_type, 'topic_question_contract');
+    assert.equal(loopback.loopback_target_ref.ref_id, firstContractId);
+    assert.equal(loopback.package_draft_input, null);
+    assert.equal((loopback as { status?: string }).status, 'active');
+    assert.equal((loopback as { is_current?: boolean }).is_current, true);
+    assert.equal((loopback as { output_topic_package_id?: string | null }).output_topic_package_id, null);
+
+    const blockedPackageRes = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1b/topic-packages/drafts',
+      payload: {
+        value_disposition_decision_id: loopback.value_disposition_decision_id,
+        created_by: 'system',
+      },
+    });
+    assert.equal(blockedPackageRes.statusCode, 409);
+    const blockedPackage = blockedPackageRes.json() as { error: { code: string; message: string } };
+    assert.equal(blockedPackage.error.code, 'GATE_CONSTRAINT_FAILED');
+    assert.match(blockedPackage.error.message, /advance_to_package/);
+
+    const forcedAdvanceRes = await app.inject({
+      method: 'POST',
+      url: `/topic-selection/v1b/topic-value-assessments/${encodeURIComponent(firstAssessment.topic_value_assessment_id)}/disposition-decisions`,
+      payload: {
+        topic_value_assessment_id: 'ignored-by-path',
+        decision: 'advance_to_package',
+        decided_by: 'human',
+        decision_rationale: 'This should fail because the original assessment was not ready.',
+      },
+    });
+    assert.equal(forcedAdvanceRes.statusCode, 409);
+    const forcedAdvance = forcedAdvanceRes.json() as { error: { code: string; message: string } };
+    assert.equal(forcedAdvance.error.code, 'GATE_CONSTRAINT_FAILED');
+    assert.match(forcedAdvance.error.message, /requires ready value assessment/);
+
+    const refinedPass = await runV1bQuestionValuePassFromSlice(
+      app,
+      firstPass.sliceSelection.research_slice?.research_slice_id ?? '',
+    );
+    const refinedAssessment = refinedPass.valueAssessment.topic_value_assessment as unknown as {
+      readiness_status: string;
+    };
+    const firstMaterialization = firstPass.questionSelection.materializations[0];
+    const refinedMaterialization = refinedPass.questionSelection.materializations[0];
+    assert.ok(firstMaterialization);
+    assert.ok(refinedMaterialization);
+    const sourceResearchSliceId = firstPass.sliceSelection.research_slice?.research_slice_id;
+    assert.ok(sourceResearchSliceId);
+    assert.equal(
+      refinedMaterialization.topic_question_contract.source_research_slice_id,
+      sourceResearchSliceId,
+    );
+    assert.equal(
+      refinedMaterialization.topic_question_contract.source_research_slice_version,
+      firstMaterialization.topic_question_contract.source_research_slice_version,
+    );
+    assert.deepEqual(
+      refinedMaterialization.topic_question_contract.accepted_risk_refs,
+      firstMaterialization.topic_question_contract.accepted_risk_refs,
+    );
+    const requiredEvidenceRoles = ['support', 'challenge', 'baseline', 'context'] as const;
+    const refinedEvidenceRoles = new Set(refinedMaterialization.evidence_refs.map((record) => record.evidence_role));
+    for (const requiredRole of requiredEvidenceRoles) {
+      assert.equal(refinedEvidenceRoles.has(requiredRole), true, `missing repaired evidence role ${requiredRole}`);
+    }
+    assert.equal(refinedMaterialization.boundary_refs.length > 0, true);
+    assert.equal(
+      refinedMaterialization.boundary_refs.every((record) => record.research_slice_boundary_id.length > 0),
+      true,
+    );
+    assert.equal(refinedMaterialization.assumption_refs.length > 0, true);
+    assert.equal(
+      refinedMaterialization.assumption_refs.some((record) => Boolean(record.source_assumption_id)),
+      true,
+    );
+    const refinedSnapshot = (refinedPass.valueAssessment as unknown as {
+      topic_value_input_snapshot: {
+        topic_question_contract_ref: TopicSelectionFunctionalRef;
+        research_slice_ref: TopicSelectionFunctionalRef;
+        evidence_refs: Array<{ evidence_role: string; evidence_ref: TopicSelectionFunctionalRef }>;
+        boundary_refs: unknown[];
+        assumption_refs: unknown[];
+      };
+    }).topic_value_input_snapshot;
+    assert.equal(refinedSnapshot.topic_question_contract_ref.ref_id, refinedMaterialization.topic_question_contract.topic_question_contract_id);
+    assert.equal(refinedSnapshot.research_slice_ref.ref_id, sourceResearchSliceId);
+    const refinedSnapshotEvidenceRoles = new Set(refinedSnapshot.evidence_refs.map((record) => record.evidence_role));
+    for (const requiredRole of requiredEvidenceRoles) {
+      assert.equal(
+        refinedSnapshotEvidenceRoles.has(requiredRole),
+        true,
+        `missing repaired value snapshot evidence role ${requiredRole}`,
+      );
+    }
+    assert.equal(refinedSnapshot.boundary_refs.length, refinedMaterialization.boundary_refs.length);
+    assert.equal(refinedSnapshot.assumption_refs.length, refinedMaterialization.assumption_refs.length);
+    assert.equal(refinedAssessment.readiness_status, 'ready');
+    assert.notEqual(
+      refinedPass.questionSelection.materializations[0]?.topic_question_contract.topic_question_contract_id,
+      firstContractId,
+    );
+    assert.equal(refinedPass.disposition?.decision, 'advance_to_package');
+    assert.equal(refinedPass.draftPackage?.topic_package.package_readiness_status, 'ready_for_promotion_review');
+
+    const staleLoopbackPackageRes = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1b/topic-packages/drafts',
+      payload: {
+        value_disposition_decision_id: loopback.value_disposition_decision_id,
+        created_by: 'system',
+      },
+    });
+    assert.equal(staleLoopbackPackageRes.statusCode, 409);
+    const staleLoopbackPackage = staleLoopbackPackageRes.json() as { error: { code: string; message: string } };
+    assert.equal(staleLoopbackPackage.error.code, 'GATE_CONSTRAINT_FAILED');
+    assert.match(staleLoopbackPackage.error.message, /advance_to_package/);
+    assert.deepEqual(
+      fakeLlmGateway.calls.map((call) => call.schemaName),
+      [
+        'topic_selection_research_slice_option_set',
+        'topic_selection_topic_question_candidate_set',
+        'topic_selection_topic_value_assessment',
+        'topic_selection_topic_question_candidate_set',
+        'topic_selection_topic_value_assessment',
+      ],
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test('topic-selection v1b HTTP loopback rechecks evidence and advances after reassessment', async () => {
+  const fakeLlmGateway = new FakeTopicSelectionV1bLlmGateway({
+    valueAssessmentSequence: ['recheck_required', 'ready'],
+  });
+  const app = buildApp({ topicSelectionV1bLlmGateway: fakeLlmGateway });
+  try {
+    const firstPass = await runV1bHttpFlow(app, uniqueId('v1b-recheck-evidence'), { stopAtAssessment: true });
+    const firstAssessment = firstPass.valueAssessment.topic_value_assessment as unknown as {
+      topic_value_assessment_id: string;
+      readiness_status: string;
+    };
+    const contractId =
+      firstPass.questionSelection.materializations[0]?.topic_question_contract.topic_question_contract_id;
+    assert.ok(contractId);
+    assert.equal(firstAssessment.readiness_status, 'recheck_required');
+
+    const loopbackRes = await app.inject({
+      method: 'POST',
+      url: `/topic-selection/v1b/topic-value-assessments/${encodeURIComponent(firstAssessment.topic_value_assessment_id)}/disposition-decisions`,
+      payload: {
+        topic_value_assessment_id: 'ignored-by-path',
+        decision: 'recheck_evidence_or_search',
+        decided_by: 'human',
+        decision_rationale: 'Return to evidence/search recheck because freshness blocks package drafting.',
+        required_actions: ['refresh or recheck evidence before reassessing the question contract'],
+      },
+    });
+    assertStatus(loopbackRes, 201);
+    const loopback = loopbackRes.json() as {
+      value_disposition_decision_id: string;
+      decision: string;
+      loopback_target_ref: TopicSelectionFunctionalRef;
+      package_draft_input: unknown;
+    };
+    assert.equal(loopback.decision, 'recheck_evidence_or_search');
+    assert.equal(loopback.loopback_target_ref.ref_type, 'recheck_request');
+    assert.equal(loopback.loopback_target_ref.ref_id, 'pending');
+    assert.equal(loopback.package_draft_input, null);
+
+    const blockedPackageRes = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1b/topic-packages/drafts',
+      payload: {
+        value_disposition_decision_id: loopback.value_disposition_decision_id,
+        created_by: 'system',
+      },
+    });
+    assert.equal(blockedPackageRes.statusCode, 409);
+    const blockedPackage = blockedPackageRes.json() as { error: { code: string; message: string } };
+    assert.equal(blockedPackage.error.code, 'GATE_CONSTRAINT_FAILED');
+    assert.match(blockedPackage.error.message, /advance_to_package/);
+
+    const reassessedPass = await runV1bValuePassFromQuestionContract(app, contractId);
+    const reassessed = reassessedPass.valueAssessment.topic_value_assessment as unknown as {
+      topic_value_assessment_id: string;
+      readiness_status: string;
+    };
+    assert.equal(reassessed.readiness_status, 'ready');
+    assert.notEqual(reassessed.topic_value_assessment_id, firstAssessment.topic_value_assessment_id);
+    assert.equal(reassessedPass.disposition?.decision, 'advance_to_package');
+    assert.equal(reassessedPass.draftPackage?.topic_package.package_readiness_status, 'ready_for_promotion_review');
+    assert.deepEqual(
+      fakeLlmGateway.calls.map((call) => call.schemaName),
+      [
+        'topic_selection_research_slice_option_set',
+        'topic_selection_topic_question_candidate_set',
+        'topic_selection_topic_value_assessment',
         'topic_selection_topic_value_assessment',
       ],
     );

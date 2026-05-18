@@ -21,9 +21,11 @@ import type {
   TopicSelectionTopicQuestionNeedRefRecord,
   TopicSelectionV1bValueAssessmentInput,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-topic-question-contracts';
-import type {
-  TopicSelectionAssessTopicValueLlmOutput,
-  TopicSelectionValueDisposition,
+import {
+  TOPIC_SELECTION_VALUE_DIMENSIONS,
+  TOPIC_SELECTION_VALUE_GATE_KEYS,
+  type TopicSelectionAssessTopicValueLlmOutput,
+  type TopicSelectionValueDisposition,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-value-assessment-contracts';
 
 import { AppError } from '../errors/app-error.js';
@@ -475,6 +477,54 @@ function makeLlmOutput(
   };
 }
 
+function makeNeedsRefinementOutput(): TopicSelectionAssessTopicValueLlmOutput {
+  const blockerRef = ref('evidence_unit', 'baseline_1');
+  return makeLlmOutput({
+    readiness_status: 'needs_refinement',
+    hard_gates: [
+      makeGate('value_signal'),
+      makeGate('non_solved_sanity'),
+      makeGate('answerability_sanity'),
+      makeGate('feasibility_sanity'),
+      makeGate('evidence_sanity', {
+        verdict: 'fail',
+        severity: 'blocking',
+        rationale: 'Baseline evidence must be repaired before package drafting.',
+        refs: [blockerRef],
+      }),
+      makeGate('claim_ceiling_fit'),
+    ],
+    dimension_scores: [
+      makeDimension('significance'),
+      makeDimension('originality'),
+      makeDimension('answerability', {
+        score: 58,
+        uncertainty: 'Baseline evidence is not sufficient for the proposed claim.',
+      }),
+      makeDimension('feasibility'),
+      makeDimension('claim_ceiling_fit'),
+      makeDimension('reviewer_risk', {
+        score: 54,
+        uncertainty: 'Reviewer risk remains high until the slice is narrowed.',
+      }),
+      makeDimension('effort_to_value_fit'),
+      makeDimension('strategic_fit'),
+      makeDimension('negative_memory_check'),
+    ],
+    recommended_disposition: 'refine_slice',
+    total_score: 62,
+    blocker_refs: [blockerRef],
+    reasoning_memo: {
+      ...makeLlmOutput().reasoning_memo,
+      recommendation: 'refine_slice',
+      evidence_backed_rationale: 'The baseline evidence ref shows the slice cannot support package drafting yet.',
+      uncertainty: 'The current slice may be too broad for the available baseline evidence.',
+      disposition_bridge: 'Return to ResearchSlice refinement before producing package input.',
+      cited_refs: [blockerRef],
+    },
+  });
+}
+
 function makeSubject(options: {
   output?: TopicSelectionAssessTopicValueLlmOutput | Error;
   valueInput?: TopicSelectionV1bValueAssessmentInput;
@@ -517,6 +567,92 @@ test('valid assessment creates TopicValueAssessment and ValueReasoningMemo only'
   assert.equal(llmGateway.calls.length, 1);
 });
 
+test('prompt directs value assessment to cite nested evidence_ref values, not wrapper refs', async () => {
+  const { service, llmGateway } = makeSubject();
+  await service.assessTopicValue({ topic_question_contract_id: CONTRACT_ID });
+
+  const systemMessage = llmGateway.calls[0]?.messages.find((message) => message.role === 'system')?.content ?? '';
+  const userPayload = JSON.parse(llmGateway.calls[0]?.messages.find((message) => message.role === 'user')?.content ?? '{}') as {
+    allowed_functional_refs_json?: { evidence_refs?: TopicSelectionFunctionalRef[] };
+  };
+  assert.match(systemMessage, /nested evidence_ref functional refs/);
+  assert.match(systemMessage, /allowed_functional_refs_json as the complete copy list/);
+  assert.match(systemMessage, /topic_question_evidence_ref_id/);
+  assert.match(systemMessage, /research_slice_evidence_ref_id/);
+  assert.match(systemMessage, /do not output ref_type topic_question_evidence_ref or research_slice_evidence_ref/i);
+  assert.match(systemMessage, /Never invent placeholder refs or synthetic evidence_unit ids/);
+  assert.match(systemMessage, /accepted_risk_refs must contain only inherited ref_type accepted_risk/);
+  assert.match(systemMessage, /Assess package-drafting readiness, not promotion readiness/);
+  assert.match(systemMessage, /Return exactly 6 hard_gates/);
+  assert.match(systemMessage, new RegExp(TOPIC_SELECTION_VALUE_GATE_KEYS.join(', ')));
+  assert.match(systemMessage, /Return exactly 9 dimension_scores/);
+  assert.match(systemMessage, new RegExp(TOPIC_SELECTION_VALUE_DIMENSIONS.join(', ')));
+  assert.ok(userPayload.allowed_functional_refs_json?.evidence_refs?.some((item) => item.ref_id === 'support_1'));
+});
+
+test('value assessment normalizes known evidence wrapper refs before hard-gate validation', async () => {
+  const output = makeLlmOutput();
+  output.dimension_scores = output.dimension_scores.map((score, index) =>
+    index === 0
+      ? {
+        ...score,
+        evidence_refs: [ref('research_slice_evidence_ref', 'slice_evidence_support_1')],
+      }
+      : score,
+  );
+  output.reasoning_memo = {
+    ...output.reasoning_memo,
+    cited_refs: [ref('topic_question_evidence_ref', 'question_evidence_ref_1')],
+  };
+  const { service } = makeSubject({ output });
+
+  const result = await service.assessTopicValue({ topic_question_contract_id: CONTRACT_ID });
+
+  assert.deepEqual(
+    result.topic_value_assessment.dimension_scores[0]?.evidence_refs,
+    [ref('evidence_unit', 'support_1')],
+  );
+  assert.deepEqual(result.value_reasoning_memo.cited_refs, [ref('evidence_unit', 'support_1')]);
+});
+
+test('value assessment normalizes research_slice_ref wrapper back to inherited research_slice ref', async () => {
+  const output = makeLlmOutput();
+  output.hard_gates = output.hard_gates.map((gate, index) =>
+    index === 0
+      ? {
+        ...gate,
+        refs: [ref('research_slice_ref', RESEARCH_SLICE_ID, 'v_untrusted_model_alias')],
+      }
+      : gate,
+  );
+  output.reasoning_memo = {
+    ...output.reasoning_memo,
+    cited_refs: [ref('research_slice_ref', RESEARCH_SLICE_ID, 'v_untrusted_model_alias')],
+  };
+  const { service } = makeSubject({ output });
+
+  const result = await service.assessTopicValue({ topic_question_contract_id: CONTRACT_ID });
+
+  assert.deepEqual(
+    result.topic_value_assessment.hard_gates[0]?.refs,
+    [ref('research_slice', RESEARCH_SLICE_ID, 'v1')],
+  );
+  assert.deepEqual(result.value_reasoning_memo.cited_refs, [ref('research_slice', RESEARCH_SLICE_ID, 'v1')]);
+});
+
+test('value assessment drops evidence refs mistakenly returned as accepted risk refs', async () => {
+  const { service } = makeSubject({
+    output: makeLlmOutput({
+      accepted_risk_refs: [ref('evidence_unit', 'support_1')],
+    }),
+  });
+
+  const result = await service.assessTopicValue({ topic_question_contract_id: CONTRACT_ID });
+
+  assert.deepEqual(result.topic_value_assessment.accepted_risk_refs, []);
+  assert.deepEqual(result.assess_topic_value_run.accepted_risk_refs, []);
+});
+
 test('LLM failure records failed run and no assessment', async () => {
   const { service, repository } = makeSubject({
     output: new LlmGatewayError('UpstreamError', 'model failed'),
@@ -546,7 +682,7 @@ test('invalid LLM output blocks persistence', async () => {
   assert.equal(await repository.findAssessmentById('topic_value_assessment_1'), null);
 });
 
-test('unknown evidence ref blocks persistence', async () => {
+test('unknown evidence refs are dropped before value assessment persistence', async () => {
   const output = makeLlmOutput({
     dimension_scores: [
       makeDimension('significance', { evidence_refs: [ref('evidence_unit', 'unknown_evidence')] }),
@@ -562,10 +698,10 @@ test('unknown evidence ref blocks persistence', async () => {
   });
   const { service } = makeSubject({ output });
 
-  await assert.rejects(
-    () => service.assessTopicValue({ topic_question_contract_id: CONTRACT_ID }),
-    (error) => error instanceof AppError && /outside the T-059\/T-057 handoff|unknown evidence/.test(error.message),
-  );
+  const result = await service.assessTopicValue({ topic_question_contract_id: CONTRACT_ID });
+  const significance = result.topic_value_assessment.dimension_scores.find((score) =>
+    score.dimension_key === 'significance');
+  assert.deepEqual(significance?.evidence_refs, []);
 });
 
 test('new need ref blocks persistence', async () => {
@@ -625,6 +761,69 @@ test('weak answerability cannot pass ready assessment', async () => {
   );
 });
 
+test('ready assessment requires consistent advance disposition and sufficient score', async () => {
+  await assert.rejects(
+    () => makeSubject({
+      output: makeLlmOutput({
+        recommended_disposition: 'refine_question',
+        reasoning_memo: {
+          ...makeLlmOutput().reasoning_memo,
+          recommendation: 'refine_question',
+        },
+      }),
+    }).service.assessTopicValue({ topic_question_contract_id: CONTRACT_ID }),
+    (error) => error instanceof AppError && /must recommend advance_to_package/.test(error.message),
+  );
+
+  await assert.rejects(
+    () => makeSubject({
+      output: makeLlmOutput({
+        total_score: 54,
+      }),
+    }).service.assessTopicValue({ topic_question_contract_id: CONTRACT_ID }),
+    (error) => error instanceof AppError && /total_score >= 70/.test(error.message),
+  );
+});
+
+test('ready assessment rejects weak dimension scores', async () => {
+  const output = makeLlmOutput({
+    dimension_scores: [
+      makeDimension('significance'),
+      makeDimension('originality'),
+      makeDimension('answerability', { score: 42 }),
+      makeDimension('feasibility'),
+      makeDimension('claim_ceiling_fit'),
+      makeDimension('reviewer_risk'),
+      makeDimension('effort_to_value_fit'),
+      makeDimension('strategic_fit'),
+      makeDimension('negative_memory_check'),
+    ],
+  });
+  const { service } = makeSubject({ output });
+
+  await assert.rejects(
+    () => service.assessTopicValue({ topic_question_contract_id: CONTRACT_ID }),
+    (error) => error instanceof AppError
+      && /weak dimension scores/.test(error.message)
+      && Array.isArray(error.details?.weak_dimensions)
+      && error.details.weak_dimensions.includes('answerability'),
+  );
+});
+
+test('non-ready assessment cannot recommend advance_to_package', async () => {
+  const { service } = makeSubject({
+    output: makeLlmOutput({
+      readiness_status: 'needs_refinement',
+      recommended_disposition: 'advance_to_package',
+    }),
+  });
+
+  await assert.rejects(
+    () => service.assessTopicValue({ topic_question_contract_id: CONTRACT_ID }),
+    (error) => error instanceof AppError && /advance_to_package requires a ready/.test(error.message),
+  );
+});
+
 test('accepted risks are preserved', async () => {
   const riskRef = ref('accepted_risk', 'risk_1');
   const contract = makeQuestionContract({ accepted_risk_refs: [riskRef] });
@@ -642,6 +841,39 @@ test('accepted risks are preserved', async () => {
 
   const result = await service.assessTopicValue({ topic_question_contract_id: CONTRACT_ID });
   assert.deepEqual(result.topic_value_assessment.accepted_risk_refs, [riskRef]);
+});
+
+test('ready_with_accepted_risk inherits accepted risk refs when LLM omits them', async () => {
+  const riskRef = ref('accepted_risk', 'risk_1');
+  const contract = makeQuestionContract({ accepted_risk_refs: [riskRef] });
+  const valueInput = makeValueInput({
+    accepted_risk_refs: [riskRef],
+    question_contract: contract,
+  });
+  const { service } = makeSubject({
+    valueInput,
+    output: makeLlmOutput({
+      readiness_status: 'ready_with_accepted_risk',
+      accepted_risk_refs: [],
+    }),
+  });
+
+  const result = await service.assessTopicValue({ topic_question_contract_id: CONTRACT_ID });
+  assert.deepEqual(result.topic_value_assessment.accepted_risk_refs, [riskRef]);
+  assert.deepEqual(result.assess_topic_value_run.accepted_risk_refs, [riskRef]);
+});
+
+test('ready_with_accepted_risk without inherited accepted risks normalizes to ready', async () => {
+  const { service } = makeSubject({
+    output: makeLlmOutput({
+      readiness_status: 'ready_with_accepted_risk',
+      accepted_risk_refs: [],
+    }),
+  });
+
+  const result = await service.assessTopicValue({ topic_question_contract_id: CONTRACT_ID });
+  assert.equal(result.topic_value_assessment.readiness_status, 'ready');
+  assert.deepEqual(result.topic_value_assessment.accepted_risk_refs, []);
 });
 
 test('slice-side inherited refs are accepted and preserved', async () => {
@@ -700,7 +932,7 @@ test('advance_to_package creates package draft input but no package id', async (
   assert.equal(packageInput.research_slice_snapshot.slice_version, 'v1');
 });
 
-test('disposition rejects new refs and missing loopback payload', async () => {
+test('disposition rejects new refs, missing actions, and unknown loopback targets', async () => {
   const { service, assessment } = await assessReadySubject();
 
   await assert.rejects(
@@ -732,14 +964,23 @@ test('disposition rejects new refs and missing loopback payload', async () => {
   );
 });
 
-test('non-advance dispositions create no package handoff', async () => {
-  for (const disposition of [
-    'refine_question',
-    'refine_slice',
-    'recheck_evidence_or_search',
-    'park',
-    'drop',
-  ] satisfies TopicSelectionValueDisposition[]) {
+test('loopback dispositions target upstream authorities and create no package handoff', async () => {
+  const cases = [
+    {
+      disposition: 'refine_question',
+      targetRef: ref('topic_question_contract', CONTRACT_ID, 'v1'),
+    },
+    {
+      disposition: 'refine_slice',
+      targetRef: ref('research_slice', RESEARCH_SLICE_ID, 'v1'),
+    },
+    {
+      disposition: 'recheck_evidence_or_search',
+      targetRef: ref('recheck_request', 'recheck_1'),
+    },
+  ] satisfies Array<{ disposition: TopicSelectionValueDisposition; targetRef: TopicSelectionFunctionalRef }>;
+
+  for (const { disposition, targetRef } of cases) {
     const { service, assessment } = await assessReadySubject();
     const decision = await service.decideValueDisposition({
       topic_value_assessment_id: assessment.topic_value_assessment_id,
@@ -748,24 +989,113 @@ test('non-advance dispositions create no package handoff', async () => {
       required_actions: ['record loopback'],
     });
 
+    assert.deepEqual(decision.loopback_target_ref, targetRef);
+    assert.equal(decision.package_draft_input, null);
+    assert.equal(decision.output_topic_package_id, null);
+    await assert.rejects(
+      () => service.buildPackageDraftInput({
+        value_disposition_decision_id: decision.value_disposition_decision_id,
+      }),
+      (error) => error instanceof AppError && /advance_to_package/.test(error.message),
+    );
+  }
+});
+
+test('recheck loopback defaults to a pending target when no recheck request exists', async () => {
+  const { service } = makeSubject({
+    valueInput: makeValueInput({ recheck_request_refs: [] }),
+    formationInput: makeFormationInput({ recheck_request_refs: [] }),
+  });
+  const result = await service.assessTopicValue({
+    topic_question_contract_id: CONTRACT_ID,
+  });
+  const decision = await service.decideValueDisposition({
+    topic_value_assessment_id: result.topic_value_assessment.topic_value_assessment_id,
+    decision: 'recheck_evidence_or_search',
+    decision_rationale: 'Search evidence again before package drafting.',
+    required_actions: ['open a recheck request for baseline freshness'],
+  });
+
+  assert.deepEqual(decision.loopback_target_ref, ref('recheck_request', 'pending'));
+  assert.equal(decision.package_draft_input, null);
+  assert.equal(decision.output_topic_package_id, null);
+});
+
+test('park and drop create no package handoff and no loopback target', async () => {
+  for (const disposition of ['park', 'drop'] satisfies TopicSelectionValueDisposition[]) {
+    const { service, assessment } = await assessReadySubject();
+    const decision = await service.decideValueDisposition({
+      topic_value_assessment_id: assessment.topic_value_assessment_id,
+      decision: disposition,
+      decision_rationale: `Use ${disposition}.`,
+      required_actions: ['record disposition rationale'],
+    });
+
+    assert.equal(decision.loopback_target_ref, null);
     assert.equal(decision.package_draft_input, null);
     assert.equal(decision.output_topic_package_id, null);
   }
 });
 
-test('buildPackageDraftInput rejects non-current, non-active, and non-advance decisions', async () => {
-  const { service, assessment } = await assessReadySubject();
+test('needs_refinement assessment returns to loopback and rejects forced package advancement', async () => {
+  const { service } = makeSubject({ output: makeNeedsRefinementOutput() });
+  const result = await service.assessTopicValue({
+    topic_question_contract_id: CONTRACT_ID,
+  });
+  const assessment = result.topic_value_assessment;
+
+  assert.equal(assessment.readiness_status, 'needs_refinement');
+  assert.equal(assessment.legacy_verdict, 'refine');
+
+  await assert.rejects(
+    () => service.decideValueDisposition({
+      topic_value_assessment_id: assessment.topic_value_assessment_id,
+      decision: 'advance_to_package',
+      decision_rationale: 'Force package drafting despite refinement status.',
+    }),
+    (error) => error instanceof AppError && /requires ready value assessment/.test(error.message),
+  );
+
+  const loopback = await service.decideValueDisposition({
+    topic_value_assessment_id: assessment.topic_value_assessment_id,
+    decision: 'refine_slice',
+    decision_rationale: 'Baseline evidence is insufficient for package drafting.',
+    required_actions: ['narrow the research slice and refresh baseline evidence'],
+  });
+
+  assert.deepEqual(loopback.loopback_target_ref, ref('research_slice', RESEARCH_SLICE_ID, 'v1'));
+  assert.equal(loopback.package_draft_input, null);
+  assert.equal(loopback.output_topic_package_id, null);
+  await assert.rejects(
+    () => service.buildPackageDraftInput({
+      value_disposition_decision_id: loopback.value_disposition_decision_id,
+    }),
+    (error) => error instanceof AppError && /advance_to_package/.test(error.message),
+  );
+});
+
+test('buildPackageDraftInput rejects superseded loopback history and non-advance decisions', async () => {
+  const { service, repository, assessment } = await assessReadySubject();
   const advance = await service.decideValueDisposition({
     topic_value_assessment_id: assessment.topic_value_assessment_id,
     decision: 'advance_to_package',
     decision_rationale: 'Advance first.',
   });
-  const park = await service.decideValueDisposition({
+  const refineSlice = await service.decideValueDisposition({
     topic_value_assessment_id: assessment.topic_value_assessment_id,
-    decision: 'park',
-    decision_rationale: 'Supersede advance.',
-    required_actions: ['hold until evidence freshness is checked'],
+    decision: 'refine_slice',
+    decision_rationale: 'Supersede advance after a quality review.',
+    required_actions: ['narrow the slice before package drafting'],
   });
+
+  const storedAdvance = await repository.findDispositionDecisionById(advance.value_disposition_decision_id);
+  const storedRefineSlice = await repository.findDispositionDecisionById(refineSlice.value_disposition_decision_id);
+  const storedAssessment = await repository.findAssessmentById(assessment.topic_value_assessment_id);
+  assert.equal(storedAdvance?.status, 'superseded');
+  assert.equal(storedAdvance?.is_current, false);
+  assert.equal(storedRefineSlice?.status, 'active');
+  assert.equal(storedRefineSlice?.is_current, true);
+  assert.equal(storedAssessment?.active_disposition_decision_id, refineSlice.value_disposition_decision_id);
 
   await assert.rejects(
     () => service.buildPackageDraftInput({
@@ -775,7 +1105,7 @@ test('buildPackageDraftInput rejects non-current, non-active, and non-advance de
   );
   await assert.rejects(
     () => service.buildPackageDraftInput({
-      value_disposition_decision_id: park.value_disposition_decision_id,
+      value_disposition_decision_id: refineSlice.value_disposition_decision_id,
     }),
     (error) => error instanceof AppError && /advance_to_package/.test(error.message),
   );

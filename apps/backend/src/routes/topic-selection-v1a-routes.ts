@@ -50,12 +50,16 @@ import {
   topicSelectionOfflineFrozenInputBundleSchema,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-offline-evaluation-replay-contracts';
 import {
+  createTopicSelectionResourceSampleRequestSchema,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-resource-sampling-contracts';
+import {
   TopicSelectionV1aController,
   type InterpretQualitySignalBody,
   type OfflineDatasetBody,
   type QueueSearchPlanRecheckBody,
   type ReadinessBody,
 } from '../controllers/topic-selection-v1a-controller.js';
+import { TopicSelectionResourceSamplingController } from '../controllers/topic-selection-resource-sampling-controller.js';
 
 type JsonSchema = Record<string, unknown>;
 
@@ -126,6 +130,9 @@ const literatureSnapshotBody = bodySchema(['title_card_id', 'topic_seed_id'], {
   created_by: actorType,
   policy_version_id: nullableStringId,
 });
+
+const resourceSampleBody = { body: createTopicSelectionResourceSampleRequestSchema } as const;
+const resourceSampleParams = paramsSchema({ sampleSetId: stringId });
 
 const coverageIntent = {
   type: 'object',
@@ -588,6 +595,7 @@ const runParams = paramsSchema({ runId: stringId });
 export async function registerTopicSelectionV1aRoutes(
   fastify: FastifyInstance,
   controller: TopicSelectionV1aController,
+  resourceSamplingController: TopicSelectionResourceSamplingController,
 ): Promise<void> {
   fastify.post(
     '/topic-selection/v1a/topic-seeds/from-title-card',
@@ -598,6 +606,16 @@ export async function registerTopicSelectionV1aRoutes(
     '/topic-selection/v1a/literature-resource-pool-snapshots',
     { schema: literatureSnapshotBody },
     controller.createLiteratureResourcePoolSnapshot,
+  );
+  fastify.post(
+    '/topic-selection/v1a/resource-samples',
+    { schema: resourceSampleBody },
+    resourceSamplingController.createResourceSampleSet,
+  );
+  fastify.get(
+    '/topic-selection/v1a/resource-samples/:sampleSetId',
+    { schema: resourceSampleParams },
+    resourceSamplingController.getResourceSampleSet,
   );
   fastify.post('/topic-selection/v1a/search-plans', { schema: searchPlanBody }, controller.createSearchPlan);
   fastify.post('/topic-selection/v1a/search-runs', { schema: searchRunBody }, controller.recordSearchRun);

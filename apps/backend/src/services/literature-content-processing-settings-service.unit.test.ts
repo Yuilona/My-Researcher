@@ -3,37 +3,94 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { InMemoryApplicationSettingsRepository } from '../repositories/in-memory-application-settings-repository.js';
-import { LiteratureContentProcessingSettingsService } from './literature-content-processing-settings-service.js';
+import {
+  DEFAULT_PAPER_ENGINEER_LOCAL_DATA_ROOT,
+  LITERATURE_CONTENT_PROCESSING_ROOT_ENV,
+  LiteratureContentProcessingSettingsService,
+  PAPER_ENGINEER_LOCAL_DATA_ROOT_ENV,
+} from './literature-content-processing-settings-service.js';
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}
 
 test('literature content-processing settings default to redacted OpenAI and large embedding profile', async () => {
+  const previousDataRoot = process.env[PAPER_ENGINEER_LOCAL_DATA_ROOT_ENV];
+  const previousLiteratureRoot = process.env[LITERATURE_CONTENT_PROCESSING_ROOT_ENV];
+  delete process.env[PAPER_ENGINEER_LOCAL_DATA_ROOT_ENV];
+  delete process.env[LITERATURE_CONTENT_PROCESSING_ROOT_ENV];
   const service = new LiteratureContentProcessingSettingsService(new InMemoryApplicationSettingsRepository());
 
-  const settings = await service.getSettings();
+  try {
+    const settings = await service.getSettings();
 
-  assert.equal(settings.providers[0]?.provider, 'openai');
-  assert.equal(settings.providers[0]?.api_key_set, false);
-  assert.equal(settings.providers[0]?.api_key_last_updated_at, null);
-  assert.equal(settings.providers[1]?.provider, 'dashscope');
-  assert.equal(settings.providers[1]?.api_key_set, false);
-  assert.equal(settings.embedding.active_profile_id, 'default');
-  assert.equal(settings.embedding.profiles.find((profile) => profile.profile_id === 'default')?.model, 'text-embedding-3-large');
-  assert.equal(settings.embedding.profiles.find((profile) => profile.profile_id === 'economy')?.model, 'text-embedding-3-small');
-  assert.equal(settings.extraction.active_profile_id, 'default');
-  assert.equal(settings.extraction.profiles.find((profile) => profile.profile_id === 'default')?.model, 'gpt-5.4-mini');
-  assert.equal(settings.extraction.profiles.find((profile) => profile.profile_id === 'high_accuracy')?.model, 'gpt-5.5');
-  assert.deepEqual(settings.extraction.runtime, {
-    preferred_key_content_method: 'llm_gateway',
-    section_concurrency: 3,
-    request_timeout_ms: 120_000,
-    max_retries: 1,
-    prompt_profile_id: 'literature_key_content_v2',
-    diagnostic_policy: 'actionable_v1',
-  });
-  assert.equal(settings.fulltext_parser.grobid.endpoint_url, 'http://localhost:8070');
-  assert.equal(
-    settings.effective_storage_roots.normalized_text,
-    path.join(os.homedir(), '.paper-engineering-assistant', 'literature-content-processing', 'normalized'),
-  );
+    assert.equal(settings.providers[0]?.provider, 'openai');
+    assert.equal(settings.providers[0]?.api_key_set, false);
+    assert.equal(settings.providers[0]?.api_key_last_updated_at, null);
+    assert.equal(settings.providers[1]?.provider, 'dashscope');
+    assert.equal(settings.providers[1]?.api_key_set, false);
+    assert.equal(settings.embedding.active_profile_id, 'default');
+    assert.equal(settings.embedding.profiles.find((profile) => profile.profile_id === 'default')?.model, 'text-embedding-3-large');
+    assert.equal(settings.embedding.profiles.find((profile) => profile.profile_id === 'economy')?.model, 'text-embedding-3-small');
+    assert.equal(settings.extraction.active_profile_id, 'default');
+    assert.equal(settings.extraction.profiles.find((profile) => profile.profile_id === 'default')?.model, 'gpt-5.4-mini');
+    assert.equal(settings.extraction.profiles.find((profile) => profile.profile_id === 'high_accuracy')?.model, 'gpt-5.5');
+    assert.deepEqual(settings.extraction.runtime, {
+      preferred_key_content_method: 'llm_gateway',
+      section_concurrency: 3,
+      request_timeout_ms: 120_000,
+      max_retries: 1,
+      prompt_profile_id: 'literature_key_content_v2',
+      diagnostic_policy: 'actionable_v1',
+    });
+    assert.equal(settings.fulltext_parser.grobid.endpoint_url, 'http://localhost:8070');
+    assert.equal(
+      settings.effective_storage_roots.normalized_text,
+      path.join(DEFAULT_PAPER_ENGINEER_LOCAL_DATA_ROOT, 'literature-content-processing', 'normalized'),
+    );
+  } finally {
+    restoreEnv(PAPER_ENGINEER_LOCAL_DATA_ROOT_ENV, previousDataRoot);
+    restoreEnv(LITERATURE_CONTENT_PROCESSING_ROOT_ENV, previousLiteratureRoot);
+  }
+});
+
+test('literature content-processing settings honor local data root env fallback', async () => {
+  const previousDataRoot = process.env[PAPER_ENGINEER_LOCAL_DATA_ROOT_ENV];
+  const previousLiteratureRoot = process.env[LITERATURE_CONTENT_PROCESSING_ROOT_ENV];
+  process.env[PAPER_ENGINEER_LOCAL_DATA_ROOT_ENV] = path.join(os.tmpdir(), 'paper-engineer-data-root');
+  delete process.env[LITERATURE_CONTENT_PROCESSING_ROOT_ENV];
+  try {
+    const service = new LiteratureContentProcessingSettingsService(new InMemoryApplicationSettingsRepository());
+    const settings = await service.getSettings();
+
+    assert.equal(
+      settings.effective_storage_roots.raw_files,
+      path.join(os.tmpdir(), 'paper-engineer-data-root', 'literature-content-processing', 'raw'),
+    );
+  } finally {
+    restoreEnv(PAPER_ENGINEER_LOCAL_DATA_ROOT_ENV, previousDataRoot);
+    restoreEnv(LITERATURE_CONTENT_PROCESSING_ROOT_ENV, previousLiteratureRoot);
+  }
+});
+
+test('literature content-processing settings honor explicit literature root env first', async () => {
+  const previousDataRoot = process.env[PAPER_ENGINEER_LOCAL_DATA_ROOT_ENV];
+  const previousLiteratureRoot = process.env[LITERATURE_CONTENT_PROCESSING_ROOT_ENV];
+  process.env[PAPER_ENGINEER_LOCAL_DATA_ROOT_ENV] = path.join(os.tmpdir(), 'ignored-paper-engineer-root');
+  process.env[LITERATURE_CONTENT_PROCESSING_ROOT_ENV] = path.join(os.tmpdir(), 'explicit-literature-root');
+  try {
+    const service = new LiteratureContentProcessingSettingsService(new InMemoryApplicationSettingsRepository());
+    const settings = await service.getSettings();
+
+    assert.equal(settings.effective_storage_roots.indexes, path.join(os.tmpdir(), 'explicit-literature-root', 'indexes'));
+  } finally {
+    restoreEnv(PAPER_ENGINEER_LOCAL_DATA_ROOT_ENV, previousDataRoot);
+    restoreEnv(LITERATURE_CONTENT_PROCESSING_ROOT_ENV, previousLiteratureRoot);
+  }
 });
 
 test('literature content-processing settings preserve, replace, and clear secrets without echoing them', async () => {

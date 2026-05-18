@@ -49,6 +49,16 @@ export interface TopicSelectionPaperProjectBridgeCreateInput {
   policy_version_id?: string | null;
 }
 
+export interface TopicSelectionPaperProjectBridgeIntakeInput {
+  paper_project_bridge_id: string;
+  bridge_payload_hash: string;
+  workspace_id?: string | null;
+  title?: string | null;
+  research_direction?: string | null;
+  created_by?: 'human' | 'hybrid';
+  policy_version_id?: string | null;
+}
+
 export interface TopicSelectionPaperProjectBridgeRecord {
   paper_project_bridge_id: string;
   bridge_status: TopicSelectionPaperProjectBridgeStatus;
@@ -122,16 +132,31 @@ export interface TopicSelectionPaperProjectBridgeHandoff {
   source_promotion_handoff: TopicSelectionPromotionBridgeHandoff;
 }
 
+export interface TopicSelectionPaperProjectBridgeIntakeResult {
+  paper_project_bridge: TopicSelectionPaperProjectBridgeRecord;
+  handoff: TopicSelectionPaperProjectBridgeHandoff;
+  paper_project_id: string;
+  paper_project_ref: TopicSelectionFunctionalRef;
+  paper_project_intake_ref: TopicSelectionFunctionalRef;
+  paper_project_created: boolean;
+  carried_literature_evidence_ids: string[];
+  carried_accepted_risk_refs: TopicSelectionFunctionalRef[];
+  carried_condition_refs: TopicSelectionFunctionalRef[];
+}
+
 export type PaperProjectBridgeRecord = TopicSelectionPaperProjectBridgeRecord;
 export type PaperProjectBridgeWorkingCopyPayload =
   TopicSelectionPaperProjectBridgeWorkingCopyPayload;
 export type PaperProjectBridgeCreateInput = TopicSelectionPaperProjectBridgeCreateInput;
+export type PaperProjectBridgeIntakeInput = TopicSelectionPaperProjectBridgeIntakeInput;
+export type PaperProjectBridgeIntakeResult = TopicSelectionPaperProjectBridgeIntakeResult;
 export type PaperProjectBridgeHandoff = TopicSelectionPaperProjectBridgeHandoff;
 export type PaperProjectBridgeStatus = TopicSelectionPaperProjectBridgeStatus;
 
 const stringId = { type: 'string', minLength: 1 } as const;
 const nullableStringId = { anyOf: [stringId, { type: 'null' }] } as const;
 const actorTypeSchema = { enum: [...TOPIC_SELECTION_ACTOR_TYPES] } as const;
+const paperProjectCreatorSchema = { enum: ['human', 'hybrid'] } as const;
 const objectPayload = { type: 'object', additionalProperties: true } as const;
 const stringArray = { type: 'array', items: stringId } as const;
 const functionalRefArray = { type: 'array', items: topicSelectionFunctionalRefSchema } as const;
@@ -206,6 +231,20 @@ export const topicSelectionPaperProjectBridgeCreateInputSchema = {
     promotion_decision_id: stringId,
     workspace_id: nullableStringId,
     created_by: actorTypeSchema,
+    policy_version_id: nullableStringId,
+  },
+} as const;
+
+export const topicSelectionPaperProjectBridgeIntakeBodySchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['bridge_payload_hash'],
+  properties: {
+    bridge_payload_hash: stringId,
+    workspace_id: nullableStringId,
+    title: nullableStringId,
+    research_direction: nullableStringId,
+    created_by: paperProjectCreatorSchema,
     policy_version_id: nullableStringId,
   },
 } as const;
@@ -348,5 +387,32 @@ export const topicSelectionPaperProjectBridgeHandoffSchema = {
     target_paper_project_ref: nullableFunctionalRef,
     bridge: topicSelectionPaperProjectBridgeRecordSchema,
     source_promotion_handoff: topicSelectionPromotionBridgeHandoffSchema,
+  },
+} as const;
+
+export const topicSelectionPaperProjectBridgeIntakeResultSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'paper_project_bridge',
+    'handoff',
+    'paper_project_id',
+    'paper_project_ref',
+    'paper_project_intake_ref',
+    'paper_project_created',
+    'carried_literature_evidence_ids',
+    'carried_accepted_risk_refs',
+    'carried_condition_refs',
+  ],
+  properties: {
+    paper_project_bridge: topicSelectionPaperProjectBridgeRecordSchema,
+    handoff: topicSelectionPaperProjectBridgeHandoffSchema,
+    paper_project_id: stringId,
+    paper_project_ref: topicSelectionFunctionalRefSchema,
+    paper_project_intake_ref: topicSelectionFunctionalRefSchema,
+    paper_project_created: { type: 'boolean' },
+    carried_literature_evidence_ids: stringArray,
+    carried_accepted_risk_refs: functionalRefArray,
+    carried_condition_refs: functionalRefArray,
   },
 } as const;
