@@ -1,10 +1,49 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import type {
+  CreatePaperProjectRequest,
+  CreatePaperProjectResponse,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-project-contracts';
+import { DIMENSION_NAMES } from '@paper-engineering-assistant/shared/research-lifecycle/research-argument-contracts';
 import { InMemoryResearchArgumentRepository } from '../repositories/in-memory-research-argument-repository.js';
-import { ResearchArgumentService } from './research-argument-service.js';
+import {
+  ResearchArgumentService,
+  type ResearchArgumentPaperProjectGateway,
+} from './research-argument-service.js';
 
 function createService(): ResearchArgumentService {
   return new ResearchArgumentService(new InMemoryResearchArgumentRepository());
+}
+
+function createSubject(gateway: ResearchArgumentPaperProjectGateway | null = null) {
+  const repository = new InMemoryResearchArgumentRepository();
+  const service = new ResearchArgumentService(repository, gateway);
+  return { repository, service };
+}
+
+class RecordingPaperProjectGateway implements ResearchArgumentPaperProjectGateway {
+  readonly createCalls: CreatePaperProjectRequest[] = [];
+  readonly deleteCalls: string[] = [];
+  private readonly papers = new Map<string, CreatePaperProjectResponse>();
+
+  async createPaperProject(input: CreatePaperProjectRequest): Promise<CreatePaperProjectResponse> {
+    this.createCalls.push(input);
+    const paperId = `paper_project_${String(this.createCalls.length).padStart(3, '0')}`;
+    const response: CreatePaperProjectResponse = {
+      paper_id: paperId,
+      status: 'active',
+      paper_active_sp_full: null,
+      paper_active_sp_partial: null,
+      created_at: now(),
+    };
+    this.papers.set(paperId, response);
+    return response;
+  }
+
+  async deletePaperProject(paperId: string): Promise<void> {
+    this.deleteCalls.push(paperId);
+    this.papers.delete(paperId);
+  }
 }
 
 function now(): string {
@@ -249,6 +288,172 @@ test('readiness projection keeps run, artifact, and analysis finding pointers fo
   assert(readinessProjection.object_pointers.some((pointer) =>
     pointer.pointer_kind === 'analysis_finding' && pointer.object_id === 'finding_001',
   ));
+});
+
+test('seedWorkspaceFromTitleCard preserves title-card source lineage for research argument workspace intake', async () => {
+  const { repository, service } = createSubject();
+
+  const seeded = await service.seedWorkspaceFromTitleCard({
+    title_card_id: 'title_card_seed_001',
+    source_need_ids: ['need_001'],
+    source_research_question_ids: ['question_001'],
+    source_value_assessment_ids: ['value_001'],
+    selected_literature_evidence_ids: ['lit_001', 'lit_001', 'lit_002'],
+    created_by: 'hybrid',
+  });
+  const workspace = await repository.findWorkspaceById(seeded.workspace_id);
+
+  assert.ok(workspace);
+  assert.equal(workspace.title_card_id, 'title_card_seed_001');
+  assert.equal(workspace.audit_ref, 'research_argument_seed:hybrid:title_card_seed_001');
+  assert.deepEqual(
+    seeded.seed_trace_refs.map((sourceRef) => `${sourceRef.source_kind}:${sourceRef.source_id}`),
+    [
+      'title_card:title_card_seed_001',
+      'need_review:need_001',
+      'research_question:question_001',
+      'value_assessment:value_001',
+      'literature_evidence:lit_001',
+      'literature_evidence:lit_002',
+    ],
+  );
+});
+
+test('readiness verify blocks PaperProject promotion before writing-entry readiness', async () => {
+  const gateway = new RecordingPaperProjectGateway();
+  const { service } = createSubject(gateway);
+  await service.createWorkspaceSkeleton({
+    workspace_id: 'ra_ws_bridge_not_ready',
+    branch_id: 'ra_branch_bridge_not_ready',
+    title_card_id: 'title_card_bridge_not_ready',
+  });
+
+  const readiness = await service.verifyReadiness({
+    workspace_id: 'ra_ws_bridge_not_ready',
+    branch_id: 'ra_branch_bridge_not_ready',
+    requested_by: 'human',
+  });
+
+  assert.equal(readiness.readiness_decision, 'not_ready');
+  assert.equal(readiness.stage, 'Stage1_WorthContinuing');
+  assert.ok(readiness.blockers.some((blocker) => blocker.severity === 'critical'));
+  await assert.rejects(
+    () => service.promoteToPaperProject({
+      workspace_id: 'ra_ws_bridge_not_ready',
+      branch_id: 'ra_branch_bridge_not_ready',
+      title_card_id: 'title_card_bridge_not_ready',
+      target_paper_title: '   ',
+      created_by: 'human',
+    }),
+    /target_paper_title is required/,
+  );
+  await assert.rejects(
+    () => service.promoteToPaperProject({
+      workspace_id: 'ra_ws_bridge_not_ready',
+      branch_id: 'ra_branch_bridge_not_ready',
+      title_card_id: 'title_card_bridge_not_ready',
+      target_paper_title: 'Should not be created',
+      created_by: 'human',
+    }),
+    /not ready for PaperProject promotion/,
+  );
+  assert.equal(gateway.createCalls.length, 0);
+});
+
+test('ready research argument branch promotes to PaperProject with writing entry and risk report refs', async () => {
+  const gateway = new RecordingPaperProjectGateway();
+  const { repository, service } = createSubject(gateway);
+  await service.createWorkspaceSkeleton({
+    workspace_id: 'ra_ws_bridge_ready',
+    branch_id: 'ra_branch_bridge_ready',
+    title_card_id: 'title_card_bridge_ready',
+    source_trace_refs: [
+      { source_kind: 'title_card', source_id: 'title_card_bridge_ready' },
+      { source_kind: 'literature_evidence', source_id: 'lit_bridge_001' },
+    ],
+  });
+  await seedReadyBranch(service, 'ra_ws_bridge_ready', 'ra_branch_bridge_ready');
+
+  const readiness = await service.verifyReadiness({
+    workspace_id: 'ra_ws_bridge_ready',
+    branch_id: 'ra_branch_bridge_ready',
+    requested_by: 'human',
+  });
+  const promotion = await service.promoteToPaperProject({
+    workspace_id: 'ra_ws_bridge_ready',
+    branch_id: 'ra_branch_bridge_ready',
+    title_card_id: 'title_card_bridge_ready',
+    target_paper_title: 'Research argument promoted paper',
+    research_direction: 'paper engineering',
+    created_by: 'hybrid',
+    confirmation_note: 'Human confirms writing-entry readiness.',
+  });
+  const workspace = await repository.findWorkspaceById('ra_ws_bridge_ready');
+  const decisions = await repository.listDecisionRecords('ra_ws_bridge_ready', 'ra_branch_bridge_ready');
+  const projections = await repository.listReportProjections({
+    workspace_id: 'ra_ws_bridge_ready',
+    branch_id: 'ra_branch_bridge_ready',
+  });
+
+  assert.equal(readiness.readiness_decision, 'ready_for_writing_entry');
+  assert.equal(promotion.paper_project_created, true);
+  assert.equal(promotion.paper_id, 'paper_project_001');
+  assert.equal(promotion.packet_ref.report_kind, 'writing_entry');
+  assert.equal(promotion.report_ref.report_kind, 'submission_risk');
+  assert.equal(promotion.writing_entry_packet.paper_id, 'paper_project_001');
+  assert.equal(promotion.writing_entry_packet.claim_summary[0]?.claim_id, 'claim_001');
+  assert.deepEqual(promotion.writing_entry_packet.evidence_summary.missing_requirement_ids, []);
+  assert.equal(
+    promotion.submission_risk_report.dimension_summary.length,
+    DIMENSION_NAMES.length,
+  );
+  assert.equal(workspace?.workspace_status, 'promoted');
+  assert.equal(workspace?.paper_id, 'paper_project_001');
+  assert.equal(decisions.length, 1);
+  assert.equal(decisions[0]?.action, 'advance');
+  assert.deepEqual(gateway.createCalls[0]?.initial_context.literature_evidence_ids, [
+    'lit_bridge_001',
+  ]);
+  assert.ok(projections.some((projection) => projection.report_kind === 'writing_entry'));
+  assert.ok(projections.some((projection) => projection.report_kind === 'submission_risk'));
+});
+
+test('duplicate research argument promotion is idempotent and does not create another PaperProject', async () => {
+  const gateway = new RecordingPaperProjectGateway();
+  const { repository, service } = createSubject(gateway);
+  await service.createWorkspaceSkeleton({
+    workspace_id: 'ra_ws_bridge_duplicate',
+    branch_id: 'ra_branch_bridge_duplicate',
+    title_card_id: 'title_card_bridge_duplicate',
+  });
+  await seedReadyBranch(service, 'ra_ws_bridge_duplicate', 'ra_branch_bridge_duplicate');
+
+  const first = await service.promoteToPaperProject({
+    workspace_id: 'ra_ws_bridge_duplicate',
+    branch_id: 'ra_branch_bridge_duplicate',
+    title_card_id: 'title_card_bridge_duplicate',
+    target_paper_title: 'Research argument duplicate paper',
+    created_by: 'human',
+  });
+  const second = await service.promoteToPaperProject({
+    workspace_id: 'ra_ws_bridge_duplicate',
+    branch_id: 'ra_branch_bridge_duplicate',
+    title_card_id: 'title_card_bridge_duplicate',
+    target_paper_title: 'Ignored duplicate title',
+    created_by: 'human',
+  });
+  const decisions = await repository.listDecisionRecords(
+    'ra_ws_bridge_duplicate',
+    'ra_branch_bridge_duplicate',
+  );
+
+  assert.equal(first.paper_project_created, true);
+  assert.equal(second.paper_project_created, false);
+  assert.equal(second.paper_id, first.paper_id);
+  assert.equal(second.packet_ref.report_id, first.packet_ref.report_id);
+  assert.equal(second.report_ref.report_id, first.report_ref.report_id);
+  assert.equal(gateway.createCalls.length, 1);
+  assert.equal(decisions.length, 1);
 });
 
 async function seedReadyBranch(

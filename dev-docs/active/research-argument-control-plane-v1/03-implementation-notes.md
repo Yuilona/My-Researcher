@@ -17,8 +17,6 @@
 - 依赖 downstream writing lane 承接 Markdown/LaTeX、章节 diff、Prism/Overleaf 与 rebuttal。
 
 ## Current implementation hook
-- 当前回合只落治理工件：
-  - 新 requirement/task 映射
-  - umbrella + child task bundles
-  - sync/lint 验证
-- 产品代码、canonical docs、shared contracts 与 runtime 实现留给 child tasks 执行。
+- `T-086` completed the backend-first bridge path after the original `T-026` placeholder was archived.
+- Runtime coverage now includes title-card seed, readiness verify, PaperProject gateway promotion, writing-entry sidecar refs, submission-risk sidecar refs, and idempotent duplicate promotion.
+- Desktop review surface and planner/critic generation remain future scoped tasks, not active child work.

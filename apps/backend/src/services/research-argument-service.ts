@@ -1,20 +1,40 @@
 import type {
   AuthorizationMetadata,
+  BlockerRef,
   ClaimEvidenceCoverageRow,
   DecisionRecord,
   DecisionTimelineEntry,
+  DimensionName,
   GitWeakMappingRef,
   LessonRecord,
+  ObjectPointer,
   ProtocolBaselineReproReadiness,
+  PromoteToPaperProjectRequest,
+  PromoteToPaperProjectResponse,
+  ReadinessVerifyRequest,
+  ReadinessVerifyResponse,
   ReportPointer,
   ReportProjection,
+  ResearchArgumentActor,
   ResearchArgumentWorkspace,
   ResearchBranch,
+  SeedWorkspaceFromTitleCardRequest,
+  SeedWorkspaceFromTitleCardResponse,
   SourceTraceRef,
+  SubmissionRiskFinding,
+  SubmissionRiskReport,
   SyncEligibility,
+  WritingEntryPacket,
   WorkspaceSummary,
 } from '@paper-engineering-assistant/shared/research-lifecycle/research-argument-contracts';
+import {
+  DIMENSION_NAMES,
+} from '@paper-engineering-assistant/shared/research-lifecycle/research-argument-contracts';
 import type { AbstractStateSnapshot } from '@paper-engineering-assistant/shared/research-lifecycle/research-argument-contracts';
+import type {
+  CreatePaperProjectRequest,
+  CreatePaperProjectResponse,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-project-contracts';
 import {
   buildResearchArgumentBranchGraph,
   type ResearchArgumentBranchGraph,
@@ -31,7 +51,12 @@ import {
   buildWorkspaceSummary,
 } from '../research-argument/read-models.js';
 import { synthesizeAbstractStateSnapshot } from '../research-argument/state-synthesizer.js';
-import { dedupeStrings } from '../research-argument/support.js';
+import {
+  dedupeBlockers,
+  dedupeObjectPointers,
+  dedupeSourceTraceRefs,
+  dedupeStrings,
+} from '../research-argument/support.js';
 import type {
   ResearchArgumentGraphObject,
   ResearchArgumentGraphObjectKind,
@@ -86,6 +111,11 @@ export interface RecordResearchArgumentLessonInput {
   reliability?: number;
 }
 
+export interface ResearchArgumentPaperProjectGateway {
+  createPaperProject(input: CreatePaperProjectRequest): Promise<CreatePaperProjectResponse>;
+  deletePaperProject?(paperId: string): Promise<void>;
+}
+
 export interface ResearchArgumentRecomputeResult {
   workspace: ResearchArgumentWorkspace;
   branch: ResearchBranch;
@@ -97,8 +127,199 @@ export interface ResearchArgumentRecomputeResult {
   report_projections: ReportProjection[];
 }
 
+export interface ResearchArgumentPromoteToPaperProjectResult
+  extends PromoteToPaperProjectResponse {
+  paper_project_created: boolean;
+  writing_entry_packet: WritingEntryPacket;
+  submission_risk_report: SubmissionRiskReport;
+}
+
 export class ResearchArgumentService {
-  constructor(private readonly repository: ResearchArgumentRepository) {}
+  constructor(
+    private readonly repository: ResearchArgumentRepository,
+    private readonly paperProjectGateway: ResearchArgumentPaperProjectGateway | null = null,
+  ) {}
+
+  async seedWorkspaceFromTitleCard(
+    input: SeedWorkspaceFromTitleCardRequest,
+  ): Promise<SeedWorkspaceFromTitleCardResponse> {
+    assertHasText(input.title_card_id, 'title_card_id');
+    const result = await this.createWorkspaceSkeleton({
+      title_card_id: input.title_card_id,
+      source_trace_refs: buildSeedTraceRefs(input),
+      audit_ref: `research_argument_seed:${input.created_by}:${input.title_card_id}`,
+    });
+
+    return {
+      workspace_id: result.workspace.workspace_id,
+      branch_id: result.branch.branch_id,
+      seed_trace_refs: result.workspace.source_trace_refs,
+      created_at: result.workspace.created_at,
+    };
+  }
+
+  async verifyReadiness(
+    input: ReadinessVerifyRequest,
+  ): Promise<ReadinessVerifyResponse> {
+    assertHasText(input.workspace_id, 'workspace_id');
+    assertHasText(input.branch_id, 'branch_id');
+    const result = await this.recompute(input.workspace_id, input.branch_id);
+    return this.toReadinessVerifyResponse(result, input.requested_by);
+  }
+
+  async promoteToPaperProject(
+    input: PromoteToPaperProjectRequest,
+  ): Promise<ResearchArgumentPromoteToPaperProjectResult> {
+    assertHasText(input.workspace_id, 'workspace_id');
+    assertHasText(input.branch_id, 'branch_id');
+    assertHasText(input.title_card_id, 'title_card_id');
+    assertHasText(input.target_paper_title, 'target_paper_title');
+    if (!this.paperProjectGateway) {
+      throw new Error('Research argument PaperProject promotion requires a configured PaperProject gateway.');
+    }
+
+    const paperProjectGateway = this.paperProjectGateway;
+    let createdPaperId: string | null = null;
+    try {
+      return await this.repository.withTransaction(async (repository) => {
+        const now = nowIso();
+        const workspace = await mustFindWorkspace(repository, input.workspace_id);
+        if (workspace.title_card_id !== input.title_card_id) {
+          throw new Error(
+            `Research argument workspace ${input.workspace_id} belongs to title card ${workspace.title_card_id}, not ${input.title_card_id}.`,
+          );
+        }
+        const branch = await mustFindBranchInWorkspace(repository, input.workspace_id, input.branch_id);
+        if (workspace.workspace_status === 'archived' || workspace.workspace_status === 'killed') {
+          throw new Error(`Research argument workspace ${workspace.workspace_id} is not promotable.`);
+        }
+        if (branch.branch_status !== 'active') {
+          throw new Error(`Research argument branch ${branch.branch_id} is not active.`);
+        }
+
+        const recompute = await this.recomputeInternal(
+          repository,
+          input.workspace_id,
+          input.branch_id,
+          now,
+        );
+        const readiness = this.toReadinessVerifyResponse(recompute, input.created_by);
+        if (readiness.readiness_decision !== 'ready_for_writing_entry') {
+          throw new Error(
+            `Research argument branch ${input.branch_id} is not ready for PaperProject promotion: ${readiness.readiness_decision}.`,
+          );
+        }
+
+        const context = await this.loadBranchContextFromRepository(
+          repository,
+          input.workspace_id,
+          input.branch_id,
+        );
+        const existingPaperId = recompute.workspace.paper_id ?? workspace.paper_id ?? null;
+        const paperProject = existingPaperId
+          ? {
+              paper_id: existingPaperId,
+              status: 'active' as const,
+              paper_active_sp_full: null,
+              paper_active_sp_partial: null,
+              created_at: now,
+            }
+          : await paperProjectGateway.createPaperProject({
+              title_card_id: input.title_card_id,
+              title: input.target_paper_title.trim(),
+              research_direction: input.research_direction?.trim() || 'research_argument',
+              created_by: input.created_by,
+              initial_context: {
+                literature_evidence_ids: this.literatureEvidenceIdsForPromotion(
+                  recompute.workspace,
+                  context.graph,
+                ),
+              },
+            });
+        if (!existingPaperId) {
+          createdPaperId = paperProject.paper_id;
+        }
+
+        const auditRef = `research_argument_promote:${input.workspace_id}:${input.branch_id}:${paperProject.paper_id}`;
+        const sidecars = this.buildPromotionSidecars({
+          workspace: recompute.workspace,
+          branch: recompute.branch,
+          graph: context.graph,
+          snapshot: recompute.snapshot,
+          readiness,
+          coverageRows: recompute.coverage_rows,
+          protocolBaselineReproReadiness: recompute.protocol_baseline_repro_readiness,
+          reportProjections: recompute.report_projections,
+          paperId: paperProject.paper_id,
+          actor: input.created_by,
+          auditRef,
+          now,
+        });
+
+        const sidecarProjections = await repository.replaceReportProjections(
+          input.workspace_id,
+          input.branch_id,
+          [sidecars.writingEntryProjection, sidecars.submissionRiskProjection],
+        );
+
+        if (!existingPaperId) {
+          const decision: DecisionRecord = {
+            decision_id: buildId('ra_decision'),
+            workspace_id: input.workspace_id,
+            branch_id: input.branch_id,
+            action: 'advance',
+            reason: input.confirmation_note ?? 'Promoted research argument branch to PaperProject writing entry.',
+            actor: input.created_by,
+            human_confirmed: true,
+            confirmation_note: input.confirmation_note,
+            linked_object_ids: sidecars.writing_entry_packet.object_pointers.map(
+              (pointer) => pointer.object_id,
+            ),
+            audit_ref: auditRef,
+            created_at: now,
+          };
+          await repository.createDecisionRecord(decision);
+          await repository.updateBranch(input.branch_id, {
+            decision_refs: dedupeStrings([
+              ...(branch.decision_refs ?? []),
+              decision.decision_id,
+            ]),
+            updated_at: now,
+          });
+        }
+
+        await repository.updateWorkspace(input.workspace_id, {
+          workspace_status: 'promoted',
+          active_branch_id: input.branch_id,
+          current_stage: recompute.snapshot.stage,
+          paper_id: paperProject.paper_id,
+          report_pointers: mergeProjectionReportPointers(
+            recompute.workspace.report_pointers,
+            sidecarProjections,
+          ),
+          updated_at: now,
+        });
+
+        return {
+          paper_id: paperProject.paper_id,
+          workspace_id: input.workspace_id,
+          branch_id: input.branch_id,
+          packet_ref: sidecars.packet_ref,
+          report_ref: sidecars.report_ref,
+          audit_ref: auditRef,
+          promoted_at: now,
+          paper_project_created: !existingPaperId,
+          writing_entry_packet: sidecars.writing_entry_packet,
+          submission_risk_report: sidecars.submission_risk_report,
+        };
+      });
+    } catch (error) {
+      if (createdPaperId && paperProjectGateway.deletePaperProject) {
+        await paperProjectGateway.deletePaperProject(createdPaperId);
+      }
+      throw error;
+    }
+  }
 
   async createWorkspaceSkeleton(
     input: CreateResearchArgumentWorkspaceInput,
@@ -602,6 +823,276 @@ export class ResearchArgumentService {
       reportProjections,
     };
   }
+
+  private toReadinessVerifyResponse(
+    result: ResearchArgumentRecomputeResult,
+    _requestedBy: ResearchArgumentActor,
+  ): ReadinessVerifyResponse {
+    const blockers = flattenSnapshotBlockers(result.snapshot);
+    const missingItems = buildReadinessMissingItems(
+      result.snapshot,
+      result.protocol_baseline_repro_readiness,
+    );
+    const readinessProjection = result.report_projections.find(
+      (projection) => projection.report_kind === 'readiness',
+    );
+    return {
+      workspace_id: result.workspace.workspace_id,
+      branch_id: result.branch.branch_id,
+      readiness_decision: readinessDecisionForSnapshot(result.snapshot),
+      stage: result.snapshot.stage,
+      blockers,
+      missing_items: missingItems,
+      dimension_verdicts: DIMENSION_NAMES.map((dimensionName) => {
+        const dimension = result.snapshot.dimensions[dimensionName];
+        return {
+          dimension_name: dimension.dimension_name,
+          level: dimension.level,
+          score: dimension.score,
+          confidence: dimension.confidence,
+        };
+      }),
+      report_pointer: readinessProjection
+        ? projectionToReportPointer(readinessProjection)
+        : undefined,
+      verified_at: result.snapshot.updated_at,
+    };
+  }
+
+  private literatureEvidenceIdsForPromotion(
+    workspace: ResearchArgumentWorkspace,
+    graph: ResearchArgumentBranchGraph,
+  ): string[] {
+    return dedupeStrings([
+      ...workspace.source_trace_refs
+        .filter((sourceRef) => sourceRef.source_kind === 'literature_evidence')
+        .map((sourceRef) => sourceRef.source_id),
+      ...graph.evidence_items.flatMap((evidenceItem) =>
+        (evidenceItem.provenance ?? [])
+          .filter((sourceRef) => sourceRef.source_kind === 'literature_evidence')
+          .map((sourceRef) => sourceRef.source_id),
+      ),
+    ]);
+  }
+
+  private buildPromotionSidecars(input: {
+    workspace: ResearchArgumentWorkspace;
+    branch: ResearchBranch;
+    graph: ResearchArgumentBranchGraph;
+    snapshot: AbstractStateSnapshot;
+    readiness: ReadinessVerifyResponse;
+    coverageRows: ClaimEvidenceCoverageRow[];
+    protocolBaselineReproReadiness: ProtocolBaselineReproReadiness;
+    reportProjections: ReportProjection[];
+    paperId: string;
+    actor: ResearchArgumentActor;
+    auditRef: string;
+    now: string;
+  }): {
+    writing_entry_packet: WritingEntryPacket;
+    submission_risk_report: SubmissionRiskReport;
+    packet_ref: PromoteToPaperProjectResponse['packet_ref'];
+    report_ref: PromoteToPaperProjectResponse['report_ref'];
+    writingEntryProjection: ReportProjection;
+    submissionRiskProjection: ReportProjection;
+  } {
+    const objectPointers = this.graphObjectPointers(input.graph);
+    const reportPointers = input.reportProjections.map(projectionToReportPointer);
+    const sourceTraceRefs = this.graphSourceTraceRefs(input.workspace, input.graph);
+    const packetId = `${input.branch.branch_id}:writing_entry`;
+    const reportId = `${input.branch.branch_id}:submission_risk`;
+    const packetRef = {
+      report_kind: 'writing_entry' as const,
+      report_id: packetId,
+      summary: `Writing entry packet for PaperProject ${input.paperId}.`,
+      object_pointers: dedupeObjectPointers([
+        { pointer_kind: 'paper_project', object_id: input.paperId },
+        ...objectPointers,
+      ]),
+    };
+    const reportRef = {
+      report_kind: 'submission_risk' as const,
+      report_id: reportId,
+      summary: `Submission risk report for PaperProject ${input.paperId}.`,
+      object_pointers: dedupeObjectPointers([
+        { pointer_kind: 'paper_project', object_id: input.paperId },
+        ...objectPointers,
+      ]),
+    };
+    const writingEntryPacket: WritingEntryPacket = {
+      packet_id: packetId,
+      workspace_id: input.workspace.workspace_id,
+      branch_id: input.branch.branch_id,
+      title_card_id: input.workspace.title_card_id,
+      paper_id: input.paperId,
+      claim_summary: input.graph.claims.map((claim) => ({
+        claim_id: claim.claim_id,
+        claim_text: claim.text,
+        claim_strength: claim.claim_strength,
+        support_state: claim.support_state,
+        evidence_requirement_ids: claim.linked_evidence_requirement_ids,
+        boundary_ids: claim.linked_boundary_ids ?? [],
+      })),
+      evidence_summary: {
+        evidence_item_ids: input.graph.evidence_items.map((item) => item.evidence_item_id),
+        mandatory_requirement_ids: input.graph.evidence_requirements
+          .filter((requirement) => requirement.is_mandatory)
+          .map((requirement) => requirement.evidence_requirement_id),
+        missing_requirement_ids: input.graph.evidence_requirements
+          .filter((requirement) => requirement.status !== 'satisfied')
+          .map((requirement) => requirement.evidence_requirement_id),
+      },
+      baseline_protocol_repro_summary: {
+        baseline_set_ids: input.protocolBaselineReproReadiness.baseline_set_ids,
+        protocol_ids: input.protocolBaselineReproReadiness.protocol_ids,
+        repro_item_ids: input.protocolBaselineReproReadiness.repro_item_ids,
+        run_ids: input.protocolBaselineReproReadiness.run_ids,
+        artifact_ids: input.protocolBaselineReproReadiness.artifact_ids,
+      },
+      source_trace_refs: sourceTraceRefs,
+      object_pointers: packetRef.object_pointers ?? [],
+      report_pointers: [...reportPointers, reportRef],
+      audit_ref: input.auditRef,
+      actor: input.actor,
+      recorded_at: input.now,
+      created_at: input.now,
+    };
+    const submissionRiskReport: SubmissionRiskReport = {
+      report_id: reportId,
+      workspace_id: input.workspace.workspace_id,
+      branch_id: input.branch.branch_id,
+      title_card_id: input.workspace.title_card_id,
+      dimension_summary: DIMENSION_NAMES.map((dimensionName) => {
+        const dimension = input.snapshot.dimensions[dimensionName];
+        return {
+          dimension_name: dimension.dimension_name,
+          level: dimension.level,
+          score: dimension.score,
+          confidence: dimension.confidence,
+        };
+      }),
+      blockers: input.readiness.blockers,
+      missing_items: input.readiness.missing_items,
+      findings: this.submissionRiskFindings(input.graph),
+      report_pointers: [...reportPointers, packetRef],
+      audit_ref: input.auditRef,
+      actor: input.actor,
+      recorded_at: input.now,
+      created_at: input.now,
+    };
+    return {
+      writing_entry_packet: writingEntryPacket,
+      submission_risk_report: submissionRiskReport,
+      packet_ref: packetRef,
+      report_ref: reportRef,
+      writingEntryProjection: {
+        report_projection_id: packetId,
+        workspace_id: input.workspace.workspace_id,
+        branch_id: input.branch.branch_id,
+        report_kind: 'writing_entry',
+        summary: packetRef.summary ?? `Writing entry packet for PaperProject ${input.paperId}.`,
+        object_pointers: writingEntryPacket.object_pointers,
+        source_trace_refs: writingEntryPacket.source_trace_refs,
+        report_pointers: writingEntryPacket.report_pointers,
+        created_at: input.now,
+        updated_at: input.now,
+      },
+      submissionRiskProjection: {
+        report_projection_id: reportId,
+        workspace_id: input.workspace.workspace_id,
+        branch_id: input.branch.branch_id,
+        report_kind: 'submission_risk',
+        summary: reportRef.summary ?? `Submission risk report for PaperProject ${input.paperId}.`,
+        object_pointers: submissionRiskReport.findings.flatMap((finding) => finding.pointers),
+        source_trace_refs: sourceTraceRefs,
+        report_pointers: submissionRiskReport.report_pointers,
+        created_at: input.now,
+        updated_at: input.now,
+      },
+    };
+  }
+
+  private graphObjectPointers(graph: ResearchArgumentBranchGraph): ObjectPointer[] {
+    return dedupeObjectPointers([
+      ...graph.problems.map((item) => ({ pointer_kind: 'problem' as const, object_id: item.problem_id })),
+      ...graph.value_hypotheses.map((item) => ({
+        pointer_kind: 'value_hypothesis' as const,
+        object_id: item.value_hypothesis_id,
+      })),
+      ...graph.contribution_deltas.map((item) => ({
+        pointer_kind: 'contribution_delta' as const,
+        object_id: item.contribution_delta_id,
+      })),
+      ...graph.claims.map((item) => ({ pointer_kind: 'claim' as const, object_id: item.claim_id })),
+      ...graph.evidence_requirements.map((item) => ({
+        pointer_kind: 'evidence_requirement' as const,
+        object_id: item.evidence_requirement_id,
+      })),
+      ...graph.evidence_items.map((item) => ({
+        pointer_kind: 'evidence_item' as const,
+        object_id: item.evidence_item_id,
+      })),
+      ...graph.baseline_sets.map((item) => ({
+        pointer_kind: 'baseline_set' as const,
+        object_id: item.baseline_set_id,
+      })),
+      ...graph.protocols.map((item) => ({ pointer_kind: 'protocol' as const, object_id: item.protocol_id })),
+      ...graph.repro_items.map((item) => ({
+        pointer_kind: 'repro_item' as const,
+        object_id: item.repro_item_id,
+      })),
+      ...graph.runs.map((item) => ({ pointer_kind: 'run' as const, object_id: item.run_id })),
+      ...graph.artifacts.map((item) => ({ pointer_kind: 'artifact' as const, object_id: item.artifact_id })),
+      ...graph.boundaries.map((item) => ({ pointer_kind: 'boundary' as const, object_id: item.boundary_id })),
+      ...graph.analysis_findings.map((item) => ({
+        pointer_kind: 'analysis_finding' as const,
+        object_id: item.analysis_finding_id,
+      })),
+      ...graph.issue_findings.map((item) => ({
+        pointer_kind: 'issue_finding' as const,
+        object_id: item.issue_finding_id,
+      })),
+    ]);
+  }
+
+  private graphSourceTraceRefs(
+    workspace: ResearchArgumentWorkspace,
+    graph: ResearchArgumentBranchGraph,
+  ): SourceTraceRef[] {
+    return dedupeSourceTraceRefs([
+      ...workspace.source_trace_refs,
+      ...graph.problems.flatMap((item) => item.source_trace_refs ?? []),
+      ...graph.value_hypotheses.flatMap((item) => item.source_trace_refs ?? []),
+      ...graph.contribution_deltas.flatMap((item) => item.source_trace_refs ?? []),
+      ...graph.claims.flatMap((item) => item.source_trace_refs ?? []),
+      ...graph.evidence_items.flatMap((item) => item.provenance ?? []),
+    ]);
+  }
+
+  private submissionRiskFindings(graph: ResearchArgumentBranchGraph): SubmissionRiskFinding[] {
+    return [
+      ...graph.issue_findings.map((issue) => ({
+        finding_id: `issue:${issue.issue_finding_id}`,
+        finding_group: riskFindingGroupForDimensions(issue.dimension_names ?? []),
+        severity: issue.severity,
+        detail: issue.detail,
+        pointers: issue.pointers,
+        affected_dimensions: issue.dimension_names,
+        suggested_fix: issue.suggested_fix,
+      })),
+      ...graph.boundaries
+        .filter((boundary) => boundary.severity === 'high')
+        .map((boundary) => ({
+          finding_id: `boundary:${boundary.boundary_id}`,
+          finding_group: 'boundary_risk' as const,
+          severity: 'high' as const,
+          detail: boundary.statement,
+          pointers: [{ pointer_kind: 'boundary' as const, object_id: boundary.boundary_id }],
+          affected_dimensions: ['BoundaryRiskCoverage' as const],
+          suggested_fix: boundary.trigger_condition,
+        })),
+    ];
+  }
 }
 
 async function mustFindWorkspace(
@@ -613,6 +1104,101 @@ async function mustFindWorkspace(
     throw new Error(`Research argument workspace ${workspaceId} not found.`);
   }
   return workspace;
+}
+
+function assertHasText(value: string | null | undefined, field: string): void {
+  if (!value || value.trim().length === 0) {
+    throw new Error(`Research argument ${field} is required.`);
+  }
+}
+
+function buildSeedTraceRefs(input: SeedWorkspaceFromTitleCardRequest): SourceTraceRef[] {
+  return dedupeSourceTraceRefs([
+    {
+      source_kind: 'title_card',
+      source_id: input.title_card_id,
+      note: `seeded_by:${input.created_by}`,
+    },
+    ...(input.source_need_ids ?? []).map((sourceId) => ({
+      source_kind: 'need_review' as const,
+      source_id: sourceId,
+    })),
+    ...(input.source_research_question_ids ?? []).map((sourceId) => ({
+      source_kind: 'research_question' as const,
+      source_id: sourceId,
+    })),
+    ...(input.source_value_assessment_ids ?? []).map((sourceId) => ({
+      source_kind: 'value_assessment' as const,
+      source_id: sourceId,
+    })),
+    ...(input.selected_literature_evidence_ids ?? []).map((sourceId) => ({
+      source_kind: 'literature_evidence' as const,
+      source_id: sourceId,
+    })),
+  ]);
+}
+
+function flattenSnapshotBlockers(snapshot: AbstractStateSnapshot): BlockerRef[] {
+  return dedupeBlockers(
+    DIMENSION_NAMES.flatMap((dimensionName) => snapshot.dimensions[dimensionName].blockers),
+  );
+}
+
+function buildReadinessMissingItems(
+  snapshot: AbstractStateSnapshot,
+  readiness: ProtocolBaselineReproReadiness,
+): string[] {
+  return dedupeStrings([
+    ...readiness.missing_items,
+    ...DIMENSION_NAMES
+      .filter((dimensionName) => snapshot.dimensions[dimensionName].gap > 0)
+      .map((dimensionName) => `Dimension ${dimensionName} is below readiness threshold.`),
+  ]);
+}
+
+function readinessDecisionForSnapshot(
+  snapshot: AbstractStateSnapshot,
+): ReadinessVerifyResponse['readiness_decision'] {
+  if (snapshot.global_flags.has_critical_blocker) {
+    return 'not_ready';
+  }
+  if (
+    snapshot.stage === 'Stage2_ReadyForWritingEntry'
+    && snapshot.derived.current_goal_satisfied
+  ) {
+    return 'ready_for_writing_entry';
+  }
+  return 'worth_continuing';
+}
+
+function projectionToReportPointer(projection: ReportProjection): ReportPointer {
+  return {
+    report_kind: projection.report_kind,
+    report_id: projection.report_projection_id,
+    summary: projection.summary,
+    object_pointers: projection.object_pointers,
+  };
+}
+
+function riskFindingGroupForDimensions(
+  dimensions: DimensionName[],
+): SubmissionRiskFinding['finding_group'] {
+  if (dimensions.includes('EvaluationSoundness')) {
+    return 'evaluation_fairness';
+  }
+  if (dimensions.includes('ReproducibilityReadiness')) {
+    return 'reproducibility';
+  }
+  if (dimensions.includes('BoundaryRiskCoverage')) {
+    return 'boundary_risk';
+  }
+  if (dimensions.includes('EvidenceCompleteness') || dimensions.includes('ClaimSharpness')) {
+    return 'claim_evidence';
+  }
+  if (dimensions.includes('OutcomeFeasibility')) {
+    return 'feasibility';
+  }
+  return 'value_novelty';
 }
 
 async function mustFindBranch(
