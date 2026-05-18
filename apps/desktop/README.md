@@ -21,6 +21,9 @@ Electron + React + Vite + TypeScript desktop shell for the research workflow UI.
 - DevTools is off by default; set `DESKTOP_OPEN_DEVTOOLS=1` when you want it to auto-open.
 - App window starts hidden in dev; click the Dock/desktop app icon to reveal and focus it at screen center.
 - On app activate, window is explicitly focused and brought to top to ensure immediate interaction.
+- Dev bootstrap checks whether `http://127.0.0.1:3000/health` is this project's Fastify API.
+  If it is not, it starts a managed backend on an available port starting at `3310`
+  and passes that URL to both `VITE_API_BASE_URL` and `DESKTOP_BACKEND_BASE_URL`.
 - Governance panel feature flag:
   - `VITE_ENABLE_GOVERNANCE_PANELS=1` to enable by default.
   - 默认关闭；也可在 UI 内按会话临时启用/关闭。

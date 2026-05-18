@@ -9,7 +9,7 @@
 
 ## Acceptance Criteria
 - UI consumes backend contracts without duplicating domain rules.
-- Workbench exposes guarded actions for register, review, readiness, recipe generation, materialization, job sync, result validation, and sidecar binding.
+- Workbench exposes guarded actions for registry create/upsert, candidate review/promotion, readiness checks, frozen recipe/materialization payload upsert, job submit/sync/cancel/collect, backend-generated result/evidence inspection, and sidecar record inspection/upsert.
 - No legacy CSS path is recreated or extended.
 - Desktop smoke confirms nav placement and core workflows.
 

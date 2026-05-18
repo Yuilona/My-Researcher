@@ -12,9 +12,10 @@ const preloadCandidates = [
 ];
 const preloadPath = preloadCandidates.find((candidate) => fs.existsSync(candidate)) ?? preloadCandidates[0];
 const backendBaseUrl = process.env.DESKTOP_BACKEND_BASE_URL ?? 'http://127.0.0.1:3000';
-const allowedGovernanceMethods = new Set(['GET', 'POST', 'PATCH', 'DELETE']);
+const allowedGovernanceMethods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const allowedGovernancePathPrefixes = [
     '/paper-projects/',
+    '/experiment-foundation/',
     '/literature/',
     '/settings/literature-content-processing/',
     '/topics/',
@@ -25,6 +26,7 @@ const allowedGovernanceExactPaths = new Set([
     '/settings/literature-content-processing',
     '/title-cards',
 ]);
+const responseMessagePreviewMaxLength = 240;
 const isMacOS = process.platform === 'darwin';
 let mainWindow = null;
 function focusAndCenterWindow(window) {
@@ -94,6 +96,27 @@ function normalizeGovernancePath(input) {
         throw new Error('Unsupported governance path.');
     }
     return input;
+}
+function looksLikeHtmlResponse(value) {
+    return /<(?:!doctype|html|head|body|script|div)\b/i.test(value.trim().slice(0, 512));
+}
+function compactResponseMessage(value) {
+    return value.replace(/\s+/g, ' ').trim();
+}
+function buildUnexpectedResponsePayload(status, contentType, body) {
+    const contentTypeLabel = contentType.trim() ? `，Content-Type: ${contentType.trim()}` : '';
+    const preview = compactResponseMessage(body).slice(0, responseMessagePreviewMaxLength);
+    const previewSuffix = preview && !looksLikeHtmlResponse(body) ? ` 响应摘要：${preview}` : '';
+    return {
+        error: {
+            code: 'API_RESPONSE_FORMAT',
+            message: [
+                `API 服务返回了非 JSON 响应（HTTP ${status}${contentTypeLabel}）。`,
+                `请确认后端服务已启动，且 DESKTOP_BACKEND_BASE_URL=${backendBaseUrl} 指向本项目 Fastify 后端。`,
+                previewSuffix,
+            ].join(''),
+        },
+    };
 }
 function localSecretsFilePath() {
     return path.join(app.getPath('userData'), 'literature-content-processing-secrets.json');
@@ -283,9 +306,15 @@ ipcMain.handle('desktop:governance-request', async (_event, request) => {
     try {
         const response = await fetch(new URL(targetPath, backendBaseUrl), init);
         const contentType = response.headers.get('content-type') ?? '';
-        const payload = contentType.includes('application/json')
-            ? await response.json()
-            : { message: await response.text() };
+        if (!contentType.includes('application/json')) {
+            const body = await response.text();
+            return {
+                ok: false,
+                status: response.status,
+                payload: buildUnexpectedResponsePayload(response.status, contentType, body),
+            };
+        }
+        const payload = await response.json();
         return {
             ok: response.ok,
             status: response.status,

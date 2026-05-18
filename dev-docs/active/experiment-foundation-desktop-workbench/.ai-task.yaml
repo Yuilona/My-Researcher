@@ -2,8 +2,8 @@ version: 1
 task_id: T-078
 project: main
 slug: experiment-foundation-desktop-workbench
-status: planned
-updated: "2026-05-17"
+status: done
+updated: "2026-05-19"
 keywords:
   - experiment-foundation
   - parent-task:T-043

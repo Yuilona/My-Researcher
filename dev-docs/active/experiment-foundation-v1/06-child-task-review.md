@@ -118,3 +118,6 @@
 - `T-075 experiment-foundation-candidate-promotion-contracts`: done; next owner is `T-076 experiment-foundation-persistence-api-readiness`.
 - `T-076 experiment-foundation-persistence-api-readiness`: done; next owner is `T-077 experiment-foundation-execution-adapters`.
 - `T-077 experiment-foundation-execution-adapters`: done; next owner is `T-078 experiment-foundation-desktop-workbench`.
+- `T-078 experiment-foundation-desktop-workbench`: done; desktop consumes registry/readiness/promotion/execution APIs without owning experiment semantics.
+- T-070~T-078 minimum implementation chain: complete.
+- Parent closure note: original roadmap also names richer tuning workflow records and real cloud SDK/credential hardening; keep those as explicit follow-up decisions rather than silently treating them as implemented.

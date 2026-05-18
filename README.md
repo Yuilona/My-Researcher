@@ -44,7 +44,7 @@ pnpm install
 ### Development
 
 ```bash
-# Primary local entrypoint (desktop app)
+# Primary local entrypoint (desktop app + local API)
 pnpm desktop:dev
 
 # Prisma-backed backend API against the repo-standard local dev DB
@@ -53,6 +53,12 @@ pnpm backend:dev:prisma
 
 # Note: root `pnpm dev` is currently a placeholder script.
 ```
+
+`pnpm desktop:dev` verifies that `127.0.0.1:3000` is this project's Fastify `/health`
+endpoint before using it. If that port is occupied by another app, it starts the
+backend on an available port starting at `3310` and passes that URL to the
+renderer and Electron main process. Override with `DESKTOP_BACKEND_BASE_URL` or
+`VITE_API_BASE_URL` when you want to attach to an already-running backend.
 
 ## Project Structure
 

@@ -5,7 +5,7 @@
 
 结论分两层：
 - 任务治理和设计分包已经闭环：`T-069` 已把审查观点吸收进母包和子包边界。
-- 产品功能尚未完全闭环：当前 repo 已有实验基座 shared contracts/schema tests 的 T-070~T-075 子集，T-076 已落地最小 DB/API/readiness 闭环，T-077 已落地 execution adapters 最小闭环；desktop UI 仍未实现。
+- 产品最小实现链路已经闭环：T-070~T-075 shared contracts/schema tests、T-076 DB/API/readiness、T-077 execution adapters、T-078 desktop workbench 已形成最小可操作链路。
 
 ## Review Report Alignment
 | Review point | Current package guard | Owner |
@@ -37,34 +37,27 @@
 ## Current Repo Closure Check
 | Area | Repo evidence | Closure |
 |---|---|---|
-| Task governance | Parent and child task bundles exist; `T-069` through `T-077` are marked done; next step is `T-078` | Closed through T-077 |
-| Shared contracts | `packages/shared/src/research-lifecycle/experiment-foundation-contracts.ts` now contains the T-070 dataset registry subset, T-071 benchmark/protocol/baseline subset, T-072 version-lock/recipe subset, T-073 materialization/adapter-boundary subset, T-074 result/evidence/sidecar subset, and T-075 candidate promotion subset | Partially closed |
-| Contract tests | `packages/shared/src/research-lifecycle/experiment-foundation-contracts.schema.test.ts` now covers T-070 through T-075, including forbidden-field alias, platform-private negative cases, materialization traceability, fine-tuning task-profile gates, invalid-result evidence rejection, fact context requirements, sidecar no-copy guards, candidate lifecycle separation, and auto-promotion gates; later product-layer tasks remain pending | Partially closed |
-| Persistence/API | T-076 adds generic registry/readiness Prisma models, repo-only migration, refreshed DB context, shared API wrappers, repository/service implementations, REST routes, readiness gates, and candidate promotion persistence | Closed for minimum backend loop |
-| Desktop UI | `apps/desktop/src/renderer/literature/shared/constants.ts` still only lists `文献管理`, `选题管理`, `论文管理` | Not closed |
-| Execution adapters | T-077 adds ExternalTrainingJob contracts, dedicated job persistence, LocalScript execution, mockable Aliyun PAI-DLC boundary, submit/sync/cancel/collect APIs, readiness/materialization/idempotency gates, and targeted backend tests | Closed for minimum backend loop |
-| Evidence/paper integration | T-074 adds shared contracts and T-077 now creates result/validation/metric observation/evidence records from collected outputs; there is still no desktop sidecar workflow | Backend minimum closed; UI not closed |
+| Task governance | Parent and child task bundles exist; `T-069` through `T-078` are marked done | T-070~T-078 minimum chain closed |
+| Shared contracts | `experiment-foundation-contracts.ts` contains T-070 through T-075 contract subsets | Closed for frozen shared contract surface |
+| Contract tests | `experiment-foundation-contracts.schema.test.ts` covers forbidden-field aliases, platform-private boundaries, evidence guards, sidecar no-copy guards, candidate gates, and execution job API wrappers | Closed for shared-contract slices |
+| Persistence/API | T-076 adds generic registry/readiness persistence, repositories/services, REST routes, readiness gates, and candidate promotion persistence | Closed for minimum backend loop |
+| Execution adapters | T-077 adds ExternalTrainingJob persistence, LocalScript execution, mocked Aliyun PAI-DLC boundary, submit/sync/cancel/collect APIs, result validation, and evidence creation | Closed for minimum backend loop |
+| Desktop UI | `coreNavItems` now places `实验基座` below `文献管理`; `ExperimentFoundationModule` exposes registry/readiness/promotion/recipe/materialization/job/evidence views | Closed for minimum operational workbench |
+| Evidence/paper integration | T-074 defines sidecar contracts; T-077 creates result/evidence records; T-078 exposes evidence and sidecar records through registry/evidence views | Minimum closed; dedicated paper-project bridge UI remains follow-up |
 
 ## Code Quality Review
-T-069 是文档和治理收口；T-070/T-071/T-072/T-073/T-074/T-075 已新增 shared contracts 和 schema tests。当前仍未改 Prisma/API/UI、桌面入口、adapter 或运行时文件存储。
-
 Quality signals:
-- 变更集中在 `dev-docs/active/experiment-foundation-*` 和治理派生视图，符合本轮任务边界。
-- 母包语义已统一到审查报告要求：asset identity、version locks、materialization boundary、candidate lifecycle、fact/evidence/paper sidecar 分工保持一致。
-- T-071 post-review fix has closed the known alias-drift gaps where `BaselineAsset` accepted protocol fields and `BenchmarkAsset` accepted baseline implementation version fields.
-- T-072 closes the first-class version-lock and platform-neutral `RecipeDraft -> RunRecipe` contract path, including fine-tuning lock refs without owning `FineTuningTaskProfile`.
-- T-073 freezes the `RunRecipe -> TrainingTaskSpec` materialization boundary and keeps adapter-private payloads behind refs/hashes; post-review fixes now also enforce valid platform/adapter pairs, blocked materialization semantics, and hash-bearing task hooks.
-- T-074 freezes the materialized-output-to-evidence bridge: result packets, validation reports, facts/observations, implementation decision signals, paper-table fact sets, evidence candidates, and paper sidecars now reject claim/table/leaderboard/DTO-copy drift.
-- T-075 freezes literature/manual candidate promotion contracts: candidate support checks, triage, promotion requests/results, auto-promotion eligibility, canonical lifecycle guards, DTO alias leakage guards, and promoted canonical ref completeness now have shared schema coverage.
-- T-076 closes the minimum product backend loop: persisted registry payloads with indexed metadata, readiness reports, service-side schema validation, candidate promotion persistence, and REST routes now exist without storing raw data or adapter-private payloads.
-- T-077 closes the minimum execution backend loop: LocalScript smoke execution, mocked Aliyun mirror/policy gates, external job runtime persistence, events, cancellation, partial refs, result validation, and evidence candidate creation now exist without real cloud SDK credentials.
-- 剩余功能风险不是 T-077 代码缺陷，而是后续尚未实现：需要从 `T-078` 开始进入 desktop UI，并在后续 hardening 中接入真实云 SDK/凭证策略。
-
-Required next quality gate:
-- `T-078` 必须消费 T-076 registry/readiness API、T-077 execution job/result/evidence API 和 shared contracts，不得在 renderer 重新实现 persistence、adapter execution、readiness 或 result validation semantics。
-- T-078 不得复活 legacy CSS；desktop UI 必须走 data-ui/token governance。
+- T-078 is UI-only and does not change backend/shared/Prisma contracts.
+- Desktop imports shared experiment-foundation constants/types instead of duplicating renderer enums.
+- Desktop bridge now allows `PUT` and `/experiment-foundation/**`, matching existing T-076 upsert/API paths.
+- Renderer JSON editors only transport frozen contract payloads to backend APIs; they do not own readiness, promotion, materialization, adapter execution, or result validation semantics.
+- No `apps/desktop/src/renderer/styles/**`, `app-layout.css`, token, or UI contract change was added.
+- UI governance initially caught dynamic `data-tone`; the fix uses explicit data-ui tone literals and the gate now passes.
+- The current worktree has unrelated dirty files from other task lines; T-078 changes must be staged/reviewed separately.
 
 ## Functional Closure Result
-当前功能需求已完成最小后端闭环，但尚未完成用户可操作的端到端实验执行闭环。
+当前功能需求已完成最小后端 + 桌面操作闭环，但不是完整实验平台或完整论文桥接产品。
 
-已经闭环的是“实验基座设计审查吸收、任务包拆分、职责边界和执行顺序”，T-070 dataset registry、T-071 benchmark/protocol/baseline、T-072 version-lock/recipe、T-073 materialization/adapter-boundary、T-074 result/evidence/sidecar、T-075 candidate promotion 合同，T-076 persistence/API/readiness 最小闭环，以及 T-077 execution adapters 最小闭环。尚未闭环的是用户可操作桌面体验：paper bridge UI 和桌面 `实验基座` workbench 仍未完成，真实 Aliyun SDK/凭证接入也应作为后续 hardening 小包处理。因此主线应继续进入 `T-078 experiment-foundation-desktop-workbench`。
+已经闭环的是：实验基座设计审查吸收、任务包拆分、职责边界和执行顺序；T-070 dataset registry；T-071 benchmark/protocol/baseline；T-072 version-lock/recipe；T-073 materialization/adapter-boundary；T-074 result/evidence/sidecar；T-075 candidate promotion；T-076 persistence/API/readiness；T-077 execution adapters；T-078 desktop workbench。
+
+为避免语义漂移，母包暂不把以下能力伪装成已实现：完整 `TuningSession/TuningProposal/TuningDecision/TuningTrial` 产品化链路、真实 Aliyun SDK/凭证接入、专门的 paper-project bridge UI。这些应作为 closure decision 后的 follow-up 小包，而不是混入 T-078。

@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../..');
+const apiProxyTarget = process.env.VITE_API_BASE_URL ?? process.env.DESKTOP_BACKEND_BASE_URL ?? 'http://127.0.0.1:3000';
 
 export default defineConfig({
   plugins: [react()],
@@ -18,11 +19,11 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/paper-projects': {
-        target: 'http://127.0.0.1:3000',
+        target: apiProxyTarget,
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://127.0.0.1:3000',
+        target: apiProxyTarget,
         changeOrigin: true,
       },
     },

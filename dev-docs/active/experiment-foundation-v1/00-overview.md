@@ -2,7 +2,7 @@
 
 ## Status
 - State: planned
-- Next step: 开始 `T-078 experiment-foundation-desktop-workbench`，消费 T-076 registry/readiness API、T-077 execution job/result/evidence APIs 和 shared contracts 落地桌面实验基座工作台。
+- Next step: T-078 已完成；进行母包 closure decision，确认是否接受 T-070~T-078 最小闭环，或另拆 tuning workflow / real cloud SDK hardening / paper-project bridge 专项。
 
 ## Parent / Child Task Model
 - This package is the parent package for experiment-foundation V1.
@@ -190,7 +190,7 @@
 - [ ] 文献 key-content 可生成资产候选；低风险完整候选可由规则自动晋升，高风险或信息缺失候选才升级人工审查。
 - [ ] Research-argument/paper-project 只消费 asset refs 或 sidecar refs，不复制资产详情。
 - [ ] `PaperExperimentSidecar` 能回答 paper 使用了哪些 recipe、result、evidence、dataset/baseline/benchmark/protocol 版本和 hash。
-- [ ] Desktop UI 在“文献管理”下方提供实验基座入口，且不新增 legacy CSS 依赖。
+- [x] Desktop UI 在“文献管理”下方提供实验基座入口，且不新增 legacy CSS 依赖。
 - [ ] Readiness checks 能阻断缺 license、缺 version/hash、缺 split/protocol、缺 baseline entrypoint 的实施准备。
 - [ ] 实验基座固定 `Resolve -> Validate -> Materialize -> Submit -> Monitor -> Collect -> Validate Result` 管道。
 - [ ] 训练任务通过平台适配器提交到外部训练平台，并能同步状态、收集结果和生成 evidence candidate。

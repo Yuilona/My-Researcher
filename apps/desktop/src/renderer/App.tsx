@@ -80,6 +80,7 @@ import { useGovernancePanelController } from './shell/useGovernancePanelControll
 import { PaperModule } from './modules/PaperModule';
 import { TitleCardManagementModule } from './modules/TitleCardManagementModule';
 import { WritingModule } from './modules/WritingModule';
+import { ExperimentFoundationModule } from './modules/experiment-foundation/ExperimentFoundationModule';
 import { LiteratureWorkspace } from './literature/LiteratureWorkspace';
 import { useOverviewController } from './literature/overview/useOverviewController';
 import { useOverviewActionsController } from './literature/overview/useOverviewActionsController';
@@ -1292,6 +1293,10 @@ export function App({ initialThemeMode }: AppProps) {
               citationStatusOptions={citationStatusOptions}
               onUpdateCitationStatus={handleUpdateCitationStatus}
             />
+          ) : null}
+
+          {activeModule === '实验基座' ? (
+            <ExperimentFoundationModule />
           ) : null}
 
           {activeModule === '选题管理' ? (

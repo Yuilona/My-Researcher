@@ -18,7 +18,7 @@ import type {
   ZoteroLinkResult,
 } from './types';
 
-export const coreNavItems = ['文献管理', '选题管理', '论文管理'];
+export const coreNavItems = ['文献管理', '实验基座', '选题管理', '论文管理'];
 export const writingNavItems = ['写作中心', '投稿检查'];
 export const themeModeOptions: Array<{ value: ThemeMode; label: string }> = [
   { value: 'system', label: '跟随系统' },

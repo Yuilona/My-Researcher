@@ -1,9 +1,9 @@
 # 00 Overview
 
 ## Status
-- State: planned
+- State: done
 - Parent task: `T-043 experiment-foundation-v1`
-- Next step: consume the stable T-076 registry/readiness API and T-077 execution job/result/evidence APIs to implement the desktop workbench.
+- Next step: parent package closure review; any real cloud SDK/credential hardening should be tracked outside V1 minimum closure.
 
 ## Goal
 - Add the desktop `实验基座` workbench below `文献管理`, exposing asset registry, readiness, recipe, job/result, evaluation fact, and sidecar workflows without owning experiment semantics in the UI.
@@ -26,6 +26,13 @@
 - Does not own persistence, adapter execution, or paper claim semantics.
 
 ## Done Means
-- `实验基座` appears below `文献管理`.
-- UI smoke and governance checks pass.
-- No legacy CSS dependency is added.
+- [x] `实验基座` appears below `文献管理`.
+- [x] UI smoke and governance checks pass.
+- [x] No legacy CSS dependency is added.
+
+## Acceptance Criteria
+- [x] `实验基座` navigation entry is placed immediately below `文献管理`.
+- [x] Registry/readiness/promotion/recipe-materialization/execution-evidence surfaces consume existing backend APIs.
+- [x] Renderer does not implement persistence, adapter execution, readiness rules, result validation, or paper-claim semantics.
+- [x] UI uses shared experiment-foundation constants/types rather than copied renderer enums.
+- [x] UI verification, governance gate, and project governance lint pass.
