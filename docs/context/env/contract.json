@@ -4,7 +4,7 @@
     "prod",
     "staging"
   ],
-  "generated_at_utc": "2026-05-14T22:28:17Z",
+  "generated_at_utc": "2026-05-16T23:18:18Z",
   "ssot_mode": "repo-env-contract",
   "variables": {
     "APPLICATION_SETTINGS_REPOSITORY": {
@@ -75,6 +75,44 @@
       "state": "active",
       "type": "enum"
     },
+    "DASHSCOPE_API_KEY": {
+      "default": null,
+      "deprecate_after": null,
+      "description": "Local DashScope API key for backend LLM workflows.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": [
+        "dev"
+      ],
+      "secret": true,
+      "secret_ref": "dashscope_api_key",
+      "state": "active",
+      "type": "string"
+    },
+    "DASHSCOPE_API_KEY_CODING": {
+      "default": null,
+      "deprecate_after": null,
+      "description": "Local DashScope API key reserved for coding-oriented LLM workflows.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": [
+        "dev"
+      ],
+      "secret": true,
+      "secret_ref": "dashscope_api_key_coding",
+      "state": "active",
+      "type": "string"
+    },
     "DATABASE_URL": {
       "default": null,
       "deprecate_after": null,
@@ -94,6 +132,25 @@
       "state": "active",
       "type": "url"
     },
+    "DEEPSEEK_API_KEY": {
+      "default": null,
+      "deprecate_after": null,
+      "description": "Local DeepSeek API key for future backend LLM provider integrations.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": [
+        "dev"
+      ],
+      "secret": true,
+      "secret_ref": "deepseek_api_key",
+      "state": "active",
+      "type": "string"
+    },
     "HOST": {
       "default": "0.0.0.0",
       "deprecate_after": null,
@@ -106,6 +163,25 @@
       "replacement": null,
       "required": false,
       "scopes": null,
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "string"
+    },
+    "LITERATURE_CONTENT_PROCESSING_ROOT": {
+      "default": "/Volumes/DataDisk/Data/PaperEngineer/literature-content-processing",
+      "deprecate_after": null,
+      "description": "Local root directory for literature raw files, normalized text, pipeline artifacts, indexes, and exports.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": [
+        "dev"
+      ],
       "secret": false,
       "secret_ref": null,
       "state": "active",
@@ -179,6 +255,44 @@
       "state": "active",
       "type": "enum"
     },
+    "OPENAI_API_KEY": {
+      "default": null,
+      "deprecate_after": null,
+      "description": "Local OpenAI API key for backend LLM workflows and topic-selection dry runs.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": [
+        "dev"
+      ],
+      "secret": true,
+      "secret_ref": "openai_api_key",
+      "state": "active",
+      "type": "string"
+    },
+    "PAPER_ENGINEER_LOCAL_DATA_ROOT": {
+      "default": "/Volumes/DataDisk/Data/PaperEngineer",
+      "deprecate_after": null,
+      "description": "Local root directory for Paper Engineer runtime data and generated artifacts.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": [
+        "dev"
+      ],
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "string"
+    },
     "PORT": {
       "default": 8000,
       "deprecate_after": null,
@@ -246,6 +360,25 @@
       "secret_ref": null,
       "state": "active",
       "type": "enum"
+    },
+    "UNPAYWALL_EMAIL": {
+      "default": null,
+      "deprecate_after": null,
+      "description": "Contact email used for Unpaywall API requests during local literature fulltext acquisition.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": [
+        "dev"
+      ],
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "string"
     }
   }
 }

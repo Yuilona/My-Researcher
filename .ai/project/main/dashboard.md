@@ -8,30 +8,30 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 68 (planned: 1, in-progress: 2, blocked: 0, done: 1, archived: 64)
+- Tasks: 89 (planned: 4, in-progress: 2, blocked: 0, done: 17, archived: 66)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
-| T-042 topic-selection-decision-chain-redesign | archived | F-001 | dev-docs/archive/topic-selection-decision-chain-redesign |
-| T-044 topic-selection-v1a-evidence-to-need | archived | F-001 | dev-docs/archive/topic-selection-v1a-evidence-to-need |
-| T-045 topic-selection-v1b-need-to-draft-topic | archived | F-001 | dev-docs/archive/topic-selection-v1b-need-to-draft-topic |
-| T-046 topic-selection-v1c-promotion-bridge | archived | F-001 | dev-docs/archive/topic-selection-v1c-promotion-bridge |
-| T-047 topic-selection-v1a-evidence-map-strength | archived | F-001 | dev-docs/archive/topic-selection-v1a-evidence-map-strength |
-| T-048 topic-selection-v1a-foundation-control-plane | archived | F-001 | dev-docs/archive/topic-selection-v1a-foundation-control-plane |
-| T-049 topic-selection-v1a-need-validation | archived | F-001 | dev-docs/archive/topic-selection-v1a-need-validation |
-| T-050 topic-selection-v1a-offline-evaluation-replay | archived | F-001 | dev-docs/archive/topic-selection-v1a-offline-evaluation-replay |
-| T-051 topic-selection-v1a-recheck-risk-memory | archived | F-001 | dev-docs/archive/topic-selection-v1a-recheck-risk-memory |
-| T-052 topic-selection-v1a-search-resource-evidence-inputs | archived | F-001 | dev-docs/archive/topic-selection-v1a-search-resource-evidence-inputs |
-| T-053 topic-selection-v1a-http-api-closure | archived | F-001 | dev-docs/archive/topic-selection-v1a-http-api-closure |
-| T-054 topic-selection-v1b-http-api-closure | archived | F-001 | dev-docs/archive/topic-selection-v1b-http-api-closure |
-| T-055 topic-selection-v1b-intake-constraint-profile | archived | F-001 | dev-docs/archive/topic-selection-v1b-intake-constraint-profile |
-| T-056 topic-selection-v1b-offline-evaluation-replay | archived | F-001 | dev-docs/archive/topic-selection-v1b-offline-evaluation-replay |
-| T-057 topic-selection-v1b-research-slice | archived | F-001 | dev-docs/archive/topic-selection-v1b-research-slice |
-| T-058 topic-selection-v1b-topic-package-draft | archived | F-001 | dev-docs/archive/topic-selection-v1b-topic-package-draft |
-| T-059 topic-selection-v1b-topic-question-contract | archived | F-001 | dev-docs/archive/topic-selection-v1b-topic-question-contract |
-| T-060 topic-selection-v1b-value-assessment | archived | F-001 | dev-docs/archive/topic-selection-v1b-value-assessment |
-| T-061 topic-selection-v1c-promotion-input-snapshot | archived | F-001 | dev-docs/archive/topic-selection-v1c-promotion-input-snapshot |
-| T-062 topic-selection-v1c-promotion-gate-support | archived | F-001 | dev-docs/archive/topic-selection-v1c-promotion-gate-support |
+| T-087 topic-selection-desktop-workbench-v1abc | planned | F-001 | dev-docs/active/topic-selection-desktop-workbench-v1abc |
+| T-088 topic-selection-workflow-runtime-foundation | planned | F-001 | dev-docs/active/topic-selection-workflow-runtime-foundation |
+| T-089 topic-selection-agent-workflow-review | planned | F-001 | dev-docs/active/topic-selection-agent-workflow-review |
+| T-075 experiment-foundation-candidate-promotion-contracts | done | F-001 | dev-docs/active/experiment-foundation-candidate-promotion-contracts |
+| T-076 experiment-foundation-persistence-api-readiness | done | F-001 | dev-docs/active/experiment-foundation-persistence-api-readiness |
+| T-077 experiment-foundation-execution-adapters | done | F-001 | dev-docs/active/experiment-foundation-execution-adapters |
+| T-078 experiment-foundation-desktop-workbench | done | F-001 | dev-docs/active/experiment-foundation-desktop-workbench |
+| T-080 topic-selection-v1b-quality-deep-acceptance | archived | F-001 | dev-docs/archive/topic-selection-v1b-quality-deep-acceptance |
+| T-081 topic-selection-v1b-quality-loopback-acceptance | archived | F-001 | dev-docs/archive/topic-selection-v1b-quality-loopback-acceptance |
+| T-082 topic-selection-paper-project-bridge-downstream-acceptance | done | F-001 | dev-docs/active/topic-selection-paper-project-bridge-downstream-acceptance |
+| T-083 backend-full-suite-environment-isolation | done | F-000 | dev-docs/active/backend-full-suite-environment-isolation |
+| T-084 topic-selection-real-e2e-canary | done | F-000 | dev-docs/active/topic-selection-real-e2e-canary |
+| T-085 topic-selection-real-e2e-scale-quality | done | F-000 | dev-docs/active/topic-selection-real-e2e-scale-quality |
+| T-086 research-argument-writing-entry-bridge-acceptance | done | F-001 | dev-docs/active/research-argument-writing-entry-bridge-acceptance |
+| T-069 experiment-foundation-design-review-sync | done | F-001 | dev-docs/active/experiment-foundation-design-review-sync |
+| T-070 experiment-foundation-dataset-registry-contracts | done | F-001 | dev-docs/active/experiment-foundation-dataset-registry-contracts |
+| T-071 experiment-foundation-benchmark-protocol-contracts | done | F-001 | dev-docs/active/experiment-foundation-benchmark-protocol-contracts |
+| T-072 experiment-foundation-version-lock-recipe-contracts | done | F-001 | dev-docs/active/experiment-foundation-version-lock-recipe-contracts |
+| T-073 experiment-foundation-materialization-adapter-contracts | done | F-001 | dev-docs/active/experiment-foundation-materialization-adapter-contracts |
+| T-074 experiment-foundation-result-evidence-sidecar-contracts | done | F-001 | dev-docs/active/experiment-foundation-result-evidence-sidecar-contracts |
 <!-- AUTO-GENERATED:END dashboard -->

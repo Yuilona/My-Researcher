@@ -28,6 +28,34 @@ variables:
     secret_ref: database_url
     scopes: [dev]
     description: Prisma database URL for the local development database.
+  OPENAI_API_KEY:
+    type: string
+    required: false
+    secret: true
+    secret_ref: openai_api_key
+    scopes: [dev]
+    description: Local OpenAI API key for backend LLM workflows and topic-selection dry runs.
+  DASHSCOPE_API_KEY:
+    type: string
+    required: false
+    secret: true
+    secret_ref: dashscope_api_key
+    scopes: [dev]
+    description: Local DashScope API key for backend LLM workflows.
+  DASHSCOPE_API_KEY_CODING:
+    type: string
+    required: false
+    secret: true
+    secret_ref: dashscope_api_key_coding
+    scopes: [dev]
+    description: Local DashScope API key reserved for coding-oriented LLM workflows.
+  DEEPSEEK_API_KEY:
+    type: string
+    required: false
+    secret: true
+    secret_ref: deepseek_api_key
+    scopes: [dev]
+    description: Local DeepSeek API key for future backend LLM provider integrations.
   TITLE_CARD_REPOSITORY:
     type: enum
     enum: [memory, prisma]
@@ -64,6 +92,23 @@ variables:
     required: false
     default: 'false'
     description: Enable deep pipeline stages for USER_AUTH literature rights class.
+  PAPER_ENGINEER_LOCAL_DATA_ROOT:
+    type: string
+    required: false
+    default: /Volumes/DataDisk/Data/PaperEngineer
+    scopes: [dev]
+    description: Local root directory for Paper Engineer runtime data and generated artifacts.
+  LITERATURE_CONTENT_PROCESSING_ROOT:
+    type: string
+    required: false
+    default: /Volumes/DataDisk/Data/PaperEngineer/literature-content-processing
+    scopes: [dev]
+    description: Local root directory for literature raw files, normalized text, pipeline artifacts, indexes, and exports.
+  UNPAYWALL_EMAIL:
+    type: string
+    required: false
+    scopes: [dev]
+    description: Contact email used for Unpaywall API requests during local literature fulltext acquisition.
   LITERATURE_PIPELINE_EMBEDDING_URL:
     type: string
     required: false

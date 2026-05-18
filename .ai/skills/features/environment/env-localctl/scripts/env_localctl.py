@@ -63,6 +63,27 @@ def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def read_env_file_value(path: Path, key: str) -> Optional[str]:
+    if not path.exists():
+        return None
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].strip()
+        if "=" not in line:
+            continue
+        raw_key, raw_value = line.split("=", 1)
+        if raw_key.strip() != key:
+            continue
+        value = raw_value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        return value
+    return None
+
+
 def _run_cli_json(
     args: Sequence[str],
     *,
@@ -1044,6 +1065,28 @@ def resolve_secret(
         val = read_text(path)
         return val.rstrip("\n"), None
 
+    if backend == "envfile":
+        # Supported ref forms: envfile:.env.local#VAR or envfile://.env.local?key=VAR
+        p = ref
+        key = ""
+        if ref.startswith("envfile://"):
+            p = ref[len("envfile://") :]
+            if "?key=" in p:
+                p, key = p.split("?key=", 1)
+        elif ref.startswith("envfile:"):
+            p = ref[len("envfile:") :]
+            if "#" in p:
+                p, key = p.rsplit("#", 1)
+        if not p.strip() or not key.strip():
+            return None, f"envfile backend requires ref like envfile:.env.local#VAR_NAME (got {ref!r})"
+        path = Path(p.strip())
+        if not path.is_absolute():
+            path = (root / path).resolve()
+        value = read_env_file_value(path, key.strip())
+        if value is None:
+            return "", None
+        return value, None
+
     if backend == "bws":
         # Bitwarden Secrets Manager (bws CLI).
         #
@@ -1088,7 +1131,7 @@ def resolve_secret(
             return None, f"bws secret key not found in project_id={pid}: {key!r}"
         return secrets[key], None
 
-    return None, f"unsupported secret backend: {backend!r} (supported: mock, env, file, bws)"
+    return None, f"unsupported secret backend: {backend!r} (supported: mock, env, file, envfile, bws)"
 
 
 def redact_effective(vars_def: Mapping[str, VarDef], effective: Mapping[str, Any]) -> Dict[str, Any]:

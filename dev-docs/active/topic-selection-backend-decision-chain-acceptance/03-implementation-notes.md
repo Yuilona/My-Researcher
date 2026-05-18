@@ -81,3 +81,61 @@
 - Guardrail: this remains a synthetic offline replay quality baseline. It verifies contract and regression-calibration behavior, not mature real-world research-quality thresholds.
 - Blocking backend defects found: none.
 - Product code changes made by this task: none; changes are test-only plus task/governance documentation.
+
+## Real-Resource Environment Rehearsal - 2026-05-17
+- Result: accepted as an environment rehearsal over the populated resource pool.
+- Scope: small-sample real flow using `ai-rag-finetuning-2022-2026`, 12 role-balanced literature records, local Postgres persistence, and the configured OpenAI LLM profile.
+- Final outcome: v1a produced a `ValidatedNeed` and v1b input bundle; v1b produced an active `TopicQuestionContract`, ready/current value assessment, ready package, and v1c input bundle; v1c produced a promote-with-conditions decision and active `PaperProjectBridge`.
+- Product code changes made during the rehearsal:
+  - hardened v1b topic-question formation prompts and post-processing so known `research_slice`, `research_slice_boundary`, `research_slice_assumption`, and slice evidence wrapper refs normalize to the exact downstream authority refs expected by the contracts;
+  - demoted non-blocking evidence-sufficiency prose from hard `blockers` into risk notes so ordinary uncertainty does not incorrectly block otherwise answerable candidates;
+  - hardened v1b value assessment prompts and post-processing so evidence wrapper refs normalize to inherited evidence refs and `accepted_risk_refs` only contain true inherited `accepted_risk` authority refs.
+- Harness change: `.ai/.tmp/topic-selection-real-flow.mjs` now writes evidence under repo-root `.ai/.tmp`, prefers risk-free `answerable` topic-question candidates, and creates/carries an explicit accepted risk through the existing v1a accepted-risk route if only `answerable_with_risk` candidates are available.
+- Interpretation: the earlier failures were real contract-drift findings exposed by live LLM output, not resource-pool insufficiency. The final pass confirms the backend chain can run with the current real resource pool.
+
+## Resource-Sampling Test Follow-Up - 2026-05-17
+- Result: accepted with sampling caveat.
+- Resource audit found 102 ready scoped records and enough role coverage, but also 11 possible topic-drift records under a simple keyword audit. This confirms the pool is usable, but sampling should not blindly trust `activation_score=100`.
+- Tightened the temporary real-flow sampler so support requires primary RAG/fine-tuning/source-attribution signals and excludes risk-heavy papers; risk-heavy RAG/embedding/source papers now fill challenge roles instead of support roles.
+- Final 16-literature live run passed and exercised the `answerable_with_risk` branch: an active accepted risk was created, carried into the TopicQuestionContract, preserved through value assessment/package/v1c bundle, and visible on the final PaperProjectBridge.
+
+## v1c Product-Level Route Hardening - 2026-05-18
+- Result: accepted as a deeper HTTP-level v1c closure check.
+- Added route-level assertions in `apps/backend/src/routes/topic-selection-v1c-routes.integration.test.ts`.
+- Additional coverage:
+  - `promote_with_conditions` carries conditions, early-check obligations, claim ceiling, source promotion decision id, promotion input snapshot id/hash, and source lineage summary into `PaperProjectBridge.working_copy_payload`;
+  - bridge creation remains a handoff only and does not create `PaperProject` or paper-project intake refs;
+  - stale human-confirmed promotion snapshot hashes are rejected with `VERSION_CONFLICT`;
+  - malformed human-verifiable promotion conditions are rejected with stable `INVALID_PAYLOAD`;
+  - only one current `PromotionDecision` can exist for a promotion input snapshot;
+  - bridge workspace drift is rejected before bridge creation, while a valid bridge can still be created afterward.
+- Product code changes made by this phase: none; changes are test-only plus acceptance documentation.
+
+## v1c Downstream Feedback Route Hardening - 2026-05-18
+- Result: accepted as a product-level downstream feedback/recheck closure check.
+- Added route-level coverage in `apps/backend/src/routes/topic-selection-v1c-routes.integration.test.ts`.
+- Additional coverage:
+  - creates a real active `PaperProjectBridge` through the v1c HTTP path, then records downstream feedback against that bridge;
+  - verifies all downstream feedback signals map to the expected loopback target at HTTP level;
+  - verifies every recheck-producing signal creates a retrievable downstream recheck projection, while `no_recheck_needed` remains append-only without a recheck projection;
+  - verifies feedback list-by-bridge is append-only and returns exactly the created feedback records;
+  - verifies missing `required_action` and workspace drift are rejected before feedback creation;
+  - verifies downstream feedback does not mutate stable bridge fields such as bridge hash, working copy hash, source promotion decision id, promotion input snapshot id/hash, or paper-project refs.
+- Test harness correction: compare a stable bridge field subset when checking immutability because the bridge GET route returns the full read model, not a narrowed DTO.
+- Product code changes made by this phase: none; changes are test-only plus acceptance documentation.
+
+## Real Provider Downstream Replay - 2026-05-18
+- Result: accepted after one live LLM contract-drift fix.
+- Scope: real DB and real OpenAI provider run over `ai-rag-finetuning-2022-2026`, with 20 resource-sampled literature records, v1a -> v1b -> v1c -> downstream feedback/recheck replay.
+- First real run exposed a live v1b value-assessment reference drift: the LLM cited the inherited research slice as `ref_type=research_slice_ref` even though the authority ref is `research_slice`.
+- Fix:
+  - hardened the value-assessment prompt to require the inherited `research_slice_ref` value exactly without emitting `ref_type=research_slice_ref`;
+  - normalized only the matching wrapper alias back to the inherited `research_slice` ref when `ref_id` matches the inherited research slice and `title_card_id` is absent or matches the active title card;
+  - kept unknown refs blocked by the existing value-assessment gate.
+- Final real run `downstream-real-rerun-20260518135802` passed:
+  - sample set `resource_sample_set_b8bcc296-1a2a-4385-8d7b-4c6ab1ae3e32`, status `ready_with_warning`, warning `CONTEXT_CAP_APPLIED`;
+  - v1b produced `answerable_with_risk`, created an accepted risk, advanced value assessment/package, and emitted a v1c input bundle;
+  - v1c produced active bridge `paper_project_bridge_7884f6dc-5776-46d3-8ed0-40a03b5ca5b1`;
+  - downstream replay created 13 feedback records, 12 recheck requests, and one append-only `no_recheck_needed` record;
+  - missing `required_action` returned `INVALID_PAYLOAD`, workspace drift returned `VERSION_CONFLICT`, and stable bridge fields stayed unchanged.
+- Product code changes made by this phase: v1b value-assessment prompt/normalization hardening plus unit coverage; real-flow harness extended to include downstream feedback/recheck replay and artifact capture.

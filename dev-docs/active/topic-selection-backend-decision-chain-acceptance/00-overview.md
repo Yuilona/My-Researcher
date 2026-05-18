@@ -2,7 +2,7 @@
 
 ## Status
 - State: done
-- Next step: no backend decision-chain acceptance follow-up remains inside T-068.
+- Next step: real-resource environment rehearsal passed; no backend decision-chain acceptance follow-up remains inside T-068.
 
 ## Parent And Scope Source
 - Parent architecture package: `dev-docs/active/topic-selection-decision-chain-redesign/`
@@ -38,3 +38,4 @@
 - [x] T-068 invariant/negative acceptance explicitly covers blocked readiness, duplicate/closed authority transitions, non-advance package blocking, non-promote bridge blocking, and append-only downstream feedback.
 - [x] T-068 persistence/contract acceptance explicitly records route contract checks, shared contract/typecheck checks, OpenAPI/API/context checks, and isolated Prisma persistence smoke.
 - [x] T-068 quality baseline acceptance verifies v1a/v1b/v1c synthetic offline replay datasets, case coverage, stage-compatible metrics, replay diffs, and cross-stage metric rejection without treating synthetic baselines as real-world quality thresholds.
+- [x] Real-resource small-sample environment rehearsal runs through v1a, v1b, v1c, and creates an active `PaperProjectBridge` using the populated `ai-rag-finetuning-2022-2026` literature scope and the configured local LLM provider.

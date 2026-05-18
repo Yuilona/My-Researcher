@@ -36,6 +36,9 @@ Project: `main`
 | T-039 literature-citation-abstract-readiness | archived | dev-docs/archive/literature-citation-abstract-readiness |
 | T-040 literature-content-processing-closure-fixes | archived | dev-docs/archive/literature-content-processing-closure-fixes |
 | T-041 literature-end-to-end-quality-upgrade | in-progress | dev-docs/active/literature-end-to-end-quality-upgrade |
+| T-083 backend-full-suite-environment-isolation | done | dev-docs/active/backend-full-suite-environment-isolation |
+| T-084 topic-selection-real-e2e-canary | done | dev-docs/active/topic-selection-real-e2e-canary |
+| T-085 topic-selection-real-e2e-scale-quality | done | dev-docs/active/topic-selection-real-e2e-scale-quality |
 
 ### F-001 Research Lifecycle Governance Core
 
@@ -82,6 +85,24 @@ Project: `main`
 | T-066 topic-selection-v1c-offline-evaluation-replay | archived | dev-docs/archive/topic-selection-v1c-offline-evaluation-replay |
 | T-067 topic-selection-v1c-http-api-closure | archived | dev-docs/archive/topic-selection-v1c-http-api-closure |
 | T-068 topic-selection-backend-decision-chain-acceptance | done | dev-docs/active/topic-selection-backend-decision-chain-acceptance |
+| T-069 experiment-foundation-design-review-sync | done | dev-docs/active/experiment-foundation-design-review-sync |
+| T-070 experiment-foundation-dataset-registry-contracts | done | dev-docs/active/experiment-foundation-dataset-registry-contracts |
+| T-071 experiment-foundation-benchmark-protocol-contracts | done | dev-docs/active/experiment-foundation-benchmark-protocol-contracts |
+| T-072 experiment-foundation-version-lock-recipe-contracts | done | dev-docs/active/experiment-foundation-version-lock-recipe-contracts |
+| T-073 experiment-foundation-materialization-adapter-contracts | done | dev-docs/active/experiment-foundation-materialization-adapter-contracts |
+| T-074 experiment-foundation-result-evidence-sidecar-contracts | done | dev-docs/active/experiment-foundation-result-evidence-sidecar-contracts |
+| T-075 experiment-foundation-candidate-promotion-contracts | done | dev-docs/active/experiment-foundation-candidate-promotion-contracts |
+| T-076 experiment-foundation-persistence-api-readiness | done | dev-docs/active/experiment-foundation-persistence-api-readiness |
+| T-077 experiment-foundation-execution-adapters | done | dev-docs/active/experiment-foundation-execution-adapters |
+| T-078 experiment-foundation-desktop-workbench | done | dev-docs/active/experiment-foundation-desktop-workbench |
+| T-079 topic-selection-resource-sampling-policy | done | dev-docs/active/topic-selection-resource-sampling-policy |
+| T-080 topic-selection-v1b-quality-deep-acceptance | archived | dev-docs/archive/topic-selection-v1b-quality-deep-acceptance |
+| T-081 topic-selection-v1b-quality-loopback-acceptance | archived | dev-docs/archive/topic-selection-v1b-quality-loopback-acceptance |
+| T-082 topic-selection-paper-project-bridge-downstream-acceptance | done | dev-docs/active/topic-selection-paper-project-bridge-downstream-acceptance |
+| T-086 research-argument-writing-entry-bridge-acceptance | done | dev-docs/active/research-argument-writing-entry-bridge-acceptance |
+| T-087 topic-selection-desktop-workbench-v1abc | planned | dev-docs/active/topic-selection-desktop-workbench-v1abc |
+| T-088 topic-selection-workflow-runtime-foundation | planned | dev-docs/active/topic-selection-workflow-runtime-foundation |
+| T-089 topic-selection-agent-workflow-review | planned | dev-docs/active/topic-selection-agent-workflow-review |
 
 ### F-002 Desktop Frontend Foundation
 
