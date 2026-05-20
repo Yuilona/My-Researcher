@@ -1,0 +1,14 @@
+version: 1
+task_id: T-090
+project: main
+slug: experiment-foundation-capability-validation
+status: planned
+updated: "2026-05-19"
+keywords:
+  - experiment-foundation
+  - parent-task:T-043
+  - capability-validation
+  - acceptance-tests
+  - automation
+  - external-integration
+  - workflow-robustness
