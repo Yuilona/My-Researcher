@@ -202,7 +202,7 @@
   TOPIC_SELECTION_REAL_E2E_EXISTING_RUN_IDS=scale-quality-sanitize-20260518200537-provider-r1 \
   TOPIC_SELECTION_REAL_E2E_SKIP_NEGATIVE=1 \
   TOPIC_SELECTION_REAL_LITERATURE_LIMIT=32 \
-  node .ai/scripts/topic-selection-real-e2e-quality-gate.mjs
+  node .ai/scripts/topic-selection-workflow-scenario-runner.mjs --scenario topic-selection.real-e2e.scale-quality.v1
   ```
 - Result: passed; reused the provider run without new LLM calls.
 - Real-flow evidence:

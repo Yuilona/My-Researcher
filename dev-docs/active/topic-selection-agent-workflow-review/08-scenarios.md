@@ -20,7 +20,7 @@ This file is the scenario registry for T-089. Scenarios describe acceptance orch
 ### `topic-selection.real-e2e.canary.v1`
 ```yaml
 scenario_id: topic-selection.real-e2e.canary.v1
-status: planned_migration
+status: partial_runner_migrated
 purpose: Full-chain small-sample happy path from resource sampling through PaperProject intake.
 scenario_type: real_e2e_canary
 execution_modes: [codex_assisted, mocked_llm, provider_llm]
@@ -47,17 +47,17 @@ covered_nodes:
   - topic-selection.downstream.paper-project-intake.v1
 fixtures_or_data_source: real resource pool sample such as ai-rag-finetuning-2022-2026 plus human decision fixtures where required
 assertion_scope: happy-path authority creation, handoff refs, bridge intake idempotency, hash stability, and artifact generation
-artifact_expectations: harness run summary, node traces, redacted prompt/response packets where model-like execution occurs, authority refs, and selected evidence refs
+artifact_expectations: real-e2e summary with scenario_id, harness run summary for generate-need-candidate, node traces, redacted prompt/response packets where model-like execution occurs, authority refs, and selected evidence refs
 business_semantics_source: 06-workflow-matrix.md + 07-node-policies.md
 ```
 
 ### `topic-selection.real-e2e.scale-quality.v1`
 ```yaml
 scenario_id: topic-selection.real-e2e.scale-quality.v1
-status: planned_migration
+status: runner_migrated
 purpose: Larger-sample quality and stability acceptance over the real resource pool.
 scenario_type: scale_quality_gate
-execution_modes: [provider_llm, codex_assisted]
+execution_modes: [provider_llm, codex_assisted, mocked_llm]
 covered_nodes:
   - topic-selection.resource-sampling.create-sample-set.v1
   - topic-selection.v1a.build-evidence-map.v1
@@ -81,14 +81,14 @@ covered_nodes:
   - topic-selection.downstream.paper-project-intake.v1
 fixtures_or_data_source: expanded real resource sample set
 assertion_scope: sampling stability, role-count stability, selected-set stability, quality degradation checks, and downstream intake invariants
-artifact_expectations: quality summary, sampled-resource audit table, node traces, selected evidence refs, and comparison metrics
+artifact_expectations: quality summary from topic-selection-workflow-scenario-runner, sampled-resource audit table, node traces, selected evidence refs, covered child scenario ids, and comparison metrics
 business_semantics_source: 06-workflow-matrix.md + 07-node-policies.md
 ```
 
 ### `topic-selection.v1b.non-advance-negative.v1`
 ```yaml
 scenario_id: topic-selection.v1b.non-advance-negative.v1
-status: planned_migration
+status: runner_migrated
 purpose: Verify weak value assessment stops before package, v1c, bridge, and PaperProject intake.
 scenario_type: negative
 execution_modes: [codex_assisted, mocked_llm, provider_llm]
@@ -105,7 +105,7 @@ covered_nodes:
   - topic-selection.v1b.decide-value-disposition.v1
 fixtures_or_data_source: controlled weak-value v1b input or real-flow fork with low value outcome
 assertion_scope: non-advance disposition, package_draft_input=null, output_topic_package_id=null, no v1c bundle, no promotion, no bridge, no PaperProject intake
-artifact_expectations: stop-node trace, non-advance disposition artifact, absence assertions for downstream authority refs
+artifact_expectations: scenario summary from topic-selection-workflow-scenario-runner, stop-node trace, non-advance disposition artifact, absence assertions for downstream authority refs
 business_semantics_source: 06-workflow-matrix.md + 07-node-policies.md
 ```
 
@@ -175,7 +175,7 @@ fixtures_or_data_source: controlled evidence map with multiple plausible need fr
 assertion_scope: D-25 implementation slice coverage, deterministic-before-LLM verification order, mocked-before-provider/codex staged verification, GenerateNeedCandidateNodeInput validation, stable GenerateNeedCandidateNodeResult shape across execution modes, status versus terminal_result mapping, debate trigger, exploration_context versus arbiter_context separation, evidence signal extraction, candidate framing expansion, optional arbiter-scoped supplemental rounds up to 3 total rounds, SupplementalRoundRoutingDecision production, supplementable versus non-supplementable reason handling, no broad re-exploration, ranked candidate draft batch minimum schema validation, CandidateDraftAdmissionReport production, admission gate decisions, PersistNeedCandidateBatchCommand validation, idempotent all-or-none NeedCandidate persistence, candidate-pool projection refs/hash, downstream handoff refs only, candidate-pool comparison, draft-to-NeedCandidate mapping, bounded NeedCandidate persistence, per-candidate validation, rejected alternative artifacts, no raw debate transcript handoff, no NeedCandidateSet authority, no SearchPlan mutation, and no ValidatedNeed creation
 artifact_expectations: D-25 implementation slice evidence, GenerateNeedCandidateNodeResult, context packet refs/hashes, shared context envelope, exploration_context digest, arbiter_context digest, cache hit/miss provenance, memory admission summary, role agent provenance, role-level summaries, SupplementalRoundRoutingDecision and supplemental-round requests when used, ranked candidate draft batch artifact, minimum schema validation report, CandidateDraftAdmissionReport, PersistNeedCandidateBatchCommand redacted snapshot, arbiter candidate batch synthesis, rejected/merged framing rationale, unresolved points, batch ranking, draft-to-record mapping report, candidate-pool projection refs/hash, validation report, persisted NeedCandidate refs, and candidate discovery audit refs
 business_semantics_source: 06-workflow-matrix.md + 07-node-policies.md
-implementation_note: D-25 WorkflowHarness plumbing cases exist for finalize-persist, supplemental-routing, admission-blocked, duplicate merge-hint, malformed blocked output, execution-mode shape stability, and persistence-conflict rollback; the initial multi-agent debate role loop is implemented through TopicSelectionNeedDiscoveryDebateLoopService; route/CLI wrappers and automated supplemental repair rounds remain pending.
+implementation_note: D-25 WorkflowHarness plumbing cases exist for finalize-persist, supplemental-routing, admission-blocked, duplicate merge-hint, malformed blocked output, execution-mode shape stability, and persistence-conflict rollback; the initial multi-agent debate role loop is implemented through TopicSelectionNeedDiscoveryDebateLoopService; the real E2E canary now routes v1a generate-need-candidate through WorkflowHarness, while full scenario-wrapper migration for remaining nodes and automated supplemental repair rounds remain pending.
 ```
 
 ### `topic-selection.debate.v1b-value-tension.v1`

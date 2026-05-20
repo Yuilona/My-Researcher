@@ -15,6 +15,7 @@ import type {
   TopicSelectionEvidenceRole,
   TopicSelectionLiteratureResourcePoolSnapshotRecord,
   TopicSelectionResourcePoolSource,
+  TopicSelectionSearchPlanBlueprint,
   TopicSelectionSearchPlanCoverageMatrix,
   TopicSelectionSearchPlanRecord,
   TopicSelectionSearchPlanRecheckRequestRecord,
@@ -53,6 +54,7 @@ type CreateTopicSeedFromTitleCardInput = {
   seed_version?: string;
   intent_summary?: string;
   scope_notes?: string | null;
+  intent_preparation_refs?: TopicSelectionFunctionalRef[];
   created_by?: TopicSelectionActorType;
   policy_version_id?: string | null;
 };
@@ -63,6 +65,7 @@ type CreateLiteratureResourcePoolSnapshotInput = {
   topic_seed_id: string;
   snapshot_version?: string;
   source_scope?: TopicSelectionResourcePoolSource;
+  resource_sample_set_provenance_ref?: TopicSelectionFunctionalRef | null;
   created_by?: TopicSelectionActorType;
   policy_version_id?: string | null;
 };
@@ -90,6 +93,7 @@ type CreateSearchPlanInput = {
   exclusion_rules?: string[];
   coverage_strategy?: Record<string, unknown>;
   coverage_intents?: CoverageIntentInput[];
+  search_plan_blueprint?: TopicSelectionSearchPlanBlueprint | null;
   parent_search_plan_ref?: TopicSelectionFunctionalRef | null;
   recheck_request_ref?: TopicSelectionFunctionalRef | null;
   created_by?: TopicSelectionActorType;
@@ -203,14 +207,29 @@ export class TopicSelectionSearchResourceService {
       throw new AppError(404, 'NOT_FOUND', `Title card ${input.title_card_id} not found.`);
     }
 
+    const seedVersion = input.seed_version ?? 'v1';
+    if (seedVersion.trim().length === 0) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'seed_version cannot be empty.');
+    }
+    const intentSummary = input.intent_summary ?? titleCard.brief;
+    if (intentSummary.trim().length === 0) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        'TopicSeed requires a non-empty intent_summary or source TitleCard brief.',
+      );
+    }
+
     const topicSeedId = this.idFactory('topic_seed');
-    const topicSeedRef = this.ref('topic_seed', topicSeedId, input.title_card_id, input.seed_version ?? 'v1');
+    const topicSeedRef = this.ref('topic_seed', topicSeedId, input.title_card_id, seedVersion);
     const titleCardRef = this.ref('title_card', titleCard.title_card_id, titleCard.title_card_id);
+    const intentPreparationRefs = input.intent_preparation_refs ?? [];
+    const topicSeedSourceRefs = [titleCardRef, ...intentPreparationRefs];
     const snapshot = await this.controlPlane.compileInputSnapshot({
       workspace_id: input.workspace_id ?? null,
       title_card_id: input.title_card_id,
       target_ref: topicSeedRef,
-      source_refs: [titleCardRef],
+      source_refs: topicSeedSourceRefs,
       payload: {
         title_card: {
           working_title: titleCard.working_title,
@@ -218,7 +237,10 @@ export class TopicSelectionSearchResourceService {
           status: titleCard.status,
           updated_at: titleCard.updated_at,
         },
+        intent_summary: intentSummary,
         scope_notes: input.scope_notes ?? null,
+        seed_version: seedVersion,
+        intent_preparation_refs: intentPreparationRefs,
       },
       policy_version: input.policy_version_id ?? null,
       created_by: input.created_by ?? 'system',
@@ -250,13 +272,13 @@ export class TopicSelectionSearchResourceService {
       topic_seed_id: topicSeedId,
       workspace_id: input.workspace_id ?? null,
       title_card_id: input.title_card_id,
-      seed_version: input.seed_version ?? 'v1',
+      seed_version: seedVersion,
       seed_kind: 'title_card',
       working_title: titleCard.working_title,
-      intent_summary: input.intent_summary ?? titleCard.brief,
+      intent_summary: intentSummary,
       scope_notes: input.scope_notes ?? null,
       source_title_card_ref: titleCardRef,
-      source_refs: [titleCardRef],
+      source_refs: topicSeedSourceRefs,
       input_snapshot_id: snapshot.input_snapshot_id,
       gate_result_id: gate.readiness_gate_result_id,
       transition_attempt_id: transition.chain_transition_attempt_id,
@@ -294,6 +316,8 @@ export class TopicSelectionSearchResourceService {
     }
 
     const missingLiteratureIds = literatureIds.filter((literatureId) => !literatureById.has(literatureId));
+    const sourceScope = input.source_scope ?? 'title_card_evidence_basket';
+    const topicSeedRef = this.ref('topic_seed', topicSeed.topic_seed_id, input.title_card_id, topicSeed.seed_version);
     const sourceHealthSummary = this.buildLiteratureSourceHealthSummary(
       literatureIds,
       literatureById,
@@ -304,13 +328,21 @@ export class TopicSelectionSearchResourceService {
     const literatureRefs = literatureIds
       .filter((literatureId) => literatureById.has(literatureId))
       .map((literatureId) => this.ref('literature_record', literatureId, input.title_card_id));
-    const snapshotPayload = {
+    const snapshotHashPayload = {
+      title_card_id: input.title_card_id,
+      topic_seed_ref: topicSeedRef,
+      source_scope: sourceScope,
       basket_updated_at: basket.updated_at,
       literature_refs: literatureRefs,
       content_source_refs: contentSourceRefs,
       source_health_summary: sourceHealthSummary,
+      policy_version_id: input.policy_version_id ?? null,
     };
-    const snapshotHash = sha256Text(stableStringify(snapshotPayload));
+    const inputSnapshotPayload = {
+      ...snapshotHashPayload,
+      resource_sample_set_provenance_ref: input.resource_sample_set_provenance_ref ?? null,
+    };
+    const snapshotHash = sha256Text(stableStringify(snapshotHashPayload));
     const snapshotId = this.idFactory('literature_snapshot');
     const snapshotVersion = input.snapshot_version ?? this.versionFromId(snapshotId);
     const snapshotRef = this.ref(
@@ -319,13 +351,17 @@ export class TopicSelectionSearchResourceService {
       input.title_card_id,
       snapshotVersion,
     );
-    const topicSeedRef = this.ref('topic_seed', topicSeed.topic_seed_id, input.title_card_id, topicSeed.seed_version);
     const inputSnapshot = await this.controlPlane.compileInputSnapshot({
       workspace_id: input.workspace_id ?? null,
       title_card_id: input.title_card_id,
       target_ref: snapshotRef,
-      source_refs: [topicSeedRef, ...literatureRefs, ...contentSourceRefs],
-      payload: snapshotPayload,
+      source_refs: [
+        topicSeedRef,
+        ...(input.resource_sample_set_provenance_ref ? [input.resource_sample_set_provenance_ref] : []),
+        ...literatureRefs,
+        ...contentSourceRefs,
+      ],
+      payload: inputSnapshotPayload,
       policy_version: input.policy_version_id ?? null,
       created_by: input.created_by ?? 'system',
     });
@@ -354,14 +390,20 @@ export class TopicSelectionSearchResourceService {
       state_write_intents: [this.stateWriteIntent(snapshotRef, 'freshness', 'literature_snapshot', 'current')],
       created_authority_refs: [snapshotRef],
     });
-    this.assertTransitionPassed(transition.result, 'LiteratureResourcePoolSnapshot');
+    this.assertTransitionPassed(transition.result, 'LiteratureResourcePoolSnapshot', blockers, {
+      gate_result_id: gate.readiness_gate_result_id,
+      input_snapshot_id: inputSnapshot.input_snapshot_id,
+      source_health_summary: sourceHealthSummary,
+      title_card_id: input.title_card_id,
+      transition_attempt_id: transition.chain_transition_attempt_id,
+    });
 
     return this.repository.createLiteratureResourcePoolSnapshot({
       literature_resource_pool_snapshot_id: snapshotId,
       workspace_id: input.workspace_id ?? null,
       title_card_id: input.title_card_id,
       snapshot_version: snapshotVersion,
-      source_scope: input.source_scope ?? 'title_card_evidence_basket',
+      source_scope: sourceScope,
       topic_seed_ref: topicSeedRef,
       literature_refs: literatureRefs,
       content_source_refs: contentSourceRefs,
@@ -373,6 +415,16 @@ export class TopicSelectionSearchResourceService {
       created_by: input.created_by ?? 'system',
       created_at: this.now(),
     });
+  }
+
+  async getTopicSeedById(topicSeedId: string): Promise<TopicSelectionTopicSeedRecord | null> {
+    return this.repository.findTopicSeedById(topicSeedId);
+  }
+
+  async getLiteratureResourcePoolSnapshotById(
+    snapshotId: string,
+  ): Promise<TopicSelectionLiteratureResourcePoolSnapshotRecord | null> {
+    return this.repository.findLiteratureResourcePoolSnapshotById(snapshotId);
   }
 
   async createSearchPlan(input: CreateSearchPlanInput): Promise<{
@@ -404,6 +456,7 @@ export class TopicSelectionSearchResourceService {
       target_ref: searchPlanRef,
       source_refs: [topicSeedRef, literatureSnapshotRef],
       payload: {
+        search_plan_blueprint: input.search_plan_blueprint ?? null,
         query_intents: input.query_intents,
         must_check_constraints: input.must_check_constraints ?? [],
         exclusion_rules: input.exclusion_rules ?? [],
@@ -908,6 +961,26 @@ export class TopicSelectionSearchResourceService {
         fulltextReadyCount += 1;
       }
     }
+    const resolvedLiteratureCount = literatureById.size;
+    const warningCodes = this.uniqueStrings([
+      ...(missingLiteratureIds.length > 0 ? ['MISSING_LITERATURE_RECORD'] : []),
+      ...(resolvedLiteratureCount > 0 && keyContentReadyCount < resolvedLiteratureCount
+        ? ['INCOMPLETE_KEY_CONTENT_READY']
+        : []),
+      ...(resolvedLiteratureCount > 0 && abstractReadyCount < resolvedLiteratureCount
+        ? ['INCOMPLETE_ABSTRACT_READY']
+        : []),
+      ...(resolvedLiteratureCount > 0 && sourceCount < resolvedLiteratureCount
+        ? ['LOW_SOURCE_COUNT']
+        : []),
+      ...(resolvedLiteratureCount > 0 && pipelineReadyCount < resolvedLiteratureCount
+        ? ['INCOMPLETE_PIPELINE_READY']
+        : []),
+      ...(staleCount > 0 ? ['STALE_OR_DUPLICATE_PIPELINE_STATUS'] : []),
+      ...(resolvedLiteratureCount > 0 && fulltextReadyCount < resolvedLiteratureCount
+        ? ['INCOMPLETE_FULLTEXT_READY']
+        : []),
+    ]);
     return {
       total_literature_count: literatureIds.length,
       missing_literature_ids: missingLiteratureIds,
@@ -919,7 +992,7 @@ export class TopicSelectionSearchResourceService {
       source_count: sourceCount,
       stale_count: staleCount,
       blocked_count: missingLiteratureIds.length,
-      warning_codes: missingLiteratureIds.length > 0 ? ['MISSING_LITERATURE_RECORD'] : [],
+      warning_codes: warningCodes,
     };
   }
 
@@ -963,9 +1036,17 @@ export class TopicSelectionSearchResourceService {
     }
   }
 
-  private assertTransitionPassed(result: string, label: string): void {
+  private assertTransitionPassed(
+    result: string,
+    label: string,
+    blockers: Array<{ code: string }> = [],
+    details: Record<string, unknown> = {},
+  ): void {
     if (result !== 'passed' && result !== 'passed_with_risk') {
-      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', `${label} did not pass its readiness transition.`);
+      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', `${label} did not pass its readiness transition.`, {
+        ...details,
+        blocker_codes: blockers.map((blocker) => blocker.code),
+      });
     }
   }
 
@@ -1011,6 +1092,10 @@ export class TopicSelectionSearchResourceService {
       state_key: stateKey,
       next_value: nextValue,
     };
+  }
+
+  private uniqueStrings(values: string[]): string[] {
+    return [...new Set(values)];
   }
 
   private versionFromId(id: string): string {

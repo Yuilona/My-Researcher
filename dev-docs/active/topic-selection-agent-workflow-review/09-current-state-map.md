@@ -5,6 +5,12 @@ Map D-25 `generate-need-candidate` implementation slices to current repository f
 
 This document is a planning artifact. It does not introduce a new runtime contract, authority object, route, or persistence path.
 
+## 2026-05-20 Status Update
+- This map began as a pre-implementation snapshot. Some early "Gap" bullets are now closed by the T-088/T-089 implementation notes and verification records.
+- Current runtime anchors now include `TopicSelectionAgentOrchestratorService`, `TopicSelectionWorkflowHarnessService`, the v1a need-discovery debate loop, and the scenario runner `.ai/scripts/topic-selection-workflow-scenario-runner.mjs`.
+- The old standalone `.ai/scripts/topic-selection-real-e2e-quality-gate.mjs` path is retired. Its assertions are preserved by `topic-selection.real-e2e.scale-quality.v1` in the scenario runner.
+- This document remains useful for historical mapping, but the current source of truth for executable scenario status is `08-scenarios.md` plus the latest implementation/verification notes.
+
 ## Scope Answer
 - The deep decisions D-17 through D-25 are focused on `topic-selection.v1a.generate-need-candidate.v1`.
 - T-089 is not limited to v1a overall: `06-workflow-matrix.md` already covers resource sampling, v1a, v1b, v1c, and downstream nodes.
@@ -127,14 +133,15 @@ This document is a planning artifact. It does not introduce a new runtime contra
 | `admission_gates` | Implemented as deterministic admission report service | `TopicSelectionCandidateDraftAdmissionService`; D-21 `CandidateDraftAdmissionReport` fields; adapter artifact-boundary tests; WorkflowHarness scenarios | No route-level node execution yet | Connected to supplemental routing, persistence, and WorkflowHarness |
 | `supplemental_routing` | Implemented as deterministic routing report service | `TopicSelectionSupplementalRoundRoutingService`; D-22 `SupplementalRoundRoutingDecision` fields; adapter artifact-boundary tests; WorkflowHarness scenarios | Does not execute supplemental worker rounds yet | Connected to optional persistence and WorkflowHarness |
 | `persistence_batch` | Implemented as service-layer batch path over existing NeedCandidate model | `TopicSelectionPersistNeedCandidateBatchService`; `TopicSelectionNeedValidationRepository.createNeedCandidatesBatch`; adapter optional persistence tests; WorkflowHarness finalize scenario | No new Prisma hash/idempotency columns; idempotency enforced by deterministic ids and transaction/replay checks | Future DB hardening optional |
-| `workflow_harness_scenarios` | Implemented for generate-need-candidate scenario plumbing and initial debate loop | `TopicSelectionWorkflowHarnessService`; `TopicSelectionNeedDiscoveryDebateLoopService`; finalize-persist, supplemental-routing, admission-blocked, duplicate merge-hint, malformed blocked output, execution-mode shape, persistence-conflict, provider-mode debate, mixed Codex/provider slot, and final-synthesis Codex-forbidden tests | Route/CLI wrappers not yet migrated; automated supplemental repair rounds pending | Next: wrapper migration or supplemental repair automation |
+| `workflow_harness_scenarios` | Implemented for generate-need-candidate scenario plumbing and initial debate loop | `TopicSelectionWorkflowHarnessService`; `TopicSelectionNeedDiscoveryDebateLoopService`; finalize-persist, supplemental-routing, admission-blocked, duplicate merge-hint, malformed blocked output, execution-mode shape, persistence-conflict, provider-mode debate, mixed Codex/provider slot, final-synthesis Codex-forbidden tests, and real E2E canary v1a generate-node migration | Full route/API runner not yet added; remaining real-flow nodes still use script orchestration; automated supplemental repair rounds pending | Next: complete scenario-wrapper migration or supplemental repair automation |
 
 ## v1a Spine Split Status
 - `validate-need-adjudication`, `human-confirm-need`, and `publish-v1b-input-bundle` are now split at the backend route/service boundary.
 - `POST /topic-selection/v1a/need-candidates/:needCandidateId/adjudications` writes only adjudication authority plus typed side-effect refs.
 - `POST /topic-selection/v1a/adjudications/:adjudicationResultId/human-confirmations` owns `HumanConfirmedDecision` and `ValidatedNeed`.
 - `POST /topic-selection/v1a/v1b-input-bundles` owns deterministic v1b handoff and is idempotent for existing bundles.
-- The remaining route-level wrapper gap in the D-25 table refers to the generate-need-candidate WorkflowHarness entrypoint, not to the adjudication/human-confirm/v1b handoff split.
+- The real E2E canary now uses the generate-need-candidate WorkflowHarness entrypoint for v1a candidate creation.
+- The remaining route-level wrapper gap in the D-25 table refers to a product/API node runner and full scenario-wrapper migration, not to the adjudication/human-confirm/v1b handoff split.
 
 ## Recommended Implementation Order
 1. Apply D-26 cross-version boundary before changing contracts; this keeps v1a node I/O from absorbing unfinished v1b/v1c semantics.

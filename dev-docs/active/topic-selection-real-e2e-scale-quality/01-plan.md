@@ -1,9 +1,10 @@
 # 01 Plan
 
 ## Phase 1 - Gate Script
-- Add `.ai/scripts/topic-selection-real-e2e-quality-gate.mjs`.
+- Add the scale-quality scenario under `.ai/scripts/topic-selection-workflow-scenario-runner.mjs`.
 - Reuse `.ai/scripts/topic-selection-real-e2e.mjs` as the execution primitive.
 - Capture logs and artifacts under `.ai/.tmp/topic-selection-real-e2e-quality/<run-id>/`.
+- Retired the legacy compatibility script `.ai/scripts/topic-selection-real-e2e-quality-gate.mjs` on 2026-05-20 after its assertions were covered by `topic-selection.real-e2e.scale-quality.v1`.
 
 ## Phase 2 - Scale and Stability Checks
 - Run 32-literature provider E2E three times.

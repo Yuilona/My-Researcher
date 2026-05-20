@@ -7,6 +7,18 @@ import { PrismaClient } from '@prisma/client';
 
 import { buildApp } from '../../apps/backend/src/app.ts';
 import { BackendLlmGateway } from '../../apps/backend/src/services/llm-gateway.ts';
+import { PrismaTopicSelectionControlPlaneRepository } from '../../apps/backend/src/repositories/prisma/prisma-topic-selection-control-plane-repository.ts';
+import { PrismaTopicSelectionNeedValidationRepository } from '../../apps/backend/src/repositories/prisma/prisma-topic-selection-need-validation-repository.ts';
+import { TopicSelectionAgentOrchestratorService } from '../../apps/backend/src/services/topic-selection-agent-orchestrator-service.ts';
+import { TopicSelectionControlPlaneService } from '../../apps/backend/src/services/topic-selection-control-plane-service.ts';
+import { TopicSelectionGenerateNeedCandidateOrchestratorAdapterService } from '../../apps/backend/src/services/topic-selection-generate-need-candidate-orchestrator-adapter-service.ts';
+import {
+  TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
+} from '../../apps/backend/src/services/topic-selection-model-profile-registry-service.ts';
+import { TopicSelectionNeedDiscoveryArtifactBoundaryService } from '../../apps/backend/src/services/topic-selection-need-discovery-artifact-boundary-service.ts';
+import { TopicSelectionNeedDiscoveryContextCompilerService } from '../../apps/backend/src/services/topic-selection-need-discovery-context-compiler-service.ts';
+import { TopicSelectionPersistNeedCandidateBatchService } from '../../apps/backend/src/services/topic-selection-persist-need-candidate-batch-service.ts';
+import { TopicSelectionWorkflowHarnessService } from '../../apps/backend/src/services/topic-selection-workflow-harness-service.ts';
 
 const TOPIC_ID = process.env.TOPIC_SELECTION_REAL_TOPIC_ID ?? 'ai-rag-finetuning-2022-2026';
 const PROVIDER_ID = process.env.TOPIC_SELECTION_REAL_PROVIDER_ID === 'dashscope' ? 'dashscope' : 'openai';
@@ -15,6 +27,10 @@ const LITERATURE_LIMIT = Number.parseInt(process.env.TOPIC_SELECTION_REAL_LITERA
 const LLM_TIMEOUT_MS = Number.parseInt(process.env.TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS ?? '180000', 10);
 const LLM_MAX_RETRIES = Number.parseInt(process.env.TOPIC_SELECTION_REAL_LLM_MAX_RETRIES ?? '3', 10);
 const USE_MOCK_LLM = process.env.TOPIC_SELECTION_REAL_FLOW_MOCK_LLM === '1';
+const V1A_GENERATE_EXECUTION_MODE = normalizeExecutionMode(
+  process.env.TOPIC_SELECTION_REAL_V1A_GENERATE_EXECUTION_MODE,
+  USE_MOCK_LLM ? 'mocked_llm' : 'provider_llm',
+);
 const ALLOW_NON_ADVANCE_V1B = process.env.TOPIC_SELECTION_REAL_ALLOW_NON_ADVANCE_V1B === '1';
 const QUALITY_NEGATIVE_MODE = process.env.TOPIC_SELECTION_REAL_QUALITY_NEGATIVE_MODE === '1';
 const EXISTING_RESOURCE_SAMPLE_SET_ID = process.env.TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID?.trim() || null;
@@ -44,11 +60,27 @@ const VALUE_DIMENSION_KEYS = [
   'negative_memory_check',
 ];
 const MOCK_RESOURCE_RISK_PATTERN = /poison|adversarial|attack|leak|hallucination|conflict|verification|source verification|failure|robust|safety/u;
+const REAL_E2E_CANARY_SCENARIO_ID = 'topic-selection.real-e2e.canary.v1';
+const REAL_E2E_SCENARIO_ID = process.env.TOPIC_SELECTION_WORKFLOW_SCENARIO_ID?.trim()
+  || process.env.TOPIC_SELECTION_REAL_SCENARIO_ID?.trim()
+  || REAL_E2E_CANARY_SCENARIO_ID;
+const GENERATE_NEED_CANDIDATE_NODE_ID = 'topic-selection.v1a.generate-need-candidate.v1';
 
 let currentStage = 'bootstrap';
 
 function uniqueId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function normalizeExecutionMode(value, fallback) {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return fallback;
+  }
+  if (['mocked_llm', 'codex_assisted', 'provider_llm'].includes(normalized)) {
+    return normalized;
+  }
+  throw new Error(`Unsupported TOPIC_SELECTION_REAL_V1A_GENERATE_EXECUTION_MODE: ${value}`);
 }
 
 function ref(refType, refId, titleCardId, versionId = null) {
@@ -627,6 +659,48 @@ function makeRealFlowLlmGateway() {
   });
 }
 
+function makeV1aGenerateLlmGateway() {
+  if (V1A_GENERATE_EXECUTION_MODE === 'provider_llm') {
+    return new BackendLlmGateway({
+      defaultTimeoutMs: LLM_TIMEOUT_MS,
+      defaultMaxRetries: LLM_MAX_RETRIES,
+    });
+  }
+  return new DeterministicRealFlowLlmGateway();
+}
+
+function makeWorkflowHarness(prisma, llmGateway) {
+  const controlPlaneRepository = new PrismaTopicSelectionControlPlaneRepository(prisma);
+  const needValidationRepository = new PrismaTopicSelectionNeedValidationRepository(prisma);
+  const controlPlane = new TopicSelectionControlPlaneService(controlPlaneRepository);
+  const artifactBoundary = new TopicSelectionNeedDiscoveryArtifactBoundaryService(controlPlane);
+  const contextCompiler = new TopicSelectionNeedDiscoveryContextCompilerService(artifactBoundary);
+  const agentOrchestrator = new TopicSelectionAgentOrchestratorService({
+    controlPlane,
+    llmGateway,
+  });
+  const generateNeedCandidateAdapter = new TopicSelectionGenerateNeedCandidateOrchestratorAdapterService({
+    contextCompiler,
+    agentOrchestrator,
+    artifactBoundary,
+    needCandidateBatchPersistence: new TopicSelectionPersistNeedCandidateBatchService(needValidationRepository),
+  });
+  return new TopicSelectionWorkflowHarnessService({
+    contextCompiler,
+    generateNeedCandidateAdapter,
+    artifactBoundary,
+  });
+}
+
+function v1aGenerateModelOptionId() {
+  if (V1A_GENERATE_EXECUTION_MODE !== 'provider_llm') {
+    return null;
+  }
+  return PROVIDER_ID === 'dashscope'
+    ? `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.dashscope-budget`
+    : `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.openai-balanced`;
+}
+
 function assertStatus(response, expected, label) {
   if (response.statusCode !== expected) {
     throw new Error(`${label}: expected HTTP ${expected}, received ${response.statusCode}: ${response.body}`);
@@ -897,7 +971,266 @@ function sourceStatement(resource) {
   return `${resource.title}: ${snippet(resource.keyContentDigest ?? resource.abstractText, 520)}`;
 }
 
-async function runV1a(app, selectedResources) {
+function evidenceUnitRefsByRole(evidenceMap, role, titleCardId) {
+  return evidenceMap.evidence_units
+    .filter((unit) => unit.evidence_role === role)
+    .map((unit) => ref('evidence_unit', unit.evidence_unit_id, titleCardId, unit.evidence_map_version ?? null));
+}
+
+function allEvidenceUnitRefs(evidenceMap, titleCardId) {
+  return ROLE_ORDER.flatMap((role) => evidenceUnitRefsByRole(evidenceMap, role, titleCardId));
+}
+
+function buildRealFlowRankedCandidateDraftBatch(input) {
+  const {
+    nodeAttemptId,
+    titleCardId,
+    evidenceMap,
+    evidenceStrengthRef,
+    conflictRef,
+  } = input;
+  return {
+    schema_version: 'v1',
+    draft_batch: {
+      batch_id: `ranked_candidate_batch_${RUN_ID}`,
+      node_attempt_id: nodeAttemptId,
+      terminal_result: 'finalize',
+      ranking_rationale:
+        'The candidate is grounded in role-balanced support, challenge, baseline, and context evidence from the real E2E resource sample.',
+      max_persisted_candidates: 5,
+    },
+    drafts: [
+      {
+        draft_id: `draft_real_flow_need_${RUN_ID}`,
+        rank: 1,
+        candidate_need:
+          'AI systems researchers need a bounded decision framework for when RAG, fine-tuning, or hybrid adaptation improves answer quality and source attribution without introducing unacceptable retrieval-conflict, poisoning, or leakage risks.',
+        unmet_need_statement:
+          'The current literature contains many RAG and fine-tuning variants, but the actionable boundary conditions for choosing among them remain hard to audit from evidence alone.',
+        mechanism_type: 'evaluation_gap',
+        mechanism_summary:
+          'Benchmarks, attribution checks, and failure-mode evidence are fragmented across RAG, fine-tuning, and agentic retrieval papers.',
+        mechanism_payload: {
+          decision_boundary: 'RAG versus fine-tuning versus hybrid adaptation',
+          evaluation_axes: ['answer_quality', 'source_attribution', 'retrieval_conflict_risk'],
+          real_e2e_run_id: RUN_ID,
+        },
+        scope_notes:
+          'Scope is limited to AI/RAG/fine-tuning literature in ai-rag-finetuning-2022-2026; no production deployment or universal superiority claims.',
+        non_goal_notes:
+          'Do not claim universal RAG superiority, universal fine-tuning superiority, or production deployment readiness.',
+        prior_art_status: 'partial_solution_known',
+        evidence_role_bundle: {
+          support_unit_refs: evidenceUnitRefsByRole(evidenceMap, 'support', titleCardId),
+          challenge_unit_refs: evidenceUnitRefsByRole(evidenceMap, 'challenge', titleCardId),
+          baseline_unit_refs: evidenceUnitRefsByRole(evidenceMap, 'baseline', titleCardId),
+          context_unit_refs: evidenceUnitRefsByRole(evidenceMap, 'context', titleCardId),
+        },
+        conflict_refs: [conflictRef],
+        strength_assessment_refs: [evidenceStrengthRef],
+        accepted_risk_refs: [],
+        gap_codes: ['decision_boundary_evidence_fragmentation', 'risk_carry_forward_gap'],
+        speculative: false,
+        confidence: 0.82,
+      },
+    ],
+    rejected_framings: [],
+    unresolved_points: [],
+  };
+}
+
+function buildExplorationPayload(input) {
+  const roleCounts = ROLE_ORDER.reduce((counts, role) => {
+    counts[role] = input.evidenceMap.evidence_units.filter((unit) => unit.evidence_role === role).length;
+    return counts;
+  }, {});
+  return {
+    topic_scope: {
+      title_card_id: input.titleCardId,
+      topic_id: TOPIC_ID,
+      domain: 'RAG, fine-tuning, and hybrid adaptation decision boundaries for AI systems papers',
+    },
+    evidence_signal_digest: {
+      role_counts: roleCounts,
+      support_count: roleCounts.support ?? 0,
+      challenge_count: roleCounts.challenge ?? 0,
+      baseline_count: roleCounts.baseline ?? 0,
+      context_count: roleCounts.context ?? 0,
+    },
+    resource_sample_digest: {
+      sample_set_id: input.resourceSampleSetId,
+      selected_literature_count: input.selectedResources.length,
+      role_counts: roleCounts,
+    },
+    search_coverage_digest: {
+      search_run_id: input.searchRunId,
+      coverage: 'role_balanced_real_flow_sample',
+    },
+    sibling_candidate_digest: {
+      candidate_count: 0,
+    },
+    decision_memory_digest: {
+      required_challenges: [
+        'avoid universal RAG or fine-tuning superiority claims',
+        'carry poisoning, leakage, and source-verification risks forward',
+      ],
+    },
+    exploration_prompts: [
+      'Generate bounded, evidence-grounded need candidates that explain why the selected literature supports a topic-management decision.',
+    ],
+    challenge_prompts: [
+      'Pressure-test whether challenge and baseline evidence prevent overclaiming.',
+    ],
+    allowed_outputs: ['ranked_candidate_draft_batch'],
+    forbidden_outputs: ['NeedCandidateSet', 'ValidatedNeed', 'TopicQuestionContract', 'SearchPlan mutation'],
+  };
+}
+
+function buildArbiterPayload(input) {
+  return {
+    node_policy_ref: ref('node_policy', GENERATE_NEED_CANDIDATE_NODE_ID, input.titleCardId, 'v1'),
+    output_schema_ref: ref('schema', 'RankedCandidateDraftBatch@v1', input.titleCardId),
+    authority_boundary: {
+      authority_object: 'NeedCandidate',
+      forbidden: ['NeedCandidateSet', 'ValidatedNeed', 'TopicQuestionContract', 'SearchPlan'],
+    },
+    max_persisted_candidates: 5,
+    deterministic_gate_checklist: [
+      'ranked_candidate_draft_batch_schema',
+      'candidate_draft_admission',
+      'supplemental_round_routing',
+      'admitted_only_batch_persistence',
+    ],
+    role_level_summaries: [
+      {
+        role: 'single_agent',
+        summary:
+          'Real E2E canary uses the unified generate-need-candidate harness and persists only admitted drafts.',
+      },
+    ],
+    candidate_pool_digest: {
+      candidate_count: 0,
+      candidate_entries: [],
+    },
+    evidence_ref_table: [
+      ...allEvidenceUnitRefs(input.evidenceMap, input.titleCardId).map((evidenceRef) => ({
+        evidence_ref: evidenceRef,
+        role: evidenceRef.ref_id.includes('challenge') ? 'challenge' : 'evidence',
+      })),
+      { evidence_ref: input.evidenceStrengthRef, role: 'strength' },
+      { evidence_ref: input.conflictRef, role: 'challenge' },
+    ],
+    rejected_framing_table: [],
+    unresolved_points: [],
+    batch_ranking_rules: ['rank grounded, bounded, reviewer-auditable candidates first'],
+    persistence_rules: ['persist only admitted drafts through NeedCandidate batch boundary'],
+    failure_rules: ['block when ranked batch is malformed or no draft passes admission gates'],
+  };
+}
+
+async function runGenerateNeedCandidateHarness(workflowHarness, input) {
+  const nodeAttemptId = `node_attempt_generate_need_candidate_${RUN_ID}`;
+  const workflowRunId = `workflow_run_generate_need_candidate_${RUN_ID}`;
+  const evidenceMapRef = ref(
+    'evidence_map',
+    input.evidenceMap.evidence_map.evidence_map_id,
+    input.titleCardId,
+    input.evidenceMap.evidence_map.evidence_map_version ?? null,
+  );
+  const evidenceStrengthRef = ref('evidence_strength_assessment', `real_flow_strength_${RUN_ID}`, input.titleCardId);
+  const conflictRef = ref('evidence_conflict', `real_flow_conflict_${RUN_ID}`, input.titleCardId);
+  const rankedBatch = buildRealFlowRankedCandidateDraftBatch({
+    nodeAttemptId,
+    titleCardId: input.titleCardId,
+    evidenceMap: input.evidenceMap,
+    evidenceStrengthRef,
+    conflictRef,
+  });
+  const topicScopeRef = ref('topic_scope', TOPIC_ID, input.titleCardId);
+  const searchRunRef = ref('search_run', input.searchRunId, input.titleCardId);
+  const searchPlanRef = ref('search_plan', input.searchPlanId, input.titleCardId, input.searchPlanVersion ?? null);
+  const literatureSnapshotRef = ref(
+    'literature_resource_pool_snapshot',
+    input.resourcePoolSnapshotId,
+    input.titleCardId,
+    input.resourcePoolSnapshotVersion ?? null,
+  );
+  const resourceSampleSetRef = ref('resource_sample_set', input.resourceSampleSetId, input.titleCardId);
+  const harnessInput = {
+    scenario_id: REAL_E2E_SCENARIO_ID,
+    scenario_case_id: `real-e2e-v1a-generate-need-candidate-${RUN_ID}`,
+    title_card_id: input.titleCardId,
+    workflow_run_id: workflowRunId,
+    input_snapshot_id: null,
+    node_attempt_id: nodeAttemptId,
+    topic_scope_ref: topicScopeRef,
+    evidence_map_ref: evidenceMapRef,
+    evidence_strength_ref: evidenceStrengthRef,
+    resource_sample_set_ref: resourceSampleSetRef,
+    candidate_pool_projection_ref: null,
+    search_snapshot_refs: [searchRunRef],
+    resource_snapshot_refs: [literatureSnapshotRef],
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    profile_id: TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
+    execution_mode: V1A_GENERATE_EXECUTION_MODE,
+    run_mode: V1A_GENERATE_EXECUTION_MODE === 'provider_llm' ? 'product' : 'acceptance',
+    executor_kind: V1A_GENERATE_EXECUTION_MODE === 'codex_assisted' ? 'codex_assisted' : 'single_agent',
+    exploration_payload: buildExplorationPayload({
+      ...input,
+      evidenceStrengthRef,
+      conflictRef,
+    }),
+    arbiter_payload: buildArbiterPayload({
+      ...input,
+      evidenceStrengthRef,
+      conflictRef,
+    }),
+    mocked_output: V1A_GENERATE_EXECUTION_MODE === 'mocked_llm'
+      ? {
+        fixture_id: `real_flow_ranked_candidate_batch_${RUN_ID}`,
+        output: rankedBatch,
+      }
+      : null,
+    codex_response: V1A_GENERATE_EXECUTION_MODE === 'codex_assisted'
+      ? {
+        operator_label: 'codex-real-e2e',
+        output: rankedBatch,
+      }
+      : null,
+    model_option_id: v1aGenerateModelOptionId(),
+    current_round_index: 1,
+    remaining_round_budget: 0,
+    persist_admitted_candidates: true,
+    persistence_context: {
+      search_run_ref: searchRunRef,
+      search_plan_ref: searchPlanRef,
+      literature_snapshot_ref: literatureSnapshotRef,
+    },
+    expectations: {
+      status: 'succeeded',
+      routing_decision: 'finalize_with_admitted_batch',
+      admitted_draft_count: 1,
+      persisted_candidate_count: 1,
+      persistence: 'required',
+    },
+    created_by: 'system',
+  };
+  const result = await workflowHarness.runGenerateNeedCandidateScenario(harnessInput);
+  if (result.scenario_status !== 'passed') {
+    throw new Error(`generate-need-candidate harness scenario failed: ${JSON.stringify(result.assertions)}`);
+  }
+  const persisted = result.adapter_result.persist_need_candidate_batch_result?.persisted_candidates ?? [];
+  if (persisted.length === 0) {
+    throw new Error('generate-need-candidate harness did not persist any NeedCandidate.');
+  }
+  return {
+    result,
+    selectedCandidate: persisted[0],
+  };
+}
+
+async function runV1a(app, workflowHarness, selectedResources, resourceSample) {
   const titleCardId = await createRealTitleCard(app, selectedResources);
   const sourceRefs = selectedResources.map((resource) => ref('literature_source', resource.sources[0].id, titleCardId));
   selectedResources.forEach((resource, index) => {
@@ -1007,33 +1340,18 @@ async function runV1a(app, selectedResources) {
     created_by: 'system',
   });
 
-  const candidate = await requestJson(app, 'POST', '/topic-selection/v1a/need-candidates', 201, {
-    title_card_id: titleCardId,
-    evidence_map_id: evidenceMap.evidence_map.evidence_map_id,
-    candidate_need:
-      'AI systems researchers need a bounded decision framework for when RAG, fine-tuning, or hybrid adaptation improves answer quality and source attribution without introducing unacceptable retrieval-conflict, poisoning, or leakage risks.',
-    unmet_need_statement:
-      'The current literature contains many RAG and fine-tuning variants, but the actionable boundary conditions for choosing among them remain hard to audit from evidence alone.',
-    mechanism_type: 'evaluation_gap',
-    mechanism_summary:
-      'Benchmarks, attribution checks, and failure-mode evidence are fragmented across RAG, fine-tuning, and agentic retrieval papers.',
-    scope_notes:
-      'Scope is limited to AI/RAG/fine-tuning literature in ai-rag-finetuning-2022-2026; no production deployment or universal superiority claims.',
-    prior_art_status: 'partial_solution_known',
-    support_evidence_unit_ids: evidenceMap.evidence_units
-      .filter((unit) => unit.evidence_role === 'support')
-      .map((unit) => unit.evidence_unit_id),
-    challenge_evidence_unit_ids: evidenceMap.evidence_units
-      .filter((unit) => unit.evidence_role === 'challenge')
-      .map((unit) => unit.evidence_unit_id),
-    baseline_evidence_unit_ids: evidenceMap.evidence_units
-      .filter((unit) => unit.evidence_role === 'baseline')
-      .map((unit) => unit.evidence_unit_id),
-    context_evidence_unit_ids: evidenceMap.evidence_units
-      .filter((unit) => unit.evidence_role === 'context')
-      .map((unit) => unit.evidence_unit_id),
-    created_by: 'system',
+  const generateNeedCandidate = await runGenerateNeedCandidateHarness(workflowHarness, {
+    titleCardId,
+    selectedResources,
+    evidenceMap,
+    resourceSampleSetId: resourceSample.sample_set.resource_sample_set_id,
+    resourcePoolSnapshotId: snapshot.literature_resource_pool_snapshot_id,
+    resourcePoolSnapshotVersion: snapshot.snapshot_version,
+    searchPlanId: plan.search_plan.search_plan_id,
+    searchPlanVersion: plan.search_plan.plan_version,
+    searchRunId: searchRun.search_run.search_run_id,
   });
+  const candidate = generateNeedCandidate.selectedCandidate;
 
   const readiness = await requestJson(
     app,
@@ -1086,6 +1404,22 @@ async function runV1a(app, selectedResources) {
     searchRunId: searchRun.search_run.search_run_id,
     evidenceMapId: evidenceMap.evidence_map.evidence_map_id,
     needCandidateId: candidate.need_candidate_id,
+    generateNeedCandidate: {
+      scenario_id: generateNeedCandidate.result.scenario_id,
+      scenario_case_id: generateNeedCandidate.result.scenario_case_id,
+      scenario_status: generateNeedCandidate.result.scenario_status,
+      execution_mode: generateNeedCandidate.result.node_input.execution_mode,
+      run_mode: generateNeedCandidate.result.harness_trace_snapshot.run_mode,
+      workflow_run_id: generateNeedCandidate.result.workflow_run_id,
+      node_attempt_id: generateNeedCandidate.result.node_attempt_id,
+      adapter_status: generateNeedCandidate.result.adapter_result.status,
+      routing_decision: generateNeedCandidate.result.adapter_result.supplemental_round_routing_decision?.routing_decision ?? null,
+      persisted_candidate_refs:
+        generateNeedCandidate.result.adapter_result.persist_need_candidate_batch_result?.persisted_candidate_refs ?? [],
+      candidate_pool_projection_ref:
+        generateNeedCandidate.result.adapter_result.persist_need_candidate_batch_result?.candidate_pool_projection_ref ?? null,
+      harness_trace_artifact_ref: generateNeedCandidate.result.harness_trace_artifact.artifact_ref,
+    },
     validationSupportPacketId: packet.validation_support_packet_id,
     validatedNeedId: confirmation.validated_need.validated_need_id,
     v1bInputBundleId: v1bInputBundle.v1b_input_bundle_id,
@@ -1718,6 +2052,7 @@ await fs.mkdir(ARTIFACT_DIR, { recursive: true });
 const prisma = new PrismaClient();
 let app;
 try {
+  const workflowHarness = makeWorkflowHarness(prisma, makeV1aGenerateLlmGateway());
   app = buildApp({
     topicSelectionResourceSamplingLlmGateway: makeRealFlowLlmGateway(),
     topicSelectionV1bLlmGateway: makeRealFlowLlmGateway(),
@@ -1763,7 +2098,7 @@ try {
     }, null, 2)}\n`,
   );
 
-  const v1a = await runV1a(app, selectedResources);
+  const v1a = await runV1a(app, workflowHarness, selectedResources, resourceSample);
   await fs.writeFile(path.join(ARTIFACT_DIR, '02-v1a.json'), `${JSON.stringify(v1a, null, 2)}\n`);
 
   const v1b = await runV1b(app, v1a);
@@ -1790,12 +2125,15 @@ try {
 
   const summary = {
     status: v1c ? 'passed' : 'passed_v1b_non_advance',
+    scenario_id: REAL_E2E_SCENARIO_ID,
+    scenario_type: QUALITY_NEGATIVE_MODE ? 'negative' : 'real_e2e_canary',
     run_id: RUN_ID,
     artifact_dir: ARTIFACT_DIR,
     topic_id: TOPIC_ID,
     model_id: MODEL_ID,
     provider_id: PROVIDER_ID,
     llm_mode: USE_MOCK_LLM ? 'deterministic_mock' : 'provider',
+    v1a_generate_execution_mode: V1A_GENERATE_EXECUTION_MODE,
     resource_sample_source: EXISTING_RESOURCE_SAMPLE_SET_ID ? 'existing_provider_sample_set' : 'created_in_run',
     resource_sample_set_id: resourceSample.sample_set.resource_sample_set_id,
     resource_sample_status: resourceSample.sample_set.status,
@@ -1814,6 +2152,8 @@ try {
 } catch (error) {
   const failure = {
     status: 'failed',
+    scenario_id: REAL_E2E_SCENARIO_ID,
+    scenario_type: QUALITY_NEGATIVE_MODE ? 'negative' : 'real_e2e_canary',
     run_id: RUN_ID,
     artifact_dir: ARTIFACT_DIR,
     topic_id: TOPIC_ID,

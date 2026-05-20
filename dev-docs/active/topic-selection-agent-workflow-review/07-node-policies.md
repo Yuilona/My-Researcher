@@ -21,6 +21,20 @@ Stub policies are not implementation-ready. They reserve all D-13 fields so miss
 - `audit_artifact_policy`
 - `failure_semantics`
 
+## Node Evaluation Dimensions
+Every node review MUST evaluate automation callability before implementation work is considered closed.
+
+`policy_status=implementation_ready` means business semantics are clear enough to implement. It does not by itself mean the node is already callable by automation. That distinction is captured by `automation_callability`.
+
+`automation_callability` MUST answer:
+- whether the node has a stable normalized node input;
+- whether the node has a stable normalized node result for success and blocked paths;
+- whether a `WorkflowHarness` runner exists;
+- whether the runner calls the existing authority-write service instead of writing authority directly;
+- whether the node can run without script-local request choreography;
+- whether the node emits harness trace/audit/artifact refs;
+- whether scenario registry or scenario runner code can invoke it by `node_id` without knowing downstream route sequencing.
+
 ## Common Policy Vocabulary
 - `policy_status=stub`: required fields are reserved, but the node is not implementation-ready.
 - `policy_status=draft`: all required fields have concrete draft values, but they still need review against contracts, services, and scenarios.
@@ -38,6 +52,10 @@ Stub policies are not implementation-ready. They reserve all D-13 fields so miss
 - `profile_escalation_policy_ref`: a reference to the attempt-level escalation policy; deterministic and human-review nodes use `not_applicable`.
 - `debate_trigger_policy`: concrete trigger rules for debate-eligible nodes; non-debate nodes use `not_allowed`.
 - `failure_semantics`: how invalid input, missing preconditions, validation failure, model failure, debate unresolved, guardrail blocking, and persistence conflict are represented.
+- `automation_callability.status=not_callable`: the node is only available through manual route/service choreography or script-owned sequencing.
+- `automation_callability.status=partially_callable`: a service/route exists, but there is no normalized harness runner or blocked result shape.
+- `automation_callability.status=callable`: a WorkflowHarness runner exists with stable input/result, trace, assertions, and no script-local business choreography.
+- `automation_callability.status=blocked`: upstream contracts or authority boundaries are not clear enough to define an automated runner safely.
 
 ## Fill Order
 Policy details must be filled in this order.
@@ -62,6 +80,10 @@ These nodes shape the most complex policy language. Fill debate triggers, Codex/
 Fill prompt/response packet expectations, deterministic validators, allowed execution modes, profile escalation refs, and authority-write boundaries.
 
 ### Phase 3 - Deterministic, Human, And Downstream Spine
+- `topic-selection.v1a.create-topic-seed.v1`
+- `topic-selection.v1a.snapshot-literature-resource-pool.v1`
+- `topic-selection.v1a.create-search-plan.v1`
+- `topic-selection.v1a.record-search-run.v1`
 - `topic-selection.v1a.build-evidence-map.v1`
 - `topic-selection.v1a.human-confirm-need.v1`
 - `topic-selection.v1a.publish-v1b-input-bundle.v1`
@@ -79,6 +101,21 @@ Fill prompt/response packet expectations, deterministic validators, allowed exec
 
 Fill currentness, immutability, human fixture separation, authority-write ownership, and absence assertions for blocked paths.
 
+## Current v1a Automation Callability Snapshot
+This snapshot prevents `policy_status=implementation_ready` from being mistaken for automated execution readiness.
+
+| Node | Policy status | Automation callability | Current reason |
+|---|---|---|---|
+| `topic-selection.v1a.create-topic-seed.v1` | `implementation_ready` | `callable` | `runCreateTopicSeedScenario` exists with stable success/blocked result and trace artifact. |
+| `topic-selection.v1a.snapshot-literature-resource-pool.v1` | `implementation_ready` | `callable` | `runSnapshotLiteratureResourcePoolScenario` exists with stable success/blocked result and trace artifact. |
+| `topic-selection.v1a.create-search-plan.v1` | `implementation_ready` | `callable` | `runCreateSearchPlanScenario` exists with strict blueprint validation, success/blocked result, and trace artifact. |
+| `topic-selection.v1a.record-search-run.v1` | `draft` | `not_callable` | route/service exists, but result accounting and evidence binding assembly remain script-owned. |
+| `topic-selection.v1a.build-evidence-map.v1` | `implementation_ready` | `partially_callable` | business policy is clear, but no normalized harness runner exists yet. |
+| `topic-selection.v1a.generate-need-candidate.v1` | `implementation_ready` | `callable` | `runGenerateNeedCandidateScenario` exists and is used by the real E2E canary. |
+| `topic-selection.v1a.validate-need-adjudication.v1` | `implementation_ready` | `not_callable` | route/service sequence exists, but readiness/support/adjudication are not wrapped as one normalized node runner. |
+| `topic-selection.v1a.human-confirm-need.v1` | `implementation_ready` | `not_callable` | route/service exists, but fixture-safe human-review runner is not implemented. |
+| `topic-selection.v1a.publish-v1b-input-bundle.v1` | `implementation_ready` | `not_callable` | route/service exists, but deterministic handoff runner is not implemented. |
+
 ## Stub Policy Template
 ```yaml
 policy_status: stub
@@ -95,6 +132,7 @@ input_contract_refs: TBD-node-policy-detail
 output_contract_refs: TBD-node-policy-detail
 authority_write_boundary: TBD-node-policy-detail
 audit_artifact_policy: TBD-node-policy-detail
+automation_callability: TBD-node-policy-detail
 failure_semantics: TBD-node-policy-detail
 ```
 
@@ -102,7 +140,7 @@ failure_semantics: TBD-node-policy-detail
 
 ### `topic-selection.resource-sampling.create-sample-set.v1`
 ```yaml
-policy_status: draft
+policy_status: implementation_ready
 node_id: topic-selection.resource-sampling.create-sample-set.v1
 authority_object: TopicSelectionResourceSampleSet
 preconditions:
@@ -255,6 +293,796 @@ failure_semantics:
   guardrail_rejection: apply review/excluded/downgrade outcome before role-balanced selection.
   role_underfilled: ready_with_warning when usable selected items remain; blocked if selected item count is 0.
   persistence_conflict: fail node attempt with conflict and preserve trace/audit refs where created.
+```
+
+### `topic-selection.v1a.create-topic-seed.v1`
+```yaml
+policy_status: implementation_ready
+node_id: topic-selection.v1a.create-topic-seed.v1
+authority_object: TopicSelectionTopicSeed
+preconditions:
+  - title_card_id resolves to an existing TitleCard.
+  - intent_summary is non-empty after fallback to TitleCard brief when applicable.
+  - scope_notes is present or intentionally null with traceable source context.
+  - seed_version is explicit or derived by the service.
+blocking_conditions:
+  - missing TitleCard returns NOT_FOUND.
+  - malformed payload returns INVALID_PAYLOAD before authority creation.
+  - empty final intent_summary after fallback blocks with GATE_CONSTRAINT_FAILED before authority creation.
+  - deterministic gate topic-selection.topic-seed-ready failure blocks before repository persistence.
+  - transition title-card-to-topic-seed failure blocks before repository persistence.
+deterministic_validators:
+  - create-topic-seed is deterministic and MUST NOT call AgentOrchestrator, BackendLlmGateway, Codex, or debate runtime.
+  - TopicSeed lineage must point to the source TitleCard.
+  - input snapshot must include title, brief, status, updated_at, final intent_summary, scope_notes, and seed_version.
+  - seed_kind is fixed to title_card by TopicSelectionSearchResourceService and is not accepted as caller input.
+  - successful transition must create a TopicSeed authority ref.
+  - duplicate/idempotency behavior must be surfaced by WorkflowHarness scenario result instead of hidden in script retries.
+amendments:
+  N1-AM01:
+    summary: TopicSeed LLM boundary amendment.
+    decision_order: node_1_amendment_not_n3_follow_up
+    node_execution:
+      - create-topic-seed remains deterministic with execution_mode=none.
+      - Node 1 MUST NOT call AgentOrchestrator, BackendLlmGateway, Codex, provider LLMs, or debate runtime.
+    optional_pre_node_semantic_preparation:
+      - Human input, Codex, provider LLM, or fixture may prepare intent_summary and scope_notes before Node 1 invocation.
+      - This preparation is input drafting only and does not create TopicSelectionTopicSeed authority.
+      - A future TopicSeedIntentDraft@v1 helper may be introduced as a pre-node value artifact/profile only after a Node 1 amendment locks its contract and model policy.
+      - Current implementation locks no executable TopicSeed draft/review profile.
+    authority_rule:
+      - TopicSelectionTopicSeed is created only by TopicSelectionSearchResourceService.createTopicSeedFromTitleCard after deterministic validation and control-plane transition.
+      - Node 1 freezes the final accepted intent_summary and scope_notes in the input snapshot regardless of their upstream drafting origin.
+allowed_execution_modes: [none]
+default_execution_mode: none
+debate_trigger_policy: not_allowed
+profile_escalation_policy_ref: not_applicable
+input_contract_refs:
+  - CreateTopicSeedFromTitleCardInput
+  - TitleCard
+output_contract_refs:
+  - TopicSelectionTopicSeedRecord
+authority_write_boundary:
+  workflow_harness: TopicSelectionWorkflowHarnessService.runCreateTopicSeedScenario
+  route: POST /topic-selection/v1a/topic-seeds/from-title-card
+  controller: TopicSelectionV1aController.createTopicSeedFromTitleCard
+  domain_service: TopicSelectionSearchResourceService.createTopicSeedFromTitleCard
+  repository: TopicSelectionSearchResourceRepository.createTopicSeed
+  authority_objects:
+    - TopicSelectionTopicSeed
+  agent_orchestrator_direct_write: false
+  debate_executor_direct_write: false
+audit_artifact_policy:
+  must_record:
+    - control-plane input snapshot.
+    - readiness gate result for topic-selection.topic-seed-ready.
+    - transition attempt for title-card-to-topic-seed.
+    - harness trace artifact with scenario_id, node_id, workflow_run_id, node_attempt_id, status, authority refs, audit refs, blockers, and assertions.
+  must_not_record:
+    - hidden reasoning.
+    - provider secrets.
+    - raw provider logs.
+    - raw debate transcripts.
+automation_callability:
+  status: callable
+  runner: TopicSelectionWorkflowHarnessService.runCreateTopicSeedScenario
+  stable_node_input: TopicSelectionWorkflowHarnessCreateTopicSeedNodeInput
+  stable_node_result: TopicSelectionWorkflowHarnessCreateTopicSeedNodeResult
+  scenario_invocation:
+    node_id: topic-selection.v1a.create-topic-seed.v1
+    script_local_choreography_required: false
+  authority_boundary_preserved: true
+  blocked_result_shape: true
+  trace_artifact: WorkflowHarnessCreateTopicSeedScenarioTrace@v1
+  remaining_gaps:
+    - scenario registry dispatch does not yet call this runner directly; current coverage is service-level WorkflowHarness unit tests.
+failure_semantics:
+  invalid_payload: return INVALID_PAYLOAD before authority creation.
+  missing_title_card: return NOT_FOUND before control-plane transition.
+  empty_final_intent: return GATE_CONSTRAINT_FAILED before TopicSeed id allocation and repository persistence.
+  gate_or_transition_failed: block before repository persistence.
+  repository_failure: fail the node attempt without creating downstream v1a authority.
+```
+
+### `topic-selection.v1a.snapshot-literature-resource-pool.v1`
+```yaml
+policy_status: implementation_ready
+node_id: topic-selection.v1a.snapshot-literature-resource-pool.v1
+authority_object: TopicSelectionLiteratureResourcePoolSnapshot
+semantic_boundary:
+  - The node only materializes a TopicSelectionLiteratureResourcePoolSnapshot authority.
+  - The node MUST NOT perform resource sampling, literature selection, evidence-role classification, or evidence-polarity judgment.
+  - Any ResourceSampleSet must be upstream provenance only after its selected literature has already been attached to the TitleCard evidence basket.
+amendments:
+  N2-AM01:
+    summary: Literature resource pool snapshot LLM boundary confirmation.
+    decision_order: node_2_amendment_not_n3_follow_up
+    node_execution:
+      - snapshot-literature-resource-pool remains deterministic with execution_mode=none.
+      - Node 2 MUST NOT call AgentOrchestrator, BackendLlmGateway, Codex, provider LLMs, or debate runtime.
+    semantic_routing:
+      - Resource sampling and selected-literature semantics belong upstream before the evidence basket is frozen.
+      - Evidence-role classification, evidence-polarity judgment, and deeper evidence interpretation belong upstream resource sampling or downstream evidence/need nodes.
+      - Node 2 only snapshots traceable resource state from the normalized source scope.
+normalized_harness_source_scope:
+  supported:
+    - title_card_evidence_basket
+  unsupported_compat_values:
+    - manual_selection
+    - search_result
+  blocked_code: UNSUPPORTED_SOURCE_SCOPE_FOR_NORMALIZED_V1A
+resource_quality_gate_policy:
+  blocking_scope: traceability_and_authority_creation_only
+  must_block:
+    - missing TopicSeed.
+    - TopicSeed/title-card lineage mismatch.
+    - empty TitleCard evidence basket.
+    - evidence-basket literature id that cannot resolve to a Literature record.
+    - unsupported normalized harness source_scope.
+    - failed control-plane readiness gate or transition.
+  must_warn:
+    - incomplete key-content readiness.
+    - incomplete abstract readiness.
+    - low source_count.
+    - incomplete pipeline readiness.
+    - stale or duplicate pipeline status.
+    - incomplete fulltext readiness.
+  warning_sink: source_health_summary.warning_codes
+snapshot_hash_policy:
+  purpose: content_replay_identity
+  must_include:
+    - title_card_id.
+    - topic_seed_ref.
+    - source_scope.
+    - evidence basket updated_at.
+    - evidence-basket-derived literature_refs.
+    - content_source_refs.
+    - source_health_summary.
+    - policy_version_id.
+  must_exclude:
+    - literature_resource_pool_snapshot_id.
+    - input_snapshot_id.
+    - gate_result_id.
+    - transition_attempt_id.
+    - harness trace artifact id.
+    - created_at.
+    - created_by.
+  replay_semantics:
+    - Same TopicSeed, same evidence basket state, same source health summary, same source scope, and same policy_version_id MUST produce the same snapshot_hash.
+    - Different control-plane/audit ids across repeated runs MUST NOT change snapshot_hash.
+    - Different resource contents, source health summary, source scope, or policy_version_id SHOULD change snapshot_hash.
+workflow_harness_runner_contract:
+  target_runner: TopicSelectionWorkflowHarnessService.runSnapshotLiteratureResourcePoolScenario
+  implementation_status: implemented
+  authority_service: TopicSelectionSearchResourceService.createLiteratureResourcePoolSnapshot
+  direct_repository_write_allowed: false
+  script_local_choreography_allowed: false
+  node_input_type: TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolNodeInput
+  node_result_type: TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolNodeResult
+  success_result_must_include:
+    - literature_resource_pool_snapshot_ref.
+    - snapshot_version.
+    - snapshot_hash.
+    - included_literature_refs.
+    - content_source_refs.
+    - source_health_summary.
+    - control_plane_refs.
+    - harness_trace_artifact_ref.
+  blocked_result_must_include:
+    - status=blocked.
+    - blocker_codes.
+    - normalized node_input.
+    - no TopicSelectionLiteratureResourcePoolSnapshot authority refs.
+    - harness_trace_artifact_ref when trace recording is available.
+audit_trace_boundary:
+  control_plane_role: authoritative_audit_facts
+  harness_trace_role: automation_execution_evidence
+  trace_schema: WorkflowHarnessSnapshotLiteratureResourcePoolScenarioTrace@v1
+  separation_rule:
+    - control-plane input snapshot, readiness gate, and transition attempt remain the authoritative audit facts.
+    - harness trace artifact MUST NOT replace control-plane audit refs.
+    - control-plane refs and harness trace refs MAY cross-reference each other for replay/debug.
+  trace_must_record:
+    - scenario_id.
+    - node_id.
+    - workflow_run_id.
+    - node_attempt_id.
+    - normalized node_input.
+    - normalized node_result.
+    - snapshot_hash.
+    - source_health_summary.
+    - authority_refs.
+    - control_plane_refs.
+    - blocker_codes.
+    - warning_codes.
+    - assertions.
+  trace_must_not_record:
+    - hidden reasoning.
+    - provider secrets.
+    - raw provider logs.
+    - raw LLM transcript.
+    - raw debate transcript.
+search_plan_handoff_policy:
+  downstream_node: topic-selection.v1a.create-search-plan.v1
+  frozen_authority_ref_required: true
+  must_handoff:
+    - literature_resource_pool_snapshot_ref.
+    - snapshot_version.
+    - snapshot_hash.
+    - source_scope.
+    - literature_refs.
+    - content_source_refs.
+    - source_health_summary.
+  downstream_must_not_read_as_resource_truth:
+    - mutable TitleCard evidence basket.
+    - ResourceSampleSet.
+    - caller-supplied selected literature refs.
+    - current search results.
+  replay_rule:
+    - SearchPlan must be based on the supplied LiteratureResourcePoolSnapshot authority, not the current mutable evidence basket state.
+    - If the evidence basket changes after snapshot creation, a new LiteratureResourcePoolSnapshot must be created before those changes can affect SearchPlan.
+    - snapshot_hash is an assertion/replay check and must not replace the snapshot authority ref.
+idempotency_policy:
+  default_mode: append_only
+  authority_id_reuse: false
+  content_equivalence_key: snapshot_hash
+  repeated_equivalent_run:
+    - MAY create a new LiteratureResourcePoolSnapshot authority id.
+    - MUST produce the same snapshot_hash when TopicSeed, evidence basket state, source scope, source health summary, and policy_version_id are equivalent.
+    - MUST record a distinct execution/audit trail for the new attempt.
+  must_not:
+    - silently reuse an existing snapshot authority by hash.
+    - treat snapshot_hash as the authority ref.
+    - skip control-plane gate/transition evidence because an equivalent hash already exists.
+  future_reuse_mode:
+    - Any reuse_existing_snapshot_by_hash behavior requires an explicit policy and runner input flag in a future slice.
+implementation_readiness_review:
+  status: implemented_callable
+  complexity: moderate_bounded
+  rationale:
+    - The node is deterministic and does not require AgentOrchestrator, provider LLM, Codex, or debate runtime.
+    - Existing route, service, repository, control-plane gate, and transition boundaries already cover the authority write path.
+    - The remaining work is harness normalization, trace assembly, hash/source-health hardening, and focused service/runner tests.
+  non_goals:
+    - do not implement alternate source_scope resolvers.
+    - do not implement resource sampling or evidence-role classification.
+    - do not implement reuse_existing_snapshot_by_hash.
+    - do not make SearchPlan read mutable evidence basket state as resource truth.
+  closed_implementation_gaps:
+    - runSnapshotLiteratureResourcePoolScenario implemented.
+    - service snapshot_hash aligned with the locked content_replay_identity payload.
+    - source_health_summary.warning_codes expanded for maturity warnings without turning them into blockers.
+    - runner trace schema and success/blocked assertions implemented.
+    - blocked missing-literature results preserve control-plane audit refs created before repository persistence is skipped.
+    - normalized runner requires concrete TopicSeed refs with version and title-card lineage.
+  callable_promotion_evidence:
+    - stable normalized input/result types exist.
+    - unsupported source_scope blocks before authority creation in the harness path.
+    - success and blocked result tests pass.
+    - hash stability and append-only repeated-run tests pass.
+    - source-health warning non-blocking tests pass.
+    - SearchPlan handoff assertion tests pass.
+preconditions:
+  - topic_seed_id resolves to a TopicSeed under the same title_card_id.
+  - title-card evidence basket is the single normalized source of included literature for this node.
+  - title-card evidence basket contains at least one literature item for the current source_scope.
+  - literature records and source records are resolvable or reported through source_health_summary.
+blocking_conditions:
+  - missing TopicSeed returns NOT_FOUND.
+  - TopicSeed title-card mismatch returns VERSION_CONFLICT.
+  - empty evidence basket blocks with GATE_CONSTRAINT_FAILED.
+  - unresolved evidence-basket literature id blocks with MISSING_LITERATURE_RECORD before snapshot authority creation.
+  - normalized harness input with source_scope other than title_card_evidence_basket blocks with UNSUPPORTED_SOURCE_SCOPE_FOR_NORMALIZED_V1A.
+  - deterministic gate topic-selection.literature-snapshot-ready failure blocks before repository persistence.
+  - transition topic-seed-to-literature-snapshot failure blocks before repository persistence.
+deterministic_validators:
+  - snapshot-literature-resource-pool is deterministic and MUST NOT call AgentOrchestrator, BackendLlmGateway, Codex, or debate runtime.
+  - included literature refs must be derived from the TitleCard evidence basket, not directly from ResourceSampleSet, SearchResult, or caller-supplied selected refs.
+  - resource sampling and evidence-role decisions must be completed before this node and reflected through the evidence basket if they are relevant.
+  - source_scope must remain explicit; normalized harness execution supports only title_card_evidence_basket while route-level enum compatibility may retain manual_selection and search_result.
+  - snapshot hash must be derived from title_card_id, TopicSeed ref, source_scope, basket timestamp, literature refs, source refs, source health summary, and policy_version_id.
+  - snapshot hash must not include repository-generated ids, control-plane ids, harness trace artifact ids, created_at, or created_by.
+  - repeated equivalent runs may create distinct snapshot authorities, but content equivalence must be visible through the same snapshot_hash.
+  - missing literature records must become source-health/blocker diagnostics, not silent omission.
+  - key-content, abstract, source-count, pipeline-readiness, stale/duplicate, and fulltext-readiness issues are diagnostic warnings at this node unless they also break traceability.
+  - snapshot lineage must point to the TopicSeed and included literature/source refs.
+  - downstream SearchPlan must consume the LiteratureResourcePoolSnapshot authority and must not infer resources from the current mutable evidence basket.
+allowed_execution_modes: [none]
+default_execution_mode: none
+debate_trigger_policy: not_allowed
+profile_escalation_policy_ref: not_applicable
+input_contract_refs:
+  - CreateLiteratureResourcePoolSnapshotInput
+  - TopicSelectionTopicSeedRecord
+  - TitleCardEvidenceBasket
+output_contract_refs:
+  - TopicSelectionLiteratureResourcePoolSnapshotRecord
+authority_write_boundary:
+  route: POST /topic-selection/v1a/literature-resource-pool-snapshots
+  controller: TopicSelectionV1aController.createLiteratureResourcePoolSnapshot
+  domain_service: TopicSelectionSearchResourceService.createLiteratureResourcePoolSnapshot
+  repository: TopicSelectionSearchResourceRepository.createLiteratureResourcePoolSnapshot
+  workflow_harness_runner: TopicSelectionWorkflowHarnessService.runSnapshotLiteratureResourcePoolScenario
+  authority_objects:
+    - TopicSelectionLiteratureResourcePoolSnapshot
+  workflow_harness_direct_write: false
+  agent_orchestrator_direct_write: false
+  debate_executor_direct_write: false
+automation_callability:
+  status: callable
+  target_runner: TopicSelectionWorkflowHarnessService.runSnapshotLiteratureResourcePoolScenario
+  stable_input_type: TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolNodeInput
+  stable_result_type: TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolNodeResult
+  script_local_choreography_required: false
+  blocked_result_shape: true
+  trace_artifact: WorkflowHarnessSnapshotLiteratureResourcePoolScenarioTrace@v1
+  remaining_gaps: []
+audit_artifact_policy:
+  must_record:
+    - control-plane input snapshot with TopicSeed, evidence-basket-derived literature refs, and source refs.
+    - readiness gate result for topic-selection.literature-snapshot-ready.
+    - transition attempt for topic-seed-to-literature-snapshot.
+    - snapshot_hash.
+    - source_health_summary.
+    - harness trace artifact using WorkflowHarnessSnapshotLiteratureResourcePoolScenarioTrace@v1 once normalized.
+  must_not_record:
+    - hidden reasoning.
+    - provider secrets.
+    - raw provider logs.
+    - raw LLM transcript.
+    - raw debate transcripts.
+failure_semantics:
+  invalid_payload: return INVALID_PAYLOAD before authority creation.
+  missing_topic_seed: return NOT_FOUND.
+  lineage_conflict: return VERSION_CONFLICT.
+  unsupported_source_scope_for_normalized_v1a: return blocked harness result with UNSUPPORTED_SOURCE_SCOPE_FOR_NORMALIZED_V1A before authority creation.
+  unresolved_literature_record: return blocked harness result with MISSING_LITERATURE_RECORD before authority creation.
+  downstream_handoff_conflict: downstream SearchPlan must block with VERSION_CONFLICT if the supplied snapshot authority does not match TopicSeed/title-card lineage.
+  empty_source_scope: block with GATE_CONSTRAINT_FAILED.
+  gate_or_transition_failed: block before repository persistence.
+  repository_failure: fail the node attempt without creating downstream v1a authority.
+```
+
+### `topic-selection.v1a.create-search-plan.v1`
+```yaml
+policy_status: draft
+node_id: topic-selection.v1a.create-search-plan.v1
+authority_object: TopicSelectionSearchPlan
+locked_decisions:
+  N3-D01:
+    status: locked
+    summary: SearchPlan authority materialization boundary only.
+    semantic_boundary:
+      - The node only materializes a caller-supplied SearchPlan blueprint as TopicSelectionSearchPlan plus TopicSelectionCoverageRowIntent authorities.
+      - The node MUST NOT execute retrieval.
+      - The node MUST NOT build EvidenceMap.
+      - The node MUST NOT judge evidence roles or evidence polarity.
+      - The node MUST NOT generate research content.
+      - The node MUST NOT call AgentOrchestrator, BackendLlmGateway, provider LLMs, Codex, or debate runtime.
+    normalized_resource_truth:
+      - The normalized harness path consumes the LiteratureResourcePoolSnapshot authority produced by Node 2.
+      - The normalized harness path MUST NOT re-read the mutable TitleCard evidence basket, ResourceSampleSet, caller-supplied selected literature refs, or current search results as resource truth.
+    normalized_coverage_policy:
+      - Explicit coverage_intents are required in the normalized harness input.
+      - Service/route compatibility behavior that derives support-only coverage rows from query_intents MAY remain.
+      - Compatibility default coverage MUST NOT be treated as normalized automated v1a behavior.
+  N3-D02:
+    status: locked
+    summary: SearchPlan blueprint is a module-level explicit upstream input, not generated by Node 3.
+    blueprint_source_policy:
+      - Node 3 validates and materializes a supplied SearchPlan blueprint.
+      - Node 3 MUST NOT generate a SearchPlan blueprint from TopicSeed, LiteratureResourcePoolSnapshot, TitleCard, ResourceSampleSet, selected literature refs, or search results.
+      - Node 3 MUST NOT call a model-like executor to draft the blueprint.
+    module_contract_policy:
+      - TopicSelectionSearchPlanBlueprint is a topic-selection module-level value contract.
+      - The minimum blueprint contract must be defined once and reused by Node 3, WorkflowScenario fixtures, human/Codex-assisted inputs, and any future blueprint-generation node.
+      - Node 3 must not define or accept a node-private incompatible blueprint variant.
+      - The blueprint is not a standalone authority object in the initial normalization slice; it is frozen in Node 3 input snapshot and harness trace.
+    allowed_blueprint_origins:
+      - WorkflowScenario or test fixture.
+      - Human-authored local input.
+      - Codex-assisted local drafting before node invocation.
+      - Future separately defined upstream blueprint-generation node.
+    provenance_policy:
+      - Blueprint origin MAY be recorded as provenance refs or trace metadata.
+      - Provenance refs do not become resource truth and do not replace the LiteratureResourcePoolSnapshot authority.
+    future_generation_boundary:
+      - Automatic blueprint generation requires a separate node such as topic-selection.v1a.draft-search-plan-blueprint.v1.
+      - That node must define its own execution mode, model policy, input context, output contract, and verification before Node 3 consumes its result.
+  N3-D03:
+    status: locked
+    summary: TopicSelectionSearchPlanBlueprint@v1 minimum module contract.
+    blueprint_minimum_fields:
+      - schema_version.
+      - blueprint_origin.
+      - blueprint_provenance_refs.
+      - title_card_ref.
+      - topic_seed_ref.
+      - literature_resource_pool_snapshot_ref.
+      - expected_snapshot_hash.
+      - plan_version.
+      - parent_search_plan_ref.
+      - recheck_request_ref.
+      - query_intents.
+      - coverage_intents.
+      - must_check_constraints.
+      - exclusion_rules.
+      - coverage_strategy.
+      - role_coverage_expectation.
+      - policy_version.
+      - output_schema_version.
+    coverage_intent_required_fields:
+      - coverage_key.
+      - intent_type.
+      - query.
+      - rationale.
+      - required.
+      - priority.
+      - expected_evidence_role.
+      - target_source_types.
+      - refs.
+    coverage_intent_optional_empty_arrays:
+      - target_source_types.
+      - refs.
+    consumer_fit_review:
+      - Node 3 maps the blueprint to CreateSearchPlanInput and coverage row authorities.
+      - Node 4 uses persisted coverage row ids and semantics for observations, bindings, assessments, and risk acceptances.
+      - EvidenceMap preserves coverage_row_intent_ref lineage from SearchRun bindings.
+      - NeedCandidate generation consumes EvidenceMap role bundles and does not need blueprint internals.
+      - Future blueprint-generation nodes can produce the same contract without adding a parallel shape.
+  N3-D04:
+    status: locked
+    summary: SearchPlanBlueprint draft/review model profile policy with Codex default.
+    node_boundary:
+      - topic-selection.v1a.create-search-plan.v1 remains deterministic with execution_mode=none.
+      - Blueprint draft/review profiles run before Node 3 and do not write SearchPlan authority.
+      - Model-like blueprint output must pass TopicSelectionSearchPlanBlueprint@v1 schema validation and Node 3 deterministic validators before authority creation.
+    execution_modes:
+      default_execution_mode: codex_assisted
+      allowed_execution_modes:
+        - codex_assisted
+        - provider_llm
+        - mocked_llm
+      mocked_llm_scope: test_and_acceptance_only
+      provider_llm_scope: explicit_operator_upgrade_or_provider_quality_scenario
+    draft_profile:
+      profile_id: topic-selection.search-plan-blueprint.draft.v1
+      profile_function: search_plan_blueprint_drafting
+      role_family: single_agent
+      stage_family: blueprint_draft
+      output_contract: TopicSelectionSearchPlanBlueprint@v1
+      default_execution_mode: codex_assisted
+      normalized_params:
+        creativity: medium
+        reasoning_depth: high
+        output_budget: large
+        structured_output_required: true
+        output_format: json_schema
+      model_options:
+        - option_id: topic-selection.search-plan-blueprint.draft.v1.openai-balanced
+          option_purpose: default_balanced_provider_run
+          provider_id: openai
+          model_id: gpt-5.4-mini
+          timeout_ms: 120000
+        - option_id: topic-selection.search-plan-blueprint.draft.v1.openai-high-accuracy
+          option_purpose: high_accuracy_explicit_provider_run
+          provider_id: openai
+          model_id: gpt-5.5
+          timeout_ms: 180000
+        - option_id: topic-selection.search-plan-blueprint.draft.v1.dashscope-budget
+          option_purpose: budget_sensitive_explicit_provider_run
+          provider_id: dashscope
+          model_id: qwen3.6-plus
+          timeout_ms: 120000
+          provider_overrides:
+            enable_thinking: true
+    review_profile:
+      profile_id: topic-selection.search-plan-blueprint.review.v1
+      profile_function: search_plan_blueprint_review
+      role_family: single_agent
+      stage_family: blueprint_review
+      output_contract: TopicSelectionSearchPlanBlueprintReview@v1
+      default_execution_mode: codex_assisted
+      normalized_params:
+        creativity: low
+        reasoning_depth: high
+        output_budget: medium
+        structured_output_required: true
+        output_format: json_schema
+      model_options:
+        - option_id: topic-selection.search-plan-blueprint.review.v1.openai-balanced
+          option_purpose: default_balanced_provider_run
+          provider_id: openai
+          model_id: gpt-5.4-mini
+          timeout_ms: 90000
+        - option_id: topic-selection.search-plan-blueprint.review.v1.openai-high-accuracy
+          option_purpose: high_accuracy_explicit_provider_run
+          provider_id: openai
+          model_id: gpt-5.5
+          timeout_ms: 150000
+        - option_id: topic-selection.search-plan-blueprint.review.v1.dashscope-budget
+          option_purpose: budget_sensitive_explicit_provider_run
+          provider_id: dashscope
+          model_id: qwen3.6-plus
+          timeout_ms: 120000
+          provider_overrides:
+            enable_thinking: true
+    fallback_and_audit:
+      automatic_provider_fallback: false
+      manual_rerun_allowed: true
+      explicit_model_option_override_allowed: true
+      codex_source_kind: codex_response
+      provider_source_kind: provider_response
+      store_raw_provider_response: false
+      forbid_hidden_reasoning: true
+      deepseek_status: not_available_until_registered_provider
+  N3-D05:
+    status: locked
+    summary: WorkflowHarness normalized runner contract blocks permissive fallback semantics.
+    runner_contract:
+      target_runner: TopicSelectionWorkflowHarnessService.runCreateSearchPlanScenario
+      implementation_status: implemented
+      normalized_input_contract:
+        - TopicSelectionSearchPlanBlueprint@v1.
+        - scenario_id.
+        - scenario_case_id.
+        - workspace_id.
+        - workflow_run_id.
+        - node_attempt_id.
+        - created_by.
+      normalized_result_contract:
+        success:
+          - status=succeeded.
+          - search_plan_ref.
+          - coverage_row_intent_refs.
+          - plan_version.
+          - query_intents.
+          - must_check_constraints.
+          - exclusion_rules.
+          - control_plane_refs.
+          - workflow_run_ref.
+          - harness_trace_artifact_ref.
+        blocked:
+          - status=blocked.
+          - blocker_codes.
+          - normalized node_input.
+          - no TopicSelectionSearchPlan authority refs.
+          - no TopicSelectionCoverageRowIntent authority refs.
+          - harness_trace_artifact_ref when trace recording is available.
+    strict_pre_service_validation:
+      - topic_seed_ref and literature_resource_pool_snapshot_ref must be concrete refs with versions and matching title_card_id.
+      - resolved TopicSeed must belong to title_card_id.
+      - resolved LiteratureResourcePoolSnapshot must belong to title_card_id and trace to the resolved TopicSeed.
+      - expected_snapshot_hash must equal the resolved LiteratureResourcePoolSnapshot.snapshot_hash.
+      - query_intents must be present and non-empty after normalization.
+      - coverage_intents must be explicitly present and non-empty after normalization.
+      - every coverage_intent must include coverage_key, intent_type, query, rationale, required, priority, expected_evidence_role, target_source_types, and refs.
+      - target_source_types and refs may be empty arrays but must not be omitted.
+    fallback_policy:
+      route_service_compatibility_fallback_allowed: true
+      normalized_harness_fallback_allowed: false
+      forbidden_in_normalized_harness:
+        - deriving coverage rows from query_intents.
+        - defaulting expected_evidence_role to support.
+        - defaulting coverage_key from row index.
+        - defaulting priority from row index.
+        - defaulting rationale to a generated generic sentence.
+        - accepting omitted target_source_types or refs.
+    authority_write_boundary:
+      authority_service: TopicSelectionSearchResourceService.createSearchPlan
+      direct_repository_write_allowed: false
+      partial_authority_allowed_on_blocked_result: false
+    trace_contract:
+      trace_schema: WorkflowHarnessCreateSearchPlanScenarioTrace@v1
+      trace_must_record:
+        - scenario_id.
+        - node_id.
+        - workflow_run_id.
+        - node_attempt_id.
+        - normalized node_input.
+        - normalized node_result.
+        - blueprint_origin.
+        - blueprint_provenance_refs.
+        - expected_snapshot_hash.
+        - resolved_snapshot_hash.
+        - query_intents.
+        - coverage_intents.
+        - search_plan_ref.
+        - coverage_row_intent_refs.
+        - control_plane_refs.
+        - blocker_codes.
+        - warning_codes.
+        - assertions.
+      trace_must_not_record:
+        - hidden reasoning.
+        - provider secrets.
+        - raw provider logs.
+        - raw LLM transcript.
+        - raw debate transcript.
+  N3-D06:
+    status: locked
+    summary: Implementation readiness and callable promotion for strict SearchPlan runner.
+    implementation_readiness_review:
+      status: implemented_callable
+      complexity: moderate_bounded
+      rationale:
+        - Existing route, service, repository, control-plane workflow, gate, transition, and coverage-row persistence paths are reused.
+        - No DB migration, provider LLM, Codex runtime, debate runtime, or new route is required.
+        - The new behavior is isolated in WorkflowHarness strict pre-service validation, blueprint snapshot freezing, and trace assembly.
+      closed_implementation_gaps:
+        - TopicSelectionSearchPlanBlueprint@v1 shared contract and JSON schema added.
+        - runCreateSearchPlanScenario implemented.
+        - Strict blueprint schema, lineage, snapshot-hash, query-intent, coverage-intent, and fallback-blocking validators implemented.
+        - WorkflowHarnessCreateSearchPlanScenarioTrace@v1 trace artifact implemented.
+        - Full SearchPlan blueprint is frozen in normalized node input, service input snapshot, and harness trace.
+        - TopicSeed intent preparation provenance refs can be recorded without changing Node 1 execution mode.
+        - ResourceSampleSet provenance refs can be recorded for Node 2 without changing snapshot resource truth or snapshot_hash.
+      callable_promotion_evidence:
+        - successful strict-blueprint SearchPlan creation test passes.
+        - malformed blueprint schema version blocked test passes.
+        - missing blueprint blocked test passes.
+        - snapshot hash drift blocked test passes.
+        - omitted coverage intents blocked test passes.
+        - fallback-derived coverage semantics blocked test passes.
+        - lineage mismatch blocked test passes.
+        - blocked paths return no SearchPlan or CoverageRow authority refs.
+    automation_callability:
+      status: callable
+      runner: TopicSelectionWorkflowHarnessService.runCreateSearchPlanScenario
+      stable_node_input: TopicSelectionWorkflowHarnessCreateSearchPlanNodeInput
+      stable_node_result: TopicSelectionWorkflowHarnessCreateSearchPlanNodeResult
+      trace_artifact: WorkflowHarnessCreateSearchPlanScenarioTrace@v1
+      script_local_choreography_required: false
+preconditions:
+  - topic_seed_id resolves under title_card_id.
+  - literature_resource_pool_snapshot_id resolves under title_card_id.
+  - snapshot.topic_seed_ref matches the requested TopicSeed.
+  - supplied snapshot_hash expectation matches the resolved LiteratureResourcePoolSnapshot.
+  - SearchPlan blueprint is explicitly supplied by the caller.
+  - SearchPlan blueprint schema_version is exactly TopicSelectionSearchPlanBlueprint@v1.
+  - SearchPlan blueprint satisfies TopicSelectionSearchPlanBlueprint@v1.
+  - query_intents are non-empty after normalization.
+  - coverage_intents are explicitly supplied and non-empty after normalization.
+blocking_conditions:
+  - missing TopicSeed or LiteratureResourcePoolSnapshot returns NOT_FOUND.
+  - TopicSeed/Snapshot/title-card lineage mismatch returns VERSION_CONFLICT.
+  - snapshot_hash mismatch returns VERSION_CONFLICT before SearchPlan authority creation.
+  - missing SearchPlan blueprint blocks before SearchPlan authority creation.
+  - malformed SearchPlan blueprint blocks before SearchPlan authority creation.
+  - empty or blank query intent blocks with GATE_CONSTRAINT_FAILED.
+  - empty or blank coverage intent blocks with GATE_CONSTRAINT_FAILED.
+  - missing coverage intent required field blocks with INVALID_PAYLOAD before SearchPlan authority creation.
+  - omitted coverage_intents in the normalized harness path blocks before SearchPlan authority creation.
+  - deterministic gate topic-selection.search-plan-ready failure blocks before repository persistence.
+  - transition literature-snapshot-to-search-plan failure blocks before repository persistence.
+deterministic_validators:
+  - create-search-plan is deterministic in the current v1a normalization slice.
+  - future model-like SearchPlan drafting requires an explicit T-089 policy update before implementation.
+  - SearchPlan blueprint generation is out of scope for this node.
+  - SearchPlanBlueprint draft/review model profiles are upstream blueprint-production or review aids, not Node 3 executors.
+  - SearchPlan blueprint validation uses the module-level TopicSelectionSearchPlanBlueprint@v1 contract.
+  - normalized harness coverage row intents must come from explicit coverage_intents, not from service fallback defaults.
+  - each coverage row must preserve expected evidence role, query, priority, required flag, and refs.
+  - must-check constraints and exclusion rules must be persisted with SearchPlan.
+  - workflow profile remains deterministic-contract unless a future policy version changes it.
+allowed_execution_modes: [none]
+default_execution_mode: none
+debate_trigger_policy: not_allowed
+profile_escalation_policy_ref: not_applicable
+input_contract_refs:
+  - TopicSelectionSearchPlanBlueprint
+  - CreateSearchPlanInput
+  - TopicSelectionTopicSeedRecord
+  - TopicSelectionLiteratureResourcePoolSnapshotRecord
+  - TopicSelectionCoverageRowIntentRecord input shape
+output_contract_refs:
+  - TopicSelectionSearchPlanRecord
+  - TopicSelectionCoverageRowIntentRecord
+authority_write_boundary:
+  route: POST /topic-selection/v1a/search-plans
+  controller: TopicSelectionV1aController.createSearchPlan
+  domain_service: TopicSelectionSearchResourceService.createSearchPlan
+  repository: TopicSelectionSearchResourceRepository.createSearchPlanWithCoverageIntents
+  authority_objects:
+    - TopicSelectionSearchPlan
+    - TopicSelectionCoverageRowIntent
+  agent_orchestrator_direct_write: false
+  debate_executor_direct_write: false
+audit_artifact_policy:
+  must_record:
+    - control-plane input snapshot with TopicSeed, Snapshot refs, and complete TopicSelectionSearchPlanBlueprint@v1 payload.
+    - deterministic workflow run for topic-selection.search-plan-draft.
+    - readiness gate result for topic-selection.search-plan-ready.
+    - transition attempt for literature-snapshot-to-search-plan.
+    - coverage row count and artifact refs.
+    - harness trace artifact once normalized.
+  must_not_record:
+    - hidden reasoning.
+    - provider secrets.
+    - raw provider logs.
+    - raw debate transcripts.
+failure_semantics:
+  invalid_payload: return INVALID_PAYLOAD before authority creation.
+  missing_upstream_ref: return NOT_FOUND.
+  lineage_conflict: return VERSION_CONFLICT.
+  snapshot_hash_mismatch: return VERSION_CONFLICT before authority creation.
+  missing_blueprint: block before authority creation.
+  coverage_gap: block with GATE_CONSTRAINT_FAILED before repository persistence.
+  gate_or_transition_failed: block before repository persistence.
+  repository_failure: fail the node attempt without partial SearchPlan/CoverageRow authority semantics.
+```
+
+### `topic-selection.v1a.record-search-run.v1`
+```yaml
+policy_status: draft
+node_id: topic-selection.v1a.record-search-run.v1
+authority_object: TopicSelectionSearchRun
+preconditions:
+  - search_plan_id resolves under title_card_id.
+  - SearchPlan resolves to its LiteratureResourcePoolSnapshot.
+  - coverage observations, evidence bindings, assessments, and risk acceptances refer only to rows under the SearchPlan.
+  - evidence_map_input_refs are non-empty when the run is intended to feed EvidenceMap.
+blocking_conditions:
+  - missing SearchPlan or LiteratureResourcePoolSnapshot returns NOT_FOUND.
+  - SearchPlan/Snapshot/title-card lineage mismatch returns VERSION_CONFLICT.
+  - coverage record outside SearchPlan rows returns VERSION_CONFLICT.
+  - run_status failed blocks downstream EvidenceMap construction.
+  - deterministic gate or transition failure blocks before repository persistence.
+deterministic_validators:
+  - record-search-run is deterministic and MUST NOT call AgentOrchestrator, BackendLlmGateway, Codex, or debate runtime.
+  - result accounting must be explicit for total, unique, duplicate, failed, and skipped counts.
+  - evidence bindings must cite coverage row ids under the SearchPlan.
+  - evidence_map_input_refs must include all refs needed by later EvidenceMap units.
+  - source health warnings must remain visible in the SearchRun result and harness trace.
+allowed_execution_modes: [none]
+default_execution_mode: none
+debate_trigger_policy: not_allowed
+profile_escalation_policy_ref: not_applicable
+input_contract_refs:
+  - RecordSearchRunInput
+  - TopicSelectionSearchPlanRecord
+  - TopicSelectionLiteratureResourcePoolSnapshotRecord
+  - TopicSelectionCoverageRowIntentRecord
+output_contract_refs:
+  - TopicSelectionSearchRunRecord
+  - TopicSelectionCoverageExecutionObservationRecord
+  - TopicSelectionCoverageEvidenceBindingRecord
+  - TopicSelectionCoverageAssessmentRecord
+  - TopicSelectionCoverageRiskAcceptanceRecord
+authority_write_boundary:
+  route: POST /topic-selection/v1a/search-runs
+  controller: TopicSelectionV1aController.recordSearchRun
+  domain_service: TopicSelectionSearchResourceService.recordSearchRun
+  repository: TopicSelectionSearchResourceRepository.createSearchRunWithCoverageRecords
+  authority_objects:
+    - TopicSelectionSearchRun
+    - TopicSelectionCoverageExecutionObservation
+    - TopicSelectionCoverageEvidenceBinding
+    - TopicSelectionCoverageAssessment
+    - TopicSelectionCoverageRiskAcceptance
+  agent_orchestrator_direct_write: false
+  debate_executor_direct_write: false
+audit_artifact_policy:
+  must_record:
+    - control-plane input snapshot with SearchPlan, Snapshot, and evidence input refs.
+    - workflow/search-run trace once normalized.
+    - result accounting summary.
+    - source health summary.
+    - coverage observation and assessment summary.
+    - harness trace artifact once normalized.
+  must_not_record:
+    - hidden reasoning.
+    - provider secrets.
+    - raw provider logs.
+    - raw debate transcripts.
+failure_semantics:
+  invalid_payload: return INVALID_PAYLOAD before authority creation.
+  missing_upstream_ref: return NOT_FOUND.
+  lineage_conflict: return VERSION_CONFLICT.
+  coverage_record_conflict: return VERSION_CONFLICT before repository persistence.
+  failed_run: persist failed SearchRun only when current service policy allows it, but block downstream EvidenceMap scenario.
+  gate_or_transition_failed: block before repository persistence.
+  repository_failure: fail the node attempt without partial SearchRun/CoverageRecord authority semantics.
 ```
 
 ### `topic-selection.v1a.build-evidence-map.v1`

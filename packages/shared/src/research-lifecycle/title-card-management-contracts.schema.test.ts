@@ -125,6 +125,20 @@ test('topic-selection control-plane schemas load through direct and aggregate ex
 test('topic-selection search/resource schemas load through direct and aggregate exports', () => {
   assert.ok(topicSelectionSearchResourceContracts.topicSelectionTopicSeedRecordSchema);
   assert.ok(topicSelectionSearchResourceContracts.topicSelectionLiteratureResourcePoolSnapshotRecordSchema);
+  assert.ok(topicSelectionSearchResourceContracts.topicSelectionSearchPlanBlueprintSchema);
+  assert.ok(topicSelectionSearchResourceContracts.topicSelectionSearchPlanBlueprintCoverageIntentSchema);
+  assert.equal(
+    topicSelectionSearchResourceContracts.topicSelectionSearchPlanBlueprintSchema.properties.schema_version.const,
+    topicSelectionSearchResourceContracts.TOPIC_SELECTION_SEARCH_PLAN_BLUEPRINT_SCHEMA_VERSION,
+  );
+  assert.equal(
+    topicSelectionSearchResourceContracts.topicSelectionSearchPlanBlueprintSchema.properties.query_intents.minItems,
+    1,
+  );
+  assert.equal(
+    topicSelectionSearchResourceContracts.topicSelectionSearchPlanBlueprintSchema.properties.coverage_intents.minItems,
+    1,
+  );
   assert.ok(topicSelectionSearchResourceContracts.topicSelectionSearchPlanRecordSchema);
   assert.ok(topicSelectionSearchResourceContracts.topicSelectionCoverageRowIntentRecordSchema);
   assert.ok(topicSelectionSearchResourceContracts.topicSelectionCoverageExecutionObservationRecordSchema);

@@ -672,7 +672,7 @@
   - artifact dir `.ai/.tmp/topic-selection-real-e2e/real-e2e-1779248422005-c0dfd5`;
   - provider/model `openai/gpt-5.4-mini`;
   - sample set `resource_sample_set_eaf6437e-a88c-43ef-8e65-2216ffd2272e`.
-- The product E2E validates the existing v1a/v1b/v1c flow, not the new debate harness route/CLI wrapper; provider/Codex mixed debate real-flow evidence remains a separate pending acceptance target.
+- This product E2E predates the canary harness migration below; provider/Codex mixed debate real-flow evidence and full scenario-wrapper migration remain separate pending acceptance targets.
 
 ## 2026-05-20 v1a Flow Convergence: Build Evidence Map
 - Update: converged `topic-selection.v1a.build-evidence-map.v1` node policy from stub to implementation-ready documentation.
@@ -749,3 +749,150 @@
   - focused unit, v1a route, and decision-chain acceptance tests passed.
   - v1b route integration passed with `.env.local`, including Prisma HTTP smoke.
   - v1a Prisma E2E service smoke passed with `.env.local`, covering the split adjudication -> human confirmation -> v1b bundle persistence path.
+
+## 2026-05-20 Real E2E Canary Harness Migration
+- Update: migrated the real E2E canary's v1a `generate-need-candidate` step to `TopicSelectionWorkflowHarnessService`.
+- Command: `node --check .ai/scripts/topic-selection-real-e2e.mjs`
+- Result: passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts src/services/topic-selection-generate-need-candidate-orchestrator-adapter-service.unit.test.ts src/services/topic-selection-agent-orchestrator-service.unit.test.ts`
+- Result: passed; 20 tests passed.
+- Initial command: `TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_V1A_GENERATE_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 pnpm topic-selection:real-e2e`
+- Result: failed with v1b `blocked_by_stale_trace`.
+- Fix: carry canonical EvidenceMap/SearchPlan/LiteratureResourcePoolSnapshot/EvidenceUnit version ids into the harness node input and admitted-candidate persistence path.
+- Follow-up command: `TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_V1A_GENERATE_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 pnpm topic-selection:real-e2e`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Successful run id: `real-e2e-1779267219817-f97f08`.
+- Coverage:
+  - real E2E canary records `topic-selection.real-e2e.canary.v1` for v1a generate;
+  - compatibility `POST /topic-selection/v1a/need-candidates` is no longer used by the canary generate step;
+  - persisted candidate refs and candidate-pool projection refs come from `PersistNeedCandidateBatchCommand`;
+  - v1b/v1c/downstream continuation verifies the harness candidate remains compatible with existing trace/readiness gates.
+
+## 2026-05-20 WorkflowScenario Runner Migration: Scale Quality And v1b Negative
+- Update: retired the standalone quality-gate script and mapped its assertions into the registered scenario runner.
+- Command: `node --check .ai/scripts/topic-selection-workflow-scenario-runner.mjs && node --check .ai/scripts/topic-selection-real-e2e.mjs`
+- Result: passed.
+- Initial command: `TOPIC_SELECTION_REAL_E2E_REPEATS=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_V1A_GENERATE_EXECUTION_MODE=mocked_llm pnpm topic-selection:real-e2e:quality-gate`
+- Result: failed on stale canonicalization rationale in resource sampling; this confirmed the migrated scenario still enforces the old evidence-role semantic audit.
+- Fix verified: guardrail-canonicalized resource sample items now carry rationale and method families aligned with the final selected role.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-resource-sampling-service.unit.test.ts`
+- Result: passed; 12 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Follow-up command: `TOPIC_SELECTION_REAL_E2E_REPEATS=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_V1A_GENERATE_EXECUTION_MODE=mocked_llm pnpm topic-selection:real-e2e:quality-gate`
+- Result: passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 597 tests total, 596 passed, 1 skipped.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Command: `git diff --check -- ...` for the migrated scripts, resource-sampling service/test, package script, and updated task docs.
+- Result: passed.
+- Successful quality run id: `real-e2e-quality-20260520172205`.
+- Coverage:
+  - `topic-selection.real-e2e.scale-quality.v1` aggregates scenario-level assertions only;
+  - canary child run reached PaperProject intake with `status=passed`;
+  - v1b negative child run returned `passed_v1b_non_advance`, `value_disposition=refine_question`, and no downstream v1c/PaperProject artifacts;
+  - scenario summary includes covered child scenario ids and no failures.
+
+## 2026-05-20 v1a Flow Convergence: Create TopicSeed
+- Update: promoted `topic-selection.v1a.create-topic-seed.v1` to `implementation_ready` and implemented the matching WorkflowHarness runner.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 10 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-search-resource-service.unit.test.ts`
+- Result: passed; 7 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 600 tests total, 599 passed, 1 skipped, 0 failed.
+- Command: `git diff --check -- apps/backend/src/services/topic-selection-workflow-harness-service.ts apps/backend/src/services/topic-selection-workflow-harness-service.unit.test.ts apps/backend/src/services/topic-selection-search-resource-service.ts apps/backend/src/services/topic-selection-search-resource-service.unit.test.ts dev-docs/active/topic-selection-workflow-runtime-foundation/01-plan.md dev-docs/active/topic-selection-workflow-runtime-foundation/03-implementation-notes.md dev-docs/active/topic-selection-workflow-runtime-foundation/07-v1a-workflow-harness-normalization.md dev-docs/active/topic-selection-agent-workflow-review/03-implementation-notes.md dev-docs/active/topic-selection-agent-workflow-review/06-workflow-matrix.md dev-docs/active/topic-selection-agent-workflow-review/07-node-policies.md`
+- Result: passed.
+- Historical governance note: at this point in the task history, `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` failed on unrelated paper-implementation task packages T-092 through T-097 missing registry entries. Later verification runs passed.
+- Coverage:
+  - node remains deterministic and model-free;
+  - `seed_kind` is fixed to `title_card` and not caller-supplied;
+  - missing TitleCard blocks without authority;
+  - final intent summary is mandatory after fallback;
+  - control-plane input snapshot, gate, transition, and harness trace refs are surfaced.
+
+## 2026-05-20 v1a Flow Convergence: Snapshot Literature Resource Pool
+- Update: promoted `topic-selection.v1a.snapshot-literature-resource-pool.v1` from `implementation_ready/not_callable` to `implementation_ready/callable`.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 15 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-search-resource-service.unit.test.ts`
+- Result: passed; 10 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed after quality-review hardening; 616 backend tests total, 615 passed, 1 skipped, 0 failed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Coverage:
+  - runner delegates to `TopicSelectionSearchResourceService.createLiteratureResourcePoolSnapshot`;
+  - unsupported normalized harness scope blocks before authority creation;
+  - missing literature blocker codes and blocked-path control-plane audit refs survive into harness result;
+  - non-concrete TopicSeed refs are rejected before authority creation;
+  - source-health maturity warnings are non-blocking;
+  - `snapshot_hash` is stable for equivalent repeated runs and policy-sensitive;
+  - append-only authority refs remain distinct across repeated equivalent runs;
+  - SearchPlan handoff uses snapshot authority fields rather than mutable evidence basket state.
+
+## 2026-05-21 v1a Node 1/2 LLM Boundary Amendment Docs
+- Update: recorded the TopicSeed and literature-resource snapshot LLM boundary as original-node amendments, preserving decision order.
+- Command: `rg -n "N1-AM01|N2-AM01|TopicSeedIntentDraft|TopicSeed Intent Draft Boundary|Node 1/2 LLM Boundary" dev-docs/active/topic-selection-workflow-runtime-foundation dev-docs/active/topic-selection-agent-workflow-review`
+- Result: passed; amendments and architecture notes are present in both active task bundles.
+- Command: `git diff --check -- dev-docs/active/topic-selection-workflow-runtime-foundation/02-architecture.md dev-docs/active/topic-selection-agent-workflow-review/02-architecture.md dev-docs/active/topic-selection-workflow-runtime-foundation/07-v1a-workflow-harness-normalization.md dev-docs/active/topic-selection-agent-workflow-review/07-node-policies.md dev-docs/active/topic-selection-workflow-runtime-foundation/03-implementation-notes.md dev-docs/active/topic-selection-agent-workflow-review/03-implementation-notes.md`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Coverage:
+  - Node 1 remains deterministic and model-free;
+  - optional TopicSeed semantic drafting is documented as pre-node input preparation only;
+  - Node 2 remains deterministic and model-free;
+  - sampling, role classification, polarity, and evidence interpretation remain outside the snapshot node.
+
+## 2026-05-21 v1a Node 3 WorkflowHarness Runner Contract Docs
+- Update: locked N3-D05 for `topic-selection.v1a.create-search-plan.v1`, preserving the distinction between compatibility API behavior and normalized automation behavior.
+- Command: `rg -n "N3-D05|runCreateSearchPlanScenario|WorkflowHarnessCreateSearchPlanScenarioTrace|route_service_compatibility_fallback_allowed|fallback generic" dev-docs/active/topic-selection-workflow-runtime-foundation dev-docs/active/topic-selection-agent-workflow-review`
+- Result: passed; runner contract and fallback boundary are recorded.
+- Command: `rg -n "\t" dev-docs/active/topic-selection-agent-workflow-review/07-node-policies.md`
+- Result: passed; no tab indentation remains in the node policy file.
+- Command: `git diff --check -- dev-docs/active/topic-selection-workflow-runtime-foundation/07-v1a-workflow-harness-normalization.md dev-docs/active/topic-selection-agent-workflow-review/07-node-policies.md dev-docs/active/topic-selection-workflow-runtime-foundation/03-implementation-notes.md dev-docs/active/topic-selection-agent-workflow-review/03-implementation-notes.md`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Coverage:
+  - normalized runner input is blueprint-first, not permissive service input;
+  - strict validation blocks snapshot hash drift, lineage mismatch, empty query/coverage intents, and missing coverage-row fields;
+  - service fallback defaults are explicitly forbidden in normalized harness execution;
+  - blocked results must not expose SearchPlan or CoverageRow authority refs;
+  - trace schema is `WorkflowHarnessCreateSearchPlanScenarioTrace@v1`.
+
+## 2026-05-21 v1a Node 3 Callable Runner Verification
+- Update: implemented Node 3 callable runner and recorded N3-D06.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 23 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-search-resource-service.unit.test.ts`
+- Result: passed; 10 tests passed.
+- Command: `cd packages/shared && TS_NODE_LOG_ERROR=true node --test --loader ts-node/esm src/research-lifecycle/title-card-management-contracts.schema.test.ts`
+- Result: passed; 49 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared test`
+- Result: passed; 117 tests passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 651 backend tests total, 650 passed, 1 skipped, 0 failed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Coverage:
+  - Node 3 runner is callable through `TopicSelectionWorkflowHarnessService.runCreateSearchPlanScenario`;
+  - wrong blueprint schema version, missing blueprint, snapshot hash mismatch, omitted coverage intents, fallback-derived coverage semantics, non-object coverage entries, and lineage mismatch all block without authority refs;
+  - successful SearchPlan creation records SearchPlan/CoverageRow refs, control-plane audit refs, trace artifact, and complete blueprint input snapshot;
+  - Node 1/2 provenance amendments are verified through input snapshots without introducing provider, Codex, or debate execution.

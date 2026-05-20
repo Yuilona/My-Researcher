@@ -69,6 +69,74 @@
 - Node policy details are filled in the D-15 order: shared vocabulary, debate-eligible nodes, remaining single-agent nodes, then deterministic/human/downstream spine.
 - `policy_status=implementation_ready` requires concrete values for all D-13 fields and scenario assertions that can cite the policy.
 
+## Module-Level Value Contracts
+- Some workflow inputs are shared module-level value contracts rather than node-private shapes.
+- `TopicSelectionTopicSeed` is a Node 1 authority object. Model-like helpers must not create it directly.
+- `TopicSeedIntentDraft` is reserved as an optional future pre-Node-1 value artifact for drafting `intent_summary` and `scope_notes`; it is not a v1a authority object and is not an executable profile in the current slice.
+- `TopicSelectionSearchPlanBlueprint` is one of these contracts: Node 3 consumes it, but future fixtures, Codex-assisted drafting, human input, or a separate automatic blueprint-generation node must all emit the same shape.
+- `TopicSelectionSearchPlanBlueprint` is not a standalone authority object in the initial slice. Its durability comes from Node 3 input snapshot and harness trace until a future producer node explicitly persists it as an artifact or authority.
+- Node policies may reference the blueprint, but must not define incompatible local variants.
+
+### TopicSeed Intent Draft Boundary
+- Node 1 may consume final `intent_summary` and `scope_notes` that were prepared by a human, Codex, provider LLM, or fixture before invocation.
+- That preparation is not Node 1 execution. `topic-selection.v1a.create-topic-seed.v1` stays deterministic with `execution_mode=none`.
+- Node 1 must not invoke `AgentOrchestrator`, provider LLMs, Codex, or debate runtime.
+- A future `TopicSeedIntentDraft@v1` helper must be locked as a Node 1 amendment before implementation and must write only a value artifact/provenance packet, never `TopicSelectionTopicSeed`.
+- No TopicSeed draft/review model profile is locked by the N3 SearchPlanBlueprint decisions.
+
+### `TopicSelectionSearchPlanBlueprint@v1`
+Minimum fields:
+- `schema_version`
+- `blueprint_origin`
+- `blueprint_provenance_refs`
+- `title_card_ref`
+- `topic_seed_ref`
+- `literature_resource_pool_snapshot_ref`
+- `expected_snapshot_hash`
+- `plan_version`
+- `parent_search_plan_ref`
+- `recheck_request_ref`
+- `query_intents`
+- `coverage_intents`
+- `must_check_constraints`
+- `exclusion_rules`
+- `coverage_strategy`
+- `role_coverage_expectation`
+- `policy_version`
+- `output_schema_version`
+
+Each `coverage_intent` row must include `coverage_key`, `intent_type`, `query`, `rationale`, `required`, `priority`, `expected_evidence_role`, `target_source_types`, and `refs`.
+
+The contract satisfies current consumers:
+- `create-search-plan` materializes SearchPlan and coverage-row authorities.
+- `record-search-run` can bind retrieval observations and evidence bindings to explicit row semantics.
+- EvidenceMap can preserve coverage-row lineage.
+- NeedCandidate generation can rely on EvidenceMap role bundles instead of re-reading blueprint internals.
+- Future blueprint-generation nodes can target the same module-level output contract.
+
+### SearchPlanBlueprint LLM Profiles
+- SearchPlanBlueprint drafting and review may use model-like execution before Node 3 runs.
+- `codex_assisted` is the default local execution mode for both draft and review.
+- `provider_llm` is an explicit operator upgrade or provider-quality scenario.
+- `mocked_llm` is test/acceptance-only.
+- Node 3 itself remains deterministic with `execution_mode=none`; these profiles do not create SearchPlan authority.
+
+Profile ids:
+- `topic-selection.search-plan-blueprint.draft.v1`
+- `topic-selection.search-plan-blueprint.review.v1`
+
+Provider model options:
+- default balanced: OpenAI `gpt-5.4-mini`
+- high-accuracy explicit override: OpenAI `gpt-5.5`
+- budget explicit override: DashScope `qwen3.6-plus`
+- DeepSeek is excluded until registered as a provider.
+
+Normalized params:
+- draft: `creativity=medium`, `reasoning_depth=high`, `output_budget=large`, `structured_output_required=true`, `output_format=json_schema`
+- review: `creativity=low`, `reasoning_depth=high`, `output_budget=medium`, `structured_output_required=true`, `output_format=json_schema`
+
+Fallback remains manual only: automatic provider fallback and fallback to Codex or mock are forbidden.
+
 ## Scenario And Runner Boundary
 - T-089 debate or workflow acceptance scenarios must be added to the shared `WorkflowScenario` registry owned by T-088.
 - T-089 must not introduce standalone debate runners, alternate prompt packet formats, alternate model-routing rules, or separate acceptance artifact semantics.

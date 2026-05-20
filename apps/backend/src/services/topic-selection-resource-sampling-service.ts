@@ -644,6 +644,8 @@ export class TopicSelectionResourceSamplingService {
     let selectedRole = this.normalizeRole(draft.primary_role);
     let roleScores = this.normalizeRoleScores(draft.role_scores);
     let evidencePolarity = this.normalizeEvidencePolarity(draft.evidence_polarity);
+    let classificationRationale = draft.classification_rationale;
+    let methodFamilies = draft.method_families ?? [];
     const deterministicSignals = this.detectDeterministicRoleSignals(candidate);
     let topicRelevance = this.clampUnit(draft.topic_relevance);
     let exclusionReason = draft.exclusion_reason ?? null;
@@ -689,6 +691,8 @@ export class TopicSelectionResourceSamplingService {
         selectedRole = preferredRole;
         evidencePolarity = this.evidencePolarityForRole(preferredRole, evidencePolarity);
         roleScores = this.boostRoleScore(roleScores, preferredRole);
+        classificationRationale = this.classificationRationaleForCanonicalRole(preferredRole);
+        methodFamilies = this.methodFamiliesForCanonicalRole(preferredRole, candidate, methodFamilies);
         exclusionReason = null;
         reviewReason = null;
         guardrailCodes.push(previousRole === 'support' && preferredRole === 'challenge'
@@ -738,12 +742,45 @@ export class TopicSelectionResourceSamplingService {
       evidence_polarity: evidencePolarity,
       role_scores: roleScores,
       confidence: this.clampUnit(draft.confidence),
-      classification_rationale: draft.classification_rationale,
+      classification_rationale: classificationRationale,
       exclusion_reason: exclusionReason,
       review_reason: reviewReason,
       guardrail_codes: guardrailCodes,
-      method_families: draft.method_families ?? [],
+      method_families: methodFamilies,
     };
+  }
+
+  private classificationRationaleForCanonicalRole(role: typeof TARGET_ROLES[number]): string {
+    return {
+      support: 'Deterministic guardrails selected support because the resource has topic-core positive method signals.',
+      challenge: 'Deterministic guardrails selected challenge because the resource has hard risk or failure-mode signals.',
+      baseline: 'Deterministic guardrails selected baseline because the resource has benchmark, evaluation, or comparison semantics.',
+      context: 'Deterministic guardrails selected context because the resource is useful for foundation or background framing.',
+    }[role];
+  }
+
+  private methodFamiliesForCanonicalRole(
+    role: typeof TARGET_ROLES[number],
+    candidate: ResourceCandidate,
+    existingFamilies: string[],
+  ): string[] {
+    const cleanedFamilies = existingFamilies.filter((family) =>
+      !/risk|attack|security|poison|failure/i.test(family));
+    const literatureText = [
+      candidate.literature.title,
+      candidate.literature.abstractText,
+      candidate.literature.keyContentDigest,
+      candidate.literature.tags.join(' '),
+    ].filter(Boolean).join('\n');
+    const canonicalFamily = {
+      support: FINE_TUNING_PATTERN.test(literatureText)
+        ? 'fine_tuning'
+        : 'retrieval_augmented_generation',
+      challenge: 'risk_analysis',
+      baseline: 'evaluation',
+      context: 'foundation_context',
+    }[role];
+    return [...new Set([...cleanedFamilies, canonicalFamily])];
   }
 
   private assembleSample(input: {

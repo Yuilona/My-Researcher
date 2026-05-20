@@ -4,9 +4,25 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+/**
+ * WorkflowScenario runner for topic-selection acceptance flows.
+ *
+ * Legacy compatibility note:
+ * assertions previously owned by `topic-selection-real-e2e-quality-gate.mjs`
+ * were migrated here under registered WorkflowScenario ids. Keep scenario
+ * semantics here and do not reintroduce standalone quality-gate scripts.
+ */
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 const ROLE_ORDER = ['support', 'challenge', 'baseline', 'context'];
+const SCENARIO_IDS = Object.freeze({
+  canary: 'topic-selection.real-e2e.canary.v1',
+  scaleQuality: 'topic-selection.real-e2e.scale-quality.v1',
+  v1bNonAdvanceNegative: 'topic-selection.v1b.non-advance-negative.v1',
+});
+const SCENARIO_ID = process.env.TOPIC_SELECTION_WORKFLOW_SCENARIO_ID
+  ?? parseScenarioArg(process.argv.slice(2))
+  ?? SCENARIO_IDS.scaleQuality;
 
 const QUALITY_RUN_ID = process.env.TOPIC_SELECTION_REAL_E2E_QUALITY_RUN_ID
   ?? `real-e2e-quality-${timestamp()}`;
@@ -20,6 +36,19 @@ const EXISTING_NEGATIVE_RUN_ID = process.env.TOPIC_SELECTION_REAL_E2E_EXISTING_N
 
 const QUALITY_DIR = path.join(REPO_ROOT, '.ai/.tmp/topic-selection-real-e2e-quality', QUALITY_RUN_ID);
 const E2E_DIR = path.join(REPO_ROOT, '.ai/.tmp/topic-selection-real-e2e');
+
+function parseScenarioArg(args) {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--scenario') {
+      return args[index + 1] ?? null;
+    }
+    if (arg.startsWith('--scenario=')) {
+      return arg.slice('--scenario='.length);
+    }
+  }
+  return null;
+}
 
 function timestamp() {
   const now = new Date();
@@ -168,11 +197,12 @@ async function appendLog(logPath, chunk) {
   await fs.appendFile(logPath, chunk);
 }
 
-async function runRealE2e(runId, envOverrides, label) {
+async function runRealE2e(runId, envOverrides, label, workflowScenarioId = SCENARIO_IDS.canary) {
   const logPath = path.join(QUALITY_DIR, `${label}.log`);
   await fs.writeFile(logPath, '');
   const childEnv = {
     ...process.env,
+    TOPIC_SELECTION_WORKFLOW_SCENARIO_ID: workflowScenarioId,
     TOPIC_SELECTION_REAL_RUN_ID: runId,
     TOPIC_SELECTION_REAL_MODEL_ID: MODEL_ID,
     TOPIC_SELECTION_REAL_LITERATURE_LIMIT: String(SAMPLE_SIZE),
@@ -480,101 +510,209 @@ async function writeManualSpotCheck(runAudit) {
   return path.relative(REPO_ROOT, filePath);
 }
 
-await fs.mkdir(QUALITY_DIR, { recursive: true });
-
-const expectedTargets = roleTargets(SAMPLE_SIZE);
-const providerRuns = [];
-if (EXISTING_PROVIDER_RUN_IDS.length > 0) {
-  for (let index = 0; index < EXISTING_PROVIDER_RUN_IDS.length; index += 1) {
-    const runId = EXISTING_PROVIDER_RUN_IDS[index];
-    console.log(`[load] provider E2E ${index + 1}/${EXISTING_PROVIDER_RUN_IDS.length}: ${runId}`);
-    providerRuns.push(await loadExistingE2e(runId, `provider-r${index + 1}`));
+async function runCanaryScenario() {
+  await fs.mkdir(QUALITY_DIR, { recursive: true });
+  const runId = process.env.TOPIC_SELECTION_REAL_RUN_ID ?? `${QUALITY_RUN_ID}-canary`;
+  console.log(`[run] ${SCENARIO_IDS.canary}: ${runId}`);
+  const run = await runRealE2e(runId, {
+    TOPIC_SELECTION_REAL_QUALITY_NEGATIVE_MODE: '0',
+    TOPIC_SELECTION_REAL_ALLOW_NON_ADVANCE_V1B: '0',
+  }, 'canary', SCENARIO_IDS.canary);
+  const failures = [];
+  if (run.exit_code !== 0 || run.summary.status !== 'passed') {
+    failures.push(formatRunFailure(run.summary, run.exit_code, classifyRunOutcome(run.summary)));
   }
-} else {
-  for (let index = 0; index < REPEATS; index += 1) {
-    const runId = `${QUALITY_RUN_ID}-provider-r${index + 1}`;
-    console.log(`[run] provider E2E ${index + 1}/${REPEATS}: ${runId}`);
-    providerRuns.push(await runRealE2e(runId, {
-      TOPIC_SELECTION_REAL_FLOW_MOCK_LLM: PROVIDER_LLM_MODE,
-      TOPIC_SELECTION_REAL_QUALITY_NEGATIVE_MODE: '0',
-      TOPIC_SELECTION_REAL_ALLOW_NON_ADVANCE_V1B: '0',
-    }, `provider-r${index + 1}`));
+  const scenarioSummary = {
+    status: failures.length === 0 ? 'passed' : 'failed',
+    scenario_id: SCENARIO_IDS.canary,
+    scenario_type: 'real_e2e_canary',
+    quality_run_id: QUALITY_RUN_ID,
+    artifact_dir: path.relative(REPO_ROOT, QUALITY_DIR),
+    child_run: {
+      run_id: run.summary.run_id,
+      status: run.summary.status,
+      log_path: run.log_path,
+      summary_path: run.summary_path,
+    },
+    failures,
+  };
+  await writeJson(path.join(QUALITY_DIR, 'scenario-summary.json'), scenarioSummary);
+  console.log(JSON.stringify(scenarioSummary, null, 2));
+  if (failures.length > 0) {
+    process.exitCode = 1;
   }
 }
 
-const selectedDetailsByRun = [];
-const resourceSamplesByRun = [];
-for (const run of providerRuns) {
-  selectedDetailsByRun.push(await loadSelectedDetails(run.summary.run_id));
-  resourceSamplesByRun.push(await loadResourceSample(run.summary.run_id));
+async function runV1bNonAdvanceNegativeScenario() {
+  await fs.mkdir(QUALITY_DIR, { recursive: true });
+  const runId = process.env.TOPIC_SELECTION_REAL_RUN_ID ?? `${QUALITY_RUN_ID}-v1b-negative`;
+  console.log(`[run] ${SCENARIO_IDS.v1bNonAdvanceNegative}: ${runId}`);
+  const run = await runRealE2e(runId, {
+    TOPIC_SELECTION_REAL_FLOW_MOCK_LLM: '1',
+    TOPIC_SELECTION_REAL_QUALITY_NEGATIVE_MODE: '1',
+    TOPIC_SELECTION_REAL_ALLOW_NON_ADVANCE_V1B: '1',
+  }, 'v1b-negative', SCENARIO_IDS.v1bNonAdvanceNegative);
+  const negativeAudit = auditNegativeRun(run);
+  const scenarioSummary = {
+    status: negativeAudit.failures.length === 0 ? 'passed' : 'failed',
+    scenario_id: SCENARIO_IDS.v1bNonAdvanceNegative,
+    scenario_type: 'negative',
+    quality_run_id: QUALITY_RUN_ID,
+    artifact_dir: path.relative(REPO_ROOT, QUALITY_DIR),
+    v1b_negative: {
+      ...negativeAudit,
+      log_path: run.log_path,
+      summary_path: run.summary_path,
+    },
+    failures: negativeAudit.failures,
+  };
+  await writeJson(path.join(QUALITY_DIR, 'scenario-summary.json'), scenarioSummary);
+  console.log(JSON.stringify(scenarioSummary, null, 2));
+  if (negativeAudit.failures.length > 0) {
+    process.exitCode = 1;
+  }
 }
-const providerAudits = providerRuns.map((run, index) =>
-  auditRun(run, selectedDetailsByRun[index], resourceSamplesByRun[index], expectedTargets));
-const stability = auditStability(providerAudits);
 
-let negativeRun = null;
-let negativeAudit = null;
-if (RUN_NEGATIVE) {
-  const runId = EXISTING_NEGATIVE_RUN_ID ?? `${QUALITY_RUN_ID}-v1b-negative`;
-  if (EXISTING_NEGATIVE_RUN_ID) {
-    console.log(`[load] v1b quality negative: ${runId}`);
-    negativeRun = await loadExistingE2e(runId, 'v1b-negative');
+async function runScaleQualityScenario() {
+  await fs.mkdir(QUALITY_DIR, { recursive: true });
+
+  const expectedTargets = roleTargets(SAMPLE_SIZE);
+  const providerRuns = [];
+  if (EXISTING_PROVIDER_RUN_IDS.length > 0) {
+    for (let index = 0; index < EXISTING_PROVIDER_RUN_IDS.length; index += 1) {
+      const runId = EXISTING_PROVIDER_RUN_IDS[index];
+      console.log(`[load] ${SCENARIO_IDS.canary} ${index + 1}/${EXISTING_PROVIDER_RUN_IDS.length}: ${runId}`);
+      providerRuns.push(await loadExistingE2e(runId, `provider-r${index + 1}`));
+    }
   } else {
-    console.log(`[run] v1b quality negative: ${runId}`);
-    negativeRun = await runRealE2e(runId, {
-      TOPIC_SELECTION_REAL_FLOW_MOCK_LLM: '1',
-      TOPIC_SELECTION_REAL_QUALITY_NEGATIVE_MODE: '1',
-      TOPIC_SELECTION_REAL_ALLOW_NON_ADVANCE_V1B: '1',
-    }, 'v1b-negative');
+    for (let index = 0; index < REPEATS; index += 1) {
+      const runId = `${QUALITY_RUN_ID}-provider-r${index + 1}`;
+      console.log(`[run] ${SCENARIO_IDS.canary} ${index + 1}/${REPEATS}: ${runId}`);
+      providerRuns.push(await runRealE2e(runId, {
+        TOPIC_SELECTION_REAL_FLOW_MOCK_LLM: PROVIDER_LLM_MODE,
+        TOPIC_SELECTION_REAL_QUALITY_NEGATIVE_MODE: '0',
+        TOPIC_SELECTION_REAL_ALLOW_NON_ADVANCE_V1B: '0',
+      }, `provider-r${index + 1}`, SCENARIO_IDS.canary));
+    }
   }
-  negativeAudit = auditNegativeRun(negativeRun);
+
+  const selectedDetailsByRun = [];
+  const resourceSamplesByRun = [];
+  for (const run of providerRuns) {
+    selectedDetailsByRun.push(await loadSelectedDetails(run.summary.run_id));
+    resourceSamplesByRun.push(await loadResourceSample(run.summary.run_id));
+  }
+  const providerAudits = providerRuns.map((run, index) =>
+    auditRun(run, selectedDetailsByRun[index], resourceSamplesByRun[index], expectedTargets));
+  const stability = auditStability(providerAudits);
+
+  let negativeRun = null;
+  let negativeAudit = null;
+  if (RUN_NEGATIVE) {
+    const runId = EXISTING_NEGATIVE_RUN_ID ?? `${QUALITY_RUN_ID}-v1b-negative`;
+    if (EXISTING_NEGATIVE_RUN_ID) {
+      console.log(`[load] ${SCENARIO_IDS.v1bNonAdvanceNegative}: ${runId}`);
+      negativeRun = await loadExistingE2e(runId, 'v1b-negative');
+    } else {
+      console.log(`[run] ${SCENARIO_IDS.v1bNonAdvanceNegative}: ${runId}`);
+      negativeRun = await runRealE2e(runId, {
+        TOPIC_SELECTION_REAL_FLOW_MOCK_LLM: '1',
+        TOPIC_SELECTION_REAL_QUALITY_NEGATIVE_MODE: '1',
+        TOPIC_SELECTION_REAL_ALLOW_NON_ADVANCE_V1B: '1',
+      }, 'v1b-negative', SCENARIO_IDS.v1bNonAdvanceNegative);
+    }
+    negativeAudit = auditNegativeRun(negativeRun);
+  }
+
+  const manualSpotCheckPath = await writeManualSpotCheck(providerAudits[0]);
+  const failures = [
+    ...providerAudits.flatMap((run) => run.failures),
+    ...stability.failures,
+    ...(negativeAudit?.failures ?? []),
+  ];
+  const warnings = providerAudits.flatMap((run) => run.warnings);
+
+  const qualitySummary = {
+    status: failures.length === 0 ? 'passed' : 'failed',
+    scenario_id: SCENARIO_IDS.scaleQuality,
+    scenario_type: 'scale_quality_gate',
+    covered_child_scenarios: [
+      SCENARIO_IDS.canary,
+      ...(RUN_NEGATIVE ? [SCENARIO_IDS.v1bNonAdvanceNegative] : []),
+    ],
+    assertion_scope: [
+      'resource_sample_hash_present',
+      'resource_sample_not_blocked',
+      'role_counts_match_targets',
+      'selected_set_stable_across_repeats',
+      'sample_hash_stable_across_repeats',
+      'paper_project_intake_created',
+      'paper_project_intake_idempotent',
+      'paper_project_intake_negative_statuses',
+      'carried_literature_evidence_ids_present',
+      'downstream_feedback_recheck_counts',
+      'selected_literature_role_semantics',
+      'v1b_non_advance_negative_stop',
+    ],
+    node_authority_created_by:
+      'child WorkflowScenario runs; this runner only aggregates scenario-level assertions and artifacts',
+    legacy_migration_source: '.ai/scripts/topic-selection-real-e2e-quality-gate.mjs',
+    quality_run_id: QUALITY_RUN_ID,
+    artifact_dir: path.relative(REPO_ROOT, QUALITY_DIR),
+    sample_size: SAMPLE_SIZE,
+    repeats: providerRuns.length,
+    expected_role_targets: expectedTargets,
+    provider_llm_mode: PROVIDER_LLM_MODE === '1' ? 'deterministic_mock' : 'provider',
+    reused_existing_runs: EXISTING_PROVIDER_RUN_IDS.length > 0,
+    provider_runs: providerAudits.map((run, index) => ({
+      run_id: run.run_id,
+      scenario_id: SCENARIO_IDS.canary,
+      status: run.status,
+      outcome: run.outcome,
+      llm_mode: run.llm_mode,
+      literature_count: run.literature_count,
+      sample_status: run.sample_status,
+      sample_warnings: run.sample_warnings,
+      sample_hash: run.sample_hash,
+      role_counts: run.role_counts,
+      paper_project_id: run.paper_project_id,
+      bridge_id: run.bridge_id,
+      log_path: providerRuns[index].log_path,
+      summary_path: providerRuns[index].summary_path,
+    })),
+    stability,
+    v1b_negative: negativeAudit ? {
+      ...negativeAudit,
+      scenario_id: SCENARIO_IDS.v1bNonAdvanceNegative,
+      log_path: negativeRun.log_path,
+      summary_path: negativeRun.summary_path,
+    } : null,
+    manual_spot_check_path: manualSpotCheckPath,
+    warnings,
+    failures,
+  };
+
+  await writeJson(path.join(QUALITY_DIR, 'quality-summary.json'), qualitySummary);
+  console.log(JSON.stringify(qualitySummary, null, 2));
+  if (failures.length > 0) {
+    process.exitCode = 1;
+  }
 }
 
-const manualSpotCheckPath = await writeManualSpotCheck(providerAudits[0]);
-const failures = [
-  ...providerAudits.flatMap((run) => run.failures),
-  ...stability.failures,
-  ...(negativeAudit?.failures ?? []),
-];
-const warnings = providerAudits.flatMap((run) => run.warnings);
-
-const qualitySummary = {
-  status: failures.length === 0 ? 'passed' : 'failed',
-  quality_run_id: QUALITY_RUN_ID,
-  artifact_dir: path.relative(REPO_ROOT, QUALITY_DIR),
-  sample_size: SAMPLE_SIZE,
-  repeats: providerRuns.length,
-  expected_role_targets: expectedTargets,
-  provider_llm_mode: PROVIDER_LLM_MODE === '1' ? 'deterministic_mock' : 'provider',
-  reused_existing_runs: EXISTING_PROVIDER_RUN_IDS.length > 0,
-  provider_runs: providerAudits.map((run, index) => ({
-    run_id: run.run_id,
-    status: run.status,
-    outcome: run.outcome,
-    llm_mode: run.llm_mode,
-    literature_count: run.literature_count,
-    sample_status: run.sample_status,
-    sample_warnings: run.sample_warnings,
-    sample_hash: run.sample_hash,
-    role_counts: run.role_counts,
-    paper_project_id: run.paper_project_id,
-    bridge_id: run.bridge_id,
-    log_path: providerRuns[index].log_path,
-    summary_path: providerRuns[index].summary_path,
-  })),
-  stability,
-  v1b_negative: negativeAudit ? {
-    ...negativeAudit,
-    log_path: negativeRun.log_path,
-    summary_path: negativeRun.summary_path,
-  } : null,
-  manual_spot_check_path: manualSpotCheckPath,
-  warnings,
-  failures,
-};
-
-await writeJson(path.join(QUALITY_DIR, 'quality-summary.json'), qualitySummary);
-console.log(JSON.stringify(qualitySummary, null, 2));
-if (failures.length > 0) {
-  process.exitCode = 1;
+async function main() {
+  if (SCENARIO_ID === SCENARIO_IDS.canary) {
+    await runCanaryScenario();
+    return;
+  }
+  if (SCENARIO_ID === SCENARIO_IDS.scaleQuality) {
+    await runScaleQualityScenario();
+    return;
+  }
+  if (SCENARIO_ID === SCENARIO_IDS.v1bNonAdvanceNegative) {
+    await runV1bNonAdvanceNegativeScenario();
+    return;
+  }
+  throw new Error(`Unsupported TOPIC_SELECTION_WORKFLOW_SCENARIO_ID: ${SCENARIO_ID}`);
 }
+
+await main();

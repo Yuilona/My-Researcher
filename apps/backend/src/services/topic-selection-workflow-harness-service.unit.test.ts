@@ -12,9 +12,16 @@ import type {
   TopicSelectionNeedDiscoveryExplorationContextPayload,
   TopicSelectionRankedCandidateDraftBatch,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-need-validation-contracts';
+import type {
+  TopicSelectionSearchPlanBlueprint,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-search-resource-contracts';
 import { AppError } from '../errors/app-error.js';
+import { InMemoryLiteratureRepository } from '../repositories/in-memory-literature-repository.js';
+import { InMemoryTitleCardManagementRepository } from '../repositories/title-card-management.repository.js';
 import { InMemoryTopicSelectionControlPlaneRepository } from '../repositories/in-memory-topic-selection-control-plane-repository.js';
 import { InMemoryTopicSelectionNeedValidationRepository } from '../repositories/in-memory-topic-selection-need-validation-repository.js';
+import { InMemoryTopicSelectionSearchResourceRepository } from '../repositories/in-memory-topic-selection-search-resource-repository.js';
+import type { LiteratureRecord } from '../repositories/literature-repository.js';
 import { TopicSelectionAgentOrchestratorService } from './topic-selection-agent-orchestrator-service.js';
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
 import {
@@ -27,7 +34,10 @@ import { TopicSelectionNeedDiscoveryArtifactBoundaryService } from './topic-sele
 import { TopicSelectionNeedDiscoveryContextCompilerService } from './topic-selection-need-discovery-context-compiler-service.js';
 import { TopicSelectionPersistNeedCandidateBatchService } from './topic-selection-persist-need-candidate-batch-service.js';
 import { TopicSelectionRankedCandidateDraftBatchValidatorService } from './topic-selection-ranked-candidate-draft-batch-validator-service.js';
+import { TopicSelectionSearchResourceService } from './topic-selection-search-resource-service.js';
 import {
+  type TopicSelectionWorkflowHarnessCreateSearchPlanInput,
+  type TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolInput,
   type TopicSelectionWorkflowHarnessGenerateNeedCandidateInput,
   TopicSelectionWorkflowHarnessService,
 } from './topic-selection-workflow-harness-service.js';
@@ -60,6 +70,19 @@ async function makeRuntime() {
     idFactory: (prefix) => `${prefix}_${++sequence}`,
     now: () => '2026-05-19T00:00:00.000Z',
   });
+  const titleCards = new InMemoryTitleCardManagementRepository();
+  const literature = new InMemoryLiteratureRepository();
+  const searchResourceRepository = new InMemoryTopicSelectionSearchResourceRepository();
+  const searchResources = new TopicSelectionSearchResourceService(
+    searchResourceRepository,
+    controlPlane,
+    titleCards,
+    literature,
+    {
+      idFactory: (prefix) => `${prefix}_${++sequence}`,
+      now: () => '2026-05-19T00:00:00.000Z',
+    },
+  );
   const artifactBoundary = new TopicSelectionNeedDiscoveryArtifactBoundaryService(controlPlane);
   const contextCompiler = new TopicSelectionNeedDiscoveryContextCompilerService(artifactBoundary, {
     now: () => '2026-05-19T00:00:00.000Z',
@@ -88,6 +111,8 @@ async function makeRuntime() {
     contextCompiler,
     generateNeedCandidateAdapter,
     artifactBoundary,
+    controlPlane,
+    searchResources,
   }, {
     now: () => '2026-05-19T00:00:00.000Z',
   });
@@ -95,7 +120,11 @@ async function makeRuntime() {
   return {
     workflowHarness,
     controlPlaneRepository,
+    literature,
     needValidationRepository,
+    searchResourceRepository,
+    searchResources,
+    titleCards,
     llmGateway,
   };
 }
@@ -305,6 +334,212 @@ function normalizedCandidateKey(batch = rankedBatch()): string {
     .slice(0, 160);
 }
 
+function makeLiterature(id: string, overrides: Partial<LiteratureRecord> = {}): LiteratureRecord {
+  return {
+    id,
+    title: `Paper ${id}`,
+    abstractText: 'A paper about robust literature retrieval.',
+    keyContentDigest: 'problem: brittle retrieval; contribution: robust evidence indexing',
+    authors: ['A. Researcher'],
+    year: 2026,
+    doiNormalized: null,
+    arxivId: null,
+    normalizedTitle: `paper ${id}`,
+    titleAuthorsYearHash: `${id}-hash`,
+    rightsClass: 'OA',
+    tags: ['retrieval'],
+    activeEmbeddingVersionId: null,
+    createdAt: '2026-05-19T00:00:00.000Z',
+    updatedAt: '2026-05-19T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+async function seedSnapshotRuntime(options: {
+  mature?: boolean;
+  missingLiterature?: boolean;
+} = {}) {
+  const ctx = await makeRuntime();
+  const titleCard = await ctx.titleCards.createTitleCard({
+    working_title: 'Risk-aware RAG adaptation',
+    brief: 'Find a bounded research need for RAG and fine-tuning decisions.',
+  });
+  const literatureId = options.missingLiterature ? 'missing_lit_001' : 'lit_001';
+  if (!options.missingLiterature) {
+    const mature = options.mature !== false;
+    await ctx.literature.createLiterature(makeLiterature('lit_001', mature
+      ? {}
+      : {
+          abstractText: null,
+          keyContentDigest: null,
+        }));
+    if (mature) {
+      await ctx.literature.upsertLiteratureSource({
+        id: 'source_001',
+        literatureId: 'lit_001',
+        provider: 'manual',
+        sourceItemId: 'manual-lit-001',
+        sourceUrl: 'file://lit_001.pdf',
+        rawPayload: {},
+        fetchedAt: '2026-05-19T00:00:00.000Z',
+      });
+    }
+    await ctx.literature.upsertPipelineState({
+      id: 'pipeline_state_001',
+      literatureId: 'lit_001',
+      citationComplete: mature,
+      abstractReady: mature,
+      keyContentReady: mature,
+      dedupStatus: mature ? 'unique' : 'duplicate',
+      updatedAt: '2026-05-19T00:00:00.000Z',
+    });
+  }
+  await ctx.titleCards.updateEvidenceBasket(titleCard.title_card_id, {
+    add_literature_ids: [literatureId],
+  });
+  const topicSeed = await ctx.searchResources.createTopicSeedFromTitleCard({
+    title_card_id: titleCard.title_card_id,
+    intent_summary: 'Seed v1a with a bounded RAG/fine-tuning research intent.',
+    scope_notes: 'Use only the current title-card topic scope.',
+    created_by: 'system',
+    policy_version_id: 'v1',
+  });
+  return {
+    ...ctx,
+    titleCard,
+    topicSeed,
+    topicSeedRef: {
+      ref_type: 'topic_seed',
+      ref_id: topicSeed.topic_seed_id,
+      version_id: topicSeed.seed_version,
+      title_card_id: titleCard.title_card_id,
+    } satisfies TopicSelectionFunctionalRef,
+  };
+}
+
+function snapshotScenarioInput(
+  input: {
+    title_card_id: string;
+    topic_seed_ref: TopicSelectionFunctionalRef;
+  },
+  overrides: Partial<TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolInput> = {},
+): TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolInput {
+  return {
+    scenario_id: 'topic-selection.real-e2e.canary.v1',
+    scenario_case_id: 'snapshot-literature-resource-pool',
+    title_card_id: input.title_card_id,
+    workflow_run_id: 'workflow_run_snapshot_001',
+    node_attempt_id: 'node_attempt_snapshot_001',
+    topic_seed_ref: input.topic_seed_ref,
+    source_scope: 'title_card_evidence_basket',
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    expectations: {
+      status: 'succeeded',
+    },
+    ...overrides,
+  };
+}
+
+async function seedSearchPlanRuntime() {
+  const ctx = await seedSnapshotRuntime();
+  const snapshotResult = await ctx.workflowHarness.runSnapshotLiteratureResourcePoolScenario(snapshotScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_ref: ctx.topicSeedRef,
+  }, {
+    workflow_run_id: 'workflow_run_search_plan_snapshot',
+    node_attempt_id: 'node_attempt_search_plan_snapshot',
+  }));
+  assert.equal(snapshotResult.node_result.status, 'succeeded');
+  assert.ok(snapshotResult.node_result.literature_resource_pool_snapshot_ref);
+  assert.ok(snapshotResult.node_result.snapshot_hash);
+  return {
+    ...ctx,
+    literatureSnapshot: snapshotResult.node_result.literature_resource_pool_snapshot!,
+    literatureSnapshotRef: snapshotResult.node_result.literature_resource_pool_snapshot_ref!,
+    snapshotHash: snapshotResult.node_result.snapshot_hash!,
+  };
+}
+
+function searchPlanBlueprint(input: {
+  title_card_id: string;
+  topic_seed_ref: TopicSelectionFunctionalRef;
+  literature_resource_pool_snapshot_ref: TopicSelectionFunctionalRef;
+  expected_snapshot_hash: string;
+}, overrides: Partial<TopicSelectionSearchPlanBlueprint> = {}): TopicSelectionSearchPlanBlueprint {
+  return {
+    schema_version: 'TopicSelectionSearchPlanBlueprint@v1',
+    blueprint_origin: 'workflow_scenario_fixture',
+    blueprint_provenance_refs: [],
+    title_card_ref: {
+      ref_type: 'title_card',
+      ref_id: input.title_card_id,
+      title_card_id: input.title_card_id,
+    },
+    topic_seed_ref: input.topic_seed_ref,
+    literature_resource_pool_snapshot_ref: input.literature_resource_pool_snapshot_ref,
+    expected_snapshot_hash: input.expected_snapshot_hash,
+    plan_version: 'v1',
+    parent_search_plan_ref: null,
+    recheck_request_ref: null,
+    query_intents: [
+      'risk-aware RAG fine-tuning evidence',
+      'retrieval poisoning counter-evidence',
+    ],
+    coverage_intents: [
+      {
+        coverage_key: 'support-method',
+        intent_type: 'support',
+        query: 'risk-aware RAG fine-tuning evidence',
+        rationale: 'Find method evidence supporting the scoped need.',
+        required: true,
+        priority: 1,
+        expected_evidence_role: 'support',
+        target_source_types: ['paper'],
+        refs: [],
+      },
+      {
+        coverage_key: 'challenge-risk',
+        intent_type: 'challenge',
+        query: 'retrieval poisoning counter-evidence',
+        rationale: 'Find adversarial or poisoning evidence that can challenge the need.',
+        required: true,
+        priority: 2,
+        expected_evidence_role: 'challenge',
+        target_source_types: ['paper'],
+        refs: [],
+      },
+    ],
+    must_check_constraints: ['include challenge evidence before need generation'],
+    exclusion_rules: ['exclude non-CS commentary'],
+    coverage_strategy: { breadth: 'small', sequencing: ['support', 'challenge'] },
+    role_coverage_expectation: { support: 1, challenge: 1 },
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    ...overrides,
+  };
+}
+
+function searchPlanScenarioInput(
+  blueprint: TopicSelectionSearchPlanBlueprint | null,
+  overrides: Partial<TopicSelectionWorkflowHarnessCreateSearchPlanInput> = {},
+): TopicSelectionWorkflowHarnessCreateSearchPlanInput {
+  return {
+    scenario_id: 'topic-selection.real-e2e.canary.v1',
+    scenario_case_id: 'create-search-plan',
+    title_card_id: blueprint?.title_card_ref.ref_id ?? 'title_card_001',
+    workflow_run_id: 'workflow_run_search_plan_001',
+    node_attempt_id: 'node_attempt_search_plan_001',
+    blueprint,
+    expectations: {
+      status: 'succeeded',
+      coverage_row_count: 2,
+      plan_version: 'v1',
+    },
+    ...overrides,
+  };
+}
+
 function scenarioInput(
   overrides: Partial<TopicSelectionWorkflowHarnessGenerateNeedCandidateInput> = {},
 ): TopicSelectionWorkflowHarnessGenerateNeedCandidateInput {
@@ -350,6 +585,544 @@ function scenarioInput(
     ...overrides,
   };
 }
+
+test('workflow harness runs create-topic-seed through the search resource authority boundary', async () => {
+  const { workflowHarness, controlPlaneRepository, searchResourceRepository, titleCards } = await makeRuntime();
+  const titleCard = await titleCards.createTitleCard({
+    working_title: 'Risk-aware RAG adaptation',
+    brief: 'Find a bounded research need for RAG and fine-tuning decisions.',
+  });
+
+  const result = await workflowHarness.runCreateTopicSeedScenario({
+    scenario_id: 'topic-selection.real-e2e.canary.v1',
+    scenario_case_id: 'topic-seed-happy-path',
+    title_card_id: titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_topic_seed_001',
+    node_attempt_id: 'node_attempt_topic_seed_001',
+    intent_summary: 'Seed v1a with a bounded RAG/fine-tuning research intent.',
+    scope_notes: 'Use only the current title-card topic scope.',
+    intent_preparation_refs: [{
+      ref_type: 'topic_seed_intent_draft',
+      ref_id: 'intent_draft_001',
+      title_card_id: titleCard.title_card_id,
+    }],
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    expectations: {
+      status: 'succeeded',
+      seed_version: 'v1',
+      intent_summary: 'Seed v1a with a bounded RAG/fine-tuning research intent.',
+    },
+  });
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.node_id, 'topic-selection.v1a.create-topic-seed.v1');
+  assert.equal(result.node_result.status, 'succeeded');
+  assert.equal(result.node_result.topic_seed?.seed_kind, 'title_card');
+  assert.equal(result.node_result.topic_seed_ref?.version_id, 'v1');
+  assert.equal(result.node_result.authority_refs.length, 1);
+  assert.equal(result.node_result.audit_refs.length, 3);
+  assert.equal(result.harness_trace_artifact.artifact_kind, 'trace');
+  assert.equal(result.harness_trace_snapshot.node_status, 'succeeded');
+
+  const persisted = await searchResourceRepository.findTopicSeedById(result.node_result.topic_seed!.topic_seed_id);
+  assert.equal(persisted?.title_card_id, titleCard.title_card_id);
+  assert.equal(persisted?.source_title_card_ref.ref_id, titleCard.title_card_id);
+  const inputSnapshot = await controlPlaneRepository.findInputSnapshotById(persisted!.input_snapshot_id!);
+  assert.equal(inputSnapshot?.source_refs.some((sourceRef) => sourceRef.ref_id === 'intent_draft_001'), true);
+  assert.deepEqual(inputSnapshot?.payload?.intent_preparation_refs, [{
+    ref_type: 'topic_seed_intent_draft',
+    ref_id: 'intent_draft_001',
+    title_card_id: titleCard.title_card_id,
+  }]);
+
+  const artifacts = await controlPlaneRepository.listArtifactRefsByWorkflowRunId('workflow_run_topic_seed_001');
+  assert.equal(artifacts.length, 1);
+  assert.equal(artifacts[0]?.payload?.payload_schema, 'WorkflowHarnessCreateTopicSeedScenarioTrace@v1');
+});
+
+test('workflow harness returns a blocked create-topic-seed result without authority on missing TitleCard', async () => {
+  const { workflowHarness, controlPlaneRepository, searchResourceRepository } = await makeRuntime();
+
+  const result = await workflowHarness.runCreateTopicSeedScenario({
+    scenario_id: 'topic-selection.real-e2e.canary.v1',
+    scenario_case_id: 'topic-seed-missing-title-card',
+    title_card_id: 'missing_title_card',
+    workflow_run_id: 'workflow_run_topic_seed_missing',
+    node_attempt_id: 'node_attempt_topic_seed_missing',
+    intent_summary: 'This should not create authority.',
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    expectations: {
+      status: 'blocked',
+      error_code: 'NOT_FOUND',
+    },
+  });
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(result.node_result.error_code, 'NOT_FOUND');
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.equal(result.node_result.topic_seed, null);
+  assert.equal(await searchResourceRepository.findTopicSeedById('topic_seed_1'), null);
+
+  const artifacts = await controlPlaneRepository.listArtifactRefsByWorkflowRunId('workflow_run_topic_seed_missing');
+  assert.equal(artifacts.length, 1);
+  assert.equal(artifacts[0]?.payload?.node_status, 'blocked');
+  assert.deepEqual(artifacts[0]?.payload?.blocker_codes, ['NOT_FOUND']);
+});
+
+test('workflow harness snapshots literature resource pool through the search resource authority boundary', async () => {
+  const ctx = await seedSnapshotRuntime();
+
+  const result = await ctx.workflowHarness.runSnapshotLiteratureResourcePoolScenario(snapshotScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_ref: ctx.topicSeedRef,
+  }, {
+    resource_sample_set_provenance_ref: {
+      ref_type: 'resource_sample_set',
+      ref_id: 'sample_set_001',
+      title_card_id: ctx.titleCard.title_card_id,
+    },
+    expectations: {
+      status: 'succeeded',
+      included_literature_count: 1,
+      content_source_count: 1,
+    },
+  }));
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.node_id, 'topic-selection.v1a.snapshot-literature-resource-pool.v1');
+  assert.equal(result.node_result.status, 'succeeded');
+  assert.equal(result.node_result.literature_resource_pool_snapshot?.topic_seed_ref.ref_id, ctx.topicSeed.topic_seed_id);
+  assert.equal(result.node_result.literature_resource_pool_snapshot_ref?.version_id, result.node_result.snapshot_version);
+  assert.equal(result.node_result.snapshot_hash?.length, 64);
+  assert.equal(result.node_result.included_literature_refs[0]?.ref_id, 'lit_001');
+  assert.equal(result.node_result.content_source_refs[0]?.ref_id, 'source_001');
+  assert.deepEqual(result.node_result.warning_codes, []);
+  assert.equal(result.node_result.authority_refs.length, 1);
+  assert.equal(result.node_result.audit_refs.length, 3);
+  assert.equal(
+    result.node_result.downstream_handoff?.literature_resource_pool_snapshot_ref.ref_id,
+    result.node_result.literature_resource_pool_snapshot?.literature_resource_pool_snapshot_id,
+  );
+  assert.equal(result.harness_trace_artifact.artifact_kind, 'trace');
+  assert.equal(
+    result.harness_trace_snapshot.payload_schema,
+    'WorkflowHarnessSnapshotLiteratureResourcePoolScenarioTrace@v1',
+  );
+
+  const persisted = await ctx.searchResourceRepository.findLiteratureResourcePoolSnapshotById(
+    result.node_result.literature_resource_pool_snapshot!.literature_resource_pool_snapshot_id,
+  );
+  assert.equal(persisted?.snapshot_hash, result.node_result.snapshot_hash);
+  const inputSnapshot = await ctx.controlPlaneRepository.findInputSnapshotById(persisted!.input_snapshot_id!);
+  assert.equal(inputSnapshot?.source_refs.some((sourceRef) => sourceRef.ref_id === 'sample_set_001'), true);
+  assert.deepEqual(inputSnapshot?.payload?.resource_sample_set_provenance_ref, {
+    ref_type: 'resource_sample_set',
+    ref_id: 'sample_set_001',
+    title_card_id: ctx.titleCard.title_card_id,
+  });
+
+  const artifacts = await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId('workflow_run_snapshot_001');
+  assert.equal(artifacts.length, 1);
+  assert.equal(
+    artifacts[0]?.payload?.payload_schema,
+    'WorkflowHarnessSnapshotLiteratureResourcePoolScenarioTrace@v1',
+  );
+});
+
+test('workflow harness blocks unsupported resource-pool source scopes before authority creation', async () => {
+  const ctx = await seedSnapshotRuntime();
+
+  const result = await ctx.workflowHarness.runSnapshotLiteratureResourcePoolScenario(snapshotScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_ref: ctx.topicSeedRef,
+  }, {
+    source_scope: 'manual_selection',
+    workflow_run_id: 'workflow_run_snapshot_unsupported_scope',
+    node_attempt_id: 'node_attempt_snapshot_unsupported_scope',
+    expectations: {
+      status: 'blocked',
+      error_code: 'UNSUPPORTED_SOURCE_SCOPE_FOR_NORMALIZED_V1A',
+      blocker_codes: ['UNSUPPORTED_SOURCE_SCOPE_FOR_NORMALIZED_V1A'],
+    },
+  }));
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(result.node_result.error_code, 'UNSUPPORTED_SOURCE_SCOPE_FOR_NORMALIZED_V1A');
+  assert.deepEqual(result.node_result.blocker_codes, ['UNSUPPORTED_SOURCE_SCOPE_FOR_NORMALIZED_V1A']);
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.equal(result.node_result.literature_resource_pool_snapshot, null);
+
+  const artifacts = await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId('workflow_run_snapshot_unsupported_scope');
+  assert.equal(artifacts.length, 1);
+  assert.equal(artifacts[0]?.payload?.node_status, 'blocked');
+});
+
+test('workflow harness preserves missing literature blocker codes without snapshot authority', async () => {
+  const ctx = await seedSnapshotRuntime({ missingLiterature: true });
+
+  const result = await ctx.workflowHarness.runSnapshotLiteratureResourcePoolScenario(snapshotScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_ref: ctx.topicSeedRef,
+  }, {
+    workflow_run_id: 'workflow_run_snapshot_missing_literature',
+    node_attempt_id: 'node_attempt_snapshot_missing_literature',
+    expectations: {
+      status: 'blocked',
+      error_code: 'GATE_CONSTRAINT_FAILED',
+      blocker_codes: ['MISSING_LITERATURE_RECORD'],
+    },
+  }));
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(result.node_result.error_code, 'GATE_CONSTRAINT_FAILED');
+  assert.deepEqual(result.node_result.blocker_codes, ['MISSING_LITERATURE_RECORD']);
+  assert.deepEqual(result.node_result.source_health_summary?.missing_literature_ids, ['missing_lit_001']);
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.deepEqual(result.node_result.audit_refs.map((ref) => ref.ref_type), [
+    'input_snapshot',
+    'readiness_gate_result',
+    'chain_transition_attempt',
+  ]);
+  assert.equal(result.node_result.literature_resource_pool_snapshot, null);
+
+  const artifacts = await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(
+    'workflow_run_snapshot_missing_literature',
+  );
+  assert.equal(artifacts.length, 1);
+  assert.deepEqual((artifacts[0]?.payload?.audit_refs as TopicSelectionFunctionalRef[]).map((ref) => ref.ref_type), [
+    'input_snapshot',
+    'readiness_gate_result',
+    'chain_transition_attempt',
+  ]);
+});
+
+test('workflow harness rejects non-concrete topic seed refs before snapshot authority creation', async () => {
+  const ctx = await seedSnapshotRuntime();
+
+  await assert.rejects(
+    () => ctx.workflowHarness.runSnapshotLiteratureResourcePoolScenario(snapshotScenarioInput({
+      title_card_id: ctx.titleCard.title_card_id,
+      topic_seed_ref: {
+        ref_type: 'topic_seed',
+        ref_id: ctx.topicSeed.topic_seed_id,
+        version_id: null,
+        title_card_id: ctx.titleCard.title_card_id,
+      },
+    })),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.statusCode === 400
+      && error.errorCode === 'INVALID_PAYLOAD',
+  );
+});
+
+test('workflow harness keeps equivalent snapshot hashes stable while preserving append-only authority refs', async () => {
+  const ctx = await seedSnapshotRuntime({ mature: false });
+  const first = await ctx.workflowHarness.runSnapshotLiteratureResourcePoolScenario(snapshotScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_ref: ctx.topicSeedRef,
+  }, {
+    workflow_run_id: 'workflow_run_snapshot_repeat_1',
+    node_attempt_id: 'node_attempt_snapshot_repeat_1',
+    expectations: {
+      status: 'succeeded',
+      included_literature_count: 1,
+      content_source_count: 0,
+      warning_codes: [
+        'INCOMPLETE_KEY_CONTENT_READY',
+        'INCOMPLETE_ABSTRACT_READY',
+        'LOW_SOURCE_COUNT',
+        'INCOMPLETE_PIPELINE_READY',
+        'STALE_OR_DUPLICATE_PIPELINE_STATUS',
+        'INCOMPLETE_FULLTEXT_READY',
+      ],
+    },
+  }));
+  const second = await ctx.workflowHarness.runSnapshotLiteratureResourcePoolScenario(snapshotScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_ref: ctx.topicSeedRef,
+  }, {
+    workflow_run_id: 'workflow_run_snapshot_repeat_2',
+    node_attempt_id: 'node_attempt_snapshot_repeat_2',
+  }));
+
+  assert.equal(first.scenario_status, 'passed');
+  assert.equal(second.scenario_status, 'passed');
+  assert.equal(first.node_result.status, 'succeeded');
+  assert.equal(second.node_result.status, 'succeeded');
+  assert.equal(first.node_result.snapshot_hash, second.node_result.snapshot_hash);
+  assert.notEqual(
+    first.node_result.literature_resource_pool_snapshot_ref?.ref_id,
+    second.node_result.literature_resource_pool_snapshot_ref?.ref_id,
+  );
+  assert.ok(first.node_result.warning_codes.includes('INCOMPLETE_KEY_CONTENT_READY'));
+  assert.ok(first.node_result.warning_codes.includes('LOW_SOURCE_COUNT'));
+});
+
+test('workflow harness creates SearchPlan from a strict blueprint without fallback semantics', async () => {
+  const ctx = await seedSearchPlanRuntime();
+  const blueprint = searchPlanBlueprint({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_ref: ctx.topicSeedRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_snapshot_hash: ctx.snapshotHash,
+  });
+
+  const result = await ctx.workflowHarness.runCreateSearchPlanScenario(searchPlanScenarioInput(blueprint, {
+    title_card_id: ctx.titleCard.title_card_id,
+  }));
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.node_id, 'topic-selection.v1a.create-search-plan.v1');
+  assert.equal(result.node_result.status, 'succeeded');
+  assert.equal(result.node_result.search_plan_ref?.version_id, 'v1');
+  assert.equal(result.node_result.coverage_row_intents.length, 2);
+  assert.equal(result.node_result.coverage_row_intents[0]?.coverage_key, 'support-method');
+  assert.equal(result.node_result.coverage_row_intents[0]?.rationale, 'Find method evidence supporting the scoped need.');
+  assert.equal(result.node_result.coverage_row_intents[0]?.priority, 1);
+  assert.equal(result.node_result.coverage_row_intents[1]?.expected_evidence_role, 'challenge');
+  assert.equal(result.node_result.authority_refs.length, 3);
+  assert.equal(result.node_result.audit_refs.some((ref) => ref.ref_type === 'workflow_run'), true);
+  assert.equal(result.harness_trace_snapshot.payload_schema, 'WorkflowHarnessCreateSearchPlanScenarioTrace@v1');
+  assert.equal(result.harness_trace_snapshot.expected_snapshot_hash, ctx.snapshotHash);
+  assert.equal(result.harness_trace_snapshot.resolved_snapshot_hash, ctx.snapshotHash);
+
+  const persisted = await ctx.searchResourceRepository.findSearchPlanById(result.node_result.search_plan!.search_plan_id);
+  assert.equal(persisted?.literature_snapshot_ref.ref_id, ctx.literatureSnapshot.literature_resource_pool_snapshot_id);
+  const inputSnapshot = await ctx.controlPlaneRepository.findInputSnapshotById(
+    result.node_result.search_plan!.input_snapshot_id!,
+  );
+  const frozenBlueprint = inputSnapshot?.payload?.search_plan_blueprint as TopicSelectionSearchPlanBlueprint | undefined;
+  assert.equal(frozenBlueprint?.schema_version, 'TopicSelectionSearchPlanBlueprint@v1');
+  assert.equal(frozenBlueprint?.expected_snapshot_hash, ctx.snapshotHash);
+  assert.equal(frozenBlueprint?.coverage_intents[1]?.expected_evidence_role, 'challenge');
+  const rows = await ctx.searchResourceRepository.listCoverageRowIntentsBySearchPlanId(
+    result.node_result.search_plan!.search_plan_id,
+  );
+  assert.equal(rows.length, 2);
+  assert.equal(rows[1]?.coverage_key, 'challenge-risk');
+
+  const artifacts = await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId('workflow_run_search_plan_001');
+  assert.equal(
+    artifacts.some((artifact) => artifact.payload?.payload_schema === 'WorkflowHarnessCreateSearchPlanScenarioTrace@v1'),
+    true,
+  );
+});
+
+test('workflow harness blocks missing SearchPlan blueprint without SearchPlan authority', async () => {
+  const ctx = await seedSearchPlanRuntime();
+
+  const result = await ctx.workflowHarness.runCreateSearchPlanScenario(searchPlanScenarioInput(null, {
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_search_plan_missing_blueprint',
+    node_attempt_id: 'node_attempt_search_plan_missing_blueprint',
+    expectations: {
+      status: 'blocked',
+      error_code: 'INVALID_PAYLOAD',
+      blocker_codes: ['MISSING_SEARCH_PLAN_BLUEPRINT'],
+      coverage_row_count: 0,
+    },
+  }));
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(result.node_result.search_plan, null);
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.deepEqual(result.node_result.blocker_codes, ['MISSING_SEARCH_PLAN_BLUEPRINT']);
+  assert.equal((await ctx.searchResourceRepository.listSearchPlansByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
+  const artifacts = await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId('workflow_run_search_plan_missing_blueprint');
+  assert.equal(artifacts[0]?.payload?.node_status, 'blocked');
+});
+
+test('workflow harness blocks malformed SearchPlan blueprint schema version', async () => {
+  const ctx = await seedSearchPlanRuntime();
+  const blueprint = searchPlanBlueprint({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_ref: ctx.topicSeedRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_snapshot_hash: ctx.snapshotHash,
+  }, {
+    schema_version: 'TopicSelectionSearchPlanBlueprint@v0',
+  });
+
+  const result = await ctx.workflowHarness.runCreateSearchPlanScenario(searchPlanScenarioInput(blueprint, {
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_search_plan_bad_schema',
+    node_attempt_id: 'node_attempt_search_plan_bad_schema',
+    expectations: {
+      status: 'blocked',
+      error_code: 'INVALID_PAYLOAD',
+      blocker_codes: ['MALFORMED_SEARCH_PLAN_BLUEPRINT'],
+      coverage_row_count: 0,
+    },
+  }));
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.equal((await ctx.searchResourceRepository.listSearchPlansByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
+});
+
+test('workflow harness blocks SearchPlan snapshot hash drift before authority creation', async () => {
+  const ctx = await seedSearchPlanRuntime();
+  const blueprint = searchPlanBlueprint({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_ref: ctx.topicSeedRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_snapshot_hash: 'wrong-snapshot-hash',
+  });
+
+  const result = await ctx.workflowHarness.runCreateSearchPlanScenario(searchPlanScenarioInput(blueprint, {
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_search_plan_hash_mismatch',
+    node_attempt_id: 'node_attempt_search_plan_hash_mismatch',
+    expectations: {
+      status: 'blocked',
+      error_code: 'VERSION_CONFLICT',
+      blocker_codes: ['SNAPSHOT_HASH_MISMATCH'],
+      coverage_row_count: 0,
+    },
+  }));
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.equal(result.harness_trace_snapshot.resolved_snapshot_hash, ctx.snapshotHash);
+  assert.deepEqual(result.node_result.blocker_codes, ['SNAPSHOT_HASH_MISMATCH']);
+});
+
+test('workflow harness blocks omitted coverage intents instead of using service fallback', async () => {
+  const ctx = await seedSearchPlanRuntime();
+  const blueprint = searchPlanBlueprint({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_ref: ctx.topicSeedRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_snapshot_hash: ctx.snapshotHash,
+  }, {
+    coverage_intents: [],
+  });
+
+  const result = await ctx.workflowHarness.runCreateSearchPlanScenario(searchPlanScenarioInput(blueprint, {
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_search_plan_no_coverage',
+    node_attempt_id: 'node_attempt_search_plan_no_coverage',
+    expectations: {
+      status: 'blocked',
+      error_code: 'GATE_CONSTRAINT_FAILED',
+      blocker_codes: ['COVERAGE_INTENTS_REQUIRED'],
+      coverage_row_count: 0,
+    },
+  }));
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.equal((await ctx.searchResourceRepository.listSearchPlansByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
+});
+
+test('workflow harness blocks fallback-derived coverage row semantics before service call', async () => {
+  const ctx = await seedSearchPlanRuntime();
+  const blueprint = searchPlanBlueprint({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_ref: ctx.topicSeedRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_snapshot_hash: ctx.snapshotHash,
+  }, {
+    coverage_intents: [
+      {
+        coverage_key: 'support-method',
+        intent_type: 'support',
+        query: 'risk-aware RAG fine-tuning evidence',
+        rationale: 'Find method evidence supporting the scoped need.',
+        required: true,
+        priority: 1,
+        target_source_types: [],
+        refs: [],
+      } as unknown as TopicSelectionSearchPlanBlueprint['coverage_intents'][number],
+    ],
+  });
+
+  const result = await ctx.workflowHarness.runCreateSearchPlanScenario(searchPlanScenarioInput(blueprint, {
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_search_plan_fallback_semantics',
+    node_attempt_id: 'node_attempt_search_plan_fallback_semantics',
+    expectations: {
+      status: 'blocked',
+      error_code: 'INVALID_PAYLOAD',
+      blocker_codes: ['COVERAGE_INTENT_FIELD_REQUIRED'],
+      coverage_row_count: 0,
+    },
+  }));
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.deepEqual(result.node_result.blocker_codes, ['COVERAGE_INTENT_FIELD_REQUIRED']);
+});
+
+test('workflow harness blocks non-object SearchPlan coverage intent before service call', async () => {
+  const ctx = await seedSearchPlanRuntime();
+  const blueprint = searchPlanBlueprint({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_ref: ctx.topicSeedRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_snapshot_hash: ctx.snapshotHash,
+  }, {
+    coverage_intents: [null] as unknown as TopicSelectionSearchPlanBlueprint['coverage_intents'],
+  });
+
+  const result = await ctx.workflowHarness.runCreateSearchPlanScenario(searchPlanScenarioInput(blueprint, {
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_search_plan_non_object_coverage',
+    node_attempt_id: 'node_attempt_search_plan_non_object_coverage',
+    expectations: {
+      status: 'blocked',
+      error_code: 'INVALID_PAYLOAD',
+      blocker_codes: ['COVERAGE_INTENT_FIELD_REQUIRED'],
+      coverage_row_count: 0,
+    },
+  }));
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.equal((await ctx.searchResourceRepository.listSearchPlansByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
+});
+
+test('workflow harness blocks SearchPlan lineage mismatch before authority creation', async () => {
+  const ctx = await seedSearchPlanRuntime();
+  const blueprint = searchPlanBlueprint({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_ref: {
+      ...ctx.topicSeedRef,
+      version_id: 'wrong-version',
+    },
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_snapshot_hash: ctx.snapshotHash,
+  });
+
+  const result = await ctx.workflowHarness.runCreateSearchPlanScenario(searchPlanScenarioInput(blueprint, {
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_search_plan_lineage_mismatch',
+    node_attempt_id: 'node_attempt_search_plan_lineage_mismatch',
+    expectations: {
+      status: 'blocked',
+      error_code: 'VERSION_CONFLICT',
+      blocker_codes: ['TOPIC_SEED_LINEAGE_MISMATCH'],
+      coverage_row_count: 0,
+    },
+  }));
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.node_result.status, 'blocked');
+  assert.deepEqual(result.node_result.blocker_codes, ['TOPIC_SEED_LINEAGE_MISMATCH']);
+  assert.equal((await ctx.searchResourceRepository.listSearchPlansByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
+});
 
 test('workflow harness runs generate-need-candidate finalize scenario through persistence boundary', async () => {
   const { workflowHarness, controlPlaneRepository, needValidationRepository, llmGateway } = await makeRuntime();

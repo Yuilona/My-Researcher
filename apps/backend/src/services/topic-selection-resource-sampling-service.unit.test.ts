@@ -618,6 +618,52 @@ test('resource sampling lets baseline-oriented LLM evidence override generic ris
   assert.ok(item?.guardrail_codes.includes('DETERMINISTIC_ROLE_CANONICALIZED_BASELINE'));
 });
 
+test('resource sampling rewrites rationale and method family when guardrails canonicalize support', async () => {
+  const scores = {
+    support: 0,
+    challenge: 0,
+    baseline: 0,
+    context: 0,
+    review: 0,
+    excluded: 0,
+  };
+  const records = [
+    literature(
+      'lit_self_verifying_rag',
+      'Agentic Retrieval-Augmented Generation for Financial Document Question Answering',
+      'We propose an agentic RAG framework with iterative retrieval-reasoning loops and self-verification for financial numerical reasoning.',
+      ['rag'],
+    ),
+  ];
+  const service = makeService({
+    classifications: [{
+      literature_ref: ref('lit_self_verifying_rag'),
+      primary_role: 'challenge',
+      topic_relevance: 0.86,
+      evidence_polarity: 'risk_or_failure',
+      role_scores: { ...scores, support: 0.12, challenge: 0.92 },
+      confidence: 0.84,
+      classification_rationale: 'Risk or failure-mode evidence for the topic-selection challenge role.',
+      method_families: ['risk_analysis'],
+    }],
+  }, records);
+
+  const result = await service.createResourceSampleSet({
+    topic_id: TOPIC_ID,
+    title_card_id: TITLE_CARD_ID,
+    sample_size: 1,
+  });
+
+  const item = result.candidate_items.find((candidate) => candidate.literature_ref.ref_id === 'lit_self_verifying_rag');
+  assert.equal(item?.selected_role, 'support');
+  assert.equal(item?.evidence_polarity, 'positive_method');
+  assert.ok(item?.guardrail_codes.includes('DETERMINISTIC_ROLE_CANONICALIZED_SUPPORT'));
+  assert.equal(item?.classification_rationale.includes('risk'), false);
+  assert.equal(item?.classification_rationale.includes('failure'), false);
+  assert.equal(item?.method_families.includes('risk_analysis'), false);
+  assert.ok(item?.method_families.includes('retrieval_augmented_generation'));
+});
+
 test('resource sampling does not force mitigation or emotional-memory papers into challenge', async () => {
   const scores = {
     support: 0,

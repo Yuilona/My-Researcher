@@ -1,7 +1,7 @@
 # 04 Verification
 
 ## 2026-05-18 Commands
-- `node --check .ai/scripts/topic-selection-real-e2e-quality-gate.mjs`
+- `node --check .ai/scripts/topic-selection-workflow-scenario-runner.mjs`
 - `node --check .ai/scripts/topic-selection-real-e2e.mjs`
 - `node --loader ts-node/esm --test src/services/topic-selection-resource-sampling-service.unit.test.ts` from `apps/backend`
 - `node --loader ts-node/esm --test src/services/topic-selection-v1b-topic-question-service.unit.test.ts` from `apps/backend`
@@ -30,4 +30,30 @@
 
 ## 2026-05-19 Cleanup Note
 - Previous scale-quality artifacts under `.ai/.tmp/topic-selection-real-e2e-quality` and child `.ai/.tmp/topic-selection-real-e2e` runs were removed as ignored temporary run output.
-- The durable quality gate remains `.ai/scripts/topic-selection-real-e2e-quality-gate.mjs`.
+- The durable quality gate now runs through `.ai/scripts/topic-selection-workflow-scenario-runner.mjs --scenario topic-selection.real-e2e.scale-quality.v1`; the old standalone script path is retired.
+
+## 2026-05-20 WorkflowScenario Runner Migration
+- Command: `node --check .ai/scripts/topic-selection-workflow-scenario-runner.mjs && node --check .ai/scripts/topic-selection-real-e2e.mjs`
+- Result: passed.
+- Initial command: `TOPIC_SELECTION_REAL_E2E_REPEATS=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_V1A_GENERATE_EXECUTION_MODE=mocked_llm pnpm topic-selection:real-e2e:quality-gate`
+- Result: failed as intended by the preserved semantic audit because a guardrail-canonicalized `support` item still carried stale risk/failure rationale from the LLM classification.
+- Fix: `TopicSelectionResourceSamplingService` now rewrites classification rationale and method families whenever deterministic guardrails canonicalize a target role.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-resource-sampling-service.unit.test.ts`
+- Result: passed; 12 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Follow-up command: `TOPIC_SELECTION_REAL_E2E_REPEATS=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_V1A_GENERATE_EXECUTION_MODE=mocked_llm pnpm topic-selection:real-e2e:quality-gate`
+- Result: passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 597 tests total, 596 passed, 1 skipped.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Successful quality run id: `real-e2e-quality-20260520172205`.
+- Coverage:
+  - scenario id `topic-selection.real-e2e.scale-quality.v1`;
+  - child scenarios `topic-selection.real-e2e.canary.v1` and `topic-selection.v1b.non-advance-negative.v1`;
+  - sample size 4 with role counts `support=1`, `challenge=1`, `baseline=1`, `context=1`;
+  - sample hash stable for the one-repeat smoke;
+  - PaperProject intake created;
+  - v1b negative stopped with `passed_v1b_non_advance`;
+  - failures: none.

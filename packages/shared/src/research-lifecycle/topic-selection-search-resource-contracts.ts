@@ -24,6 +24,17 @@ export const TOPIC_SELECTION_SEARCH_PLAN_STATUSES = [
 ] as const;
 export type TopicSelectionSearchPlanStatus = (typeof TOPIC_SELECTION_SEARCH_PLAN_STATUSES)[number];
 
+export const TOPIC_SELECTION_SEARCH_PLAN_BLUEPRINT_ORIGINS = [
+  'workflow_scenario_fixture',
+  'human_authored',
+  'codex_assisted',
+  'upstream_node',
+] as const;
+export type TopicSelectionSearchPlanBlueprintOrigin =
+  (typeof TOPIC_SELECTION_SEARCH_PLAN_BLUEPRINT_ORIGINS)[number];
+export const TOPIC_SELECTION_SEARCH_PLAN_BLUEPRINT_SCHEMA_VERSION =
+  'TopicSelectionSearchPlanBlueprint@v1' as const;
+
 export const TOPIC_SELECTION_COVERAGE_INTENT_TYPES = [
   'support',
   'challenge',
@@ -186,6 +197,39 @@ export interface TopicSelectionCoverageRowIntentRecord {
   created_at: string;
 }
 
+export interface TopicSelectionSearchPlanBlueprintCoverageIntent {
+  coverage_key: string;
+  intent_type: TopicSelectionCoverageIntentType;
+  query: string;
+  rationale: string;
+  required: boolean;
+  priority: number;
+  expected_evidence_role: TopicSelectionEvidenceRole;
+  target_source_types: string[];
+  refs: TopicSelectionFunctionalRef[];
+}
+
+export interface TopicSelectionSearchPlanBlueprint {
+  schema_version: string;
+  blueprint_origin: TopicSelectionSearchPlanBlueprintOrigin;
+  blueprint_provenance_refs: TopicSelectionFunctionalRef[];
+  title_card_ref: TopicSelectionFunctionalRef;
+  topic_seed_ref: TopicSelectionFunctionalRef;
+  literature_resource_pool_snapshot_ref: TopicSelectionFunctionalRef;
+  expected_snapshot_hash: string;
+  plan_version: string | null;
+  parent_search_plan_ref: TopicSelectionFunctionalRef | null;
+  recheck_request_ref: TopicSelectionFunctionalRef | null;
+  query_intents: string[];
+  coverage_intents: TopicSelectionSearchPlanBlueprintCoverageIntent[];
+  must_check_constraints: string[];
+  exclusion_rules: string[];
+  coverage_strategy: Record<string, unknown>;
+  role_coverage_expectation: Record<string, unknown>;
+  policy_version: string;
+  output_schema_version: string;
+}
+
 export interface TopicSelectionCoverageExecutionObservationRecord {
   coverage_execution_observation_id: string;
   search_plan_id: string;
@@ -313,9 +357,86 @@ const numberValue = { type: 'number' } as const;
 const nullableNumber = { anyOf: [numberValue, { type: 'null' }] } as const;
 const booleanValue = { type: 'boolean' } as const;
 const stringArray = { type: 'array', items: stringId } as const;
+const nonEmptyStringArray = { type: 'array', minItems: 1, items: stringId } as const;
 const objectPayload = { type: 'object', additionalProperties: true } as const;
 const functionalRefArray = { type: 'array', items: topicSelectionFunctionalRefSchema } as const;
 const recordArray = { type: 'array', items: objectPayload } as const;
+
+export const topicSelectionSearchPlanBlueprintCoverageIntentSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'coverage_key',
+    'intent_type',
+    'query',
+    'rationale',
+    'required',
+    'priority',
+    'expected_evidence_role',
+    'target_source_types',
+    'refs',
+  ],
+  properties: {
+    coverage_key: stringId,
+    intent_type: { enum: [...TOPIC_SELECTION_COVERAGE_INTENT_TYPES] },
+    query: stringId,
+    rationale: stringId,
+    required: booleanValue,
+    priority: numberValue,
+    expected_evidence_role: { enum: [...TOPIC_SELECTION_EVIDENCE_ROLES] },
+    target_source_types: stringArray,
+    refs: functionalRefArray,
+  },
+} as const;
+
+export const topicSelectionSearchPlanBlueprintSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'blueprint_origin',
+    'blueprint_provenance_refs',
+    'title_card_ref',
+    'topic_seed_ref',
+    'literature_resource_pool_snapshot_ref',
+    'expected_snapshot_hash',
+    'plan_version',
+    'parent_search_plan_ref',
+    'recheck_request_ref',
+    'query_intents',
+    'coverage_intents',
+    'must_check_constraints',
+    'exclusion_rules',
+    'coverage_strategy',
+    'role_coverage_expectation',
+    'policy_version',
+    'output_schema_version',
+  ],
+  properties: {
+    schema_version: { const: TOPIC_SELECTION_SEARCH_PLAN_BLUEPRINT_SCHEMA_VERSION },
+    blueprint_origin: { enum: [...TOPIC_SELECTION_SEARCH_PLAN_BLUEPRINT_ORIGINS] },
+    blueprint_provenance_refs: functionalRefArray,
+    title_card_ref: topicSelectionFunctionalRefSchema,
+    topic_seed_ref: topicSelectionFunctionalRefSchema,
+    literature_resource_pool_snapshot_ref: topicSelectionFunctionalRefSchema,
+    expected_snapshot_hash: stringId,
+    plan_version: nullableStringId,
+    parent_search_plan_ref: { anyOf: [topicSelectionFunctionalRefSchema, { type: 'null' }] },
+    recheck_request_ref: { anyOf: [topicSelectionFunctionalRefSchema, { type: 'null' }] },
+    query_intents: nonEmptyStringArray,
+    coverage_intents: {
+      type: 'array',
+      minItems: 1,
+      items: topicSelectionSearchPlanBlueprintCoverageIntentSchema,
+    },
+    must_check_constraints: stringArray,
+    exclusion_rules: stringArray,
+    coverage_strategy: objectPayload,
+    role_coverage_expectation: objectPayload,
+    policy_version: stringId,
+    output_schema_version: stringId,
+  },
+} as const;
 
 export const topicSelectionSourceHealthSummarySchema = {
   type: 'object',

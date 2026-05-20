@@ -186,3 +186,214 @@
   - unknown falsification `trigger_source_refs` are removed while `trigger_evidence_refs` stay strict;
   - normalization adds human-review triggers so provider-output repairs remain visible.
 - DashScope with `DASHSCOPE_API_KEY` failed authentication; mapping `DASHSCOPE_API_KEY_CODING` authenticated but returned a no-options research-slice payload, so DashScope structured-output compatibility remains unaccepted for this flow.
+
+## 2026-05-20 Real E2E Harness Migration: v1a Generate Need Candidate
+- Migrated `.ai/scripts/topic-selection-real-e2e.mjs` so the v1a `generate-need-candidate` step no longer calls the compatibility `POST /topic-selection/v1a/need-candidates` single-candidate route.
+- The script now keeps the legacy command name but executes `TopicSelectionWorkflowHarnessService.runGenerateNeedCandidateScenario` for `topic-selection.real-e2e.canary.v1`.
+- The harness path records:
+  - `GenerateNeedCandidateNodeInput`;
+  - exploration and arbiter context packets;
+  - ranked draft batch artifact;
+  - minimum schema validation report;
+  - `CandidateDraftAdmissionReport`;
+  - `SupplementalRoundRoutingDecision`;
+  - admitted-only `PersistNeedCandidateBatchCommand`;
+  - harness trace artifact;
+  - persisted `NeedCandidate` refs and candidate-pool projection ref/hash.
+- The script exposes `TOPIC_SELECTION_REAL_V1A_GENERATE_EXECUTION_MODE` with values `mocked_llm`, `codex_assisted`, or `provider_llm`.
+  - Default is `mocked_llm` when `TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1`.
+  - Default is `provider_llm` for normal real-provider E2E.
+  - Provider mode selects the model option through `TopicSelectionModelProfileRegistryService` semantics, not through ad hoc script provider/model wiring.
+- The compatibility route remains available for manual/single-candidate creation, but the real E2E canary no longer claims that route as the generate-node workflow path.
+- A mock real-flow run initially failed at v1b readiness with `blocked_by_stale_trace` because the harness-built refs omitted evidence/search/literature version ids, creating support-packet mismatch blockers.
+- Fixed the script harness input to carry the canonical `evidence_map_version`, `plan_version`, `snapshot_version`, and evidence-unit version refs into batch persistence, preserving v1a-to-v1b trace currentness.
+- Remaining migration gap: the full real-E2E script still orchestrates resource sampling, v1b, v1c, bridge, and downstream checks directly; only the v1a generate-node has been moved behind the unified harness in this slice.
+
+## 2026-05-20 WorkflowScenario Quality Runner Migration
+- Marked `.ai/scripts/topic-selection-real-e2e-quality-gate.mjs` as a legacy compatibility script and removed the file after migration.
+- Added `.ai/scripts/topic-selection-workflow-scenario-runner.mjs` as the canonical CLI runner for registered topic-selection workflow scenarios.
+- `pnpm topic-selection:real-e2e:quality-gate` now wraps `topic-selection.real-e2e.scale-quality.v1` instead of invoking a standalone quality script.
+- Extracted the useful legacy assertions into the scale-quality scenario runner:
+  - resource sample hash/status presence;
+  - selected literature count and role-target counts;
+  - sample hash and selected-set stability across repeats;
+  - selected literature role-semantics prechecks;
+  - PaperProject intake creation, idempotency, and negative status boundaries;
+  - downstream feedback/recheck counts;
+  - v1b non-advance negative stop before package, v1c, bridge, and PaperProject intake.
+- `.ai/scripts/topic-selection-real-e2e.mjs` now records the top-level `scenario_id` supplied by `TOPIC_SELECTION_WORKFLOW_SCENARIO_ID`, so child runs under the quality runner are distinguishable as `topic-selection.real-e2e.canary.v1` or `topic-selection.v1b.non-advance-negative.v1`.
+- The migrated semantic audit exposed stale resource-sampling rationale after deterministic role canonicalization; `TopicSelectionResourceSamplingService` now rewrites `classification_rationale` and `method_families` to match the final selected role whenever guardrails override the LLM role.
+- Remaining migration gap: the new scenario runner is a CLI-level scenario wrapper. Full node-by-node execution for resource sampling, v1b, v1c, bridge, and downstream still needs deeper `WorkflowHarness` sequencing in later slices.
+
+## 2026-05-20 v1a WorkflowHarness Normalization Slice Opened
+- Opened `07-v1a-workflow-harness-normalization.md` as an explicit T-088 implementation slice.
+- Governance decision: reuse T-088 for runtime implementation and T-089 for semantic node-policy source; do not create a new task package.
+- Correction: complete v1a starts at `TopicSeed`; the previous evidence-map-first framing described only the evidence-to-need subchain.
+- Scope is complete v1a after an upstream TitleCard exists:
+  - `topic-selection.v1a.create-topic-seed.v1`;
+  - `topic-selection.v1a.snapshot-literature-resource-pool.v1`;
+  - `topic-selection.v1a.create-search-plan.v1`;
+  - `topic-selection.v1a.record-search-run.v1`;
+  - `topic-selection.v1a.build-evidence-map.v1`;
+  - `topic-selection.v1a.generate-need-candidate.v1`;
+  - `topic-selection.v1a.validate-need-adjudication.v1`;
+  - `topic-selection.v1a.human-confirm-need.v1`;
+  - `topic-selection.v1a.publish-v1b-input-bundle.v1`.
+- TitleCard creation is explicitly upstream of v1a for this slice.
+- Resource sampling is explicitly excluded from complete v1a and remains the v1a input layer with a separate draft policy.
+- The target standard is automated orchestrator-callable node runners with normalized node input/result, authority refs, artifact/audit refs, warning/blocker codes, assertions, and harness trace artifacts.
+- Implementation should proceed node by node, using the existing `runGenerateNeedCandidateScenario` as the quality bar rather than accepting route-level E2E success as sufficient.
+
+## 2026-05-20 v1a WorkflowHarness Normalization: Create TopicSeed
+- Implemented `TopicSelectionWorkflowHarnessService.runCreateTopicSeedScenario` for `topic-selection.v1a.create-topic-seed.v1`.
+- The runner calls `TopicSelectionSearchResourceService.createTopicSeedFromTitleCard`; it does not write TopicSeed authority directly.
+- The runner emits one normalized result shape across success and blocked paths, including node input, node result, authority refs, audit refs, blocker codes, assertions, harness trace snapshot, and a control-plane trace artifact.
+- Blocked `AppError` paths such as missing TitleCard return a blocked harness result without TopicSeed authority refs.
+- `TopicSelectionSearchResourceService.createTopicSeedFromTitleCard` now validates direct service calls for non-empty `seed_version` and non-empty final `intent_summary` after fallback to TitleCard brief.
+- TopicSeed input snapshots now include final `intent_summary` and `seed_version` so replay/debug does not have to infer them from the persisted record.
+- `seed_kind` remains fixed to `title_card` by the service and is not accepted as caller input.
+
+## 2026-05-20 v1a WorkflowHarness Normalization: Automation Callability Dimension
+- Added automation callability as a separate node-evaluation dimension.
+- `implementation_ready` now means the node semantics are clear enough to implement, while `automation_callability=callable` means a normalized `WorkflowHarness` runner exists and can be invoked without script-local route choreography.
+- Updated `07-v1a-workflow-harness-normalization.md` so the 9-node v1a inventory records both policy status and automation callability.
+- Current callable v1a nodes are:
+  - `topic-selection.v1a.create-topic-seed.v1`;
+  - `topic-selection.v1a.generate-need-candidate.v1`.
+- `topic-selection.v1a.build-evidence-map.v1` is only `partially_callable`: its business policy is implementation-ready, but it still lacks a normalized runner.
+
+## 2026-05-20 v1a Node 2 Alignment: Snapshot Boundary And Source Of Truth
+- Locked the first two decisions for `topic-selection.v1a.snapshot-literature-resource-pool.v1` before implementing the runner.
+- The node is a deterministic authority-materialization boundary for `TopicSelectionLiteratureResourcePoolSnapshot`; it must not perform resource sampling, literature selection, evidence-role classification, or evidence-polarity judgment.
+- The TitleCard evidence basket is the single normalized source of included literature. `ResourceSampleSet` may appear only as upstream provenance after its selected literature has already been attached to the evidence basket.
+- This keeps resource sampling as the v1a input layer and prevents the snapshot runner from introducing a second content source beside the evidence basket.
+
+## 2026-05-20 v1a Node 2 Alignment: Source Scope
+- Locked N2-D03 for the upcoming `runSnapshotLiteratureResourcePoolScenario` implementation.
+- The normalized harness path supports only `source_scope=title_card_evidence_basket`.
+- `manual_selection` and `search_result` remain shared-contract compatibility values, but they are not automated v1a harness scopes until explicit resolvers exist.
+- The runner should block unsupported scopes with `UNSUPPORTED_SOURCE_SCOPE_FOR_NORMALIZED_V1A` before creating a snapshot authority.
+
+## 2026-05-20 v1a Node 2 Alignment: Resource Quality Gate
+- Locked N2-D04 for the upcoming `runSnapshotLiteratureResourcePoolScenario` implementation.
+- The runner should block only traceability and authority-creation failures: missing TopicSeed, lineage mismatch, empty evidence basket, unresolved evidence-basket literature ids, unsupported normalized source scope, or failed control-plane gate/transition.
+- Resource maturity gaps should be returned as `source_health_summary.warning_codes` rather than hard blockers: incomplete key content, abstract, source count, pipeline readiness, stale/duplicate status, and fulltext readiness.
+- This preserves downstream quality decisions for SearchPlan, EvidenceMap, NeedCandidate generation, and v1b intake instead of overloading the snapshot node.
+
+## 2026-05-20 v1a Node 2 Alignment: Snapshot Hash And Replay
+- Locked N2-D05 for the upcoming `runSnapshotLiteratureResourcePoolScenario` implementation.
+- `snapshot_hash` should identify replay-equivalent snapshot contents, not a single execution attempt.
+- Stable hash inputs should include `title_card_id`, TopicSeed ref, `source_scope`, evidence basket `updated_at`, evidence-basket-derived literature refs, content source refs, `source_health_summary`, and `policy_version_id`.
+- Runtime artifacts must be excluded from the hash: repository-generated snapshot id, control-plane ids, harness trace artifact id, `created_at`, and `created_by`.
+- The runner tests should verify that equivalent repeated runs keep the same `snapshot_hash` even when audit/control-plane ids differ.
+
+## 2026-05-20 v1a Node 2 Alignment: Harness Runner Contract
+- Locked N2-D06 for the upcoming `runSnapshotLiteratureResourcePoolScenario` implementation.
+- The runner target is `TopicSelectionWorkflowHarnessService.runSnapshotLiteratureResourcePoolScenario`.
+- The runner should delegate authority creation to `TopicSelectionSearchResourceService.createLiteratureResourcePoolSnapshot` and must not perform direct repository writes.
+- The runner should be callable as a single node with normalized node input/result shapes, including one blocked-result envelope that preserves blocker codes and avoids snapshot authority refs.
+- The node remains `not_callable` until code, trace artifact schema, and success/blocked runner tests are implemented.
+
+## 2026-05-20 v1a Node 2 Alignment: Audit And Trace Boundary
+- Locked N2-D07 for the upcoming `runSnapshotLiteratureResourcePoolScenario` implementation.
+- Control-plane records are the authoritative audit facts; harness trace is execution evidence for automation and replay debugging.
+- The runner trace schema should be `WorkflowHarnessSnapshotLiteratureResourcePoolScenarioTrace@v1`.
+- The trace should include normalized input/result, `snapshot_hash`, `source_health_summary`, authority refs, control-plane refs, blockers, warnings, and assertions.
+- The trace must not contain hidden reasoning, secrets, provider logs, raw LLM transcripts, or raw debate transcripts.
+
+## 2026-05-20 v1a Node 2 Alignment: SearchPlan Handoff
+- Locked N2-D08 for the upcoming `runSnapshotLiteratureResourcePoolScenario` implementation.
+- The runner result should produce a downstream handoff packet for SearchPlan containing snapshot ref, version, hash, source scope, literature refs, content source refs, and `source_health_summary`.
+- Node 3 must treat the `LiteratureResourcePoolSnapshot` as the resource truth and must not re-read the mutable TitleCard evidence basket, `ResourceSampleSet`, selected refs, or current search results as resource truth.
+- `snapshot_hash` is an assertion/replay check, not a replacement for the snapshot authority ref.
+- Basket changes after snapshot creation require a new snapshot before they can influence SearchPlan.
+
+## 2026-05-20 v1a Node 2 Alignment: Idempotency And Repeated Runs
+- Locked N2-D09 for the upcoming `runSnapshotLiteratureResourcePoolScenario` implementation.
+- The runner should use append-only default behavior: repeated equivalent runs may create new snapshot authority refs.
+- `snapshot_hash` is the content-equivalence key, so equivalent repeated runs must keep the same hash even when authority refs and audit/control-plane refs differ.
+- The runner must not silently reuse an existing snapshot by hash or skip control-plane evidence because an equivalent hash already exists.
+- Any future reuse-by-hash mode should be an explicit opt-in policy and runner input flag, not the default behavior.
+
+## 2026-05-20 v1a Node 2 Implementation Readiness Review
+- Locked N2-D10 and promoted `topic-selection.v1a.snapshot-literature-resource-pool.v1` to `policy_status=implementation_ready`.
+- At readiness-review time the node was not yet callable; this was superseded by the implementation slice below.
+- Complexity is moderate and bounded because the implementation can reuse the existing `TopicSelectionSearchResourceService.createLiteratureResourcePoolSnapshot` authority path and the deterministic control-plane pattern already used by `runCreateTopicSeedScenario`.
+- Implementation does not require new persistence models, schema migration, provider calls, AgentOrchestrator, Codex, or debate runtime.
+- Required implementation hardening: align `snapshot_hash` with the locked replay payload, expand `source_health_summary.warning_codes`, block unsupported harness `source_scope`, add success/blocked trace assertions, and verify append-only repeated-run behavior.
+
+## 2026-05-20 v1a WorkflowHarness Normalization: Snapshot Literature Resource Pool
+- Implemented `TopicSelectionWorkflowHarnessService.runSnapshotLiteratureResourcePoolScenario`.
+- The node is now `automation_callability=callable`.
+- The runner calls `TopicSelectionSearchResourceService.createLiteratureResourcePoolSnapshot` and keeps repository writes inside the authority service.
+- The runner emits normalized success/blocked results, assertions, downstream SearchPlan handoff data, audit refs, warning/blocker codes, and `WorkflowHarnessSnapshotLiteratureResourcePoolScenarioTrace@v1`.
+- `TopicSelectionSearchResourceService.createLiteratureResourcePoolSnapshot` now computes `snapshot_hash` from stable content replay inputs: title card, TopicSeed ref, source scope, basket timestamp, literature refs, source refs, source-health summary, and policy version.
+- Resource maturity issues now appear as source-health warnings without blocking traceable resources.
+- Equivalent repeated runs remain append-only at the authority level while preserving the same `snapshot_hash`.
+
+## 2026-05-20 v1a Node 2 Quality Review Follow-up
+- Fixed the blocked-path audit gap found during self-review: when missing literature causes the deterministic gate/transition to block, the harness result now preserves the control-plane input snapshot, readiness gate, and transition attempt refs instead of returning an audit-empty blocked result.
+- Hardened normalized Node 2 input validation so `topic_seed_ref` must be a concrete TopicSeed authority ref with `version_id` and matching `title_card_id`.
+- Hardened harness string validation so malformed programmatic inputs return `INVALID_PAYLOAD` instead of leaking runtime `TypeError`.
+- Added regression coverage for blocked audit refs and non-concrete TopicSeed refs.
+
+## 2026-05-20 v1a Node 3 Alignment: SearchPlan Boundary
+- Locked N3-D01 for `topic-selection.v1a.create-search-plan.v1`.
+- Node 3 is a deterministic authority-materialization boundary for `TopicSelectionSearchPlan` and `TopicSelectionCoverageRowIntent`; it must not execute retrieval, build EvidenceMap, judge evidence roles, generate research content, call models, call Codex, or run debate.
+- The normalized harness path consumes Node 2's `LiteratureResourcePoolSnapshot` authority as resource truth and must not re-read mutable TitleCard evidence basket state or alternate resource sources.
+- Explicit `coverage_intents` are required in the normalized harness path. Existing service/route fallback from `query_intents` to support-only coverage rows may remain as compatibility behavior, but it is not the normalized automated v1a path.
+- The runner input should carry expected `snapshot_hash` so stale or mismatched snapshot assumptions block before SearchPlan authority creation.
+
+## 2026-05-20 v1a Node 3 Alignment: Blueprint Source
+- Locked N3-D02 for `topic-selection.v1a.create-search-plan.v1`.
+- `SearchPlan blueprint` is an explicit upstream input to Node 3; the node validates and materializes it but does not generate it.
+- Allowed origins are WorkflowScenario/test fixtures, human-authored input, Codex-assisted local drafting before invocation, and a future separately defined upstream blueprint-generation node.
+- Any automatic blueprint generation must be a separate node with its own execution-mode/model policy, context contract, output contract, and verification.
+- Blueprint provenance may be recorded for traceability, but it does not become resource truth and does not replace the `LiteratureResourcePoolSnapshot` authority.
+- Corrected contract ownership: `TopicSelectionSearchPlanBlueprint` is a topic-selection module-level value contract, not an N3-only local shape.
+- In the initial slice the blueprint is frozen through Node 3 normalized input, control-plane input snapshot, and harness trace rather than persisted as a standalone authority object.
+
+## 2026-05-20 v1a Node 3 Alignment: Blueprint Minimum Contract
+- Locked N3-D03 as the module-level `TopicSelectionSearchPlanBlueprint@v1` minimum contract.
+- Required blueprint fields cover origin/provenance, TopicSeed/Snapshot lineage, expected snapshot hash, optional plan/recheck lineage, query intents, coverage intents, constraints, exclusions, coverage strategy, role coverage expectation, policy version, and output schema version.
+- Required coverage row fields are `coverage_key`, `intent_type`, `query`, `rationale`, `required`, `priority`, `expected_evidence_role`, `target_source_types`, and `refs`.
+- `target_source_types` and `refs` may be empty arrays, but must be present after normalization so Node 4 and EvidenceMap do not infer missing semantics.
+- Consumer review passed: the contract supports Node 3 materialization, Node 4 coverage bindings, EvidenceMap coverage lineage, NeedCandidate role-bundle consumption, and future blueprint-generation output without creating a second shape.
+
+## 2026-05-21 v1a Node 3 Alignment: Blueprint LLM Profiles
+- Locked N3-D04 for SearchPlanBlueprint semantic draft/review model policy.
+- `codex_assisted` is the default execution mode for both blueprint draft and review in this local personal-use workflow.
+- `provider_llm` is reserved for explicit operator upgrade or provider-quality scenarios; `mocked_llm` remains test/acceptance-only.
+- Draft profile: `topic-selection.search-plan-blueprint.draft.v1`, output `TopicSelectionSearchPlanBlueprint@v1`, OpenAI `gpt-5.4-mini` default, OpenAI `gpt-5.5` high-accuracy override, DashScope `qwen3.6-plus` budget override, normalized params `creativity=medium`, `reasoning_depth=high`, `output_budget=large`, `json_schema`.
+- Review profile: `topic-selection.search-plan-blueprint.review.v1`, output `TopicSelectionSearchPlanBlueprintReview@v1`, same provider options, normalized params `creativity=low`, `reasoning_depth=high`, `output_budget=medium`, `json_schema`.
+- Node 3 remains deterministic and does not call these profiles; it only consumes a validated blueprint and writes SearchPlan/CoverageRow authorities through the domain service.
+- Automatic provider fallback is disabled; manual rerun or explicit model-option override must create new provenance.
+
+## 2026-05-21 v1a Node 1/2 LLM Boundary Amendments
+- Applied the discussion result as amendments in the original Node 1 and Node 2 sections instead of adding an N3 follow-up decision.
+- N1-AM01 confirms `topic-selection.v1a.create-topic-seed.v1` remains deterministic with `execution_mode=none`; it does not call AgentOrchestrator, BackendLlmGateway, Codex, provider LLMs, or debate runtime.
+- Optional upstream semantic preparation may draft `intent_summary` and `scope_notes` before Node 1, but that preparation is input drafting only. It does not write `TopicSelectionTopicSeed` authority.
+- Reserved `TopicSeedIntentDraft@v1` as a possible future pre-node value artifact/profile, with no executable profile locked in this slice.
+- N2-AM01 confirms `topic-selection.v1a.snapshot-literature-resource-pool.v1` remains deterministic and model-free. Resource sampling, role classification, evidence polarity, and evidence interpretation remain upstream or downstream semantics, not Node 2 behavior.
+
+## 2026-05-21 v1a Node 3 Alignment: WorkflowHarness Runner Contract
+- Locked N3-D05 for `topic-selection.v1a.create-search-plan.v1`.
+- The normalized automation boundary is `TopicSelectionWorkflowHarnessService.runCreateSearchPlanScenario`.
+- The runner consumes `TopicSelectionSearchPlanBlueprint@v1` plus scenario/run metadata, not a bare permissive `CreateSearchPlanInput`.
+- Strict pre-service validation must block lineage mismatch, stale `expected_snapshot_hash`, empty query intents, missing coverage intents, and missing coverage-row fields before SearchPlan authority creation.
+- Route/service compatibility fallback may remain for legacy/manual API callers, but normalized harness execution must not derive coverage rows, evidence roles, coverage keys, priorities, refs, or rationales from fallback defaults.
+- Authority writes remain delegated to `TopicSelectionSearchResourceService.createSearchPlan`; the runner must not write SearchPlan or CoverageRow repositories directly.
+- The runner result must use one success/blocked envelope and record `WorkflowHarnessCreateSearchPlanScenarioTrace@v1`.
+
+## 2026-05-21 v1a Node 3 Implementation: WorkflowHarness Runner
+- Implemented `TopicSelectionWorkflowHarnessService.runCreateSearchPlanScenario` and promoted Node 3 to `automation_callability=callable`.
+- Added the shared `TopicSelectionSearchPlanBlueprint@v1` DTO/schema, including the exported schema-version constant used by the harness.
+- Required strict coverage-intent semantics before authority creation.
+- The runner validates exact blueprint schema version, TopicSeed/Snapshot/TitleCard lineage, expected snapshot hash, non-empty query intents, explicit non-empty coverage intents, and every required coverage-row semantic field.
+- Non-object coverage intent entries and blank string-array entries block as malformed blueprint payloads instead of reaching the service fallback path.
+- The runner delegates SearchPlan and CoverageRow authority writes to `TopicSelectionSearchResourceService.createSearchPlan`; it does not write repositories directly.
+- The authority service now freezes the complete SearchPlan blueprint in the control-plane input snapshot when the normalized harness supplies one.
+- The harness trace uses `WorkflowHarnessCreateSearchPlanScenarioTrace@v1` and records blueprint origin, provenance refs, expected/resolved snapshot hash, query intents, coverage intents, authority refs, blockers, warnings, and assertions.
+- Blocked results return no SearchPlan or CoverageRow authority refs and still record a harness trace artifact when trace recording is available.
+- Node 1 now accepts optional `intent_preparation_refs` for input-snapshot provenance without changing its deterministic execution mode.
+- Node 2 now accepts optional `resource_sample_set_provenance_ref` for input-snapshot provenance while excluding it from `snapshot_hash`, so resource truth remains the LiteratureResourcePoolSnapshot contents.

@@ -218,6 +218,126 @@ test('SearchPlan creation requires concrete seed and literature snapshot refs', 
   );
 });
 
+test('TopicSeed creation requires non-empty final intent summary', async () => {
+  const ctx = makeService();
+  const titleCard = await ctx.titleCards.createTitleCard({
+    working_title: 'Empty intent source',
+    brief: '',
+  });
+
+  await assert.rejects(
+    () => ctx.service.createTopicSeedFromTitleCard({
+      title_card_id: titleCard.title_card_id,
+      created_by: 'system',
+    }),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.statusCode === 409
+      && error.errorCode === 'GATE_CONSTRAINT_FAILED',
+  );
+  assert.equal(await ctx.searchResourceRepository.findTopicSeedById('topic_seed_1'), null);
+});
+
+test('TopicSeed preserves semantic preparation refs in record and input snapshot', async () => {
+  const ctx = makeService();
+  const titleCard = await ctx.titleCards.createTitleCard({
+    working_title: 'Prepared intent source',
+    brief: 'Use a prepared intent draft to seed topic selection.',
+  });
+  const preparationRef = ref('topic_seed_intent_draft', 'intent_draft_001', titleCard.title_card_id);
+
+  const seed = await ctx.service.createTopicSeedFromTitleCard({
+    title_card_id: titleCard.title_card_id,
+    intent_summary: 'Prepared intent summary.',
+    intent_preparation_refs: [preparationRef],
+    created_by: 'system',
+  });
+
+  assert.equal(seed.source_refs.some((sourceRef) => sourceRef.ref_id === 'intent_draft_001'), true);
+  const inputSnapshot = await ctx.controlPlaneRepository.findInputSnapshotById(seed.input_snapshot_id!);
+  assert.equal(inputSnapshot?.source_refs.some((sourceRef) => sourceRef.ref_id === 'intent_draft_001'), true);
+  assert.deepEqual(inputSnapshot?.payload?.intent_preparation_refs, [preparationRef]);
+});
+
+test('LiteratureResourcePoolSnapshot records maturity warnings without blocking traceable resources', async () => {
+  const ctx = makeService();
+  const titleCard = await ctx.titleCards.createTitleCard({
+    working_title: 'Immature resource pool',
+    brief: 'Snapshot traceable but immature resources.',
+  });
+  await ctx.literature.createLiterature(makeLiterature('lit_immature'));
+  const immature = (await ctx.literature.findLiteratureById('lit_immature'))!;
+  await ctx.literature.updateLiterature({
+    ...immature,
+    abstractText: null,
+    keyContentDigest: null,
+  });
+  await ctx.literature.upsertPipelineState({
+    id: 'pipeline_state_immature',
+    literatureId: 'lit_immature',
+    citationComplete: false,
+    abstractReady: false,
+    keyContentReady: false,
+    dedupStatus: 'duplicate',
+    updatedAt: '2026-05-13T00:00:00.000Z',
+  });
+  await ctx.titleCards.updateEvidenceBasket(titleCard.title_card_id, {
+    add_literature_ids: ['lit_immature'],
+  });
+  const seed = await ctx.service.createTopicSeedFromTitleCard({
+    title_card_id: titleCard.title_card_id,
+    intent_summary: 'Trace immature resources without adjudicating quality.',
+    policy_version_id: 'policy-v1',
+  });
+
+  const first = await ctx.service.createLiteratureResourcePoolSnapshot({
+    title_card_id: titleCard.title_card_id,
+    topic_seed_id: seed.topic_seed_id,
+    policy_version_id: 'policy-v1',
+  });
+  const second = await ctx.service.createLiteratureResourcePoolSnapshot({
+    title_card_id: titleCard.title_card_id,
+    topic_seed_id: seed.topic_seed_id,
+    policy_version_id: 'policy-v1',
+  });
+
+  assert.deepEqual(first.literature_refs.map((item) => item.ref_id), ['lit_immature']);
+  assert.equal(first.content_source_refs.length, 0);
+  assert.equal(first.source_health_summary.blocked_count, 0);
+  assert.deepEqual(first.source_health_summary.warning_codes, [
+    'INCOMPLETE_KEY_CONTENT_READY',
+    'INCOMPLETE_ABSTRACT_READY',
+    'LOW_SOURCE_COUNT',
+    'INCOMPLETE_PIPELINE_READY',
+    'STALE_OR_DUPLICATE_PIPELINE_STATUS',
+    'INCOMPLETE_FULLTEXT_READY',
+  ]);
+  assert.equal(first.snapshot_hash, second.snapshot_hash);
+  assert.notEqual(first.literature_resource_pool_snapshot_id, second.literature_resource_pool_snapshot_id);
+});
+
+test('LiteratureResourcePoolSnapshot hash changes when policy version changes', async () => {
+  const ctx = await seedTitleCardWithLiterature();
+  const seed = await ctx.service.createTopicSeedFromTitleCard({
+    title_card_id: ctx.titleCard.title_card_id,
+    intent_summary: 'Policy-aware snapshot hash.',
+    policy_version_id: 'policy-v1',
+  });
+
+  const first = await ctx.service.createLiteratureResourcePoolSnapshot({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_id: seed.topic_seed_id,
+    policy_version_id: 'policy-v1',
+  });
+  const second = await ctx.service.createLiteratureResourcePoolSnapshot({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_id: seed.topic_seed_id,
+    policy_version_id: 'policy-v2',
+  });
+
+  assert.notEqual(first.snapshot_hash, second.snapshot_hash);
+});
+
 test('SearchRun cannot become consumable without source health and result accounting', async () => {
   const ctx = await createBasePlan();
 
