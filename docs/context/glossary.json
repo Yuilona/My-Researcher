@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-11T00:00:00Z",
+  "updatedAt": "2026-05-20T00:00:00Z",
   "terms": [
     {
       "term": "Research Argument Control Plane",
-      "definition": "位于 title-card 与 paper-project 之间的 pre-writing 中间层，用结构化对象图、readiness、decision 与 handoff artifact 管理研究论证收敛。它是旧“论文管理”粗粒度说法中关于论证控制面的当前 canonical name。",
+      "definition": "legacy/transition asset：历史上位于 title-card 与 paper-project 之间的 pre-writing 中间层，用结构化对象图、readiness、decision 与 handoff artifact 管理研究论证收敛。自 2026-05-20 起，它不再是独立 authority domain；有效能力等待 PaperImplementation 吸收或替代后移除。",
       "scope": "research-argument",
       "aliases": [
         "research-argument",
@@ -12,6 +12,7 @@
         "pre-writing control plane"
       ],
       "see_also": [
+        "PaperImplementation",
         "ResearchArgumentWorkspace",
         "AbstractState",
         "WritingEntryPacket",
@@ -34,6 +35,244 @@
       ]
     },
     {
+      "term": "PaperImplementation",
+      "definition": "paper-implementation 是论文管理中的研究实施 authority lane，拥有 ImplementationProject、CoreMotiveVersion、ValidationCycle、ResearchWorkOrder、RunEvidenceUnit、ClaimTracePacket、ImplementationDossier 和 writing-ready decision。它吸收或替代 research-argument 的有效能力。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "paper-implementation",
+        "论文实施"
+      ],
+      "see_also": [
+        "PaperProject",
+        "Research Argument Control Plane",
+        "WritingEntryPacket",
+        "SubmissionRiskReport"
+      ]
+    },
+    {
+      "term": "ImplementationDossier",
+      "definition": "PaperImplementation 拥有的完整、权威、可追踪写作前研究材料包，包含 motive、validation cycle、work order、run evidence、result interpretation、claim trace、citation candidates、failed paths、accepted risks、boundaries 和 trace manifests。只有通过 ImplementationDossierReadinessGate 后，材料才可作为 writing-ready。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "implementation dossier",
+        "实施档案",
+        "写作前研究材料包"
+      ],
+      "see_also": [
+        "PaperImplementation",
+        "WritingEntryPacket",
+        "SubmissionRiskReport"
+      ]
+    },
+    {
+      "term": "ResearchWorkOrder",
+      "definition": "PaperImplementation 拥有的实验 command/governance envelope，规定为什么跑、服务哪个 motive/assertion/validation cycle、采用什么 run policy，并通过 refs/hashes 调用 experiment-foundation 的 RunRecipe、TrainingTaskSpec、ExternalTrainingJob 和结果对象。它不拥有实验基座对象本身。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "work order",
+        "implementation work order",
+        "研究工作单"
+      ],
+      "see_also": [
+        "PaperImplementation",
+        "ExperimentFoundation",
+        "ImplementationDossier"
+      ]
+    },
+    {
+      "term": "ExperimentFoundation",
+      "definition": "实验基座 bounded context，拥有 reusable assets、RunRecipe、TrainingTaskSpec、ExternalTrainingJob、ExperimentResult、ResultValidationReport、EvaluationFact 和 EvidenceCandidate。它提供实验执行与结果基座，但不决定 paper claim readiness 或 ImplementationDossier readiness。",
+      "scope": "experiment-foundation",
+      "aliases": [
+        "experiment-foundation",
+        "实验基座"
+      ],
+      "see_also": [
+        "ResearchWorkOrder",
+        "PaperImplementation"
+      ]
+    },
+    {
+      "term": "TraceManifest",
+      "definition": "PaperImplementation 中所有 writing-affecting objects 的强制 trace 附件，分开记录 literature、experiment、artifact、decision 和 internal interpretation lineage。缺失或破损 trace 会阻断或降级 writing-ready。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "trace manifest",
+        "trace kernel"
+      ],
+      "see_also": [
+        "PaperImplementation",
+        "ClaimTracePacket",
+        "ImplementationDossier"
+      ]
+    },
+    {
+      "term": "ClaimTracePacket",
+      "definition": "PaperImplementation 中每个 claim 进入 ImplementationDossier 前必须具备的 claim-specific trace package，记录 support、challenge、scope、citation、artifact、boundary 和 TraceManifest refs。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "claim trace",
+        "claim trace packet"
+      ],
+      "see_also": [
+        "TraceManifest",
+        "ImplementationDossier",
+        "CitationCandidate"
+      ]
+    },
+    {
+      "term": "CitationCandidate",
+      "definition": "可进入写作引用池的候选引用，只能从可引用 literature evidence 和有效 SourceLocator 生成。LLM summary、board summary、human note 和 result interpretation 不能直接生成 CitationCandidate。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "citation candidate",
+        "引用候选"
+      ],
+      "see_also": [
+        "TraceManifest",
+        "ClaimTracePacket"
+      ]
+    },
+    {
+      "term": "MemoAsEvidenceGuard",
+      "definition": "PaperImplementation 的 evidence hygiene gate，用于阻止 LLM memo、rationale、board summary、human discussion note 和 result interpretation 被当作 evidence 或 citation authority。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "memo-as-evidence guard",
+        "non-citable guard"
+      ],
+      "see_also": [
+        "TraceManifest",
+        "CitationCandidate"
+      ]
+    },
+    {
+      "term": "AgentRuntimeKernel",
+      "definition": "可跨 topic-selection 与 paper-implementation 复用的 agent runtime 基础设施层，负责 execution mode、run mode、model profile resolution、LLM gateway boundary、structured-output validation、invocation provenance、artifact refs、mock/product isolation 和 scenario evaluation。它不拥有任何业务 authority state。",
+      "scope": "agent-runtime",
+      "aliases": [
+        "agent runtime kernel",
+        "shared agent runtime"
+      ],
+      "see_also": [
+        "PaperImplementationAgentWorkflowHarness",
+        "ImplementationControlPlane"
+      ]
+    },
+    {
+      "term": "ImplementationControlPlane",
+      "definition": "PaperImplementation 的编排控制面，负责决定下一步实施 workflow、调度 agent/work order/gate/trace/decision queue/dossier readiness。它控制 flow，但不直接调用 provider、实验适配器或写 authority state。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "implementation control plane",
+        "paper implementation control plane"
+      ],
+      "see_also": [
+        "PaperImplementation",
+        "PaperImplementationAgentWorkflowHarness",
+        "ResearchWorkOrder"
+      ]
+    },
+    {
+      "term": "ImplementationInputSnapshot",
+      "definition": "PaperImplementation agent workflow 的受控输入快照，记录 motive、evidence board、validation cycle、route/probe/experiment plan、work order、run evidence、result packet、accepted risk、human decision、claim/dossier refs 及其 hashes，同时记录 excluded refs 和排除原因。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "implementation input snapshot",
+        "agent input snapshot"
+      ],
+      "see_also": [
+        "PaperImplementationAgentWorkflowHarness",
+        "TraceManifest",
+        "MemoAsEvidenceGuard"
+      ]
+    },
+    {
+      "term": "PaperImplementationAgentWorkflowHarness",
+      "definition": "PaperImplementation 拥有的 LLM workflow 外壳，强制使用 ImplementationInputSnapshot、schema/reference/trace validation、invocation audit/provenance、artifact refs 和 proposal-only output。它不能直接写 authority state 或提交实验。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "implementation agent workflow harness",
+        "agent workflow harness"
+      ],
+      "see_also": [
+        "AgentRuntimeKernel",
+        "ImplementationInputSnapshot",
+        "ImplementationControlPlane"
+      ]
+    },
+    {
+      "term": "TransitionAttempt",
+      "definition": "PaperImplementation 中正式状态变化前的 transition envelope，绑定 input refs、output refs、actor、policy versions、gate results、trace manifests、blockers、accepted risks 和 harness runs。没有 TransitionAttempt，就没有正式状态变化。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "transition attempt",
+        "state transition attempt"
+      ],
+      "see_also": [
+        "ImplementationControlPlane",
+        "StateWriter"
+      ]
+    },
+    {
+      "term": "StateWriter",
+      "definition": "PaperImplementation 中唯一允许应用 authority state mutation、version transition、lifecycle/maturity/readiness 更新的组件。Agent、harness、orchestrator 和 adapter 都不能绕过 StateWriter 直接写正式状态。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "state writer",
+        "authority state writer"
+      ],
+      "see_also": [
+        "TransitionAttempt",
+        "PaperImplementationAgentWorkflowHarness"
+      ]
+    },
+    {
+      "term": "HumanConfirmationRecord",
+      "definition": "PaperImplementation 中用于高风险 transition 的显式 human authorization artifact，绑定 confirmation target refs、TransitionAttempt、GateResult refs、reviewed source refs/hashes、decision、human rationale、confirmer identity、policy version、timestamp 和 trace manifest。它不是 authority state write。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "human confirmation",
+        "human confirmation record",
+        "human authorization record"
+      ],
+      "see_also": [
+        "TransitionAttempt",
+        "StateWriter",
+        "DecisionWorkQueueItem"
+      ]
+    },
+    {
+      "term": "DecisionWorkQueueItem",
+      "definition": "PaperImplementation 中面向产品/API 的待处理工作项，用于聚合 human review、trace repair、gate blocker、failed workflow、failed run review、stale evidence recheck 和 accepted-risk expiry。它暴露可行动任务，但不直接写 authority state。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "decision work queue item",
+        "decision queue item",
+        "human review queue item"
+      ],
+      "see_also": [
+        "HumanConfirmationRecord",
+        "ImplementationControlPlane",
+        "StateWriter"
+      ]
+    },
+    {
+      "term": "PaperImplementationWorkbench",
+      "definition": "论文管理下的 paper-implementation 桌面工作台，用于围绕 DecisionWorkQueueItem 操作实施决策、trace repair、work order、claim readiness 和 dossier/export readiness。它消费 backend read-models 并发出 commands，不是 writing editor、experiment console 或 authority state writer。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "implementation workbench",
+        "paper implementation workbench",
+        "论文实施工作台"
+      ],
+      "see_also": [
+        "PaperImplementation",
+        "DecisionWorkQueueItem",
+        "ImplementationDossier"
+      ]
+    },
+    {
       "term": "TitleCard",
       "definition": "title-card 是 paper-project 的 canonical origin surface，拥有 idea shaping、evidence basket、need/question/value/package 和 promotion decision。创建 paper-project 时使用 title_card_id，而不是 topic_id。",
       "scope": "title-card",
@@ -48,25 +287,27 @@
     },
     {
       "term": "Paper Management Label",
-      "definition": "“论文管理”是历史产品分组和当前桌面导航标签，不是当前实现的 canonical bounded-context name。当前设计中应明确写作 paper-project lifecycle、research-argument control plane 或 paper literature collection。",
+      "definition": "“论文管理”是历史产品分组和当前桌面导航标签，不是当前实现的 canonical bounded-context name。当前设计中应明确 paper-implementation、paper-project lifecycle 或 paper literature collection；research-argument 仅作为 legacy/transition asset 引用。",
       "scope": "terminology",
       "aliases": [
         "论文管理",
         "paper management"
       ],
       "see_also": [
+        "PaperImplementation",
         "PaperProject",
         "Research Argument Control Plane"
       ]
     },
     {
       "term": "ResearchArgumentWorkspace",
-      "definition": "research-argument 域的公开根对象，承载一个 title-card 对应的 pre-writing 论证空间及其当前 active branch、readiness 和 handoff refs。",
+      "definition": "legacy research-argument 的公开根对象，承载一个 title-card 对应的历史 pre-writing 论证空间及其当前 active branch、readiness 和 handoff refs。新实施 authority 不应挂在该对象下。",
       "scope": "research-argument",
       "aliases": [
         "workspace"
       ],
       "see_also": [
+        "PaperImplementation",
         "Research Branch",
         "AbstractState"
       ]
@@ -86,7 +327,7 @@
     },
     {
       "term": "ArgumentObjectGraph",
-      "definition": "保存真实研究状态的结构化对象与关系图，是抽象 readiness 视图背后的 source-of-truth 语义层。",
+      "definition": "legacy research-argument 中保存结构化对象与关系图的语义层。它可作为迁移输入或只读投影参考，但不再是 PaperImplementation 的 source of truth。",
       "scope": "research-argument",
       "aliases": [
         "argument graph",
@@ -125,12 +366,13 @@
     },
     {
       "term": "ReadyForWritingEntry",
-      "definition": "Stage 2 readiness 结论，表示 claim、evidence、protocol、boundary 与 reproducibility 已达到进入 downstream writing lane 的最低门槛。",
+      "definition": "legacy research-argument 的 Stage 2 readiness 结论。未来 writing-ready authority 应由 PaperImplementation 的 ImplementationDossierReadinessGate 决定。",
       "scope": "research-argument",
       "aliases": [
         "writing-entry ready"
       ],
       "see_also": [
+        "PaperImplementation",
         "AbstractState",
         "WritingEntryPacket",
         "SubmissionRiskReport"
@@ -213,26 +455,29 @@
     },
     {
       "term": "WritingEntryPacket",
-      "definition": "research-argument 生成的写作交接 sidecar artifact，摘要化携带 claim/evidence/baseline/protocol/repro 与 traceability refs，供 downstream writing lane 消费。",
+      "definition": "downstream writing-entry projection：从特定 ImplementationDossier 版本派生的写作入口摘要，服务下游写作/editor ergonomics。它必须指向 source dossier、readiness gate result 和 trace refs，不能独立决定 writing-ready。legacy research-argument 版本仅作为迁移参考。",
       "scope": "research-argument",
       "aliases": [
         "writing packet",
         "写作交接包"
       ],
       "see_also": [
+        "PaperImplementation",
+        "ImplementationDossier",
         "ReadyForWritingEntry",
         "SubmissionRiskReport"
       ]
     },
     {
       "term": "SubmissionRiskReport",
-      "definition": "按维度和风险项组织的 pre-writing reviewer-style 风险报告，包含 severity、detail、pointers、blockers 与 missing items。",
+      "definition": "legacy research-argument 中按维度和风险项组织的 pre-writing reviewer-style 风险报告。未来如继续使用，应作为 PaperImplementation dossier/risk projection，而不是独立 authority artifact。",
       "scope": "research-argument",
       "aliases": [
         "risk report",
         "投稿风险报告"
       ],
       "see_also": [
+        "PaperImplementation",
         "WritingEntryPacket",
         "RuleEngine",
         "CriticHub"

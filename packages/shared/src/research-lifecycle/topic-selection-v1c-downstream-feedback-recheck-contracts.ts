@@ -11,6 +11,7 @@ import type {
 
 export const TOPIC_SELECTION_DOWNSTREAM_FEEDBACK_SOURCE_KINDS = [
   'paper_project',
+  'paper_implementation',
   'writing',
   'research_argument',
   'reviewer_check',

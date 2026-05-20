@@ -249,11 +249,15 @@ function parseEnumBlocks(schemaText) {
 
 function parseModelBlocks(schemaText) {
   const models = [];
-  const re = /model\s+(\w+)\s*\{([\s\S]*?)\}/g;
+  const re = /model\s+(\w+)\s*\{/g;
   let m;
   while ((m = re.exec(schemaText)) !== null) {
     const name = m[1];
-    const body = m[2] || '';
+    const bodyStart = re.lastIndex;
+    const bodyEnd = findMatchingBlockEnd(schemaText, bodyStart);
+    if (bodyEnd < 0) continue;
+    const body = schemaText.slice(bodyStart, bodyEnd);
+    re.lastIndex = bodyEnd + 1;
 
     const fieldLines = [];
     const modelAttrLines = [];
@@ -272,6 +276,48 @@ function parseModelBlocks(schemaText) {
     models.push({ name, fieldLines, modelAttrLines });
   }
   return models;
+}
+
+function findMatchingBlockEnd(source, bodyStart) {
+  let depth = 1;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = bodyStart; i < source.length; i += 1) {
+    const ch = source[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') {
+      depth += 1;
+      continue;
+    }
+    if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return i;
+      }
+    }
+  }
+
+  return -1;
 }
 
 export function parsePrismaSchema(schemaTextRaw) {

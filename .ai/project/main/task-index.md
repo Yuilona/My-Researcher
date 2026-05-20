@@ -96,7 +96,19 @@ Project: `main`
 | T-084 topic-selection-real-e2e-canary | done | F-000 | dev-docs/active/topic-selection-real-e2e-canary |
 | T-085 topic-selection-real-e2e-scale-quality | done | F-000 | dev-docs/active/topic-selection-real-e2e-scale-quality |
 | T-086 research-argument-writing-entry-bridge-acceptance | done | F-001 | dev-docs/active/research-argument-writing-entry-bridge-acceptance |
-| T-087 topic-selection-desktop-workbench-v1abc | planned | F-001 | dev-docs/active/topic-selection-desktop-workbench-v1abc |
-| T-088 topic-selection-workflow-runtime-foundation | planned | F-001 | dev-docs/active/topic-selection-workflow-runtime-foundation |
+| T-087 topic-selection-desktop-workbench-v1abc | archived | F-001 | dev-docs/archive/topic-selection-desktop-workbench-v1abc |
+| T-088 topic-selection-workflow-runtime-foundation | in-progress | F-001 | dev-docs/active/topic-selection-workflow-runtime-foundation |
 | T-089 topic-selection-agent-workflow-review | planned | F-001 | dev-docs/active/topic-selection-agent-workflow-review |
+| T-090 experiment-foundation-capability-validation | planned | F-001 | dev-docs/active/experiment-foundation-capability-validation |
+| T-091 paper-implementation-full-landing | planned | F-001 | dev-docs/active/paper-implementation-full-landing |
+| T-092 paper-implementation-contracts-and-gap-map | done | F-001 | dev-docs/active/paper-implementation-contracts-and-gap-map |
+| T-093 paper-implementation-intake-bootstrap | done | F-001 | dev-docs/active/paper-implementation-intake-bootstrap |
+| T-094 paper-implementation-motive-evidence-board | planned | F-001 | dev-docs/active/paper-implementation-motive-evidence-board |
+| T-095 paper-implementation-validation-cycle-planning | planned | F-001 | dev-docs/active/paper-implementation-validation-cycle-planning |
+| T-096 paper-implementation-workorder-experiment-bridge | planned | F-001 | dev-docs/active/paper-implementation-workorder-experiment-bridge |
+| T-097 paper-implementation-trace-kernel | done | F-001 | dev-docs/active/paper-implementation-trace-kernel |
+| T-098 paper-implementation-result-claim-dossier | planned | F-001 | dev-docs/active/paper-implementation-result-claim-dossier |
+| T-099 paper-implementation-ai-workflow-harness | planned | F-001 | dev-docs/active/paper-implementation-ai-workflow-harness |
+| T-100 paper-implementation-desktop-workbench | planned | F-001 | dev-docs/active/paper-implementation-desktop-workbench |
+| T-101 paper-implementation-contract-evaluation-suite | planned | F-001 | dev-docs/active/paper-implementation-contract-evaluation-suite |
 <!-- AUTO-GENERATED:END task-index -->

@@ -42,18 +42,21 @@
 - 把评测设计提升到公平对标、统计稳健与可复现可审计的基线水平。
 - 缩短从初稿到投稿前可交付状态的迭代周期。
 
-## Canonical Research Argument References
-- The formal SSOT for the pre-writing research-argument layer lives in:
+## Legacy Research Argument References
+- The historical SSOT for the pre-writing research-argument layer lives in:
   - `docs/project/architecture/research-argument-framework.md`
   - `docs/project/architecture/research-argument-data-schema.md`
   - `docs/project/architecture/research-argument-planner-spec.md`
   - `docs/project/product/research-argument-control-plane-ui.md`
+- As of 2026-05-20, `research-argument` is a legacy/transition asset. It is not the forward authority for implementation readiness or writing-prep decisions.
+- Useful `research-argument` capabilities should be absorbed or replaced by `PaperImplementation`, then the remaining assets should be removed through a dedicated decommission task.
 - `research-varify/` remains an intake directory only and is not the long-term SSOT for runtime, context, or shared contracts.
 
 ## Canonical Terminology Boundaries
 - `title-card` owns idea shaping, evidence basket, need/question/value/package, and promotion origin identity.
 - `paper-project` owns the downstream paper lifecycle container: paper id, version spine, stage/release gates, artifact bundle, writing package, and paper literature links.
-- `research-argument` owns the pre-writing control plane: argument object graph, readiness, decision log, submission risk report, and writing handoff packet.
+- `paper-implementation` owns the research implementation authority: motive versions, validation cycles, work orders, run evidence, result interpretation, claim trace, implementation dossier, and writing-ready decisions.
+- `research-argument` is legacy/transition only: historical graph/readiness/risk/writing-handoff assets may be migrated, projected, or replaced, but must not be extended as a parallel authority domain.
 - `topic_id` remains valid for literature topic scope, retrieval, topic settings, and auto-pull contexts. It is not the origin field for `POST /paper-projects`; use `title_card_id` there.
 - `论文管理` / `paper management` is a legacy product bucket or desktop navigation label. Current implementation docs must use one of the canonical names above.
 
@@ -141,9 +144,10 @@ The original eight sub-functions remain historical requirement input. Current im
 2. 题目卡 / title-card
    - Internal: 方向候选、证据篮、need/question/value/package、promotion decision。
    - Integrations: 外部文献检索与趋势摘要接口（用于候选方向补充证据）。
-3. 研究论证控制面 / research-argument
-   - Internal: 论证对象图、readiness、decision log、submission risk report、writing entry packet。
-   - Integrations: LLM 辅助结构化生成与审阅接口。
+3. 论文实施 / paper-implementation
+   - Internal: ImplementationProject、CoreMotiveVersion、ValidationCycle、ResearchWorkOrder、RunEvidenceUnit、ClaimTracePacket、ImplementationDossier、DossierReadinessGate。
+   - Integrations: topic-selection intake、experiment-foundation execution/evidence substrate、downstream writing lane。
+   - Legacy transition: historical `research-argument` graph/readiness/risk/writing-handoff assets are migration or replacement inputs only.
 4. 理论框架与研究设计
    - Internal: 假设与边界管理、问题定义模板、机制到证据映射。
    - Integrations: LLM 辅助结构化生成与审阅接口。
@@ -165,7 +169,8 @@ The original eight sub-functions remain historical requirement input. Current im
 
 Note:
 - Do not reintroduce `论文管理` as a catch-all module in current implementation plans.
-- Use `paper-project` when referring to lifecycle container behavior, `research-argument` when referring to pre-writing readiness/control behavior, and `paper literature collection` when referring to the current desktop view.
+- Use `paper-implementation` when referring to research implementation authority, `paper-project` when referring to lifecycle container behavior, and `paper literature collection` when referring to the current desktop view.
+- Use `research-argument` only for legacy/transition assets pending absorption, replacement, or removal.
 
 ## Data and integrations (high level)
 - Core entities: Project、Document、Section、Claim、Evidence、ClaimEvidence、Baseline、Protocol、ReproItem、Issue、Report。

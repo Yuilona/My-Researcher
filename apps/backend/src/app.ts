@@ -7,6 +7,7 @@ import { LiteratureBackfillController } from './controllers/literature-backfill-
 import { LiteratureContentProcessingSettingsController } from './controllers/literature-content-processing-settings-controller.js';
 import { LiteratureFulltextAcquisitionController } from './controllers/literature-fulltext-acquisition-controller.js';
 import { LiteratureController } from './controllers/literature-controller.js';
+import { PaperImplementationController } from './controllers/paper-implementation-controller.js';
 import { TopicSettingsController } from './controllers/topic-settings-controller.js';
 import { TopicSelectionResourceSamplingController } from './controllers/topic-selection-resource-sampling-controller.js';
 import { TopicSelectionV1aController } from './controllers/topic-selection-v1a-controller.js';
@@ -17,6 +18,8 @@ import { InMemoryAutoPullRepository } from './repositories/in-memory-auto-pull-r
 import { InMemoryExperimentFoundationExecutionRepository } from './repositories/in-memory-experiment-foundation-execution-repository.js';
 import { InMemoryExperimentFoundationRepository } from './repositories/in-memory-experiment-foundation-repository.js';
 import { InMemoryLiteratureRepository } from './repositories/in-memory-literature-repository.js';
+import { InMemoryPaperImplementationRepository } from './repositories/in-memory-paper-implementation-repository.js';
+import { InMemoryPaperImplementationTraceRepository } from './repositories/in-memory-paper-implementation-trace-repository.js';
 import { ResearchLifecycleController } from './controllers/research-lifecycle-controller.js';
 import { InMemoryResearchLifecycleRepository } from './repositories/in-memory-research-lifecycle-repository.js';
 import { InMemoryTopicSelectionControlPlaneRepository } from './repositories/in-memory-topic-selection-control-plane-repository.js';
@@ -42,6 +45,8 @@ import { PrismaAutoPullRepository } from './repositories/prisma/prisma-auto-pull
 import { PrismaExperimentFoundationExecutionRepository } from './repositories/prisma/prisma-experiment-foundation-execution-repository.js';
 import { PrismaExperimentFoundationRepository } from './repositories/prisma/prisma-experiment-foundation-repository.js';
 import { PrismaLiteratureRepository } from './repositories/prisma/prisma-literature-repository.js';
+import { PrismaPaperImplementationRepository } from './repositories/prisma/prisma-paper-implementation-repository.js';
+import { PrismaPaperImplementationTraceRepository } from './repositories/prisma/prisma-paper-implementation-trace-repository.js';
 import { PrismaResearchLifecycleRepository } from './repositories/prisma/prisma-research-lifecycle-repository.js';
 import { InMemoryTitleCardManagementRepository } from './repositories/title-card-management.repository.js';
 import { PrismaTitleCardManagementRepository } from './repositories/prisma/prisma-title-card-management-repository.js';
@@ -70,6 +75,7 @@ import { registerLiteratureBackfillRoutes } from './routes/literature-backfill-r
 import { registerLiteratureContentProcessingSettingsRoutes } from './routes/literature-content-processing-settings-routes.js';
 import { registerLiteratureFulltextAcquisitionRoutes } from './routes/literature-fulltext-acquisition-routes.js';
 import { registerLiteratureRoutes } from './routes/literature-routes.js';
+import { registerPaperImplementationRoutes } from './routes/paper-implementation-routes.js';
 import { registerResearchLifecycleRoutes } from './routes/research-lifecycle-routes.js';
 import { registerTitleCardManagementRoutes } from './routes/title-card-management.js';
 import { registerTopicSettingsRoutes } from './routes/topic-settings-routes.js';
@@ -81,6 +87,8 @@ import type { AutoPullRepository } from './repositories/auto-pull-repository.js'
 import type { ExperimentFoundationExecutionRepository } from './repositories/experiment-foundation-execution.repository.js';
 import type { ExperimentFoundationRepository } from './repositories/experiment-foundation.repository.js';
 import type { LiteratureRepository } from './repositories/literature-repository.js';
+import type { PaperImplementationRepository } from './repositories/paper-implementation.repository.js';
+import type { PaperImplementationTraceRepository } from './repositories/paper-implementation-trace.repository.js';
 import type { ResearchLifecycleRepository } from './repositories/research-lifecycle-repository.js';
 import type { TitleCardManagementRepository } from './repositories/title-card-management.repository.js';
 import type { TopicSelectionControlPlaneRepository } from './repositories/topic-selection-control-plane.repository.js';
@@ -112,6 +120,11 @@ import { LiteratureFulltextAcquisitionService } from './services/literature-full
 import { LiteratureService } from './services/literature-service.js';
 import { LiteratureContentProcessingSettingsService } from './services/literature-content-processing-settings-service.js';
 import { BackendLlmGateway } from './services/llm-gateway.js';
+import {
+  PaperImplementationIntakeBootstrapService,
+  type PaperImplementationDownstreamFeedbackService,
+} from './services/paper-implementation-intake-bootstrap-service.js';
+import { PaperImplementationTraceKernelService } from './services/paper-implementation-trace-kernel-service.js';
 import { ResearchLifecycleService } from './services/research-lifecycle-service.js';
 import {
   TitleCardManagementService,
@@ -130,7 +143,10 @@ import { TopicSelectionV1bResearchSliceService } from './services/topic-selectio
 import { TopicSelectionV1bTopicPackageService } from './services/topic-selection-v1b-topic-package-service.js';
 import { TopicSelectionV1bTopicQuestionService } from './services/topic-selection-v1b-topic-question-service.js';
 import { TopicSelectionV1bValueAssessmentService } from './services/topic-selection-v1b-value-assessment-service.js';
-import { TopicSelectionV1cDownstreamFeedbackRecheckService } from './services/topic-selection-v1c-downstream-feedback-recheck-service.js';
+import {
+  TopicSelectionV1cDownstreamFeedbackRecheckService,
+  type TopicSelectionPaperProjectBridgeHandoffProvider,
+} from './services/topic-selection-v1c-downstream-feedback-recheck-service.js';
 import { TopicSelectionV1cHumanPromotionDecisionService } from './services/topic-selection-v1c-human-promotion-decision-service.js';
 import { TopicSelectionV1cPaperProjectBridgeService } from './services/topic-selection-v1c-paper-project-bridge-service.js';
 import { TopicSelectionV1cPromotionGateService } from './services/topic-selection-v1c-promotion-gate-service.js';
@@ -146,6 +162,10 @@ export type BuildAppOptions = {
   topicSelectionResourceSamplingLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
   topicSelectionV1bLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
   topicSelectionV1cPromotionGateLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
+  paperImplementationRepository?: PaperImplementationRepository;
+  paperImplementationTraceRepository?: PaperImplementationTraceRepository;
+  paperImplementationBridgeService?: TopicSelectionPaperProjectBridgeHandoffProvider;
+  paperImplementationDownstreamFeedbackService?: PaperImplementationDownstreamFeedbackService;
 };
 
 export function resolveTitleCardManagementStoreConfig(): {
@@ -155,6 +175,7 @@ export function resolveTitleCardManagementStoreConfig(): {
   titleCardStrategy: RepositoryStrategy;
   applicationSettingsStrategy: RepositoryStrategy;
   experimentFoundationStrategy: RepositoryStrategy;
+  paperImplementationStrategy: RepositoryStrategy;
 } {
   const titleCardStrategy = resolveRepositoryStrategy(
     process.env.TITLE_CARD_REPOSITORY,
@@ -183,6 +204,11 @@ export function resolveTitleCardManagementStoreConfig(): {
     process.env.RESEARCH_LIFECYCLE_REPOSITORY,
     process.env.TITLE_CARD_REPOSITORY,
   );
+  const paperImplementationStrategy = resolveRepositoryStrategy(
+    process.env.PAPER_IMPLEMENTATION_REPOSITORY,
+    process.env.TITLE_CARD_REPOSITORY,
+    process.env.RESEARCH_LIFECYCLE_REPOSITORY,
+  );
 
   return {
     researchLifecycleStrategy,
@@ -191,6 +217,7 @@ export function resolveTitleCardManagementStoreConfig(): {
     titleCardStrategy,
     applicationSettingsStrategy,
     experimentFoundationStrategy,
+    paperImplementationStrategy,
   };
 }
 
@@ -245,6 +272,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const topicSelectionV1cDownstreamFeedbackRecheckRepository = createTopicSelectionV1cDownstreamFeedbackRecheckRepository(
     storeConfig.titleCardStrategy,
   );
+  const paperImplementationRepository = options.paperImplementationRepository
+    ?? createPaperImplementationRepository(storeConfig.paperImplementationStrategy);
+  const paperImplementationTraceRepository = options.paperImplementationTraceRepository
+    ?? createPaperImplementationTraceRepository(storeConfig.paperImplementationStrategy);
   const auditStore = new FileGovernanceDeliveryAuditStore({
     filePath: process.env.GOVERNANCE_DELIVERY_AUDIT_LOG_PATH,
   });
@@ -391,6 +422,21 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     paperProjectBridgeService: topicSelectionV1cPaperProjectBridgeService,
     recheckRiskMemoryService: topicSelectionRecheckRiskMemoryService,
   });
+  const paperImplementationIntakeBootstrapService = new PaperImplementationIntakeBootstrapService({
+    repository: paperImplementationRepository,
+    paperProjectBridgeService: options.paperImplementationBridgeService
+      ?? topicSelectionV1cPaperProjectBridgeService,
+    downstreamFeedbackService: options.paperImplementationDownstreamFeedbackService
+      ?? topicSelectionV1cDownstreamFeedbackRecheckService,
+  });
+  const paperImplementationTraceKernelService = new PaperImplementationTraceKernelService({
+    projectRepository: paperImplementationRepository,
+    traceRepository: paperImplementationTraceRepository,
+  });
+  const paperImplementationController = new PaperImplementationController(
+    paperImplementationIntakeBootstrapService,
+    paperImplementationTraceKernelService,
+  );
   const topicSelectionV1cController = new TopicSelectionV1cController(
     topicSelectionV1cPromotionInputService,
     topicSelectionV1cPromotionGateService,
@@ -495,6 +541,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     await registerTopicSelectionV1aRoutes(instance, topicSelectionV1aController, topicSelectionResourceSamplingController);
     await registerTopicSelectionV1bRoutes(instance, topicSelectionV1bController);
     await registerTopicSelectionV1cRoutes(instance, topicSelectionV1cController);
+    await registerPaperImplementationRoutes(instance, paperImplementationController);
     await registerLiteratureAcquisitionSettingsRoutes(instance, literatureAcquisitionSettingsController);
     await registerLiteratureContentProcessingSettingsRoutes(instance, literatureContentProcessingSettingsController);
     await registerLiteratureBackfillRoutes(instance, literatureBackfillController);
@@ -797,6 +844,28 @@ function createTopicSelectionV1cDownstreamFeedbackRecheckRepository(
   return new InMemoryTopicSelectionV1cDownstreamFeedbackRecheckRepository();
 }
 
+function createPaperImplementationRepository(
+  strategy: RepositoryStrategy,
+): PaperImplementationRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaPaperImplementationRepository(prisma);
+  }
+
+  return new InMemoryPaperImplementationRepository();
+}
+
+function createPaperImplementationTraceRepository(
+  strategy: RepositoryStrategy,
+): PaperImplementationTraceRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaPaperImplementationTraceRepository(prisma);
+  }
+
+  return new InMemoryPaperImplementationTraceRepository();
+}
+
 function createAutoPullScheduler(service: AutoPullService): AutoPullScheduler | null {
   const enabled = process.env.AUTO_PULL_SCHEDULER_ENABLED ?? 'true';
   const normalized = enabled.trim().toLowerCase();
@@ -843,6 +912,7 @@ function assertTitleCardManagementStoreCompatibility(config: {
   titleCardStrategy: RepositoryStrategy;
   applicationSettingsStrategy: RepositoryStrategy;
   experimentFoundationStrategy: RepositoryStrategy;
+  paperImplementationStrategy: RepositoryStrategy;
 }) {
   if (config.titleCardStrategy !== 'prisma') {
     return;
@@ -854,9 +924,10 @@ function assertTitleCardManagementStoreCompatibility(config: {
     || config.titleCardStrategy !== config.autoPullStrategy
     || config.titleCardStrategy !== config.applicationSettingsStrategy
     || config.titleCardStrategy !== config.experimentFoundationStrategy
+    || config.titleCardStrategy !== config.paperImplementationStrategy
   ) {
     throw new Error(
-      'When title-card management uses Prisma, TITLE_CARD_REPOSITORY, RESEARCH_LIFECYCLE_REPOSITORY, AUTO_PULL_REPOSITORY, APPLICATION_SETTINGS_REPOSITORY, and EXPERIMENT_FOUNDATION_REPOSITORY must resolve to the same strategy.',
+      'When title-card management uses Prisma, TITLE_CARD_REPOSITORY, RESEARCH_LIFECYCLE_REPOSITORY, AUTO_PULL_REPOSITORY, APPLICATION_SETTINGS_REPOSITORY, EXPERIMENT_FOUNDATION_REPOSITORY, and PAPER_IMPLEMENTATION_REPOSITORY must resolve to the same strategy.',
     );
   }
 }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-17T23:40:06.633Z",
+  "updatedAt": "2026-05-20T22:02:14.831Z",
   "artifacts": [
     {
       "id": "api-openapi",
@@ -11,8 +11,8 @@
       "tags": [
         "api"
       ],
-      "checksumSha256": "10d71b81260cc1be2b07a03944598f9e9dc17cbe5436adcedfef6cf2ab9a41fc",
-      "lastUpdated": "2026-05-16T00:33:36.475Z",
+      "checksumSha256": "faa9973e5a0010cb77376d2897bc86803ca526b03aae8c5476f31c5891a89c81",
+      "lastUpdated": "2026-05-20T08:50:40.359Z",
       "source": {
         "kind": "manual",
         "notes": "Edit the contract file; then run ctl-context touch."
@@ -29,8 +29,8 @@
         "index",
         "llm"
       ],
-      "checksumSha256": "1440bae53e3c156a98ae647c6d3bdbf8ae4c2c86f3ff074016d7d80908cf9944",
-      "lastUpdated": "2026-05-16T00:33:36.477Z",
+      "checksumSha256": "658fb51224b948ede5a53fe66b071a22717a12268685f27b9156e396a5d9d456",
+      "lastUpdated": "2026-05-20T08:50:40.361Z",
       "source": {
         "kind": "command",
         "command": "node .ai/scripts/ctl-api-index.mjs generate --touch",
@@ -47,8 +47,8 @@
         "glossary",
         "llm"
       ],
-      "checksumSha256": "ebf3747f3ea9fc4706a4da4caaafa208fbc0476068c92e47f4e17c6e8905cde5",
-      "lastUpdated": "2026-05-11T11:02:04.581Z",
+      "checksumSha256": "d3e855ac8bcbcfaeb4952af418669ad50e1120e1a073fda09dec9a8616cfad92",
+      "lastUpdated": "2026-05-20T09:53:45.744Z",
       "source": {
         "kind": "manual",
         "notes": "Edit via ctl-context add-term/remove-term; then run ctl-context touch."
@@ -80,8 +80,8 @@
       "tags": [
         "db"
       ],
-      "checksumSha256": "86dc8ac7ef9cd54feda7c4c26404ecf8221ea650df0507dcd6667f88732d1775",
-      "lastUpdated": "2026-05-17T23:40:06.631Z",
+      "checksumSha256": "06b9f0469263beb5ec0c246759d233f818063ec882287516ed61971374381cf4",
+      "lastUpdated": "2026-05-20T22:02:14.828Z",
       "source": {
         "kind": "command",
         "command": "node .ai/scripts/ctl-db-ssot.mjs sync-to-context",

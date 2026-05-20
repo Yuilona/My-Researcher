@@ -2,9 +2,17 @@
 
 ## Status
 - State: in-progress
-- Next step: `T-086` 已完成 backend-first writing-entry bridge；下一步需决定是否继续拆 UI review surface 或 planner/critic generation。
+- Mode: legacy/transition
+- Next step: do not continue UI review surface or planner/critic generation under `research-argument`; future work should inventory, migrate, replace, or decommission these assets under `PaperImplementation`.
+
+## Supersession Notice
+- As of 2026-05-20, `research-argument` is no longer an independent authority domain.
+- `PaperImplementation` is the forward authority for motive versions, validation cycles, claim trace, dossier readiness, and writing-prep decisions.
+- Existing `research-argument` docs, contracts, persistence, services, and tests remain as legacy/transition assets until useful capabilities are absorbed or replaced by `PaperImplementation`.
+- After that absorption/replacement is complete, remaining `research-argument` assets should be removed through a dedicated decommission task.
 
 ## Goal
+- Historical goal, retained for context:
 - 为仓库建立一条新的 pre-writing research argument control plane 主线，协调 `title-card` 上游证据链与 `paper-project` 下游写作容器之间的 research convergence。
 - 完整覆盖 research-argument 这一需求切片，并补齐投稿前风险报告与写作交接输出。
 - 通过 umbrella task 固定子任务拆分、执行顺序、跨任务边界、验证口径与 handoff 方式。
@@ -38,7 +46,8 @@
 - [x] `T-026` / `T-027` / `T-028` 已从 active pending stub 收束到本 umbrella backlog；它们未实施、未验证，不再被视为独立 active work。
 - [x] 已做新的 product/engineering 决策：先以 `T-086` 实现 backend-first writing-entry bridge，不推进 UI 或 planner。
 - [x] 已生成并完成新的 scoped implementation plan：`dev-docs/active/research-argument-writing-entry-bridge-acceptance/`。
-- [ ] 后续若继续推进 UI review surface 或 planner/critic generation，需要再开新的 scoped implementation task。
+- [x] 2026-05-20 supersession decision recorded: do not continue `research-argument` as independent authority.
+- [ ] Future work, if needed, must be scoped as `PaperImplementation` migration/replacement/decommission work.
 
 ## Child-task ownership
 - Completed:
@@ -49,4 +58,6 @@
   - `T-027`: desktop control plane, risk report review, handoff packet preview
   - `T-028`: planner / critic / rule engine / risk-report assembly / async execution enhancement
 - Current rule:
-  - Do not reopen `T-026` / `T-027` / `T-028` as independent active tasks. If this work resumes, create one fresh, scoped implementation task from this umbrella.
+  - Do not reopen `T-026` / `T-027` / `T-028` as independent active tasks.
+  - Do not create new `research-argument` UI/planner/critic child tasks.
+  - If a useful capability resumes, create it under `PaperImplementation` as migration, replacement, projection, or decommission work.

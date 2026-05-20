@@ -3,11 +3,18 @@
 ## Purpose
 - 固定 `Research Argument Control Plane` 在当前产品中的位置、边界、 ownership split 与 phased delivery 约束，避免后续子任务重复拍板。
 
+## Supersession / Legacy Status
+- `research-argument` is a legacy/transition asset as of 2026-05-20.
+- It no longer owns pre-writing implementation authority.
+- `PaperImplementation` owns motive/version, validation cycle, research work order, run evidence, result interpretation, claim trace, implementation dossier, and writing-ready decisions.
+- Existing `ArgumentObjectGraph`, `AbstractState`, `StateSynthesizer`, readiness checks, `WritingEntryPacket`, and `SubmissionRiskReport` are migration/replacement candidates only.
+- New authority behavior must not be added under this boundary.
+
 ## Architectural position
 - Upstream owners:
   - `T-014 automated-topic-management`
   - `T-021 topic-management-workbench-ui`
-- New middle layer:
+- Historical middle layer:
   - `ArgumentObjectGraph`
   - `AbstractState`
   - `StateSynthesizer`
@@ -16,10 +23,11 @@
 - Downstream owner:
   - 现有 `paper-project` lifecycle / stage-gate / writing-package 主线
 
-## Frozen ownership split
+## Legacy ownership split
 - `title-card` 相关公开对象、路由、UI workflow 仍由 `T-014` / `T-021` 维护。
 - `paper-project` 相关公开对象、version spine、release gate 仍由现有 research-lifecycle 维护。
-- 本任务新增的 canonical surface 是 research-argument domain；它可以读取上游并桥接下游，但不得重定义两侧已有公开语义。
+- `research-argument` 现为 legacy/transition surface；它可以作为迁移输入或只读投影来源，但不得继续作为 canonical authority domain。
+- `PaperImplementation` is the replacement authority for implementation readiness and writing-prep decisions.
 
 ## Frozen interface seam
 - Input seam:
@@ -41,6 +49,8 @@
   - no rewrite of `paper-project` contracts in V1
 
 ## Requirements coverage matrix
+This table records historical coverage. Future implementation should map useful rows into `PaperImplementation` child tasks instead of reopening `research-argument` children.
+
 | Requirement / journey slice | Coverage mode | Owner |
 | --- | --- | --- |
 | Journey 1: 研究想法到 Claims 定义 | owned | `T-024` + `T-025` |
@@ -73,6 +83,7 @@
   - async task orchestration
 
 ## Cross-task dependency rules
+- These rules are historical unless used for migration inventory.
 - `T-024` is the SSOT writer for canonical docs / glossary / shared contracts.
 - `T-025` owns persistence and state read models.
 - `T-026` owns seed/init, risk/handoff sidecar artifacts, and bridge flows, but not title-card source objects.
@@ -80,6 +91,8 @@
 - `T-028` owns planner/critic/rule/report enhancement, but must consume `T-025` / `T-026` contracts instead of redefining them。
 
 ## Package handoff contract
+Historical handoff contract; future handoff authority should be redefined under `PaperImplementation`.
+
 | Producer task | Stable outputs before handoff | Primary consumer |
 | --- | --- | --- |
 | `T-024` | canonical docs paths, glossary terms, shared domain/read-model/bridge/advisory DTO names | `T-025` / `T-026` / `T-027` / `T-028` |

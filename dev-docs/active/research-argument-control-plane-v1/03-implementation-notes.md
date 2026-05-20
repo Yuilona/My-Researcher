@@ -20,3 +20,14 @@
 - `T-086` completed the backend-first bridge path after the original `T-026` placeholder was archived.
 - Runtime coverage now includes title-card seed, readiness verify, PaperProject gateway promotion, writing-entry sidecar refs, submission-risk sidecar refs, and idempotent duplicate promotion.
 - Desktop review surface and planner/critic generation remain future scoped tasks, not active child work.
+
+## 2026-05-20 - Superseded By PaperImplementation
+- `research-argument` is now marked as a legacy/transition asset.
+- It should not receive new authority writes, readiness gates, desktop surfaces, planner/critic runtime, or independent child tasks.
+- Useful capabilities should be absorbed or replaced by `PaperImplementation`:
+  - readiness dimensions and deterministic checks;
+  - claim/evidence coverage ideas;
+  - `WritingEntryPacket` as a possible downstream projection;
+  - `SubmissionRiskReport` as a possible dossier/risk projection;
+  - repository/test lessons for migration.
+- Remaining assets should be removed after replacement via a dedicated decommission task.

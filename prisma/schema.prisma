@@ -3821,6 +3821,257 @@ model TopicSelectionDownstreamTopicFeedback {
   @@index([policyVersionId], map: "tsdtf_policy_version_idx")
 }
 
+model PaperImplementationIntakeSnapshot {
+  id                            String   @id
+  implementationProjectId       String   @unique(map: "piis_project_unique")
+  workspaceId                   String?
+  titleCardId                   String
+  paperProjectBridgeId          String
+  paperProjectBridgeRef         Json     @default("{}")
+  bridgePayloadHash             String
+  promotionDecisionId           String
+  promotionDecisionRef          Json     @default("{}")
+  promotionCommitmentProfileId  String
+  promotionCommitmentProfileRef Json     @default("{}")
+  promotionInputSnapshotId      String
+  promotionInputSnapshotRef     Json     @default("{}")
+  promotionInputSnapshotHash    String
+  topicPackageId                String
+  packageVersion                String
+  sourceStatus                  String
+  snapshotHashes                Json     @default("{}")
+  sourceRefs                    Json     @default("[]")
+  acceptedRiskRefs              Json     @default("[]")
+  conditionRefs                 Json     @default("[]")
+  earlyCheckObligations         String[] @default([])
+  workingCopyPayload            Json     @default("{}")
+  workingCopyPayloadHash        String
+  sourceHandoff                 Json     @default("{}")
+  targetPaperProjectRef         Json?
+  intakeSnapshotHash            String
+  policyVersionId               String?
+  createdBy                     String
+  createdAt                     DateTime @db.Timestamptz(6)
+
+  @@index([paperProjectBridgeId, createdAt(sort: Desc)], map: "piis_bridge_created_idx")
+  @@index([bridgePayloadHash], map: "piis_bridge_hash_idx")
+  @@index([promotionDecisionId], map: "piis_promotion_decision_idx")
+  @@index([promotionCommitmentProfileId], map: "piis_commitment_profile_idx")
+  @@index([promotionInputSnapshotId], map: "piis_input_snapshot_idx")
+  @@index([promotionInputSnapshotHash], map: "piis_input_hash_idx")
+  @@index([topicPackageId], map: "piis_topic_package_idx")
+  @@index([sourceStatus], map: "piis_source_status_idx")
+  @@index([policyVersionId], map: "piis_policy_version_idx")
+}
+
+model PaperImplementationProject {
+  id                    String   @id
+  intakeSnapshotId      String   @unique(map: "pip_intake_snapshot_unique")
+  workspaceId           String?
+  titleCardId           String
+  paperProjectBridgeId  String   @unique(map: "pip_bridge_unique")
+  bridgePayloadHash     String
+  targetPaperProjectRef Json?
+  lifecycleStatus       String
+  freshnessStatus       String
+  sourceStatus          String
+  versionNumber         Int
+  policyVersionId       String?
+  createdBy             String
+  createdAt             DateTime @db.Timestamptz(6)
+  updatedAt             DateTime @db.Timestamptz(6)
+
+  @@index([titleCardId, createdAt(sort: Desc)], map: "pip_title_created_idx")
+  @@index([bridgePayloadHash], map: "pip_bridge_hash_idx")
+  @@index([lifecycleStatus], map: "pip_lifecycle_status_idx")
+  @@index([freshnessStatus], map: "pip_freshness_status_idx")
+  @@index([sourceStatus], map: "pip_source_status_idx")
+  @@index([policyVersionId], map: "pip_policy_version_idx")
+}
+
+model PaperImplementationFeedbackEvent {
+  id                         String   @id
+  implementationProjectId    String
+  intakeSnapshotId           String
+  paperProjectBridgeId       String
+  feedbackType               String
+  severity                   String
+  summary                    String
+  sourceObjectRefs           Json     @default("[]")
+  evidenceRefs               Json     @default("[]")
+  runRefs                    Json     @default("[]")
+  recommendedUpstreamAction  String
+  feedbackStatus             String
+  downstreamTopicFeedbackRef Json?
+  downstreamRecheckRequest   Json?
+  downstreamImpactSummary    Json?
+  artifactRefs               Json     @default("[]")
+  payload                    Json     @default("{}")
+  policyVersionId            String?
+  createdBy                  String
+  createdAt                  DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pife_project_created_idx")
+  @@index([paperProjectBridgeId, createdAt(sort: Desc)], map: "pife_bridge_created_idx")
+  @@index([feedbackType], map: "pife_feedback_type_idx")
+  @@index([severity], map: "pife_severity_idx")
+  @@index([feedbackStatus], map: "pife_status_idx")
+  @@index([recommendedUpstreamAction], map: "pife_upstream_action_idx")
+  @@index([policyVersionId], map: "pife_policy_version_idx")
+}
+
+model PaperImplementationTraceManifest {
+  id                            String   @id
+  implementationProjectId       String
+  targetRefType                 String
+  targetRefId                   String
+  targetVersionId               String?
+  targetRef                     Json     @default("{}")
+  literatureLineage             Json     @default("{}")
+  experimentLineage             Json     @default("{}")
+  artifactLineage               Json     @default("{}")
+  decisionLineage               Json     @default("{}")
+  internalInterpretationLineage Json     @default("{}")
+  integrity                     Json     @default("{}")
+  traceStatus                   String
+  brokenRefCount                Int
+  staleRefCount                 Int
+  missingRefCount               Int
+  nonCitableRefCount            Int
+  tracePolicyVersionId          String?
+  createdBy                     String
+  createdAt                     DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pitm_project_created_idx")
+  @@index([implementationProjectId, targetRefType, targetRefId], map: "pitm_target_idx")
+  @@index([targetRefType, targetRefId, targetVersionId], map: "pitm_target_version_idx")
+  @@index([traceStatus], map: "pitm_trace_status_idx")
+  @@index([brokenRefCount], map: "pitm_broken_count_idx")
+  @@index([staleRefCount], map: "pitm_stale_count_idx")
+  @@index([missingRefCount], map: "pitm_missing_count_idx")
+  @@index([nonCitableRefCount], map: "pitm_non_citable_count_idx")
+  @@index([tracePolicyVersionId], map: "pitm_policy_version_idx")
+}
+
+model PaperImplementationCitationCandidate {
+  id                          String   @id
+  implementationProjectId     String
+  traceManifestId             String
+  traceManifestRef            Json     @default("{}")
+  sourceKind                  String
+  sourceType                  String
+  sourceId                    String
+  sourceEvidenceUnitRefType   String
+  sourceEvidenceUnitId        String
+  sourceEvidenceUnitVersionId String?
+  sourceEvidenceUnitRef       Json     @default("{}")
+  sourceLocatorId             String
+  locatorQuality              String
+  locator                     Json     @default("{}")
+  citedFor                    Json     @default("[]")
+  linkedTargetRefType         String
+  linkedTargetRefId           String
+  linkedTargetVersionId       String?
+  linkedTargetRefs            Json     @default("[]")
+  status                      String
+  normalizedSourceStatement   String
+  citationLimitation          String?
+  createdBy                   String
+  createdAt                   DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "picc_project_created_idx")
+  @@index([traceManifestId], map: "picc_trace_manifest_idx")
+  @@index([sourceLocatorId], map: "picc_source_locator_idx")
+  @@index([sourceKind], map: "picc_source_kind_idx")
+  @@index([sourceType], map: "picc_source_type_idx")
+  @@index([sourceId], map: "picc_source_id_idx")
+  @@index([sourceEvidenceUnitRefType, sourceEvidenceUnitId, sourceEvidenceUnitVersionId], map: "picc_source_evidence_ref_idx")
+  @@index([linkedTargetRefType, linkedTargetRefId, linkedTargetVersionId], map: "picc_linked_target_idx")
+  @@index([status], map: "picc_status_idx")
+}
+
+model PaperImplementationClaimTracePacket {
+  id                            String   @id
+  implementationProjectId       String
+  claimRefType                  String
+  claimRefId                    String
+  claimVersionId                String?
+  claimRef                      Json     @default("{}")
+  claimStatement                String
+  traceManifestId               String
+  traceManifestRef              Json     @default("{}")
+  literatureLineage             Json     @default("{}")
+  experimentLineage             Json     @default("{}")
+  artifactLineage               Json     @default("{}")
+  decisionLineage               Json     @default("{}")
+  internalInterpretationLineage Json     @default("{}")
+  challenge                     Json     @default("{}")
+  claimScope                    Json     @default("{}")
+  boundary                      Json     @default("{}")
+  createdBy                     String
+  createdAt                     DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "picp_project_created_idx")
+  @@index([traceManifestId], map: "picp_trace_manifest_idx")
+  @@index([claimRefType, claimRefId, claimVersionId], map: "picp_claim_ref_idx")
+}
+
+model PaperImplementationNaturalLanguageFieldRole {
+  id                      String   @id
+  implementationProjectId String
+  fieldOwnerRefType       String
+  fieldOwnerRefId         String
+  fieldOwnerVersionId     String?
+  fieldOwnerVersionKey    String   @default("")
+  fieldOwnerRef           Json     @default("{}")
+  fieldName               String
+  fieldRole               String
+  canFeedWorkflow         Boolean
+  canFeedHardGate         Boolean
+  canBeCited              Boolean
+  policyVersionId         String?
+  policyVersionKey        String   @default("")
+  createdBy               String
+  createdAt               DateTime @db.Timestamptz(6)
+
+  @@unique([implementationProjectId, fieldOwnerRefType, fieldOwnerRefId, fieldOwnerVersionKey, fieldName, policyVersionKey], map: "pinl_owner_field_policy_unique")
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pinl_project_created_idx")
+  @@index([fieldOwnerRefType, fieldOwnerRefId, fieldOwnerVersionId], map: "pinl_owner_ref_idx")
+  @@index([fieldName], map: "pinl_field_name_idx")
+  @@index([fieldRole], map: "pinl_field_role_idx")
+  @@index([canFeedWorkflow], map: "pinl_can_feed_workflow_idx")
+  @@index([canFeedHardGate], map: "pinl_can_feed_hard_gate_idx")
+  @@index([canBeCited], map: "pinl_can_be_cited_idx")
+  @@index([policyVersionId], map: "pinl_policy_version_idx")
+}
+
+model PaperImplementationTraceRepairQueueItem {
+  id                      String    @id
+  implementationProjectId String
+  traceManifestId         String
+  targetRefType           String
+  targetRefId             String
+  targetVersionId         String?
+  targetRef               Json      @default("{}")
+  lineageType             String
+  blockerCode             String
+  severity                String
+  status                  String
+  sourceRef               Json?
+  createdBy               String
+  createdAt               DateTime  @db.Timestamptz(6)
+  resolvedBy              String?
+  resolvedAt              DateTime? @db.Timestamptz(6)
+  resolutionNote          String?
+
+  @@index([implementationProjectId, status, createdAt(sort: Desc)], map: "pitrq_project_status_idx")
+  @@index([traceManifestId, status], map: "pitrq_manifest_status_idx")
+  @@index([targetRefType, targetRefId, targetVersionId], map: "pitrq_target_idx")
+  @@index([lineageType], map: "pitrq_lineage_type_idx")
+  @@index([blockerCode], map: "pitrq_blocker_code_idx")
+  @@index([severity], map: "pitrq_severity_idx")
+}
+
 model TopicSelectionRecheckEvent {
   id                String    @id
   workspaceId       String?

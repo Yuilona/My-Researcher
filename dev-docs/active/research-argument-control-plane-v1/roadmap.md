@@ -3,9 +3,17 @@
 ## Decision
 - New complex task: `T-023 research-argument-control-plane-v1`
 - Mapping: `M-001 > F-001 > R-011`
-- Primary goal: 在 `title-card -> paper-project` 之间建立一层 pre-writing research argument control plane，用结构化对象图、抽象状态和 phased execution 收口 `research-varify` 的设计输入，并补齐投稿前风险报告与写作交接输出。
+- Historical primary goal: 在 `title-card -> paper-project` 之间建立一层 pre-writing research argument control plane，用结构化对象图、抽象状态和 phased execution 收口 `research-varify` 的设计输入，并补齐投稿前风险报告与写作交接输出。
+
+## 2026-05-20 Supersession Decision
+- `research-argument` is now a legacy/transition asset, not an independent authority domain.
+- `PaperImplementation` supersedes it for motive, validation, claim trace, dossier readiness, and writing-prep authority.
+- No new `research-argument` UI/planner/critic/runtime authority work should be opened.
+- Useful existing capabilities should be inventoried and either absorbed into `PaperImplementation`, replaced by `PaperImplementation`, exposed as read-only projections, or removed.
+- After absorption/replacement, remaining `research-argument` contracts, docs, storage, services, and tests should be removed through a dedicated decommission child task.
 
 ## Why this is a separate task
+Historical rationale:
 - `research-varify` 引入的是新的 argument layer，不等于现有 `R-009` 选题决策层，也不等于 `T-003` 的 version-spine / stage-gate 治理。
 - 该框架同时涉及 docs/contract、backend domain、bridge、desktop control plane 和 planner/critic，必须有一个 umbrella task 管理边界和执行顺序。
 - 将其独立建包后：
@@ -49,12 +57,14 @@
   - governance、contract、backend、desktop 的验证与 handoff 记录齐全
 
 ## Explicit defaults
+- New default: `research-argument` is not the default home for future implementation work.
 - V1 默认一个 `title-card` 对应一个 active research-argument workspace。
 - 多路线通过 workspace 内 `Branch` 管理，而不是多个 sibling workspace。
 - `research-varify` 保留为 intake 输入，不作为长期 SSOT 目录。
 - 先落 V1 基座，再做 V1.5 planner / critic，不跳步。
 - 不扩 `createPaperProject` 公共合同。
 - Markdown/LaTeX、章节 diff apply、Prism/Overleaf、完整 rebuttal 继续留在 downstream writing lane。
+- Any future work on these concepts must be scoped as `PaperImplementation` migration/replacement/decommission work.
 
 ## Rollback
 - 若任务编号或映射错误，可删除对应 `dev-docs/active/research-argument-*/` 目录、回退 `registry.yaml` 新增项后重新执行 `sync --apply`。
