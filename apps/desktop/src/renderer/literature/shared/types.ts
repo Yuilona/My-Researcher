@@ -53,25 +53,42 @@ export type LiteratureTabKey = 'auto-import' | 'manual-import' | 'overview' | 'c
 export type AutoImportSubTabKey = 'topic-settings' | 'rule-center' | 'runs-alerts';
 export type ManualImportSubTabKey = 'file-review' | 'zotero-sync';
 export type ContentProcessingSubTabKey = 'operations' | 'clusters' | 'settings';
+
+/**
+ * T-087 reviewer workbench primary tab keys. Legacy T-021 keys (evidence /
+ * need / research-question / value / package / promotion) were retired in
+ * Phase 6 along with the legacy `TitleCardManagementModule`.
+ */
 export type TitleCardPrimaryTabKey =
   | 'overview'
-  | 'evidence'
-  | 'need'
-  | 'research-question'
+  | 'v1a'
+  | 'v1b'
+  | 'v1c';
+
+// v1a/b/c stage sub-tabs (D3).
+export type TitleCardV1aSubTabKey =
+  | 'seed'
+  | 'search-plan'
+  | 'evidence-map'
+  | 'need-candidate'
+  | 'validated-need';
+export type TitleCardV1bSubTabKey =
+  | 'slice'
+  | 'question'
   | 'value'
-  | 'package'
-  | 'promotion';
-export type TitleCardEvidenceSubTabKey = 'candidates' | 'basket' | 'inspector';
-export type TitleCardEditorSubTabKey = 'list' | 'editor';
-export type TitleCardPromotionSubTabKey = 'decision' | 'promotion';
+  | 'package';
+export type TitleCardV1cSubTabKey =
+  | 'gate-check'
+  | 'decision'
+  | 'commitment'
+  | 'bridge'
+  | 'downstream';
+
 export type TitleCardSubTabState = {
   overview: null;
-  evidence: TitleCardEvidenceSubTabKey;
-  need: TitleCardEditorSubTabKey;
-  'research-question': TitleCardEditorSubTabKey;
-  value: TitleCardEditorSubTabKey;
-  package: TitleCardEditorSubTabKey;
-  promotion: TitleCardPromotionSubTabKey;
+  v1a: TitleCardV1aSubTabKey;
+  v1b: TitleCardV1bSubTabKey;
+  v1c: TitleCardV1cSubTabKey;
 };
 export type ManualUploadFileStatus = 'processing' | 'parsed' | 'empty' | 'failed' | 'accepted' | 'duplicate';
 export type AppMode = 'standard' | 'dev';

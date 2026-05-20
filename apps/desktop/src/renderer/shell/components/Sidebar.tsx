@@ -1,4 +1,5 @@
 import type { SidebarProps } from '../types';
+import { SidebarTitleCardSelector } from './SidebarTitleCardSelector';
 
 export function Sidebar({
   isSidebarCollapsed,
@@ -13,11 +14,21 @@ export function Sidebar({
   onInjectManualImportTestData,
   onClearInjectedManualImportData,
   onToggleSettingsPanel,
+  titleCardId,
+  onTitleCardIdChange,
+  titleCardListRefreshToken,
 }: SidebarProps) {
+  const showTitleCardSelector = activeModule === '选题管理';
   return (
     <aside className="sidebar-pane">
       {!isSidebarCollapsed ? (
         <>
+          <SidebarTitleCardSelector
+            enabled={showTitleCardSelector}
+            titleCardId={titleCardId}
+            onTitleCardIdChange={onTitleCardIdChange}
+            refreshToken={titleCardListRefreshToken}
+          />
           <nav className="sidebar-nav-zones" aria-label="模块导航">
             <section className="sidebar-nav-zone sidebar-nav-zone-core">
               <div className="module-nav-list">

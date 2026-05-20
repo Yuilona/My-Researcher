@@ -36,6 +36,14 @@ type SyncLiteratureLocalSecretsResponse = {
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string;
   readonly VITE_ENABLE_GOVERNANCE_PANELS?: string;
+  /**
+   * T-087 reviewer workbench feature flag — **retired in Phase 6**. Kept in
+   * the typed env surface so externally-set `.env` values don't break the
+   * `import.meta.env` shape, but the value is no longer read by the app:
+   * the reviewer workbench is now always-on and the legacy
+   * `TitleCardManagementModule` was deleted.
+   */
+  readonly VITE_TOPIC_WORKBENCH_V1ABC?: string;
 }
 
 interface ImportMeta {

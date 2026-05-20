@@ -46,4 +46,15 @@ export type SidebarProps = {
   onInjectManualImportTestData: () => Promise<void>;
   onClearInjectedManualImportData: () => Promise<void>;
   onToggleSettingsPanel: () => void;
+  /**
+   * T-087 Active title-card selector (D5).
+   *
+   * When `activeModule === '选题管理'`, the Sidebar renders a dropdown to
+   * switch active title-card. The list is fetched lazily via
+   * `useTitleCardList(refreshToken, enabled)` inside the Sidebar so other
+   * modules don't trigger the network call.
+   */
+  titleCardId: string | null;
+  onTitleCardIdChange: (id: string | null) => void;
+  titleCardListRefreshToken: number;
 };

@@ -35,14 +35,16 @@ export const literatureTabs: Array<{ key: LiteratureTabKey; label: string }> = [
   { key: 'overview', label: '文献综览' },
   { key: 'content-processing', label: '内容处理' },
 ];
+/**
+ * T-087 v1a/b/c reviewer workbench stage tabs (D3 two-level structure).
+ * Legacy T-021 tabs (evidence/need/research-question/value/package/promotion)
+ * were retired in Phase 6 along with the legacy `TitleCardManagementModule`.
+ */
 export const titleCardTabs: Array<{ key: TitleCardPrimaryTabKey; label: string }> = [
   { key: 'overview', label: '总揽' },
-  { key: 'evidence', label: '证据' },
-  { key: 'need', label: '需求' },
-  { key: 'research-question', label: '研究问题' },
-  { key: 'value', label: '价值' },
-  { key: 'package', label: '方案' },
-  { key: 'promotion', label: '晋升' },
+  { key: 'v1a', label: 'v1a · 证据-需求' },
+  { key: 'v1b', label: 'v1b · 切片-题目-价值-方案' },
+  { key: 'v1c', label: 'v1c · 晋升桥' },
 ];
 export const autoImportSubTabs: Array<{ key: AutoImportSubTabKey; label: string }> = [
   { key: 'topic-settings', label: '设置主题' },
@@ -296,31 +298,30 @@ export const literatureSubTabsByTab: Partial<Record<LiteratureTabKey, Array<{ ke
   'manual-import': manualImportSubTabs.map((tab) => ({ key: tab.key, label: tab.label })),
   'content-processing': contentProcessingSubTabs.map((tab) => ({ key: tab.key, label: tab.label })),
 };
+/**
+ * T-087 reviewer workbench sub-tabs (D3). Legacy T-021 sub-tab map was
+ * retired in Phase 6.
+ */
 export const titleCardSubTabsByTab: Partial<Record<TitleCardPrimaryTabKey, Array<{ key: string; label: string }>>> = {
-  evidence: [
-    { key: 'candidates', label: '候选证据' },
-    { key: 'basket', label: '证据篮' },
-    { key: 'inspector', label: '检查器' },
+  v1a: [
+    { key: 'seed', label: 'Seed' },
+    { key: 'search-plan', label: 'SearchPlan' },
+    { key: 'evidence-map', label: 'EvidenceMap' },
+    { key: 'need-candidate', label: 'NeedCandidate' },
+    { key: 'validated-need', label: 'ValidatedNeed' },
   ],
-  need: [
-    { key: 'list', label: '列表' },
-    { key: 'editor', label: '表单/检查器' },
+  v1b: [
+    { key: 'slice', label: 'Slice' },
+    { key: 'question', label: 'Question' },
+    { key: 'value', label: 'Value' },
+    { key: 'package', label: 'Package' },
   ],
-  'research-question': [
-    { key: 'list', label: '列表' },
-    { key: 'editor', label: '表单/检查器' },
-  ],
-  value: [
-    { key: 'list', label: '列表' },
-    { key: 'editor', label: '表单/检查器' },
-  ],
-  package: [
-    { key: 'list', label: '列表' },
-    { key: 'editor', label: '表单/检查器' },
-  ],
-  promotion: [
-    { key: 'decision', label: '决策' },
-    { key: 'promotion', label: '晋升' },
+  v1c: [
+    { key: 'gate-check', label: 'GateCheck' },
+    { key: 'decision', label: 'Decision' },
+    { key: 'commitment', label: 'Commitment' },
+    { key: 'bridge', label: 'Bridge' },
+    { key: 'downstream', label: 'Downstream' },
   ],
 };
 export const querySortPresetOptions: Array<{ value: QuerySortPreset; label: string }> = [

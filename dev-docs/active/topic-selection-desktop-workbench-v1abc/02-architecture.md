@@ -100,13 +100,67 @@
   - 沿用现有 `pushLiteratureFeedback`-style 顶部反馈
   - 关键 human-confirm 动作在前端打 console + 通过 governance event delivery 后端记录（不需要前端新增 telemetry）
 
-## Open questions
+## Phase 0 Discovery 发现与决议
 
-> 与 roadmap.md `Open questions` 一致，Phase 0 期需要逐项决议；此处只记录"对架构有结构性影响"的子集。
+### Discovery: 后端 GET 列表能力缺口（关键）
+现有 v1a/v1b/v1c 路由几乎全是 POST 创建动作，**缺乏"按 title-card 列出该 stage authority/workflow 对象"的 list endpoint**：
 
-- O1（Q1）：Topbar 是 stage-tab + sub-tab 两层（推荐）还是单层 7 tab — 直接影响 `titleCardTabs` 类型与 sub-tab 状态管理。
-- O2（Q2）：active title-card 是 `App.tsx` 顶层 state（与 paper_id 对称）还是模块内 context — 影响其他模块能否消费 active title-card。
-- O3（Q3）：Queue 在模块内右侧 drawer / 独立 tab / 顶层 badge — 影响是否需要 Topbar 改造再加一项。
-- O4（Q4）：EvidenceMap 等是否仅以结构化列表 + JSON drilldown 收口（推荐），还是要做 claim grid 等可视化 — 影响 Phase 2 / Phase 3 工作量预估。
-- O5（Q8）：feature flag 默认值与旧 module 退出策略 — 推荐 dev/prod 默认开、Phase 6 sign-off 后删除旧文件。
-- O6（Q9）：是否引入 URL hash 深链（如 `#title-card=<id>&stage=v1b&surface=slice-selection`）以支持人审跳转 — 当前桌面 shell 不依赖路由，引入需要评估代价。
+| stage | 当前可用 GET | UI 需要但缺失 |
+|---|---|---|
+| v1a | `work-queue/open` + 各 by-id + `coverage-matrix` + `need-validation-bundle` | list-by-titleCard：SearchPlan / SearchRun / EvidenceMap / NeedCandidate / ValidatedNeed |
+| v1b | `topic-packages/:id` + offline-evaluation | list-by-titleCard：IntakeSnapshot / ResearchConstraintProfile / SliceOptionSet / SliceSelectionDecision / QuestionCandidateSet / QuestionSelectionDecision / ValueAssessment / ValueDisposition / TopicPackage(draft) |
+| v1c | dossier / decision / bridge / feedback / recheck by-id | list-by-titleCard：PromotionInputSnapshot / DecisionSupport / GateCheck / HumanPromotionDecision / PromotionDecision / CommitmentProfile / PaperProjectBridge |
+
+**决议（D1）**：本 UI 任务允许同步补**纯只读** GET list endpoints，不动 service 业务逻辑/contract。每个 endpoint 形如：
+
+```
+GET /topic-selection/v1a/title-cards/:titleCardId/search-plans
+GET /topic-selection/v1a/title-cards/:titleCardId/evidence-maps
+GET /topic-selection/v1a/title-cards/:titleCardId/need-candidates
+GET /topic-selection/v1a/title-cards/:titleCardId/validated-needs
+GET /topic-selection/v1b/title-cards/:titleCardId/intake-snapshots
+GET /topic-selection/v1b/title-cards/:titleCardId/research-slice-option-sets
+GET /topic-selection/v1b/title-cards/:titleCardId/topic-question-candidate-sets
+GET /topic-selection/v1b/title-cards/:titleCardId/topic-value-assessments
+GET /topic-selection/v1b/title-cards/:titleCardId/topic-packages
+GET /topic-selection/v1c/title-cards/:titleCardId/promotion-decisions
+GET /topic-selection/v1c/title-cards/:titleCardId/paper-project-bridges
+```
+
+实现策略：在对应 service 层加 `listByTitleCardId(titleCardId)` 只读包装；route 仅做参数校验 + service 调用 + DTO 投影；不写 Prisma 查询新逻辑（复用仓储的现有过滤）。OpenAPI / api-index 自动 drift。
+
+### Discovery: `data-ui` contract 缺位原语
+现有 contract：`alert / badge / button / card / divider / empty-state / field / form / grid / icon-button / input / link / list / modal / page / section / select / stack / tab / table / tabs / text / textarea / toolbar`。
+
+**决议（D2'，修订 D2）**：本任务**不扩 contract**（避免 `ui-governance-gate` RFC + approval workflow 与本轮节奏冲突），4 个缺位原语用现有 role 组合实现：
+
+| 缺位 | 用现有 role 实现 | 备注 |
+|---|---|---|
+| drawer | `modal` + B1 layout-only Tailwind 定位为右侧全高 | 折叠态用 `badge` 计数代偿"始终可见" |
+| split-pane | `grid cols=2` + 双 `card` | 等价 |
+| timeline | `list variant=rows` + `divider` + `badge` | 等价 |
+| stepper | `tabs` + 数字 `badge` | 等价 |
+
+Follow-up：v2 评估走 `ui-governance-gate` RFC 升级到真原语。
+
+### 决议（D3）：Topbar 二级 tab
+- 一级：`总揽 / v1a 证据-需求 / v1b 切片-题目-价值-方案 / v1c 晋升`
+- 二级（动态按 stage 变化）：
+  - 总揽：单层，无 sub-tab
+  - v1a：`Seed / SearchPlan / EvidenceMap / NeedCandidate / ValidatedNeed`
+  - v1b：`Slice / Question / Value / Package`
+  - v1c：`GateCheck / Decision / Commitment / Bridge / Downstream`
+
+类型重构方向：`TitleCardPrimaryTabKey = 'overview' | 'v1a' | 'v1b' | 'v1c'`；sub-tab 类型按 stage 分组。
+
+### 决议（D4）：Queue 位置
+模块内**右侧常驻 drawer**，4 类队列以 drawer 内 tabs 切换；active title-card 变化时跟随。drawer 自身可折叠，折叠时仅显示 4 个 badge 计数。
+
+### 仍待 Phase 0 收口的开放问题（合并到下一轮 Q）
+- O-Q2：active title-card 全局 state 放 `App.tsx` 还是模块内 context（影响其他模块是否能消费）
+- O-Q4：EvidenceMap / SliceOptionSet / QuestionCandidateSet 可视化深度（是否做比较表/grid）
+- O-Q5：AcceptedRisk / HumanOverride 强约束 UI（是否 v1 全字段强校验）
+- O-Q6：PromotionGateCheck 渲染粒度（逐项卡 vs summary+drilldown）
+- O-Q7：Negative memory（CandidateDecisionMemory）是否在 v1 作为 reviewer card inline 上下文
+- O-Q8：feature flag 默认值（dev 开/prod 灰度 vs 全开）
+- O-Q9：URL hash 深链 v1 是否引入

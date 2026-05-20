@@ -78,7 +78,7 @@ import { GovernancePanel } from './shell/components/GovernancePanel';
 import { useShellHandlers } from './shell/useShellHandlers';
 import { useGovernancePanelController } from './shell/useGovernancePanelController';
 import { PaperModule } from './modules/PaperModule';
-import { TitleCardManagementModule } from './modules/TitleCardManagementModule';
+import { TopicWorkbenchModule } from './modules/topic-workbench/TopicWorkbenchModule';
 import { WritingModule } from './modules/WritingModule';
 import { ExperimentFoundationModule } from './modules/experiment-foundation/ExperimentFoundationModule';
 import { LiteratureWorkspace } from './literature/LiteratureWorkspace';
@@ -131,12 +131,9 @@ const emptyMetadataIntakeContext: MetadataIntakeOpenContext = {
 
 const initialTitleCardSubTabs: TitleCardSubTabState = {
   overview: null,
-  evidence: 'candidates',
-  need: 'list',
-  'research-question': 'list',
-  value: 'list',
-  package: 'list',
-  promotion: 'decision',
+  v1a: 'seed',
+  v1b: 'slice',
+  v1c: 'gate-check',
 };
 
 export function App({ initialThemeMode }: AppProps) {
@@ -154,6 +151,8 @@ export function App({ initialThemeMode }: AppProps) {
   const [governanceEnabled, setGovernanceEnabled] = useState<boolean>(
     isFlagEnabled(import.meta.env.VITE_ENABLE_GOVERNANCE_PANELS),
   );
+  /** T-087: D5 active title-card lives at App.tsx top level (parity with paper_id). */
+  const [titleCardId, setTitleCardId] = useState<string | null>(null);
   const [paperIdInput, setPaperIdInput] = useState<string>('');
   const [paperId, setPaperId] = useState<string>('');
   const [refreshTick, setRefreshTick] = useState<number>(0);
@@ -990,18 +989,12 @@ export function App({ initialThemeMode }: AppProps) {
       switch (tab) {
         case 'overview':
           return current;
-        case 'evidence':
-          return { ...current, evidence: subTab as TitleCardSubTabState['evidence'] };
-        case 'need':
-          return { ...current, need: subTab as TitleCardSubTabState['need'] };
-        case 'research-question':
-          return { ...current, 'research-question': subTab as TitleCardSubTabState['research-question'] };
-        case 'value':
-          return { ...current, value: subTab as TitleCardSubTabState['value'] };
-        case 'package':
-          return { ...current, package: subTab as TitleCardSubTabState['package'] };
-        case 'promotion':
-          return { ...current, promotion: subTab as TitleCardSubTabState['promotion'] };
+        case 'v1a':
+          return { ...current, v1a: subTab as TitleCardSubTabState['v1a'] };
+        case 'v1b':
+          return { ...current, v1b: subTab as TitleCardSubTabState['v1b'] };
+        case 'v1c':
+          return { ...current, v1c: subTab as TitleCardSubTabState['v1c'] };
         default:
           return current;
       }
@@ -1266,6 +1259,9 @@ export function App({ initialThemeMode }: AppProps) {
           onInjectManualImportTestData={manualImportController.handleInjectManualImportTestData}
           onClearInjectedManualImportData={manualImportController.handleClearInjectedManualImportData}
           onToggleSettingsPanel={() => setSettingsPanelOpen((current) => !current)}
+          titleCardId={titleCardId}
+          onTitleCardIdChange={setTitleCardId}
+          titleCardListRefreshToken={refreshTick}
         />
 
         <main className="workspace-pane">
@@ -1300,7 +1296,9 @@ export function App({ initialThemeMode }: AppProps) {
           ) : null}
 
           {activeModule === '选题管理' ? (
-            <TitleCardManagementModule
+            <TopicWorkbenchModule
+              titleCardId={titleCardId}
+              onSetTitleCardId={setTitleCardId}
               refreshToken={refreshTick}
               activePrimaryTab={activeTitleCardTab}
               activeSecondaryTab={activeTitleCardSubTab}
