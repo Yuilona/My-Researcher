@@ -11,6 +11,8 @@ import type {
   TopicSelectionNeedCandidateStatusPatch,
   TopicSelectionNeedValidationAdjudicationWriteInput,
   TopicSelectionNeedValidationAdjudicationWriteResult,
+  TopicSelectionNeedValidationHumanConfirmationWriteInput,
+  TopicSelectionNeedValidationHumanConfirmationWriteResult,
   TopicSelectionNeedValidationRepository,
 } from './topic-selection-need-validation.repository.js';
 
@@ -28,8 +30,59 @@ export class InMemoryTopicSelectionNeedValidationRepository implements TopicSele
     return record;
   }
 
+  async createNeedCandidatesBatch(
+    records: TopicSelectionNeedCandidateRecord[],
+  ): Promise<TopicSelectionNeedCandidateRecord[]> {
+    const existingIds = records.filter((record) => this.needCandidates.has(record.need_candidate_id));
+    if (existingIds.length > 0) {
+      throw new Error(`NeedCandidate already exists: ${existingIds.map((record) => record.need_candidate_id).join(', ')}.`);
+    }
+    const seenIds = new Set<string>();
+    const duplicateIds = records.filter((record) => {
+      if (seenIds.has(record.need_candidate_id)) {
+        return true;
+      }
+      seenIds.add(record.need_candidate_id);
+      return false;
+    });
+    if (duplicateIds.length > 0) {
+      throw new Error(`Duplicate NeedCandidate batch ids: ${duplicateIds.map((record) => record.need_candidate_id).join(', ')}.`);
+    }
+    const existingVersions = new Set(
+      [...this.needCandidates.values()].map((record) => `${record.evidence_map_id}:${record.candidate_version}`),
+    );
+    const seenVersions = new Set<string>();
+    const duplicateVersions = records.filter((record) => {
+      const key = `${record.evidence_map_id}:${record.candidate_version}`;
+      if (existingVersions.has(key) || seenVersions.has(key)) {
+        return true;
+      }
+      seenVersions.add(key);
+      return false;
+    });
+    if (duplicateVersions.length > 0) {
+      throw new Error(
+        `Duplicate NeedCandidate batch versions: ${
+          duplicateVersions.map((record) => `${record.evidence_map_id}:${record.candidate_version}`).join(', ')
+        }.`,
+      );
+    }
+    for (const record of records) {
+      this.needCandidates.set(record.need_candidate_id, record);
+    }
+    return records;
+  }
+
   async findNeedCandidateById(needCandidateId: string): Promise<TopicSelectionNeedCandidateRecord | null> {
     return this.needCandidates.get(needCandidateId) ?? null;
+  }
+
+  async listNeedCandidatesByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionNeedCandidateRecord[]> {
+    return [...this.needCandidates.values()]
+      .filter((record) => record.title_card_id === titleCardId)
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
   }
 
   async updateNeedCandidateStatus(
@@ -126,6 +179,29 @@ export class InMemoryTopicSelectionNeedValidationRepository implements TopicSele
 
   async findValidatedNeedById(validatedNeedId: string): Promise<TopicSelectionValidatedNeedRecord | null> {
     return this.validatedNeeds.get(validatedNeedId) ?? null;
+  }
+
+  async confirmValidatedNeed(
+    input: TopicSelectionNeedValidationHumanConfirmationWriteInput,
+  ): Promise<TopicSelectionNeedValidationHumanConfirmationWriteResult> {
+    if (this.validatedNeeds.has(input.validated_need.validated_need_id)) {
+      throw new Error(`ValidatedNeed ${input.validated_need.validated_need_id} already exists.`);
+    }
+    const candidate = this.applyCandidatePatch(input.validated_need.source_need_candidate_id, input.candidate_patch);
+    this.needCandidates.set(candidate.need_candidate_id, candidate);
+    this.validatedNeeds.set(input.validated_need.validated_need_id, input.validated_need);
+    return {
+      validated_need: input.validated_need,
+      need_candidate: candidate,
+    };
+  }
+
+  async listValidatedNeedsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionValidatedNeedRecord[]> {
+    return [...this.validatedNeeds.values()]
+      .filter((record) => record.title_card_id === titleCardId)
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
   }
 
   async createV1aToV1bInputBundle(

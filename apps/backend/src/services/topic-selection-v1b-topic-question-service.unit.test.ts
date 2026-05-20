@@ -404,6 +404,30 @@ test('known research_slice boundary placeholders are normalized by boundary kind
   );
 });
 
+test('extra unknown boundary refs are dropped when canonical boundary refs remain', async () => {
+  const candidate = makeCandidateDraft('question-a', {
+    boundary_check: {
+      ...makeCandidateDraft().boundary_check,
+      preserved_boundary_refs: [
+        ref('research_slice_boundary', 'boundary_include_1'),
+      ],
+      excluded_boundary_refs: [
+        ref('research_slice_boundary', 'boundary_exclude_1'),
+        ref('research_slice_boundary', 'research_slice_invented_boundary'),
+      ],
+    },
+  });
+  const ctx = makeContext({ llmOutput: makeLlmOutput(makeFormationInput(), [candidate]) });
+
+  const result = await formOnce(ctx);
+
+  assert.deepEqual(
+    result.candidates[0]!.boundary_check_payload.excluded_boundary_refs,
+    [ref('research_slice_boundary', 'boundary_exclude_1')],
+  );
+  assert.equal(result.candidates[0]!.human_review_triggers.includes('boundary_refs_normalized'), true);
+});
+
 test('known research_slice placeholders in assumption refs are normalized to inherited assumptions', async () => {
   const formationInput = makeFormationInput();
   const output = makeLlmOutput(formationInput);
@@ -583,6 +607,28 @@ test('falsification source refs normalize copied boundary ids with missing bound
     result.candidates[0]!.falsification_conditions_payload[0]!.trigger_source_refs,
     [ref('research_slice_boundary', 'research_slice_boundary_real_boundary_1')],
   );
+});
+
+test('unknown falsification source refs are dropped without dropping evidence triggers', async () => {
+  const candidate = makeCandidateDraft('question-a', {
+    falsification_conditions: [
+      {
+        ...makeCandidateDraft().falsification_conditions[0]!,
+        trigger_evidence_refs: [ref('evidence_unit', 'baseline_1')],
+        trigger_source_refs: [ref('research_slice_assumption', 'research_slice_assumption_unknown')],
+      },
+    ],
+  });
+  const ctx = makeContext({ llmOutput: makeLlmOutput(makeFormationInput(), [candidate]) });
+
+  const result = await formOnce(ctx);
+
+  assert.deepEqual(result.candidates[0]!.falsification_conditions_payload[0]!.trigger_source_refs, []);
+  assert.deepEqual(
+    result.candidates[0]!.falsification_conditions_payload[0]!.trigger_evidence_refs,
+    [ref('evidence_unit', 'baseline_1')],
+  );
+  assert.equal(result.candidates[0]!.human_review_triggers.includes('falsification_source_refs_normalized'), true);
 });
 
 test('LLM failure records a failed formation run and creates no candidate set', async () => {

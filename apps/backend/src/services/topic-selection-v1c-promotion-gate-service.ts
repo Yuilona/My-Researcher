@@ -1455,4 +1455,14 @@ export class TopicSelectionV1cPromotionGateService {
     }
     return 'blocked';
   }
+
+  /**
+   * T-087 Phase 4 read-only projection — list PromotionGateChecks under a
+   * title-card. Pure repository delegation.
+   */
+  async listGateChecksByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionPromotionGateCheckRecord[]> {
+    return this.repository.listGateChecksByTitleCardId(titleCardId);
+  }
 }

@@ -65,6 +65,14 @@ export interface TopicSelectionV1cHumanPromotionDecisionRepository {
   findPromotionDecisionById(
     promotionDecisionId: string,
   ): Promise<TopicSelectionPromotionDecisionRecord | null>;
+  /**
+   * T-087 Phase 4 read-only projection — list PromotionDecisions under a
+   * title-card, newest first. Drives the reviewer workbench v1c Decision
+   * surface.
+   */
+  listPromotionDecisionsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionPromotionDecisionRecord[]>;
 
   findCommitmentProfileById(
     promotionCommitmentProfileId: string,

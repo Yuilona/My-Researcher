@@ -449,26 +449,33 @@ test('v1a Prisma E2E smoke creates a traced human-confirmed ValidatedNeed and re
       final_decision: 'validate',
       rationale: 'Human reviewer confirms the unmet need and the trace boundary.',
       adjudicated_by: { actor_type: 'human', actor_id: 'reviewer_prisma_e2e' },
+    });
+    assert.equal(adjudication.validated_need, null);
+    assert.equal(adjudication.v1b_input_bundle, null);
+    assert.ok(adjudication.adjudication_result.output_validated_need_id);
+    assert.equal(adjudication.adjudication_result.human_decision_id, null);
+
+    const confirmation = await needService.confirmValidatedNeed({
+      adjudication_result_id: adjudication.adjudication_result.adjudication_result_id,
       human_actor: { actor_type: 'human', actor_id: 'reviewer_prisma_e2e' },
       human_rationale: 'Validated after checking support, baseline, context, and handoff refs.',
     });
-    assert.ok(adjudication.validated_need);
-    assert.ok(adjudication.v1b_input_bundle);
-    assert.equal(
-      adjudication.adjudication_result.output_validated_need_id,
-      adjudication.validated_need.validated_need_id,
-    );
-    assert.equal(adjudication.validated_need.human_decision_id, adjudication.adjudication_result.human_decision_id);
-    assert.equal(adjudication.v1b_input_bundle.validated_need_id, adjudication.validated_need.validated_need_id);
+    const validatedNeed = confirmation.validated_need;
+    const v1bInputBundle = await needService.publishV1bInputBundle({
+      validated_need_id: validatedNeed.validated_need_id,
+      created_by: 'system',
+    });
+    assert.equal(adjudication.adjudication_result.output_validated_need_id, validatedNeed.validated_need_id);
+    assert.equal(v1bInputBundle.validated_need_id, validatedNeed.validated_need_id);
 
     const humanDecision = await controlPlaneRepository.findHumanConfirmedDecisionById(
-      adjudication.validated_need.human_decision_id,
+      validatedNeed.human_decision_id,
     );
     assert.equal(humanDecision?.decision_type, 'confirm');
 
     const qualitySignal = await controlPlane.emitQualitySignal({
       title_card_id: titleCardId,
-      target_ref: ref('validated_need', adjudication.validated_need.validated_need_id, titleCardId),
+      target_ref: ref('validated_need', validatedNeed.validated_need_id, titleCardId),
       stage: 'v1a',
       check_type: 'trace_review',
       verdict: 'warn',
@@ -491,9 +498,9 @@ test('v1a Prisma E2E smoke creates a traced human-confirmed ValidatedNeed and re
     const acceptedRisk = await recheckService.acceptRisk({
       title_card_id: titleCardId,
       risk_type: 'residual_coverage_gap',
-      target_ref: ref('validated_need', adjudication.validated_need.validated_need_id, titleCardId),
+      target_ref: ref('validated_need', validatedNeed.validated_need_id, titleCardId),
       scope_refs: [ref('search_plan', searchPlan.search_plan.search_plan_id, titleCardId, searchPlan.search_plan.plan_version)],
-      affected_object_refs: [ref('validated_need', adjudication.validated_need.validated_need_id, titleCardId)],
+      affected_object_refs: [ref('validated_need', validatedNeed.validated_need_id, titleCardId)],
       rationale: 'Residual coverage risk is bounded for the E2E smoke case.',
       accepted_by: { actor_type: 'human', actor_id: 'reviewer_prisma_e2e' },
       recheck_condition: 'new counter-evidence appears',
@@ -580,11 +587,11 @@ test('v1a Prisma E2E smoke creates a traced human-confirmed ValidatedNeed and re
     assert.equal(materializedRecheck.request.status, 'materialized');
     assert.equal(materializedRecheck.follow_up_search_run?.run_kind, 'recheck_followup');
 
-    const supportRefs = adjudication.validated_need.evidence_role_bundle.support_unit_refs;
-    const baselineRefs = adjudication.validated_need.evidence_role_bundle.baseline_unit_refs;
-    const contextRefs = adjudication.validated_need.evidence_role_bundle.context_unit_refs;
+    const supportRefs = validatedNeed.evidence_role_bundle.support_unit_refs;
+    const baselineRefs = validatedNeed.evidence_role_bundle.baseline_unit_refs;
+    const contextRefs = validatedNeed.evidence_role_bundle.context_unit_refs;
     const traceRefs = [
-      ...adjudication.validated_need.trace_refs,
+      ...validatedNeed.trace_refs,
       ref('evidence_map', evidenceMap.evidence_map.evidence_map_id, titleCardId),
       ref('search_run', searchRun.search_run.search_run_id, titleCardId),
       ref('search_plan', searchPlan.search_plan.search_plan_id, titleCardId, searchPlan.search_plan.plan_version),
@@ -611,8 +618,8 @@ test('v1a Prisma E2E smoke creates a traced human-confirmed ValidatedNeed and re
       memory_used_as_evidence_refs: [],
       downstream_rework_causes: [],
       payload: {
-        validated_need_id: adjudication.validated_need.validated_need_id,
-        v1b_input_bundle_id: adjudication.v1b_input_bundle.v1b_input_bundle_id,
+        validated_need_id: validatedNeed.validated_need_id,
+        v1b_input_bundle_id: v1bInputBundle.v1b_input_bundle_id,
       },
     };
     const dataset = await offlineService.createDataset({
@@ -633,7 +640,7 @@ test('v1a Prisma E2E smoke creates a traced human-confirmed ValidatedNeed and re
         source_refs: traceRefs,
         stage_snapshots: {
           control_plane: {
-            human_decision_id: adjudication.validated_need.human_decision_id,
+            human_decision_id: validatedNeed.human_decision_id,
             quality_signal_id: qualitySignal.quality_signal_id,
           },
           search_resource: {
@@ -651,8 +658,8 @@ test('v1a Prisma E2E smoke creates a traced human-confirmed ValidatedNeed and re
             readiness_assessment_id: readiness.readiness_assessment_id,
             support_packet_id: packet.validation_support_packet_id,
             adjudication_result_id: adjudication.adjudication_result.adjudication_result_id,
-            validated_need_id: adjudication.validated_need.validated_need_id,
-            v1b_input_bundle_id: adjudication.v1b_input_bundle.v1b_input_bundle_id,
+            validated_need_id: validatedNeed.validated_need_id,
+            v1b_input_bundle_id: v1bInputBundle.v1b_input_bundle_id,
           },
           recheck_risk_memory: {
             accepted_risk_id: acceptedRisk.accepted_risk_id,

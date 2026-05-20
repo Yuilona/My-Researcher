@@ -1017,4 +1017,24 @@ export class TopicSelectionSearchResourceService {
     const suffix = id.split('_').at(-1) ?? 'v1';
     return `v-${suffix}`;
   }
+
+  /**
+   * T-087 D1 read-only projection — list SearchPlans under a title-card.
+   * Pure repository delegation; no decision-chain semantics changed.
+   */
+  async listSearchPlansByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionSearchPlanRecord[]> {
+    return this.repository.listSearchPlansByTitleCardId(titleCardId);
+  }
+
+  /**
+   * T-087 Phase 2.2 read-only projection — list SearchPlanRecheckRequests
+   * under a title-card; pure repository delegation.
+   */
+  async listSearchPlanRecheckRequestsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionSearchPlanRecheckRequestRecord[]> {
+    return this.repository.listSearchPlanRecheckRequestsByTitleCardId(titleCardId);
+  }
 }

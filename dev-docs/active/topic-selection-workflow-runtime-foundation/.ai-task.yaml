@@ -2,8 +2,8 @@ version: 1
 task_id: T-088
 project: main
 slug: topic-selection-workflow-runtime-foundation
-status: planned
-updated: "2026-05-19"
+status: in-progress
+updated: "2026-05-20"
 keywords:
   - topic-selection
   - workflow-harness

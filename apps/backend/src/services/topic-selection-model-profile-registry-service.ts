@@ -1,0 +1,527 @@
+import * as AjvModule from 'ajv/dist/ajv.js';
+import type {
+  ErrorObject,
+  ValidateFunction,
+} from 'ajv/dist/ajv.js';
+import type {
+  TopicSelectionAgentExecutionMode,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-need-validation-contracts';
+import {
+  TOPIC_SELECTION_MODEL_PROFILE_REGISTRY_SCHEMA_VERSION,
+  topicSelectionModelProfileRegistrySchema,
+  type TopicSelectionAgentRunMode,
+  type TopicSelectionModelOption,
+  type TopicSelectionModelProfile,
+  type TopicSelectionModelProfileRegistry,
+  type TopicSelectionModelProfileRunModeEligibility,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-profile-contracts';
+import { AppError } from '../errors/app-error.js';
+import {
+  sha256Text,
+  stableStringify,
+} from './literature-content-processing-utils.js';
+
+const AjvConstructor = AjvModule.Ajv;
+
+export type TopicSelectionModelProfileRegistryValidationIssueCode =
+  | 'SCHEMA_VALIDATION_FAILED'
+  | 'DUPLICATE_PROFILE_ID'
+  | 'DUPLICATE_MODEL_OPTION_ID'
+  | 'UNKNOWN_PROVIDER_ID'
+  | 'PROVIDER_MODE_REQUIRES_MODEL_OPTION'
+  | 'AUTOMATIC_PROVIDER_FALLBACK_FORBIDDEN'
+  | 'SEMANTIC_RETRY_FORBIDDEN'
+  | 'SUPPLEMENTAL_ROUND_MUST_NOT_BE_RETRY'
+  | 'MOCK_PRODUCT_MODE_FORBIDDEN'
+  | 'DISALLOWED_EXECUTION_MODE_ELIGIBILITY'
+  | 'STRUCTURED_OUTPUT_CAPABILITY_REQUIRED'
+  | 'RAW_PROVIDER_RESPONSE_AUDIT_FORBIDDEN'
+  | 'HIDDEN_REASONING_AUDIT_FORBIDDEN'
+  | 'TECHNICAL_RETRY_MUST_PRESERVE_INVOCATION'
+  | 'BUDGET_ATTEMPTS_BELOW_TECHNICAL_RETRY';
+
+export interface TopicSelectionModelProfileRegistryValidationIssue {
+  code: TopicSelectionModelProfileRegistryValidationIssueCode;
+  message: string;
+  profile_id?: string;
+  option_id?: string;
+  path?: string;
+}
+
+export interface TopicSelectionModelProfileRegistryValidationResult {
+  valid: boolean;
+  issue_count: number;
+  issues: TopicSelectionModelProfileRegistryValidationIssue[];
+}
+
+export interface TopicSelectionResolvedModelProfile {
+  profile: TopicSelectionModelProfile;
+  selected_model_option: TopicSelectionModelOption | null;
+  profile_hash: string;
+  normalized_params_hash: string | null;
+}
+
+export interface ResolveTopicSelectionModelProfileInput {
+  profile_id: string;
+  execution_mode: TopicSelectionAgentExecutionMode;
+  run_mode: TopicSelectionAgentRunMode;
+  model_option_id?: string | null;
+}
+
+type RegisteredProviderId = 'openai' | 'dashscope';
+
+const REGISTERED_PROVIDER_IDS: RegisteredProviderId[] = ['openai', 'dashscope'];
+
+const DEFAULT_RUN_MODE_ELIGIBILITY: TopicSelectionModelProfileRunModeEligibility = {
+  mocked_llm: ['test', 'acceptance'],
+  codex_assisted: ['acceptance', 'product'],
+  provider_llm: ['acceptance', 'product'],
+};
+
+const PROVIDER_REQUIRED_CAPABILITIES = [
+  'structured_output',
+  'json_schema',
+] as const;
+
+export const TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID =
+  'topic-selection.generate-need-candidate.single-agent.v1' as const;
+export const TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID =
+  'topic-selection.need-discovery.explorer.v1' as const;
+export const TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID =
+  'topic-selection.need-discovery.deep-critic.v1' as const;
+export const TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FRAMING_PROFILE_ID =
+  'topic-selection.need-discovery.arbiter-framing.v1' as const;
+export const TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID =
+  'topic-selection.need-discovery.arbiter-final.v1' as const;
+
+function normalizedParams(
+  overrides: Partial<TopicSelectionModelOption['normalized_params']> = {},
+): TopicSelectionModelOption['normalized_params'] {
+  return {
+    creativity: 'medium',
+    reasoning_depth: 'medium',
+    output_budget: 'medium',
+    structured_output_required: true,
+    output_format: 'json_schema',
+    ...overrides,
+  };
+}
+
+function providerOptions(profileKey: string): TopicSelectionModelOption[] {
+  return [
+    {
+      option_id: `${profileKey}.openai-balanced`,
+      option_purpose: 'default_balanced_provider_run',
+      provider_id: 'openai',
+      model_id: 'gpt-5.4-mini',
+      use_when: ['default_provider_run'],
+      request_policy: {
+        timeout_ms: 60000,
+      },
+      normalized_params: normalizedParams(),
+      provider_overrides: {},
+      capability_degrade_policy: {
+        allow_optional_degrade: false,
+      },
+    },
+    {
+      option_id: `${profileKey}.dashscope-budget`,
+      option_purpose: 'budget_sensitive_explicit_provider_run',
+      provider_id: 'dashscope',
+      model_id: 'qwen3.6-plus',
+      use_when: ['budget_sensitive_manual_selection'],
+      request_policy: {
+        timeout_ms: 120000,
+      },
+      normalized_params: normalizedParams(),
+      provider_overrides: {
+        enable_thinking: true,
+      },
+      capability_degrade_policy: {
+        allow_optional_degrade: false,
+      },
+    },
+  ];
+}
+
+function profileBase(input: {
+  profile_id: string;
+  profile_function: string;
+  role_family: TopicSelectionModelProfile['role_family'];
+  stage_family: string;
+  quality_objectives: string[];
+  allowed_execution_modes: TopicSelectionAgentExecutionMode[];
+  output_contract: string;
+  model_options?: TopicSelectionModelOption[];
+  run_mode_eligibility?: TopicSelectionModelProfileRunModeEligibility;
+}): TopicSelectionModelProfile {
+  return {
+    profile_id: input.profile_id,
+    profile_version: 'v1',
+    status: 'active',
+    profile_function: input.profile_function,
+    role_family: input.role_family,
+    stage_family: input.stage_family,
+    quality_objectives: input.quality_objectives,
+    allowed_execution_modes: input.allowed_execution_modes,
+    run_mode_eligibility: input.run_mode_eligibility ?? DEFAULT_RUN_MODE_ELIGIBILITY,
+    required_capabilities: [...PROVIDER_REQUIRED_CAPABILITIES],
+    output_contract: input.output_contract,
+    model_options: input.model_options ?? providerOptions(input.profile_id),
+    provider_fallback_policy: {
+      automatic_fallback: false,
+      manual_rerun_allowed: true,
+      explicit_profile_override_allowed: true,
+      provider_failure_result: 'blocked',
+      record_failure_artifact: true,
+    },
+    failure_handling_policy: {
+      technical_retry: {
+        enabled: true,
+        max_provider_call_attempts: 2,
+        retryable_error_classes: [
+          'network_timeout',
+          'transient_rate_limit',
+          'transient_provider_5xx',
+        ],
+        require_same_profile: true,
+        require_same_model_option: true,
+        require_same_prompt_packet_hash: true,
+        require_same_context_packet_hashes: true,
+      },
+      semantic_retry: {
+        enabled: false,
+      },
+      provider_fallback: {
+        automatic_fallback: false,
+      },
+      supplemental_round: {
+        is_retry: false,
+        requires_arbiter_scoped_questions: true,
+      },
+    },
+    audit_policy: {
+      store_prompt_hash: true,
+      store_response_hash: true,
+      store_structured_output: true,
+      store_raw_provider_response: false,
+      forbid_hidden_reasoning: true,
+    },
+    budget_policy: {
+      max_provider_attempts: 2,
+      max_estimated_cost_usd: null,
+    },
+  };
+}
+
+const DEFAULT_TOPIC_SELECTION_MODEL_PROFILE_REGISTRY: TopicSelectionModelProfileRegistry = {
+  schema_version: TOPIC_SELECTION_MODEL_PROFILE_REGISTRY_SCHEMA_VERSION,
+  profiles: [
+    profileBase({
+      profile_id: TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
+      profile_function: 'generate_need_candidate_single_agent',
+      role_family: 'single_agent',
+      stage_family: 'single_agent_synthesis',
+      quality_objectives: [
+        'generate_grounded_need_candidates',
+        'preserve_authority_boundary',
+        'prepare_deterministic_admission',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'provider_llm', 'codex_assisted'],
+      output_contract: 'RankedCandidateDraftBatch@v1',
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
+      profile_function: 'need_discovery_exploration',
+      role_family: 'explorer',
+      stage_family: 'round_1_discovery',
+      quality_objectives: [
+        'broaden_candidate_framing',
+        'surface_latent_value_points',
+        'preserve_source_grounding',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'provider_llm', 'codex_assisted'],
+      output_contract: 'NeedDiscoveryExplorerNotes@v1',
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID,
+      profile_function: 'need_discovery_deep_critique',
+      role_family: 'deep_critic',
+      stage_family: 'round_1_discovery',
+      quality_objectives: [
+        'stress_test_candidate_value',
+        'surface_failure_modes',
+        'identify_missing_counterevidence',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'provider_llm', 'codex_assisted'],
+      output_contract: 'NeedDiscoveryDeepCriticNotes@v1',
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FRAMING_PROFILE_ID,
+      profile_function: 'need_discovery_arbiter_issue_framing',
+      role_family: 'arbiter',
+      stage_family: 'issue_framing',
+      quality_objectives: [
+        'frame_debate_questions',
+        'focus_supplemental_repair',
+        'preserve_authority_boundary',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'provider_llm', 'codex_assisted'],
+      output_contract: 'DebateIssueFrame@v1',
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID,
+      profile_function: 'need_discovery_arbiter_final_synthesis',
+      role_family: 'arbiter',
+      stage_family: 'final_synthesis',
+      quality_objectives: [
+        'rank_grounded_need_candidates',
+        'separate_rejected_framings',
+        'prepare_deterministic_admission',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'provider_llm'],
+      run_mode_eligibility: {
+        ...DEFAULT_RUN_MODE_ELIGIBILITY,
+        codex_assisted: [],
+      },
+      output_contract: 'RankedCandidateDraftBatch@v1',
+    }),
+  ],
+};
+
+function cloneRegistry(
+  registry: TopicSelectionModelProfileRegistry,
+): TopicSelectionModelProfileRegistry {
+  return JSON.parse(JSON.stringify(registry)) as TopicSelectionModelProfileRegistry;
+}
+
+export function createDefaultTopicSelectionModelProfileRegistry(): TopicSelectionModelProfileRegistry {
+  return cloneRegistry(DEFAULT_TOPIC_SELECTION_MODEL_PROFILE_REGISTRY);
+}
+
+export class TopicSelectionModelProfileRegistryService {
+  private readonly ajv = new AjvConstructor({
+    allErrors: true,
+    strict: false,
+    removeAdditional: false,
+  });
+  private readonly registry: TopicSelectionModelProfileRegistry;
+  private readonly registeredProviderIds: Set<string>;
+  private readonly validator: ValidateFunction;
+
+  constructor(options: {
+    registry?: TopicSelectionModelProfileRegistry;
+    registeredProviderIds?: string[];
+  } = {}) {
+    this.registry = cloneRegistry(options.registry ?? DEFAULT_TOPIC_SELECTION_MODEL_PROFILE_REGISTRY);
+    this.registeredProviderIds = new Set(options.registeredProviderIds ?? REGISTERED_PROVIDER_IDS);
+    this.validator = this.ajv.compile(topicSelectionModelProfileRegistrySchema);
+  }
+
+  validateRegistry(
+    registry: TopicSelectionModelProfileRegistry = this.registry,
+  ): TopicSelectionModelProfileRegistryValidationResult {
+    const issues: TopicSelectionModelProfileRegistryValidationIssue[] = [];
+    const schemaValid = this.validator(registry);
+    if (!schemaValid) {
+      issues.push(...this.schemaIssues(this.validator.errors ?? []));
+      return this.validationResult(issues);
+    }
+
+    this.validateProfiles(registry, issues);
+    return this.validationResult(issues);
+  }
+
+  resolveProfile(input: ResolveTopicSelectionModelProfileInput): TopicSelectionResolvedModelProfile {
+    const validation = this.validateRegistry();
+    if (!validation.valid) {
+      throw new AppError(
+        500,
+        'INTERNAL_ERROR',
+        `Topic-selection model profile registry is invalid: ${validation.issues[0]?.code ?? 'UNKNOWN'}.`,
+      );
+    }
+
+    const profile = this.registry.profiles.find((item) => item.profile_id === input.profile_id);
+    if (!profile || profile.status !== 'active') {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'model profile is not active or does not exist.');
+    }
+    if (!profile.allowed_execution_modes.includes(input.execution_mode)) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'execution_mode is not allowed by model profile.');
+    }
+    const allowedRunModes = profile.run_mode_eligibility[input.execution_mode] ?? [];
+    if (!allowedRunModes.includes(input.run_mode)) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'run_mode is not allowed by model profile.');
+    }
+
+    const selectedOption = input.execution_mode === 'provider_llm'
+      ? this.selectModelOption(profile, input.model_option_id)
+      : null;
+
+    return {
+      profile,
+      selected_model_option: selectedOption,
+      profile_hash: this.hash(profile),
+      normalized_params_hash: selectedOption ? this.hash(selectedOption.normalized_params) : null,
+    };
+  }
+
+  private validateProfiles(
+    registry: TopicSelectionModelProfileRegistry,
+    issues: TopicSelectionModelProfileRegistryValidationIssue[],
+  ): void {
+    const seenProfileIds = new Set<string>();
+    for (const profile of registry.profiles) {
+      if (seenProfileIds.has(profile.profile_id)) {
+        this.pushIssue(issues, 'DUPLICATE_PROFILE_ID', 'profile_id must be unique.', profile.profile_id);
+      }
+      seenProfileIds.add(profile.profile_id);
+      this.validateProfile(profile, issues);
+    }
+  }
+
+  private validateProfile(
+    profile: TopicSelectionModelProfile,
+    issues: TopicSelectionModelProfileRegistryValidationIssue[],
+  ): void {
+    if (profile.provider_fallback_policy.automatic_fallback) {
+      this.pushIssue(issues, 'AUTOMATIC_PROVIDER_FALLBACK_FORBIDDEN', 'automatic provider fallback is disabled in v1.', profile.profile_id);
+    }
+    if (profile.failure_handling_policy.semantic_retry.enabled) {
+      this.pushIssue(issues, 'SEMANTIC_RETRY_FORBIDDEN', 'semantic retry is disabled in v1.', profile.profile_id);
+    }
+    if (profile.failure_handling_policy.provider_fallback.automatic_fallback) {
+      this.pushIssue(issues, 'AUTOMATIC_PROVIDER_FALLBACK_FORBIDDEN', 'failure handling cannot enable provider fallback.', profile.profile_id);
+    }
+    if (profile.failure_handling_policy.supplemental_round.is_retry) {
+      this.pushIssue(issues, 'SUPPLEMENTAL_ROUND_MUST_NOT_BE_RETRY', 'supplemental rounds are not retries.', profile.profile_id);
+    }
+    if (!profile.audit_policy.forbid_hidden_reasoning) {
+      this.pushIssue(issues, 'HIDDEN_REASONING_AUDIT_FORBIDDEN', 'hidden reasoning must be forbidden by audit policy.', profile.profile_id);
+    }
+    if (profile.audit_policy.store_raw_provider_response) {
+      this.pushIssue(issues, 'RAW_PROVIDER_RESPONSE_AUDIT_FORBIDDEN', 'raw provider responses must not be stored.', profile.profile_id);
+    }
+    if (profile.run_mode_eligibility.mocked_llm.includes('product')) {
+      this.pushIssue(issues, 'MOCK_PRODUCT_MODE_FORBIDDEN', 'mocked_llm cannot be eligible for product run mode.', profile.profile_id);
+    }
+    for (const [mode, runModes] of Object.entries(profile.run_mode_eligibility) as Array<[TopicSelectionAgentExecutionMode, TopicSelectionAgentRunMode[]]>) {
+      if (runModes.length > 0 && !profile.allowed_execution_modes.includes(mode)) {
+        this.pushIssue(issues, 'DISALLOWED_EXECUTION_MODE_ELIGIBILITY', `${mode} has run-mode eligibility but is not an allowed execution mode.`, profile.profile_id);
+      }
+    }
+    if (profile.allowed_execution_modes.includes('provider_llm') && profile.model_options.length === 0) {
+      this.pushIssue(issues, 'PROVIDER_MODE_REQUIRES_MODEL_OPTION', 'provider_llm profiles must define at least one model option.', profile.profile_id);
+    }
+    if (
+      profile.failure_handling_policy.technical_retry.enabled
+      && profile.budget_policy.max_provider_attempts
+        < profile.failure_handling_policy.technical_retry.max_provider_call_attempts
+    ) {
+      this.pushIssue(
+        issues,
+        'BUDGET_ATTEMPTS_BELOW_TECHNICAL_RETRY',
+        'budget max_provider_attempts must cover the configured technical retry attempt count.',
+        profile.profile_id,
+      );
+    }
+    this.validateTechnicalRetry(profile, issues);
+    this.validateModelOptions(profile, issues);
+  }
+
+  private validateTechnicalRetry(
+    profile: TopicSelectionModelProfile,
+    issues: TopicSelectionModelProfileRegistryValidationIssue[],
+  ): void {
+    const retry = profile.failure_handling_policy.technical_retry;
+    if (!retry.require_same_profile
+      || !retry.require_same_model_option
+      || !retry.require_same_prompt_packet_hash
+      || !retry.require_same_context_packet_hashes) {
+      this.pushIssue(
+        issues,
+        'TECHNICAL_RETRY_MUST_PRESERVE_INVOCATION',
+        'technical retry must preserve profile, option, prompt packet, and context packet hashes.',
+        profile.profile_id,
+      );
+    }
+  }
+
+  private validateModelOptions(
+    profile: TopicSelectionModelProfile,
+    issues: TopicSelectionModelProfileRegistryValidationIssue[],
+  ): void {
+    const seenOptionIds = new Set<string>();
+    for (const option of profile.model_options) {
+      if (seenOptionIds.has(option.option_id)) {
+        this.pushIssue(issues, 'DUPLICATE_MODEL_OPTION_ID', 'model option ids must be unique inside a profile.', profile.profile_id, option.option_id);
+      }
+      seenOptionIds.add(option.option_id);
+      if (!this.registeredProviderIds.has(option.provider_id)) {
+        this.pushIssue(issues, 'UNKNOWN_PROVIDER_ID', 'model option references an unknown provider.', profile.profile_id, option.option_id);
+      }
+      if (option.normalized_params.structured_output_required
+        && !profile.required_capabilities.includes('structured_output')) {
+        this.pushIssue(issues, 'STRUCTURED_OUTPUT_CAPABILITY_REQUIRED', 'structured output option requires structured_output capability.', profile.profile_id, option.option_id);
+      }
+      if (option.normalized_params.output_format === 'json_schema'
+        && !profile.required_capabilities.includes('json_schema')) {
+        this.pushIssue(issues, 'STRUCTURED_OUTPUT_CAPABILITY_REQUIRED', 'json_schema option requires json_schema capability.', profile.profile_id, option.option_id);
+      }
+    }
+  }
+
+  private selectModelOption(
+    profile: TopicSelectionModelProfile,
+    modelOptionId?: string | null,
+  ): TopicSelectionModelOption {
+    const option = modelOptionId
+      ? profile.model_options.find((item) => item.option_id === modelOptionId)
+      : profile.model_options.find((item) => item.use_when.includes('default_provider_run'))
+        ?? profile.model_options[0];
+    if (!option) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'provider_llm profile does not define a model option.');
+    }
+    if (modelOptionId && option.option_id !== modelOptionId) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'model_option_id is not defined by model profile.');
+    }
+    return option;
+  }
+
+  private schemaIssues(errors: ErrorObject[]): TopicSelectionModelProfileRegistryValidationIssue[] {
+    return errors.map((error) => ({
+      code: 'SCHEMA_VALIDATION_FAILED',
+      message: `${error.instancePath || '/'} ${error.message ?? 'schema validation failed'}`,
+      path: error.instancePath || '/',
+    }));
+  }
+
+  private pushIssue(
+    issues: TopicSelectionModelProfileRegistryValidationIssue[],
+    code: TopicSelectionModelProfileRegistryValidationIssueCode,
+    message: string,
+    profileId?: string,
+    optionId?: string,
+  ): void {
+    issues.push({
+      code,
+      message,
+      profile_id: profileId,
+      option_id: optionId,
+    });
+  }
+
+  private validationResult(
+    issues: TopicSelectionModelProfileRegistryValidationIssue[],
+  ): TopicSelectionModelProfileRegistryValidationResult {
+    return {
+      valid: issues.length === 0,
+      issue_count: issues.length,
+      issues,
+    };
+  }
+
+  private hash(value: unknown): string {
+    return sha256Text(stableStringify(value));
+  }
+}

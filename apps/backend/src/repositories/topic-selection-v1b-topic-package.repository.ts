@@ -39,6 +39,12 @@ export interface TopicSelectionV1bTopicPackageRepository {
   findPackageById(
     topicPackageId: string,
   ): Promise<TopicSelectionTopicPackageRecord | null>;
+  /**
+   * T-087 Phase 3.1 read-only projection — list TopicPackages under a title-card.
+   */
+  listPackagesByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionTopicPackageRecord[]>;
   findPackageByValueDispositionDecisionId(
     valueDispositionDecisionId: string,
   ): Promise<TopicSelectionTopicPackageRecord | null>;

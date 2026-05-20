@@ -430,6 +430,17 @@ implements TopicSelectionV1bValueAssessmentRepository {
     return row ? toAssessmentRecord(row) : null;
   }
 
+  async listAssessmentsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionTopicValueAssessmentRecord[]> {
+    const rows = await this.prisma.titleCardValueAssessment.findMany({
+      where: { titleCardId },
+      orderBy: { updatedAt: 'desc' },
+      include: { researchRecord: { select: { payload: true } } },
+    });
+    return rows.map(toAssessmentRecord);
+  }
+
   async findInputSnapshotById(
     inputSnapshotId: string,
   ): Promise<TopicSelectionTopicValueAssessmentInputSnapshotRecord | null> {

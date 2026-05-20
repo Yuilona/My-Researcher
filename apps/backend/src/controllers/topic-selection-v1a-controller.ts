@@ -28,6 +28,10 @@ export type ReadinessBody = Omit<
 >;
 type SupportPacketBody = Parameters<TopicSelectionNeedValidationService['createValidationDecisionSupportPacket']>[0];
 type AdjudicationBody = Omit<Parameters<TopicSelectionNeedValidationService['adjudicateNeed']>[0], 'need_candidate_id'>;
+type ConfirmValidatedNeedBody = Omit<
+  Parameters<TopicSelectionNeedValidationService['confirmValidatedNeed']>[0],
+  'adjudication_result_id'
+>;
 type V1bInputBundleBody = Parameters<TopicSelectionNeedValidationService['publishV1bInputBundle']>[0];
 type QualitySignalBody = Parameters<TopicSelectionControlPlaneService['emitQualitySignal']>[0];
 export type InterpretQualitySignalBody = Omit<
@@ -260,6 +264,21 @@ export class TopicSelectionV1aController {
     }
   };
 
+  confirmValidatedNeed = async (
+    request: BodyParamsRequest<ConfirmValidatedNeedBody, { adjudicationResultId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.needValidation.confirmValidatedNeed({
+        ...request.body,
+        adjudication_result_id: request.params.adjudicationResultId,
+      });
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
   publishV1bInputBundle = async (request: BodyRequest<V1bInputBundleBody>, reply: FastifyReply) => {
     try {
       const result = await this.needValidation.publishV1bInputBundle(request.body);
@@ -335,6 +354,142 @@ export class TopicSelectionV1aController {
     try {
       const result = await this.recheckRiskMemory.listOpenQueueItems();
       return reply.send({ items: result });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  /**
+   * T-087 D1 — list SearchPlans for a title-card. Reviewer workbench v1a
+   * SearchPlan surface entry point.
+   */
+  listSearchPlansByTitleCard = async (
+    request: ParamsRequest<{ titleCardId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.searchResources.listSearchPlansByTitleCardId(request.params.titleCardId);
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  /**
+   * T-087 D1 — list EvidenceMaps for a title-card. Reviewer workbench v1a
+   * EvidenceMap surface entry point.
+   */
+  listEvidenceMapsByTitleCard = async (
+    request: ParamsRequest<{ titleCardId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.evidenceMaps.listEvidenceMapsByTitleCardId(request.params.titleCardId);
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  /**
+   * T-087 D1 — list NeedCandidates for a title-card. Reviewer workbench v1a
+   * NeedCandidate surface entry point.
+   */
+  listNeedCandidatesByTitleCard = async (
+    request: ParamsRequest<{ titleCardId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.needValidation.listNeedCandidatesByTitleCardId(request.params.titleCardId);
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  /**
+   * T-087 D1 — list ValidatedNeeds for a title-card. Reviewer workbench v1a
+   * ValidatedNeed surface entry point.
+   */
+  listValidatedNeedsByTitleCard = async (
+    request: ParamsRequest<{ titleCardId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.needValidation.listValidatedNeedsByTitleCardId(request.params.titleCardId);
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  /**
+   * T-087 Phase 2.5 — list ValidationDecisionSupportPackets for a candidate.
+   * Drives the adjudication confirm drawer's support_packet_id picker.
+   */
+  listValidationSupportPacketsByNeedCandidate = async (
+    request: ParamsRequest<{ needCandidateId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.needValidation.listValidationSupportPacketsByNeedCandidateId(
+        request.params.needCandidateId,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  /**
+   * T-087 Phase 2.4 — list CandidateDecisionMemorySuggestions for a candidate.
+   * Drives the NeedCandidate inline negative-memory section.
+   */
+  listCandidateMemorySuggestionsByNeedCandidate = async (
+    request: ParamsRequest<{ needCandidateId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.needValidation.listCandidateMemorySuggestionsByNeedCandidateId(
+        request.params.needCandidateId,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  /**
+   * T-087 Phase 2.2 — list SearchPlanRecheckRequests for a title-card.
+   * Drives the SearchPlan card's recheck-request inline list.
+   */
+  listSearchPlanRecheckRequestsByTitleCard = async (
+    request: ParamsRequest<{ titleCardId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.searchResources.listSearchPlanRecheckRequestsByTitleCardId(
+        request.params.titleCardId,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  /**
+   * T-087 Phase 2.3 — list EvidenceUnits for an EvidenceMap.
+   * Drives the EvidenceMap drilldown inline panel.
+   */
+  listEvidenceUnitsByEvidenceMap = async (
+    request: ParamsRequest<{ evidenceMapId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.evidenceMaps.listEvidenceUnitsByEvidenceMapId(
+        request.params.evidenceMapId,
+      );
+      return reply.send({ items });
     } catch (error) {
       return handleError(reply, error);
     }

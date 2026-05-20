@@ -22,6 +22,9 @@
 ## Phase 4 - Migration
 - Wrap or replace `.ai/scripts/topic-selection-real-e2e.mjs` and `.ai/scripts/topic-selection-real-e2e-quality-gate.mjs` with the unified harness.
 - Remove obsolete ad hoc runner logic once parity is proven.
+- Preserve legacy command names only as thin CLI wrappers around registered `WorkflowScenario` ids.
+- Add drift checks so scripts cannot retain independent node sequencing, prompt construction, model-mode branching, guardrail decisions, evidence assignment, persistence semantics, hash semantics, or replay/cache semantics.
+- Treat migration as incomplete until every existing real-flow/E2E/provider-stability path maps to the scenario registry and wrapper tests prove no direct business-service execution remains in CLI scripts.
 
 ## Phase 5 - Verification
 - Add mocked runtime tests for each node.

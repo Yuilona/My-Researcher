@@ -31,6 +31,7 @@ import type {
 import { AppError } from '../errors/app-error.js';
 import type {
   TopicSelectionNeedValidationAdjudicationWriteResult,
+  TopicSelectionNeedValidationHumanConfirmationWriteResult,
   TopicSelectionNeedValidationRepository,
 } from '../repositories/topic-selection-need-validation.repository.js';
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
@@ -109,8 +110,6 @@ type AdjudicateNeedInput = {
   final_decision: TopicSelectionNeedAdjudicationDecision;
   rationale: string;
   adjudicated_by?: TopicSelectionActorRef;
-  human_actor?: TopicSelectionActorRef;
-  human_rationale?: string | null;
   rejected_reason?: TopicSelectionNeedRejectedReason | null;
   loopback_target?: TopicSelectionNeedLoopbackTarget;
   required_actions?: string[];
@@ -123,6 +122,18 @@ type AdjudicateNeedInput = {
   memory_suggestion?: CandidateMemorySuggestionInput | null;
   decision_payload?: Record<string, unknown>;
   policy_version_id?: string | null;
+};
+
+type ConfirmValidatedNeedInput = {
+  workspace_id?: string | null;
+  adjudication_result_id: string;
+  human_actor: TopicSelectionActorRef;
+  human_rationale: string;
+  policy_version_id?: string | null;
+};
+
+type ConfirmValidatedNeedResult = TopicSelectionNeedValidationHumanConfirmationWriteResult & {
+  adjudication_result: TopicSelectionValidateNeedAdjudicationResultRecord;
 };
 
 type PublishV1bInputBundleInput = {
@@ -633,12 +644,10 @@ export class TopicSelectionNeedValidationService {
     if (input.final_decision === 'merge' && !input.merge_target_need_candidate_ref) {
       throw new AppError(400, 'INVALID_PAYLOAD', 'Merge adjudication requires merge_target_need_candidate_ref.');
     }
-    this.assertValidateHumanActor(input);
 
     const adjudicationId = this.idFactory('need_adjudication');
     const adjudicationRef = this.ref('validate_need_adjudication_result', adjudicationId, candidate.title_card_id);
     const validatedNeedId = input.final_decision === 'validate' ? this.idFactory('validated_need') : null;
-    const validatedNeedRef = validatedNeedId ? this.ref('validated_need', validatedNeedId, candidate.title_card_id) : null;
     const memorySuggestion = this.buildMemorySuggestion(candidate, adjudicationId, input);
     const memorySuggestionRef = memorySuggestion
       ? this.ref('candidate_decision_memory_suggestion', memorySuggestion.memory_suggestion_id, candidate.title_card_id)
@@ -658,23 +667,10 @@ export class TopicSelectionNeedValidationService {
     const recheckRef = searchPlanRecheckRequest
       ? this.ref('search_plan_recheck_request', searchPlanRecheckRequest.search_plan_recheck_request_id, candidate.title_card_id)
       : null;
-    const targetRef = validatedNeedRef ?? adjudicationRef;
-    const humanDecision = input.final_decision === 'validate'
-      ? await this.controlPlane.recordHumanDecision({
-          workspace_id: input.workspace_id ?? candidate.workspace_id ?? null,
-          title_card_id: candidate.title_card_id,
-          target_ref: targetRef,
-          decision_type: 'confirm',
-          actor: input.human_actor ?? input.adjudicated_by ?? { actor_type: 'human' },
-          rationale: input.human_rationale ?? input.rationale,
-          policy_version_id: input.policy_version_id ?? null,
-          resulting_authority_refs: validatedNeedRef ? [validatedNeedRef] : [],
-        })
-      : null;
     const inputSnapshot = await this.controlPlane.compileInputSnapshot({
       workspace_id: input.workspace_id ?? candidate.workspace_id ?? null,
       title_card_id: candidate.title_card_id,
-      target_ref: targetRef,
+      target_ref: adjudicationRef,
       source_refs: this.uniqueRefs([
         this.candidateRef(candidate),
         this.supportPacketRef(supportPacket),
@@ -682,7 +678,6 @@ export class TopicSelectionNeedValidationService {
         candidate.search_run_ref,
         candidate.search_plan_ref,
         candidate.literature_snapshot_ref,
-        ...(humanDecision ? [this.ref('human_confirmed_decision', humanDecision.human_confirmed_decision_id, candidate.title_card_id)] : []),
         ...(recheckRef ? [recheckRef] : []),
         ...(memorySuggestionRef ? [memorySuggestionRef] : []),
       ]),
@@ -703,7 +698,7 @@ export class TopicSelectionNeedValidationService {
       output_summary: {
         final_decision: input.final_decision,
         output_validated_need_id: validatedNeedId,
-        human_decision_id: humanDecision?.human_confirmed_decision_id ?? null,
+        human_decision_id: null,
       },
       artifacts: [
         {
@@ -721,15 +716,14 @@ export class TopicSelectionNeedValidationService {
       workspace_id: input.workspace_id ?? candidate.workspace_id ?? null,
       title_card_id: candidate.title_card_id,
       gate_key: 'topic-selection.validate-need-adjudication-ready',
-      target_ref: targetRef,
+      target_ref: adjudicationRef,
       input_snapshot_id: inputSnapshot.input_snapshot_id,
       workflow_run_id: workflow.workflow_run.workflow_run_id,
       policy_version_id: input.policy_version_id ?? null,
-      verdict: input.final_decision === 'validate' ? 'needs_human_review' : 'pass',
+      verdict: 'pass',
     });
     const createdAuthorityRefs = this.uniqueRefs([
       adjudicationRef,
-      ...(validatedNeedRef ? [validatedNeedRef] : []),
       ...(memorySuggestionRef ? [memorySuggestionRef] : []),
       ...(recheckRef ? [recheckRef] : []),
     ]);
@@ -738,17 +732,20 @@ export class TopicSelectionNeedValidationService {
       title_card_id: candidate.title_card_id,
       transition_key: 'need-candidate-adjudication',
       source_ref: this.candidateRef(candidate),
-      target_ref: targetRef,
+      target_ref: adjudicationRef,
       gate_result_id: gate.readiness_gate_result_id,
       workflow_run_id: workflow.workflow_run.workflow_run_id,
       input_snapshot_id: inputSnapshot.input_snapshot_id,
       policy_version_id: input.policy_version_id ?? null,
-      actor: input.adjudicated_by ?? input.human_actor ?? { actor_type: 'human' },
-      human_decision_refs: humanDecision
-        ? [this.ref('human_confirmed_decision', humanDecision.human_confirmed_decision_id, candidate.title_card_id)]
-        : [],
+      actor: input.adjudicated_by ?? { actor_type: 'human' },
+      human_decision_refs: [],
       state_write_intents: [
-        this.stateWriteIntent(this.candidateRef(candidate), 'decision', 'need_candidate', this.statusForDecision(input.final_decision)),
+        this.stateWriteIntent(
+          this.candidateRef(candidate),
+          'decision',
+          'need_candidate',
+          this.adjudicationPendingStatusForDecision(input.final_decision),
+        ),
       ],
       created_authority_refs: createdAuthorityRefs,
     });
@@ -756,9 +753,8 @@ export class TopicSelectionNeedValidationService {
     const trace = await this.controlPlane.buildTraceSnapshot({
       workspace_id: input.workspace_id ?? candidate.workspace_id ?? null,
       title_card_id: candidate.title_card_id,
-      target_ref: targetRef,
+      target_ref: adjudicationRef,
       object_refs: this.uniqueRefs([
-        targetRef,
         adjudicationRef,
         this.candidateRef(candidate),
         this.supportPacketRef(supportPacket),
@@ -766,7 +762,6 @@ export class TopicSelectionNeedValidationService {
         candidate.search_run_ref,
         candidate.search_plan_ref,
         candidate.literature_snapshot_ref,
-        ...(humanDecision ? [this.ref('human_confirmed_decision', humanDecision.human_confirmed_decision_id, candidate.title_card_id)] : []),
         ...(memorySuggestionRef ? [memorySuggestionRef] : []),
         ...(recheckRef ? [recheckRef] : []),
       ]),
@@ -783,7 +778,7 @@ export class TopicSelectionNeedValidationService {
       supportPacket,
       adjudicationId,
       input,
-      humanDecisionId: humanDecision?.human_confirmed_decision_id ?? null,
+      humanDecisionId: null,
       validatedNeedId,
       searchPlanRecheckRequestRef: recheckRef,
       memorySuggestionRef,
@@ -794,21 +789,15 @@ export class TopicSelectionNeedValidationService {
       traceSnapshotId: trace.trace_snapshot_id,
       artifactRefs: workflow.artifact_refs.map((artifact) => this.ref('artifact_ref', artifact.artifact_ref_id, candidate.title_card_id)),
     });
-    const validatedNeed = validatedNeedRef && humanDecision
-      ? this.buildValidatedNeed(candidate, supportPacket, adjudicationResult, validatedNeedRef, humanDecision, trace)
-      : null;
-    const v1bInputBundle = validatedNeed
-      ? this.buildV1bInputBundle(validatedNeed, candidate, supportPacket, adjudicationResult, memorySuggestionRef ? [memorySuggestionRef] : [], recheckRef ? [recheckRef] : [], 'v1')
-      : null;
     return this.repository.adjudicateWithSideEffects({
       adjudication_result: adjudicationResult,
       candidate_patch: {
-        lifecycle_status: this.lifecycleStatusForDecision(input.final_decision),
-        decision_status: this.statusForDecision(input.final_decision),
-        review_status: input.final_decision === 'validate' ? 'human_confirmed' : 'human_reviewed',
+        lifecycle_status: this.adjudicationPendingLifecycleStatusForDecision(input.final_decision, candidate.lifecycle_status),
+        decision_status: this.adjudicationPendingStatusForDecision(input.final_decision),
+        review_status: input.final_decision === 'validate' ? 'needs_human_review' : 'human_reviewed',
         freshness_status: recheckRef ? 'recheck_required' : candidate.freshness_status,
         result_adjudication_id: adjudicationId,
-        result_validated_need_id: validatedNeedId,
+        result_validated_need_id: null,
         merged_into_need_candidate_ref: input.merge_target_need_candidate_ref ?? null,
         open_recheck_request_refs: recheckRef
           ? this.uniqueRefs([...candidate.open_recheck_request_refs, recheckRef])
@@ -820,16 +809,182 @@ export class TopicSelectionNeedValidationService {
         ]),
         updated_at: this.now(),
       },
-      validated_need: validatedNeed,
+      validated_need: null,
       memory_suggestion: memorySuggestion,
-      v1b_input_bundle: v1bInputBundle,
+      v1b_input_bundle: null,
     });
+  }
+
+  async confirmValidatedNeed(input: ConfirmValidatedNeedInput): Promise<ConfirmValidatedNeedResult> {
+    if (input.human_actor.actor_type !== 'human' && input.human_actor.actor_type !== 'hybrid') {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'Validate confirmation requires a human or hybrid human_actor.');
+    }
+    if (!input.human_rationale.trim()) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'Validate confirmation requires human_rationale.');
+    }
+    const adjudication = await this.repository.findAdjudicationResultById(input.adjudication_result_id);
+    if (!adjudication) {
+      throw new AppError(404, 'NOT_FOUND', `AdjudicationResult ${input.adjudication_result_id} not found.`);
+    }
+    if (adjudication.final_decision !== 'validate') {
+      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'Only validate adjudications can produce a ValidatedNeed.');
+    }
+    if (!adjudication.output_validated_need_id) {
+      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'Validate adjudication is missing output_validated_need_id.');
+    }
+    const existing = await this.repository.findValidatedNeedById(adjudication.output_validated_need_id);
+    if (existing) {
+      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'ValidatedNeed already exists for this adjudication.');
+    }
+    const candidate = await this.requireCandidate(adjudication.need_candidate_id);
+    if (candidate.result_validated_need_id) {
+      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'NeedCandidate already produced a ValidatedNeed.');
+    }
+    if (candidate.result_adjudication_id && candidate.result_adjudication_id !== adjudication.adjudication_result_id) {
+      throw new AppError(409, 'VERSION_CONFLICT', 'NeedCandidate result adjudication does not match confirmation adjudication.');
+    }
+    const supportPacket = await this.requireSupportPacket(adjudication.support_packet_id);
+    if (supportPacket.need_candidate_id !== candidate.need_candidate_id) {
+      throw new AppError(409, 'VERSION_CONFLICT', 'Support packet belongs to a different NeedCandidate.');
+    }
+    const validatedNeedRef = this.ref('validated_need', adjudication.output_validated_need_id, candidate.title_card_id);
+    const humanDecision = await this.controlPlane.recordHumanDecision({
+      workspace_id: input.workspace_id ?? candidate.workspace_id ?? null,
+      title_card_id: candidate.title_card_id,
+      target_ref: validatedNeedRef,
+      decision_type: 'confirm',
+      actor: input.human_actor,
+      rationale: input.human_rationale,
+      policy_version_id: input.policy_version_id ?? null,
+      resulting_authority_refs: [validatedNeedRef],
+    });
+    const inputSnapshot = await this.controlPlane.compileInputSnapshot({
+      workspace_id: input.workspace_id ?? candidate.workspace_id ?? null,
+      title_card_id: candidate.title_card_id,
+      target_ref: validatedNeedRef,
+      source_refs: this.uniqueRefs([
+        this.candidateRef(candidate),
+        this.supportPacketRef(supportPacket),
+        this.ref('validate_need_adjudication_result', adjudication.adjudication_result_id, candidate.title_card_id),
+        candidate.evidence_map_ref,
+        candidate.search_run_ref,
+        candidate.search_plan_ref,
+        candidate.literature_snapshot_ref,
+        this.ref('human_confirmed_decision', humanDecision.human_confirmed_decision_id, candidate.title_card_id),
+      ]),
+      payload: {
+        adjudication_result_id: adjudication.adjudication_result_id,
+        output_validated_need_id: adjudication.output_validated_need_id,
+        required_human_checks: supportPacket.required_human_checks,
+      },
+      policy_version: input.policy_version_id ?? null,
+      created_by: input.human_actor.actor_type,
+    });
+    const workflow = await this.controlPlane.recordWorkflowRun({
+      workspace_id: input.workspace_id ?? candidate.workspace_id ?? null,
+      title_card_id: candidate.title_card_id,
+      workflow_key: 'topic-selection.human-confirm-need',
+      workflow_profile_key: 'human-confirmation-record',
+      input_snapshot_id: inputSnapshot.input_snapshot_id,
+      output_summary: {
+        validated_need_id: adjudication.output_validated_need_id,
+        human_decision_id: humanDecision.human_confirmed_decision_id,
+      },
+      artifacts: [
+        {
+          artifact_kind: 'structured_output',
+          payload: {
+            adjudication_result_id: adjudication.adjudication_result_id,
+            human_rationale: input.human_rationale,
+            required_human_checks: supportPacket.required_human_checks,
+          },
+        },
+      ],
+      created_by: input.human_actor.actor_type,
+    });
+    const gate = await this.controlPlane.runDeterministicGate({
+      workspace_id: input.workspace_id ?? candidate.workspace_id ?? null,
+      title_card_id: candidate.title_card_id,
+      gate_key: 'topic-selection.human-confirm-need-ready',
+      target_ref: validatedNeedRef,
+      input_snapshot_id: inputSnapshot.input_snapshot_id,
+      workflow_run_id: workflow.workflow_run.workflow_run_id,
+      policy_version_id: input.policy_version_id ?? null,
+    });
+    const transition = await this.controlPlane.attemptTransition({
+      workspace_id: input.workspace_id ?? candidate.workspace_id ?? null,
+      title_card_id: candidate.title_card_id,
+      transition_key: 'need-adjudication-to-validated-need',
+      source_ref: this.ref('validate_need_adjudication_result', adjudication.adjudication_result_id, candidate.title_card_id),
+      target_ref: validatedNeedRef,
+      gate_result_id: gate.readiness_gate_result_id,
+      workflow_run_id: workflow.workflow_run.workflow_run_id,
+      input_snapshot_id: inputSnapshot.input_snapshot_id,
+      policy_version_id: input.policy_version_id ?? null,
+      actor: input.human_actor,
+      human_decision_refs: [this.ref('human_confirmed_decision', humanDecision.human_confirmed_decision_id, candidate.title_card_id)],
+      state_write_intents: [
+        this.stateWriteIntent(this.candidateRef(candidate), 'decision', 'need_candidate', 'resulted_in_validated_need'),
+      ],
+      created_authority_refs: [
+        validatedNeedRef,
+        this.ref('human_confirmed_decision', humanDecision.human_confirmed_decision_id, candidate.title_card_id),
+      ],
+    });
+    this.assertTransitionPassed(transition.result, 'ValidatedNeed');
+    const trace = await this.controlPlane.buildTraceSnapshot({
+      workspace_id: input.workspace_id ?? candidate.workspace_id ?? null,
+      title_card_id: candidate.title_card_id,
+      target_ref: validatedNeedRef,
+      object_refs: this.uniqueRefs([
+        validatedNeedRef,
+        this.candidateRef(candidate),
+        this.supportPacketRef(supportPacket),
+        this.ref('validate_need_adjudication_result', adjudication.adjudication_result_id, candidate.title_card_id),
+        candidate.evidence_map_ref,
+        candidate.search_run_ref,
+        candidate.search_plan_ref,
+        candidate.literature_snapshot_ref,
+        this.ref('human_confirmed_decision', humanDecision.human_confirmed_decision_id, candidate.title_card_id),
+      ]),
+      artifact_refs: workflow.artifact_refs.map((artifact) => this.ref('artifact_ref', artifact.artifact_ref_id, candidate.title_card_id)),
+      transition_attempt_refs: [this.ref('chain_transition_attempt', transition.chain_transition_attempt_id, candidate.title_card_id)],
+      payload: {
+        validated_need_id: adjudication.output_validated_need_id,
+        human_decision_id: humanDecision.human_confirmed_decision_id,
+      },
+      created_by: input.human_actor.actor_type,
+    });
+    const validatedNeed = this.buildValidatedNeed(candidate, supportPacket, adjudication, validatedNeedRef, humanDecision, trace);
+    const result = await this.repository.confirmValidatedNeed({
+      validated_need: validatedNeed,
+      candidate_patch: {
+        lifecycle_status: 'closed',
+        decision_status: 'resulted_in_validated_need',
+        review_status: 'human_confirmed',
+        freshness_status: candidate.freshness_status,
+        result_adjudication_id: adjudication.adjudication_result_id,
+        result_validated_need_id: validatedNeed.validated_need_id,
+        updated_at: this.now(),
+      },
+    });
+    return {
+      ...result,
+      adjudication_result: adjudication,
+    };
   }
 
   async publishV1bInputBundle(input: PublishV1bInputBundleInput): Promise<TopicSelectionV1aToV1bInputBundleRecord> {
     const validatedNeed = await this.repository.findValidatedNeedById(input.validated_need_id);
     if (!validatedNeed) {
       throw new AppError(404, 'NOT_FOUND', `ValidatedNeed ${input.validated_need_id} not found.`);
+    }
+    const existingBundles = await this.repository.listV1aToV1bInputBundlesByValidatedNeedId(input.validated_need_id);
+    const existingBundle = input.bundle_version
+      ? existingBundles.find((bundle) => bundle.bundle_version === input.bundle_version)
+      : existingBundles[0] ?? null;
+    if (existingBundle) {
+      return existingBundle;
     }
     const candidate = await this.requireCandidate(validatedNeed.source_need_candidate_id);
     const supportPacket = await this.requireSupportPacket(validatedNeed.support_packet_id);
@@ -897,7 +1052,7 @@ export class TopicSelectionNeedValidationService {
       transition_attempt_id: input.transitionAttemptId,
       trace_snapshot_id: input.traceSnapshotId,
       artifact_refs: input.artifactRefs,
-      adjudicated_by: input.input.adjudicated_by ?? input.input.human_actor ?? { actor_type: 'human' },
+      adjudicated_by: input.input.adjudicated_by ?? { actor_type: 'human' },
       created_at: this.now(),
     };
   }
@@ -1149,6 +1304,19 @@ export class TopicSelectionNeedValidationService {
       : 'closed';
   }
 
+  private adjudicationPendingStatusForDecision(
+    decision: TopicSelectionNeedAdjudicationDecision,
+  ): TopicSelectionNeedCandidateDecisionStatus {
+    return decision === 'validate' ? 'ready_for_validation' : this.statusForDecision(decision);
+  }
+
+  private adjudicationPendingLifecycleStatusForDecision(
+    decision: TopicSelectionNeedAdjudicationDecision,
+    currentStatus: TopicSelectionNeedCandidateRecord['lifecycle_status'],
+  ): TopicSelectionNeedCandidateRecord['lifecycle_status'] {
+    return decision === 'validate' ? currentStatus : this.lifecycleStatusForDecision(decision);
+  }
+
   private loopbackForDecision(decision: TopicSelectionNeedAdjudicationDecision): TopicSelectionNeedLoopbackTarget {
     if (decision === 'return_to_candidate') {
       return 'need_candidate';
@@ -1332,21 +1500,14 @@ export class TopicSelectionNeedValidationService {
     if (candidate.result_validated_need_id || candidate.decision_status === 'resulted_in_validated_need') {
       throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'NeedCandidate already produced a ValidatedNeed.');
     }
+    if (candidate.result_adjudication_id) {
+      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'NeedCandidate already has a pending adjudication.');
+    }
     if (candidate.lifecycle_status === 'closed') {
       throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'Closed NeedCandidate cannot be adjudicated again.');
     }
     if (candidate.decision_status !== 'ready_for_validation') {
       throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'Adjudication requires ready_for_validation NeedCandidate.');
-    }
-  }
-
-  private assertValidateHumanActor(input: AdjudicateNeedInput): void {
-    if (input.final_decision !== 'validate') {
-      return;
-    }
-    const actor = input.human_actor ?? input.adjudicated_by ?? { actor_type: 'human' };
-    if (actor.actor_type !== 'human' && actor.actor_type !== 'hybrid') {
-      throw new AppError(400, 'INVALID_PAYLOAD', 'Validate adjudication requires a human or hybrid human_actor.');
     }
   }
 
@@ -1378,5 +1539,48 @@ export class TopicSelectionNeedValidationService {
       }
     }
     return result;
+  }
+
+  /**
+   * T-087 D1 read-only projection — list NeedCandidates under a title-card.
+   * Pure repository delegation; no decision-chain semantics changed.
+   */
+  async listNeedCandidatesByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionNeedCandidateRecord[]> {
+    return this.repository.listNeedCandidatesByTitleCardId(titleCardId);
+  }
+
+  /**
+   * T-087 Phase 2.5 — list ValidationDecisionSupportPackets for a candidate.
+   * Powers the adjudication confirm drawer's support_packet_id picker;
+   * pure repository delegation, no decision-chain semantics changed.
+   */
+  async listValidationSupportPacketsByNeedCandidateId(
+    needCandidateId: string,
+  ): Promise<TopicSelectionValidationDecisionSupportPacketRecord[]> {
+    return this.repository.listValidationDecisionSupportPacketsByNeedCandidateId(needCandidateId);
+  }
+
+  /**
+   * T-087 Phase 2.4 — list CandidateDecisionMemorySuggestions for a candidate.
+   * Powers the NeedCandidate inline negative-memory section so reviewers can
+   * see prior reasons this direction was rejected / parked / superseded.
+   * Pure repository delegation; no decision-chain semantics changed.
+   */
+  async listCandidateMemorySuggestionsByNeedCandidateId(
+    needCandidateId: string,
+  ): Promise<TopicSelectionCandidateDecisionMemorySuggestionRecord[]> {
+    return this.repository.listCandidateDecisionMemorySuggestionsByNeedCandidateId(needCandidateId);
+  }
+
+  /**
+   * T-087 D1 read-only projection — list ValidatedNeeds under a title-card.
+   * Pure repository delegation; no decision-chain semantics changed.
+   */
+  async listValidatedNeedsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionValidatedNeedRecord[]> {
+    return this.repository.listValidatedNeedsByTitleCardId(titleCardId);
   }
 }

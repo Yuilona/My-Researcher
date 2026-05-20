@@ -583,77 +583,142 @@ test('non-validate adjudication persists result with null output_validated_need_
   assert.equal(result.memory_suggestion?.status, 'suggested');
 });
 
-test('validate adjudication creates HumanConfirmedDecision, ValidatedNeed, candidate result link, and v1b bundle', async () => {
+test('validate adjudication requires explicit human confirmation before ValidatedNeed and v1b bundle publication', async () => {
   const ctx = await createReadyPacketFixture();
-  const result = await ctx.needService.adjudicateNeed({
+  const adjudication = await ctx.needService.adjudicateNeed({
     need_candidate_id: ctx.candidate.need_candidate_id,
     support_packet_id: ctx.packet.validation_support_packet_id,
     final_decision: 'validate',
     rationale: 'Reviewer confirms the unmet need and evidence boundary.',
     adjudicated_by: { actor_type: 'human', actor_id: 'reviewer_1' },
+  });
+
+  assert.equal(adjudication.adjudication_result.final_decision, 'validate');
+  assert.ok(adjudication.adjudication_result.output_validated_need_id);
+  assert.equal(adjudication.adjudication_result.human_decision_id, null);
+  assert.equal(adjudication.validated_need, null);
+  assert.equal(adjudication.v1b_input_bundle, null);
+  assert.equal(adjudication.need_candidate.result_adjudication_id, adjudication.adjudication_result.adjudication_result_id);
+  assert.equal(adjudication.need_candidate.result_validated_need_id, null);
+  assert.equal(adjudication.need_candidate.decision_status, 'ready_for_validation');
+  assert.equal(adjudication.need_candidate.review_status, 'needs_human_review');
+
+  const confirmation = await ctx.needService.confirmValidatedNeed({
+    adjudication_result_id: adjudication.adjudication_result.adjudication_result_id,
     human_actor: { actor_type: 'human', actor_id: 'reviewer_1' },
     human_rationale: 'Validated after reviewing support, prior art, and scope.',
   });
-  const humanDecision = result.adjudication_result.human_decision_id
-    ? await ctx.controlPlaneRepository.findHumanConfirmedDecisionById(result.adjudication_result.human_decision_id)
-    : null;
+  const humanDecision = await ctx.controlPlaneRepository.findHumanConfirmedDecisionById(
+    confirmation.validated_need.human_decision_id,
+  );
+  const bundle = await ctx.needService.publishV1bInputBundle({
+    validated_need_id: confirmation.validated_need.validated_need_id,
+    created_by: 'system',
+  });
+  const bundleAgain = await ctx.needService.publishV1bInputBundle({
+    validated_need_id: confirmation.validated_need.validated_need_id,
+    created_by: 'system',
+  });
 
-  assert.equal(result.adjudication_result.final_decision, 'validate');
-  assert.equal(result.adjudication_result.output_validated_need_id, result.validated_need?.validated_need_id);
-  assert.equal(result.need_candidate.result_validated_need_id, result.validated_need?.validated_need_id);
-  assert.equal(result.validated_need?.source_need_candidate_id, ctx.candidate.need_candidate_id);
-  assert.equal(result.v1b_input_bundle?.validated_need_id, result.validated_need?.validated_need_id);
-  assert.equal(result.v1b_input_bundle?.support_packet_id, ctx.packet.validation_support_packet_id);
+  assert.equal(confirmation.validated_need.validated_need_id, adjudication.adjudication_result.output_validated_need_id);
+  assert.equal(confirmation.need_candidate.result_validated_need_id, confirmation.validated_need.validated_need_id);
+  assert.equal(confirmation.validated_need.source_need_candidate_id, ctx.candidate.need_candidate_id);
+  assert.equal(bundle.validated_need_id, confirmation.validated_need.validated_need_id);
+  assert.equal(bundle.support_packet_id, ctx.packet.validation_support_packet_id);
+  assert.equal(bundleAgain.v1b_input_bundle_id, bundle.v1b_input_bundle_id);
   assert.equal(humanDecision?.decision_type, 'confirm');
 });
 
 test('validate adjudication rejects non-human confirmation actor before persistence', async () => {
   const ctx = await createReadyPacketFixture();
+  const adjudication = await ctx.needService.adjudicateNeed({
+    need_candidate_id: ctx.candidate.need_candidate_id,
+    support_packet_id: ctx.packet.validation_support_packet_id,
+    final_decision: 'validate',
+    rationale: 'System-only adjudication can only request human review, not confirmation.',
+    adjudicated_by: { actor_type: 'system' },
+  });
 
   await assert.rejects(
-    () => ctx.needService.adjudicateNeed({
-      need_candidate_id: ctx.candidate.need_candidate_id,
-      support_packet_id: ctx.packet.validation_support_packet_id,
-      final_decision: 'validate',
-      rationale: 'System-only confirmation should not materialize a ValidatedNeed.',
-      adjudicated_by: { actor_type: 'system' },
+    () => ctx.needService.confirmValidatedNeed({
+      adjudication_result_id: adjudication.adjudication_result.adjudication_result_id,
       human_actor: { actor_type: 'system' },
+      human_rationale: 'System-only confirmation should not materialize a ValidatedNeed.',
     }),
     (error: unknown) =>
       error instanceof AppError
       && error.statusCode === 400
       && error.errorCode === 'INVALID_PAYLOAD',
   );
+  const validatedNeed = adjudication.adjudication_result.output_validated_need_id
+    ? await ctx.needValidationRepository.findValidatedNeedById(adjudication.adjudication_result.output_validated_need_id)
+    : null;
   const results = await ctx.needValidationRepository.listAdjudicationResultsByNeedCandidateId(ctx.candidate.need_candidate_id);
-  assert.equal(results.length, 0);
+  assert.equal(results.length, 1);
+  assert.equal(validatedNeed, null);
 });
 
 test('validated candidate cannot be re-adjudicated or produce duplicate ValidatedNeed', async () => {
   const ctx = await createReadyPacketFixture();
-  const first = await ctx.needService.adjudicateNeed({
+  const adjudication = await ctx.needService.adjudicateNeed({
     need_candidate_id: ctx.candidate.need_candidate_id,
     support_packet_id: ctx.packet.validation_support_packet_id,
     final_decision: 'validate',
     rationale: 'Reviewer confirms the unmet need and evidence boundary.',
     adjudicated_by: { actor_type: 'human', actor_id: 'reviewer_1' },
+  });
+  let pendingAdjudicationError: unknown;
+  try {
+    await ctx.needService.adjudicateNeed({
+      need_candidate_id: ctx.candidate.need_candidate_id,
+      support_packet_id: ctx.packet.validation_support_packet_id,
+      final_decision: 'validate',
+      rationale: 'A second pending validate attempt should be rejected.',
+      adjudicated_by: { actor_type: 'human', actor_id: 'reviewer_1' },
+    });
+  } catch (error) {
+    pendingAdjudicationError = error;
+  }
+  assert.ok(pendingAdjudicationError instanceof AppError);
+  assert.equal(pendingAdjudicationError.statusCode, 409);
+  assert.equal(pendingAdjudicationError.errorCode, 'GATE_CONSTRAINT_FAILED');
+
+  const first = await ctx.needService.confirmValidatedNeed({
+    adjudication_result_id: adjudication.adjudication_result.adjudication_result_id,
     human_actor: { actor_type: 'human', actor_id: 'reviewer_1' },
+    human_rationale: 'Validated after reviewing support, prior art, and scope.',
   });
 
-  await assert.rejects(
-    () => ctx.needService.adjudicateNeed({
+  let duplicateConfirmationError: unknown;
+  try {
+    await ctx.needService.confirmValidatedNeed({
+      adjudication_result_id: adjudication.adjudication_result.adjudication_result_id,
+      human_actor: { actor_type: 'human', actor_id: 'reviewer_1' },
+      human_rationale: 'A second confirmation should be rejected.',
+    });
+  } catch (error) {
+    duplicateConfirmationError = error;
+  }
+  assert.ok(duplicateConfirmationError instanceof AppError);
+  assert.equal(duplicateConfirmationError.statusCode, 409);
+  assert.equal(duplicateConfirmationError.errorCode, 'GATE_CONSTRAINT_FAILED');
+
+  let duplicateAdjudicationError: unknown;
+  try {
+    await ctx.needService.adjudicateNeed({
       need_candidate_id: ctx.candidate.need_candidate_id,
       support_packet_id: ctx.packet.validation_support_packet_id,
       final_decision: 'validate',
       rationale: 'A second validate attempt should be rejected.',
       adjudicated_by: { actor_type: 'human', actor_id: 'reviewer_1' },
-      human_actor: { actor_type: 'human', actor_id: 'reviewer_1' },
-    }),
-    (error: unknown) =>
-      error instanceof AppError
-      && error.statusCode === 409
-      && error.errorCode === 'GATE_CONSTRAINT_FAILED',
-  );
-  assert.ok(first.validated_need?.validated_need_id);
+    });
+  } catch (error) {
+    duplicateAdjudicationError = error;
+  }
+  assert.ok(duplicateAdjudicationError instanceof AppError);
+  assert.equal(duplicateAdjudicationError.statusCode, 409);
+  assert.equal(duplicateAdjudicationError.errorCode, 'GATE_CONSTRAINT_FAILED');
+  assert.ok(first.validated_need.validated_need_id);
 });
 
 test('request_searchplan_recheck emits T-052 request without mutating SearchPlan', async () => {

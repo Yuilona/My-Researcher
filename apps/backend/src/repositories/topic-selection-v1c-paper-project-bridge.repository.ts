@@ -58,6 +58,13 @@ export interface TopicSelectionV1cPaperProjectBridgeRepository {
   findBridgeById(
     paperProjectBridgeId: string,
   ): Promise<TopicSelectionPaperProjectBridgeRecord | null>;
+  /**
+   * T-087 Phase 4 read-only projection — list PaperProjectBridges under a
+   * title-card. Drives the reviewer workbench v1c Bridge surface.
+   */
+  listBridgesByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionPaperProjectBridgeRecord[]>;
 
   findBridgeBySourcePromotionDecisionId(
     sourcePromotionDecisionId: string,

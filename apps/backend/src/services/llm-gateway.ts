@@ -98,6 +98,8 @@ export type LlmStructuredOutputRequest = {
   schemaName: string;
   schema: Record<string, unknown>;
   policy?: LlmRequestPolicy;
+  normalizedParams?: object;
+  providerOverrides?: Record<string, unknown>;
 };
 
 export type LlmStructuredOutputResponse<T> = {
@@ -398,7 +400,10 @@ export class BackendLlmGateway {
         model: request.model.modelId,
         messages: request.messages,
         response_format: { type: 'json_object' },
-        extra_body: { enable_thinking: true },
+        extra_body: {
+          enable_thinking: true,
+          ...(request.providerOverrides ?? {}),
+        },
       }),
     });
     return this.readJsonResponse(response);

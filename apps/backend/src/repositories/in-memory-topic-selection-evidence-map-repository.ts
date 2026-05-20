@@ -48,6 +48,14 @@ export class InMemoryTopicSelectionEvidenceMapRepository implements TopicSelecti
     return this.evidenceMaps.get(evidenceMapId) ?? null;
   }
 
+  async listEvidenceMapsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionEvidenceMapRecord[]> {
+    return [...this.evidenceMaps.values()]
+      .filter((record) => record.title_card_id === titleCardId)
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+  }
+
   async updateEvidenceMapFreshness(
     evidenceMapId: string,
     freshnessStatus: TopicSelectionEvidenceFreshnessStatus,

@@ -1,7 +1,7 @@
 # 00 Overview
 
 ## Status
-- State: planned
+- State: in-progress
 - Task ID: `T-088`
 - Feature / Milestone / Requirement: `F-001` / `M-001` / `R-009`
 - Parent architecture package: `dev-docs/archive/topic-selection-decision-chain-redesign/`

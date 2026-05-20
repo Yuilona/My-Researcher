@@ -69,6 +69,14 @@ export class InMemoryTopicSelectionSearchResourceRepository implements TopicSele
     return this.searchPlans.get(searchPlanId) ?? null;
   }
 
+  async listSearchPlansByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionSearchPlanRecord[]> {
+    return [...this.searchPlans.values()]
+      .filter((record) => record.title_card_id === titleCardId)
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+  }
+
   async createCoverageExecutionObservation(
     record: TopicSelectionCoverageExecutionObservationRecord,
   ): Promise<TopicSelectionCoverageExecutionObservationRecord> {
@@ -166,6 +174,14 @@ export class InMemoryTopicSelectionSearchResourceRepository implements TopicSele
     requestId: string,
   ): Promise<TopicSelectionSearchPlanRecheckRequestRecord | null> {
     return this.recheckRequests.get(requestId) ?? null;
+  }
+
+  async listSearchPlanRecheckRequestsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionSearchPlanRecheckRequestRecord[]> {
+    return [...this.recheckRequests.values()]
+      .filter((record) => record.title_card_id === titleCardId)
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
   }
 
   async updateSearchPlanRecheckRequest(

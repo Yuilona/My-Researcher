@@ -131,6 +131,16 @@ implements TopicSelectionV1cPaperProjectBridgeRepository {
     return row ? toBridgeRecord(row) : null;
   }
 
+  async listBridgesByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionPaperProjectBridgeRecord[]> {
+    const rows = await this.prisma.topicSelectionPaperProjectBridge.findMany({
+      where: { titleCardId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toBridgeRecord);
+  }
+
   async findBridgeBySourcePromotionDecisionId(
     sourcePromotionDecisionId: string,
   ): Promise<TopicSelectionPaperProjectBridgeRecord | null> {

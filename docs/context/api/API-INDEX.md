@@ -1,9 +1,9 @@
 # API Index
 
-> Auto-generated at 2026-05-16T00:33:36.448Z — do NOT hand-edit.
-> Source: `docs/context/api/openapi.yaml` (SHA-256: `10d71b81260c...`)
+> Auto-generated at 2026-05-19T22:16:57.442Z — do NOT hand-edit.
+> Source: `docs/context/api/openapi.yaml` (SHA-256: `faa9973e5a00...`)
 
-Total endpoints: **177**
+Total endpoints: **194**
 
 | Method | Path | Summary | Auth | Input (required) | Output (core) | Errors |
 |--------|------|---------|------|------------------|---------------|--------|
@@ -128,6 +128,14 @@ Total endpoints: **177**
 | POST | /topic-selection/v1a/candidate-memory-suggestions/{memorySuggestionId}/materialize | Materialize a candidate memory suggestion into durable decision memory. | none | memorySuggestionId | memory_entry, candidate_memory | 404, 409 |
 | POST | /topic-selection/v1a/accepted-risks | Record a human accepted risk for a v1a target ref. | none | risk_type, target_ref, scope_refs, rationale, accepted_by | — | 400, 409 |
 | GET | /topic-selection/v1a/work-queue/open | List open v1a decision work queue items. | none | — | items | — |
+| GET | /topic-selection/v1a/title-cards/{titleCardId}/search-plans | List v1a SearchPlans for a title-card (T-087 D1 reviewer workbench projection). | none | titleCardId | items | — |
+| GET | /topic-selection/v1a/title-cards/{titleCardId}/evidence-maps | List v1a EvidenceMaps for a title-card (T-087 D1 reviewer workbench projection). | none | titleCardId | items | — |
+| GET | /topic-selection/v1a/title-cards/{titleCardId}/need-candidates | List v1a NeedCandidates for a title-card (T-087 D1 reviewer workbench projection). | none | titleCardId | items | — |
+| GET | /topic-selection/v1a/title-cards/{titleCardId}/validated-needs | List v1a ValidatedNeeds for a title-card (T-087 D1 reviewer workbench projection). | none | titleCardId | items | — |
+| GET | /topic-selection/v1a/need-candidates/{needCandidateId}/validation-support-packets | List validation-decision support packets for a need candidate (T-087 Phase 2.5 picker driver). | none | needCandidateId | items | — |
+| GET | /topic-selection/v1a/need-candidates/{needCandidateId}/memory-suggestions | List candidate-decision memory suggestions for a need candidate (T-087 Phase 2.4 negative-memory inline display). | none | needCandidateId | items | — |
+| GET | /topic-selection/v1a/title-cards/{titleCardId}/search-plan-recheck-requests | List SearchPlan recheck requests for a title-card (T-087 Phase 2.2 reviewer workbench inline list). | none | titleCardId | items | — |
+| GET | /topic-selection/v1a/evidence-maps/{evidenceMapId}/units | List EvidenceUnits for an EvidenceMap (T-087 Phase 2.3 drilldown driver). | none | evidenceMapId | items | — |
 | POST | /topic-selection/v1a/offline-evaluation/datasets | Create a v1a offline evaluation dataset. | none | — | — | 400 |
 | POST | /topic-selection/v1a/offline-evaluation/datasets/synthetic-baseline | Create the synthetic v1a offline evaluation baseline dataset. | none | — | dataset, cases | 400 |
 | POST | /topic-selection/v1a/offline-evaluation/cases | Add a frozen case to a v1a offline evaluation dataset. | none | dataset_id, case_key, case_type, frozen_input_bundle, gold_expectation | — | 400, 404 |
@@ -136,6 +144,12 @@ Total endpoints: **177**
 | POST | /topic-selection/v1a/offline-evaluation/runs/{runId}/complete | Complete an offline evaluation run and calculate metrics. | none | runId | run, metric_results | 404, 409 |
 | GET | /topic-selection/v1a/offline-evaluation/runs/{runId}/metric-results | List metric results for a v1a offline evaluation run. | none | runId | items | 404 |
 | GET | /topic-selection/v1a/offline-evaluation/runs/{runId}/replay-diffs | List replay diffs for a v1a offline evaluation run. | none | runId | items | 404 |
+| GET | /topic-selection/v1b/title-cards/{titleCardId}/research-slice-option-sets | List ResearchSliceOptionSets under a title-card (T-087 Phase 3.1 read-only projection). | none | titleCardId | items | — |
+| GET | /topic-selection/v1b/title-cards/{titleCardId}/topic-question-candidate-sets | List TopicQuestionCandidateSets under a title-card (T-087 Phase 3.1 read-only projection). | none | titleCardId | items | — |
+| GET | /topic-selection/v1b/title-cards/{titleCardId}/topic-value-assessments | List TopicValueAssessments under a title-card (T-087 Phase 3.1 read-only projection). | none | titleCardId | items | — |
+| GET | /topic-selection/v1b/title-cards/{titleCardId}/topic-packages | List TopicPackage(draft) under a title-card (T-087 Phase 3.1 read-only projection). | none | titleCardId | items | — |
+| GET | /topic-selection/v1b/research-slice-option-sets/{optionSetId}/options | List ResearchSliceOptions for an OptionSet (T-087 Phase 3.2 selection picker driver). | none | optionSetId | items | — |
+| GET | /topic-selection/v1b/topic-question-candidate-sets/{candidateSetId}/candidates | List TopicQuestionCandidates for a CandidateSet (T-087 Phase 3.3 selection picker driver). | none | candidateSetId | items | — |
 | POST | /topic-selection/v1b/intake-snapshots | Create a v1b intake snapshot from a v1a-to-v1b input bundle. | none | v1b_input_bundle_id | — | 400, 404, 409 |
 | POST | /topic-selection/v1b/research-constraint-profiles | Create the ResearchConstraintProfile consumed by ResearchSlice planning. | none | v1b_intake_snapshot_id, target_community, claim_ceiling | — | 400, 404, 409 |
 | POST | /topic-selection/v1b/intake-readiness-assessments | Assess whether v1b intake/profile is ready for ResearchSlice planning. | none | v1b_intake_snapshot_id, research_constraint_profile_id | — | 400, 404, 409 |
@@ -156,6 +170,9 @@ Total endpoints: **177**
 | POST | /topic-selection/v1b/offline-evaluation/runs/{runId}/complete | Complete a v1b offline evaluation run and calculate metrics. | none | runId | run, metric_results | 404, 409 |
 | GET | /topic-selection/v1b/offline-evaluation/runs/{runId}/metric-results | List metric results for a v1b offline evaluation run. | none | runId | items | 404 |
 | GET | /topic-selection/v1b/offline-evaluation/runs/{runId}/replay-diffs | List replay diffs for a v1b offline evaluation run. | none | runId | items | 404 |
+| GET | /topic-selection/v1c/title-cards/{titleCardId}/promotion-gate-checks | List PromotionGateChecks under a title-card (T-087 Phase 4 read-only projection). | none | titleCardId | items | — |
+| GET | /topic-selection/v1c/title-cards/{titleCardId}/promotion-decisions | List PromotionDecisions under a title-card (T-087 Phase 4 read-only projection). | none | titleCardId | items | — |
+| GET | /topic-selection/v1c/title-cards/{titleCardId}/paper-project-bridges | List PaperProjectBridges under a title-card (T-087 Phase 4 read-only projection). | none | titleCardId | items | — |
 | POST | /topic-selection/v1c/promotion-input-snapshots | Create a v1c PromotionInputSnapshot from a ready v1b-to-v1c input bundle. | none | v1b_to_v1c_input_bundle_id | — | 400, 404, 409 |
 | GET | /topic-selection/v1c/promotion-input-snapshots/{snapshotId} | Read a v1c PromotionInputSnapshot. | none | snapshotId | — | 404 |
 | POST | /topic-selection/v1c/promotion-decision-support | Create promotion decision support, dossier, mini-check, and gate check. | none | promotion_input_snapshot_id | promotion_decision_support, promotion_dossier, argument_readiness_mini_check, promotion_gate_check, handoff | 400, 404, 409 |

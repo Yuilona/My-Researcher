@@ -25,4 +25,6 @@
 - [ ] For each proposed debate node, roles, model/profile choices, inputs, turn limits, resolution rule, blocker rule, and audit artifact are specified.
 - [ ] For each rejected debate node, the reason is recorded.
 - [ ] Codex-assisted execution boundaries are explicit and distinguish local acceptance from product runtime.
+- [ ] Every matrix node has a node policy covering blockers, validators, execution permissions, authority boundary, audit/artifact policy, and failure semantics.
+- [ ] Every matrix node references at least one registered `WorkflowScenario`.
 - [ ] The output is ready to become implementation tasks without semantic ambiguity.

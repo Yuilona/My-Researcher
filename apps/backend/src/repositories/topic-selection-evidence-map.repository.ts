@@ -24,6 +24,12 @@ export interface TopicSelectionEvidenceMapRepository {
   ): Promise<TopicSelectionEvidenceMapCreateRecords>;
 
   findEvidenceMapById(evidenceMapId: string): Promise<TopicSelectionEvidenceMapRecord | null>;
+  /**
+   * T-087 D1 read-only projection — list EvidenceMaps under a title-card.
+   * Reverse-chronological order; powers the reviewer workbench v1a
+   * EvidenceMap surface.
+   */
+  listEvidenceMapsByTitleCardId(titleCardId: string): Promise<TopicSelectionEvidenceMapRecord[]>;
   updateEvidenceMapFreshness(
     evidenceMapId: string,
     freshnessStatus: TopicSelectionEvidenceFreshnessStatus,

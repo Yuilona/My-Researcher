@@ -1,4 +1,200 @@
 # 04 Verification
 
-## Pending
-- No verification runs yet.
+## 2026-05-19 Initial `AgentOrchestrator` Runtime Implementation
+- Update: added `TopicSelectionAgentOrchestratorService` and focused unit coverage for execution-mode normalization.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-agent-orchestrator-service.unit.test.ts src/services/topic-selection-need-discovery-context-compiler-service.unit.test.ts src/services/topic-selection-need-discovery-artifact-boundary-service.unit.test.ts`
+- Result: passed; 11 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Coverage:
+  - `mocked_llm`, `codex_assisted`, and `provider_llm` return the same normalized result shape.
+  - `provider_llm` calls only the existing `BackendLlmGateway`.
+  - `mocked_llm` cannot run in product mode.
+  - invalid structured output blocks without mode-specific result shape.
+  - hidden/raw output fields block before downstream use.
+  - diagnostic audit artifacts store hashes/provenance and do not store full structured output.
+
+## 2026-05-20 DMP Runtime Foundation Slice 1: Profile Registry/Schema Validator
+- Update: added shared DMP profile contracts, backend profile registry validator/resolver, default v1 need-discovery profiles, and focused tests.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts`
+- Result: passed; 5 tests passed.
+- Command: `cd packages/shared && node --test --loader ts-node/esm src/research-lifecycle/topic-selection-agent-profile-contracts.schema.test.ts`
+- Result: passed; 3 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts src/services/topic-selection-agent-orchestrator-service.unit.test.ts`
+- Result: passed; 9 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared test`
+- Result: passed; 95 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend test`
+- Result: initial direct run failed because the T-054 Prisma HTTP smoke test requires `DATABASE_URL`; this confirmed the suite must be run with the local env SSOT loaded.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 583 tests total, 582 passed, 1 skipped.
+- Command: `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs`
+- Result: passed; registries structurally valid.
+- Command: `node .ai/skills/workflows/llm/llm-engineering/scripts/check-llm-config-keys.mjs`
+- Result: initially failed because `DASHSCOPE_API_KEY_CODING` was referenced but not registered; fixed by adding it to `.ai/llm-config/registry/config_keys.yaml`; rerun passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main && node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed after correcting task status spelling to `in-progress`; project hub regenerated.
+- Coverage:
+  - default DMP v1 need-discovery profiles validate;
+  - provider profile resolution selects the default OpenAI balanced option;
+  - `mocked_llm` product mode and `codex_assisted` arbiter-final execution are rejected;
+  - duplicate profiles/options and unknown provider ids are reported;
+  - semantic retry, automatic fallback drift, mock product eligibility, raw provider audit, hidden reasoning audit, and non-preserving technical retry are rejected;
+  - shared schema rejects invalid normalized parameter values and automatic fallback.
+
+## 2026-05-20 Quality Review And DMP Runtime Foundation Slice 2: Orchestrator Profile Resolution
+- Update: fixed DMP dual-track risks found in code review and wired profile resolution into `TopicSelectionAgentOrchestratorService`, generate-need-candidate adapter, and workflow harness.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: initially failed because `LlmStructuredOutputRequest.normalizedParams` used an index-signature type incompatible with the shared normalized params interface; fixed the request field type to `object`; rerun passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-agent-orchestrator-service.unit.test.ts src/services/topic-selection-model-profile-registry-service.unit.test.ts src/services/topic-selection-generate-need-candidate-orchestrator-adapter-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts src/services/llm-gateway.unit.test.ts`
+- Result: passed; 31 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck && pnpm --filter @paper-engineering-assistant/shared test`
+- Result: passed; 95 tests passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 584 tests total, 583 passed, 1 skipped.
+- Command: `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs`
+- Result: passed; registries structurally valid.
+- Command: `node .ai/skills/workflows/llm/llm-engineering/scripts/check-llm-config-keys.mjs`
+- Result: passed; all in-scope LLM config keys registered.
+- Coverage:
+  - `AgentOrchestrator` rejects profile/output-contract mismatch;
+  - provider model and request policy are resolved from the profile registry, not from harness/adapter concrete model input;
+  - explicit `model_option_id` selects DashScope option and carries provider overrides into the gateway request;
+  - provenance includes profile version/hash, selected model option id, normalized params hash, output contract, and `provider_response` source kind;
+  - generate-need-candidate adapter and WorkflowHarness provider-mode scenarios execute through registry-resolved profile options;
+  - full shared/backend suites remain green after fixture profile-id cleanup.
+
+## 2026-05-20 DMP Runtime Foundation Slice 3: Shared Invocation Provenance Contract
+- Update: added the shared agent invocation provenance/audit envelope and wired `TopicSelectionAgentOrchestratorService` to validate audit snapshots before control-plane artifact persistence.
+- Command: `cd packages/shared && node --test --loader ts-node/esm src/research-lifecycle/topic-selection-agent-invocation-contracts.schema.test.ts`
+- Result: passed; 4 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-agent-orchestrator-service.unit.test.ts src/services/topic-selection-generate-need-candidate-orchestrator-adapter-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 19 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared test`
+- Result: passed; 100 tests passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 584 tests total, 583 passed, 1 skipped.
+- Command: `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+- Result: passed; project hub regenerated.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Command: `git diff --check -- apps/backend/src/services/topic-selection-agent-orchestrator-service.ts apps/backend/src/services/topic-selection-agent-orchestrator-service.unit.test.ts packages/shared/src/research-lifecycle/topic-selection-agent-invocation-contracts.ts packages/shared/src/research-lifecycle/topic-selection-agent-invocation-contracts.schema.test.ts packages/shared/src/research-lifecycle/index.ts packages/shared/package.json packages/shared/src/research-lifecycle/title-card-management-contracts.schema.test.ts dev-docs/active/topic-selection-workflow-runtime-foundation/02-architecture.md dev-docs/active/topic-selection-workflow-runtime-foundation/03-implementation-notes.md dev-docs/active/topic-selection-workflow-runtime-foundation/04-verification.md dev-docs/active/topic-selection-agent-workflow-review/03-implementation-notes.md dev-docs/active/topic-selection-agent-workflow-review/04-verification.md`
+- Result: passed.
+- Coverage:
+  - shared schema accepts canonical provider, Codex, and mocked provenance envelopes;
+  - shared schema rejects provider provenance without selected model-option params;
+  - shared schema rejects raw provider response and hidden-reasoning fields;
+  - orchestrator audit artifacts include invocation attempt id, cache status, structured output hash, profile/model-option provenance, and source-kind markers;
+  - missing mocked/Codex source packets are rejected as `INVALID_PAYLOAD` before audit construction, preventing invalid blocked audit snapshots;
+  - generate-need-candidate adapter and WorkflowHarness scenarios still preserve one result shape across mocked, Codex-assisted, and provider execution modes.
+
+## 2026-05-20 DMP Runtime Foundation Slice 4: Need Discovery Debate Role Invocation Runtime
+- Update: added the initial v1a need-discovery debate loop runtime and wired it into the generate-need-candidate adapter plus WorkflowHarness.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts`
+- Result: passed; 4 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts`
+- Result: passed; 12 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts src/services/topic-selection-generate-need-candidate-orchestrator-adapter-service.unit.test.ts src/services/topic-selection-agent-orchestrator-service.unit.test.ts src/services/topic-selection-model-profile-registry-service.unit.test.ts src/services/topic-selection-need-discovery-artifact-boundary-service.unit.test.ts src/services/topic-selection-need-discovery-context-compiler-service.unit.test.ts`
+- Result: passed; 36 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck`
+- Result: passed.
+- Command: `cd packages/shared && node --test --loader ts-node/esm src/research-lifecycle/title-card-management-contracts.schema.test.ts`
+- Result: passed; 48 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared test`
+- Result: passed; 100 tests passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 589 tests total, 588 passed, 1 skipped.
+- Command: `git diff --check -- apps/backend/src/services/topic-selection-need-discovery-debate-loop-service.ts apps/backend/src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts apps/backend/src/services/topic-selection-workflow-harness-service.ts apps/backend/src/services/topic-selection-workflow-harness-service.unit.test.ts apps/backend/src/services/topic-selection-generate-need-candidate-orchestrator-adapter-service.ts apps/backend/src/services/topic-selection-agent-orchestrator-service.ts apps/backend/src/services/topic-selection-model-profile-registry-service.ts apps/backend/src/services/topic-selection-need-discovery-artifact-boundary-service.ts packages/shared/src/research-lifecycle/topic-selection-need-validation-contracts.ts packages/shared/src/research-lifecycle/title-card-management-contracts.schema.test.ts dev-docs/active/topic-selection-workflow-runtime-foundation/03-implementation-notes.md dev-docs/active/topic-selection-workflow-runtime-foundation/04-verification.md dev-docs/active/topic-selection-agent-workflow-review/03-implementation-notes.md dev-docs/active/topic-selection-agent-workflow-review/04-verification.md`
+- Result: passed.
+- Coverage:
+  - debate loop accepts multiple explorer instances and a deep critic instance in `mocked_llm`;
+  - missing mandatory worker role outputs are rejected as `INVALID_PAYLOAD`;
+  - debate round input is capped at 3;
+  - worker role outputs, role-level summaries, arbiter issue frame, and final synthesis artifacts are recorded;
+  - final arbiter invocation carries `executor_kind=multi_agent_debate` and `debate_extension` provenance;
+  - blocked arbiter issue-framing remains visible in role invocation results while keeping issue-frame/final artifacts absent;
+  - WorkflowHarness can execute `executor_kind=multi_agent_debate` without writing NeedCandidate authority rows when persistence is disabled;
+  - existing admission/routing path still consumes only the final ranked draft batch, not raw debate worker output;
+  - shared schemas validate canonical debate role output, summary, issue-frame, and final-synthesis payloads and reject an unsupported debate role.
+
+## 2026-05-20 DMP Runtime Foundation Slice 5: Executable Debate Scenario Contract Consumption
+- Update: added shared scenario contract DTO/schema and refactored `TopicSelectionNeedDiscoveryDebateLoopService` to use it for executable v1a role/stage metadata.
+- Initial command: `pnpm --filter @paper-engineering-assistant/shared test -- topic-selection-debate-scenario-contracts.schema.test.ts`
+- Result: failed due incorrect pnpm script argument forwarding; reran the direct package test command below.
+- Command: `cd packages/shared && node --test --loader ts-node/esm src/research-lifecycle/topic-selection-debate-scenario-contracts.schema.test.ts`
+- Result: passed; 2 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts src/services/topic-selection-model-profile-registry-service.unit.test.ts`
+- Result: passed; 10 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck`
+- Result: passed.
+- Initial command: `pnpm --filter @paper-engineering-assistant/shared test`
+- Result: failed because `title-card-management-contracts.schema.test.ts` exact barrel-export expectations needed the new shared module; fixed and reran.
+- Command: `pnpm --filter @paper-engineering-assistant/shared test`
+- Result: passed; 103 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts src/services/topic-selection-generate-need-candidate-orchestrator-adapter-service.unit.test.ts`
+- Result: passed; 22 tests passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 592 backend tests total, 591 passed, 1 skipped, 0 failed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Command: `git diff --check -- packages/shared/src/research-lifecycle/topic-selection-debate-scenario-contracts.ts packages/shared/src/research-lifecycle/topic-selection-debate-scenario-contracts.schema.test.ts packages/shared/src/research-lifecycle/index.ts packages/shared/package.json packages/shared/src/research-lifecycle/title-card-management-contracts.schema.test.ts apps/backend/src/services/topic-selection-need-discovery-debate-loop-service.ts apps/backend/src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts apps/backend/src/services/topic-selection-generate-need-candidate-orchestrator-adapter-service.ts apps/backend/src/services/topic-selection-workflow-harness-service.ts dev-docs/active/topic-selection-agent-workflow-review/11-debate-model-invocation-policy.md dev-docs/active/topic-selection-agent-workflow-review/12-v1a-generate-need-candidate-debate-contract.md dev-docs/active/topic-selection-agent-workflow-review/03-implementation-notes.md dev-docs/active/topic-selection-agent-workflow-review/04-verification.md dev-docs/active/topic-selection-workflow-runtime-foundation/03-implementation-notes.md dev-docs/active/topic-selection-workflow-runtime-foundation/04-verification.md`
+- Result: passed.
+- Coverage:
+  - executable scenario contract is schema-validated and exported through shared package boundaries;
+  - debate loop no longer duplicates role/stage slot profile ids, prompt ids, output contracts, schema names, instance defaults, or round cap;
+  - debate loop supports explicit slot-level Codex substitution while keeping final synthesis provider-backed;
+  - final synthesis Codex override is rejected before a final authority-producing invocation can run;
+  - provider-mode debate follows executable contract defaults and still uses the model profile registry for provider/model/options/normalized params;
+  - final-synthesis Codex substitution remains blocked by contract/profile alignment.
+
+## 2026-05-20 Real E2E Provider Run And Ref-Normalization Hardening
+- Initial command: `pnpm topic-selection:real-e2e`
+- Result: failed at `v1b LLM research-slice option generation`; provider output placed a known non-evidence `v1b_intake_snapshot_*` ref in an evidence array.
+- Fix verified: `TopicSelectionV1bResearchSliceService` removes known non-evidence upstream refs from evidence arrays, preserves unknown foreign evidence refs as blockers, and records `NON_EVIDENCE_REFS_REMOVED_FROM_SLICE_OPTION`.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-v1b-research-slice-service.unit.test.ts`
+- Result: passed; 9 tests passed after the first ref-slot repair and 10 tests passed after canonical evidence-ref repair.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed after both ResearchSlice repairs.
+- Follow-up run: `TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_eaf6437e-a88c-43ef-8e65-2216ffd2272e TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:real-e2e`
+- Result: failed at package handoff because a provider-produced evidence ref carried a malformed `title_card_id`.
+- Fix verified: known ResearchSlice evidence refs are canonicalized to inherited evidence role bundle refs before persistence and record `EVIDENCE_REFS_CANONICALIZED`.
+- Follow-up run exposed TopicQuestion provider output with an extra invented boundary ref.
+- Fix verified: `TopicSelectionV1bTopicQuestionService` drops extra unknown boundary refs when canonical boundary refs remain and records `boundary_refs_normalized`.
+- Follow-up run exposed an unknown falsification `trigger_source_ref`.
+- Fix verified: unknown falsification source refs are removed without dropping strict evidence triggers and record `falsification_source_refs_normalized`.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-v1b-topic-question-service.unit.test.ts`
+- Result: passed; 35 tests passed.
+- DashScope compatibility check:
+  - `TOPIC_SELECTION_REAL_PROVIDER_ID=dashscope TOPIC_SELECTION_REAL_MODEL_ID=qwen3.6-plus ... pnpm topic-selection:real-e2e` failed with `DASHSCOPE_API_KEY` 401.
+  - Re-running with `DASHSCOPE_API_KEY` temporarily mapped from `DASHSCOPE_API_KEY_CODING` authenticated but failed contract validation with `ResearchSlice planning returned no options`.
+  - Decision: DashScope is not accepted for this E2E yet; keep OpenAI as the provider-quality path.
+- Successful command: `TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_eaf6437e-a88c-43ef-8e65-2216ffd2272e TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 TOPIC_SELECTION_REAL_LLM_MAX_RETRIES=3 pnpm topic-selection:real-e2e`
+- Result: passed.
+- Successful run id: `real-e2e-1779248422005-c0dfd5`.
+- Artifact dir: `.ai/.tmp/topic-selection-real-e2e/real-e2e-1779248422005-c0dfd5`.
+- Initial backend regression command: `pnpm --filter @paper-engineering-assistant/backend test`
+- Result: failed because `.env.local` was not sourced and the Prisma HTTP smoke tests require `DATABASE_URL`; reran with env loaded.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 596 backend tests total, 595 passed, 1 skipped, 0 failed.
+- Command: `git diff --check -- .ai/scripts/topic-selection-real-e2e.mjs apps/backend/src/services/topic-selection-v1b-research-slice-service.ts apps/backend/src/services/topic-selection-v1b-research-slice-service.unit.test.ts apps/backend/src/services/topic-selection-v1b-topic-question-service.ts apps/backend/src/services/topic-selection-v1b-topic-question-service.unit.test.ts dev-docs/active/topic-selection-workflow-runtime-foundation/03-implementation-notes.md dev-docs/active/topic-selection-workflow-runtime-foundation/04-verification.md dev-docs/active/topic-selection-agent-workflow-review/04-verification.md`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Coverage:
+  - provider-backed v1b ResearchSlice, TopicQuestion, and ValueAssessment nodes executed;
+  - v1a produced a validated need and v1b advanced to package;
+  - `answerable_with_risk` accepted risk carried into v1b and v1c;
+  - v1c promotion, bridge, PaperProject intake, downstream feedback, and recheck request paths completed;
+  - negative checks in the script confirmed malformed intake `INVALID_PAYLOAD`, stale hash `VERSION_CONFLICT`, workspace drift `VERSION_CONFLICT`, inactive bridge `GATE_CONSTRAINT_FAILED`, and downstream invalid feedback/workspace drift behavior.

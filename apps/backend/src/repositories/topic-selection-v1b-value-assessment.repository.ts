@@ -42,6 +42,13 @@ export interface TopicSelectionV1bValueAssessmentRepository {
   findAssessmentById(
     assessmentId: string,
   ): Promise<TopicSelectionTopicValueAssessmentRecord | null>;
+  /**
+   * T-087 Phase 3.1 read-only projection — list TopicValueAssessments under
+   * a title-card.
+   */
+  listAssessmentsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionTopicValueAssessmentRecord[]>;
   findInputSnapshotById(
     inputSnapshotId: string,
   ): Promise<TopicSelectionTopicValueAssessmentInputSnapshotRecord | null>;

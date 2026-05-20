@@ -1132,4 +1132,14 @@ export class TopicSelectionV1cHumanPromotionDecisionService {
       && refs.length > 0
       && refs.every((ref) => this.hasText(ref.ref_type) && this.hasText(ref.ref_id));
   }
+
+  /**
+   * T-087 Phase 4 read-only projection — list PromotionDecisions under a
+   * title-card. Pure repository delegation.
+   */
+  async listPromotionDecisionsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionPromotionDecisionRecord[]> {
+    return this.repository.listPromotionDecisionsByTitleCardId(titleCardId);
+  }
 }

@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-16T00:33:36.448Z",
+  "generatedAt": "2026-05-19T22:16:57.442Z",
   "sourceOpenapi": "docs/context/api/openapi.yaml",
-  "sourceChecksumSha256": "10d71b81260cc1be2b07a03944598f9e9dc17cbe5436adcedfef6cf2ab9a41fc",
+  "sourceChecksumSha256": "faa9973e5a0010cb77376d2897bc86803ca526b03aae8c5476f31c5891a89c81",
   "stats": {
-    "totalEndpoints": 177,
+    "totalEndpoints": 194,
     "byTag": {
       "health": 1,
       "research-lifecycle": 8,
@@ -13,9 +13,9 @@
       "topic-settings": 3,
       "auto-pull": 10,
       "title-card-management": 28,
-      "topic-selection-v1a": 30,
-      "topic-selection-v1b": 20,
-      "topic-selection-v1c": 28
+      "topic-selection-v1a": 38,
+      "topic-selection-v1b": 26,
+      "topic-selection-v1c": 31
     }
   },
   "endpoints": [
@@ -3923,6 +3923,206 @@
       }
     },
     {
+      "method": "GET",
+      "path": "/topic-selection/v1a/title-cards/{titleCardId}/search-plans",
+      "operationId": "listTopicSelectionV1aSearchPlansByTitleCard",
+      "summary": "List v1a SearchPlans for a title-card (T-087 D1 reviewer workbench projection).",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "titleCardId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1a/title-cards/{titleCardId}/search-plans'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1a/title-cards/{titleCardId}/evidence-maps",
+      "operationId": "listTopicSelectionV1aEvidenceMapsByTitleCard",
+      "summary": "List v1a EvidenceMaps for a title-card (T-087 D1 reviewer workbench projection).",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "titleCardId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1a/title-cards/{titleCardId}/evidence-maps'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1a/title-cards/{titleCardId}/need-candidates",
+      "operationId": "listTopicSelectionV1aNeedCandidatesByTitleCard",
+      "summary": "List v1a NeedCandidates for a title-card (T-087 D1 reviewer workbench projection).",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "titleCardId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1a/title-cards/{titleCardId}/need-candidates'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1a/title-cards/{titleCardId}/validated-needs",
+      "operationId": "listTopicSelectionV1aValidatedNeedsByTitleCard",
+      "summary": "List v1a ValidatedNeeds for a title-card (T-087 D1 reviewer workbench projection).",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "titleCardId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1a/title-cards/{titleCardId}/validated-needs'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1a/need-candidates/{needCandidateId}/validation-support-packets",
+      "operationId": "listTopicSelectionV1aSupportPacketsByNeedCandidate",
+      "summary": "List validation-decision support packets for a need candidate (T-087 Phase 2.5 picker driver).",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "needCandidateId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1a/need-candidates/{needCandidateId}/validation-support-packets'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1a/need-candidates/{needCandidateId}/memory-suggestions",
+      "operationId": "listTopicSelectionV1aMemorySuggestionsByNeedCandidate",
+      "summary": "List candidate-decision memory suggestions for a need candidate (T-087 Phase 2.4 negative-memory inline display).",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "needCandidateId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1a/need-candidates/{needCandidateId}/memory-suggestions'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1a/title-cards/{titleCardId}/search-plan-recheck-requests",
+      "operationId": "listTopicSelectionV1aSearchPlanRecheckRequestsByTitleCard",
+      "summary": "List SearchPlan recheck requests for a title-card (T-087 Phase 2.2 reviewer workbench inline list).",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "titleCardId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1a/title-cards/{titleCardId}/search-plan-recheck-requests'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1a/evidence-maps/{evidenceMapId}/units",
+      "operationId": "listTopicSelectionV1aEvidenceUnitsByEvidenceMap",
+      "summary": "List EvidenceUnits for an EvidenceMap (T-087 Phase 2.3 drilldown driver).",
+      "tag": "topic-selection-v1a",
+      "auth": "none",
+      "input": {
+        "params": [
+          "evidenceMapId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1a/evidence-maps/{evidenceMapId}/units'"
+      }
+    },
+    {
       "method": "POST",
       "path": "/topic-selection/v1a/offline-evaluation/datasets",
       "operationId": "createTopicSelectionV1aOfflineEvaluationDataset",
@@ -4167,6 +4367,156 @@
       ],
       "example": {
         "curl": "curl -X GET '/topic-selection/v1a/offline-evaluation/runs/{runId}/replay-diffs'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1b/title-cards/{titleCardId}/research-slice-option-sets",
+      "operationId": "listTopicSelectionV1bResearchSliceOptionSetsByTitleCard",
+      "summary": "List ResearchSliceOptionSets under a title-card (T-087 Phase 3.1 read-only projection).",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [
+          "titleCardId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1b/title-cards/{titleCardId}/research-slice-option-sets'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1b/title-cards/{titleCardId}/topic-question-candidate-sets",
+      "operationId": "listTopicSelectionV1bTopicQuestionCandidateSetsByTitleCard",
+      "summary": "List TopicQuestionCandidateSets under a title-card (T-087 Phase 3.1 read-only projection).",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [
+          "titleCardId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1b/title-cards/{titleCardId}/topic-question-candidate-sets'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1b/title-cards/{titleCardId}/topic-value-assessments",
+      "operationId": "listTopicSelectionV1bTopicValueAssessmentsByTitleCard",
+      "summary": "List TopicValueAssessments under a title-card (T-087 Phase 3.1 read-only projection).",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [
+          "titleCardId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1b/title-cards/{titleCardId}/topic-value-assessments'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1b/title-cards/{titleCardId}/topic-packages",
+      "operationId": "listTopicSelectionV1bTopicPackagesByTitleCard",
+      "summary": "List TopicPackage(draft) under a title-card (T-087 Phase 3.1 read-only projection).",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [
+          "titleCardId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1b/title-cards/{titleCardId}/topic-packages'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1b/research-slice-option-sets/{optionSetId}/options",
+      "operationId": "listTopicSelectionV1bResearchSliceOptionsByOptionSet",
+      "summary": "List ResearchSliceOptions for an OptionSet (T-087 Phase 3.2 selection picker driver).",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [
+          "optionSetId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1b/research-slice-option-sets/{optionSetId}/options'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1b/topic-question-candidate-sets/{candidateSetId}/candidates",
+      "operationId": "listTopicSelectionV1bTopicQuestionCandidatesByCandidateSet",
+      "summary": "List TopicQuestionCandidates for a CandidateSet (T-087 Phase 3.3 selection picker driver).",
+      "tag": "topic-selection-v1b",
+      "auth": "none",
+      "input": {
+        "params": [
+          "candidateSetId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1b/topic-question-candidate-sets/{candidateSetId}/candidates'"
       }
     },
     {
@@ -4888,6 +5238,81 @@
       ],
       "example": {
         "curl": "curl -X GET '/topic-selection/v1b/offline-evaluation/runs/{runId}/replay-diffs'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/title-cards/{titleCardId}/promotion-gate-checks",
+      "operationId": "listTopicSelectionV1cPromotionGateChecksByTitleCard",
+      "summary": "List PromotionGateChecks under a title-card (T-087 Phase 4 read-only projection).",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "titleCardId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/title-cards/{titleCardId}/promotion-gate-checks'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/title-cards/{titleCardId}/promotion-decisions",
+      "operationId": "listTopicSelectionV1cPromotionDecisionsByTitleCard",
+      "summary": "List PromotionDecisions under a title-card (T-087 Phase 4 read-only projection).",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "titleCardId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/title-cards/{titleCardId}/promotion-decisions'"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/topic-selection/v1c/title-cards/{titleCardId}/paper-project-bridges",
+      "operationId": "listTopicSelectionV1cPaperProjectBridgesByTitleCard",
+      "summary": "List PaperProjectBridges under a title-card (T-087 Phase 4 read-only projection).",
+      "tag": "topic-selection-v1c",
+      "auth": "none",
+      "input": {
+        "params": [
+          "titleCardId"
+        ],
+        "query": [],
+        "body": null
+      },
+      "output": {
+        "successStatus": 200,
+        "coreFields": [
+          "items"
+        ]
+      },
+      "errors": [],
+      "example": {
+        "curl": "curl -X GET '/topic-selection/v1c/title-cards/{titleCardId}/paper-project-bridges'"
       }
     },
     {

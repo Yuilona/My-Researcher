@@ -78,6 +78,10 @@ class StubValueAssessmentRepository implements TopicSelectionV1bValueAssessmentR
     throw new Error('not implemented');
   }
 
+  async listAssessmentsByTitleCardId(): Promise<TopicSelectionTopicValueAssessmentRecord[]> {
+    return [];
+  }
+
   async findInputSnapshotById(): Promise<TopicSelectionTopicValueAssessmentInputSnapshotRecord | null> {
     throw new Error('not implemented');
   }

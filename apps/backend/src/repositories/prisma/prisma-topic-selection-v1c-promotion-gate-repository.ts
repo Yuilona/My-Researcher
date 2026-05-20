@@ -280,6 +280,16 @@ implements TopicSelectionV1cPromotionGateRepository {
     return row ? toGateCheckRecord(row) : null;
   }
 
+  async listGateChecksByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionPromotionGateCheckRecord[]> {
+    const rows = await this.prisma.topicSelectionPromotionGateCheck.findMany({
+      where: { titleCardId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toGateCheckRecord);
+  }
+
   async findBundleByGateCheckId(
     promotionGateCheckId: string,
   ): Promise<TopicSelectionV1cPromotionGateRecordBundle | null> {

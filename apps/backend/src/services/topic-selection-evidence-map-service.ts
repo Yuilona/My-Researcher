@@ -1089,4 +1089,25 @@ export class TopicSelectionEvidenceMapService {
     const suffix = id.split('_').at(-1) ?? 'v1';
     return `v-${suffix}`;
   }
+
+  /**
+   * T-087 D1 read-only projection — list EvidenceMaps under a title-card.
+   * Pure repository delegation; no decision-chain semantics changed.
+   */
+  async listEvidenceMapsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionEvidenceMapRecord[]> {
+    return this.repository.listEvidenceMapsByTitleCardId(titleCardId);
+  }
+
+  /**
+   * T-087 Phase 2.3 read-only projection — list EvidenceUnits for an
+   * EvidenceMap so the reviewer workbench can drill into support / challenge
+   * / baseline / context groups.
+   */
+  async listEvidenceUnitsByEvidenceMapId(
+    evidenceMapId: string,
+  ): Promise<TopicSelectionEvidenceUnitRecord[]> {
+    return this.repository.listEvidenceUnitsByEvidenceMapId(evidenceMapId);
+  }
 }

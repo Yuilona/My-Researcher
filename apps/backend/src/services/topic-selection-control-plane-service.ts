@@ -222,6 +222,10 @@ export class TopicSelectionControlPlaneService {
     return this.repository.createArtifactRef(this.buildArtifactRefRecord(input));
   }
 
+  async getArtifactRef(artifactRefId: string): Promise<TopicSelectionArtifactRefRecord | null> {
+    return this.repository.findArtifactRefById(artifactRefId);
+  }
+
   async recordWorkflowRun(input: RecordWorkflowRunInput): Promise<RecordWorkflowRunResult> {
     const now = this.now();
     const workflowRun: TopicSelectionLlmWorkflowRunRecord = {

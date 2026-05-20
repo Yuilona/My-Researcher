@@ -916,8 +916,43 @@ export class TopicSelectionV1bTopicQuestionService {
       },
       candidates: output.candidates.map((candidate) => {
         const riskNormalized = this.normalizeCandidateRiskFields(candidate);
+        const preservedBoundaryRefs = this.normalizeBoundaryRefsForKind(
+          riskNormalized.boundary_check.preserved_boundary_refs,
+          formationInput,
+          'included',
+        );
+        const excludedBoundaryRefs = this.normalizeBoundaryRefsForKind(
+          riskNormalized.boundary_check.excluded_boundary_refs,
+          formationInput,
+          'excluded',
+        );
+        const falsificationConditions = riskNormalized.falsification_conditions.map((condition) => ({
+          ...condition,
+          trigger_evidence_refs: this.normalizeEvidenceRefs(condition.trigger_evidence_refs, formationInput),
+          trigger_source_refs: this.normalizeSourceRefs(condition.trigger_source_refs, formationInput),
+        }));
+        const boundaryRefsNormalized = !this.sameRefSet(
+          [
+            ...riskNormalized.boundary_check.preserved_boundary_refs,
+            ...riskNormalized.boundary_check.excluded_boundary_refs,
+          ],
+          [
+            ...preservedBoundaryRefs,
+            ...excludedBoundaryRefs,
+          ],
+        );
+        const falsificationSourceRefsNormalized = riskNormalized.falsification_conditions.some((condition, index) =>
+          !this.sameRefSet(condition.trigger_source_refs, falsificationConditions[index]?.trigger_source_refs ?? []),
+        );
         return {
           ...riskNormalized,
+          human_review_triggers: boundaryRefsNormalized || falsificationSourceRefsNormalized
+            ? this.uniqueStrings([
+              ...riskNormalized.human_review_triggers,
+              ...(boundaryRefsNormalized ? ['boundary_refs_normalized'] : []),
+              ...(falsificationSourceRefsNormalized ? ['falsification_source_refs_normalized'] : []),
+            ])
+            : riskNormalized.human_review_triggers,
           answerability_plan: {
             ...riskNormalized.answerability_plan,
             required_evidence_refs: this.normalizeEvidenceRefs(
@@ -927,16 +962,8 @@ export class TopicSelectionV1bTopicQuestionService {
           },
           boundary_check: {
             ...riskNormalized.boundary_check,
-            preserved_boundary_refs: this.normalizeBoundaryRefsForKind(
-              riskNormalized.boundary_check.preserved_boundary_refs,
-              formationInput,
-              'included',
-            ),
-            excluded_boundary_refs: this.normalizeBoundaryRefsForKind(
-              riskNormalized.boundary_check.excluded_boundary_refs,
-              formationInput,
-              'excluded',
-            ),
+            preserved_boundary_refs: preservedBoundaryRefs,
+            excluded_boundary_refs: excludedBoundaryRefs,
           },
           traceability_check: {
             ...riskNormalized.traceability_check,
@@ -961,11 +988,7 @@ export class TopicSelectionV1bTopicQuestionService {
               formationInput,
             ),
           },
-          falsification_conditions: riskNormalized.falsification_conditions.map((condition) => ({
-            ...condition,
-            trigger_evidence_refs: this.normalizeEvidenceRefs(condition.trigger_evidence_refs, formationInput),
-            trigger_source_refs: this.normalizeSourceRefs(condition.trigger_source_refs, formationInput),
-          })),
+          falsification_conditions: falsificationConditions,
         };
       }),
     };
@@ -1038,7 +1061,7 @@ export class TopicSelectionV1bTopicQuestionService {
     return this.uniqueRefs(refs.flatMap((ref) =>
       aliases.get(this.refKey(ref))
         ?? aliases.get(this.relaxedSourceRefKey(ref))
-        ?? [ref],
+        ?? [],
     ));
   }
 
@@ -1129,14 +1152,37 @@ export class TopicSelectionV1bTopicQuestionService {
     formationInput: TopicSelectionV1bTopicQuestionFormationInput,
     boundaryKind: 'included' | 'excluded',
   ): TopicSelectionFunctionalRef[] {
-    return this.uniqueRefs(refs.flatMap((ref) => {
-      if (!this.isSliceAggregateAlias(ref, formationInput)) {
-        return [ref];
+    const aliases = this.boundaryRefAliases(formationInput, boundaryKind);
+    const normalizedRefs = this.uniqueRefs(refs.flatMap((ref) => {
+      if (this.isSliceAggregateAlias(ref, formationInput)) {
+        return formationInput.boundaries
+          .filter((boundary) => boundary.boundary_kind === boundaryKind)
+          .map((boundary) => this.ref('research_slice_boundary', boundary.research_slice_boundary_id, boundary.title_card_id));
       }
-      return formationInput.boundaries
-        .filter((boundary) => boundary.boundary_kind === boundaryKind)
-        .map((boundary) => this.ref('research_slice_boundary', boundary.research_slice_boundary_id, boundary.title_card_id));
+      return aliases.get(this.refKey(ref))
+        ?? aliases.get(this.looseRefKey(ref))
+        ?? aliases.get(this.relaxedSourceRefKey(ref))
+        ?? [];
     }));
+    return normalizedRefs.length > 0 ? normalizedRefs : refs;
+  }
+
+  private boundaryRefAliases(
+    formationInput: TopicSelectionV1bTopicQuestionFormationInput,
+    boundaryKind: 'included' | 'excluded',
+  ): Map<string, TopicSelectionFunctionalRef[]> {
+    const aliases = new Map<string, TopicSelectionFunctionalRef[]>();
+    for (const boundary of formationInput.boundaries.filter((item) => item.boundary_kind === boundaryKind)) {
+      const boundaryRef = this.ref(
+        'research_slice_boundary',
+        boundary.research_slice_boundary_id,
+        boundary.title_card_id,
+      );
+      aliases.set(this.refKey(boundaryRef), [boundaryRef]);
+      aliases.set(this.looseRefKey(boundaryRef), [boundaryRef]);
+      aliases.set(this.relaxedSourceRefKey(boundaryRef), [boundaryRef]);
+    }
+    return aliases;
   }
 
   private isSliceAggregateAlias(
@@ -2169,5 +2215,26 @@ export class TopicSelectionV1bTopicQuestionService {
     return new AppError(500, 'INTERNAL_ERROR', this.errorMessage(error), {
       form_topic_question_run_id: runId,
     });
+  }
+
+  /**
+   * T-087 Phase 3.1 read-only projection — list TopicQuestionCandidateSets
+   * under a title-card. Pure repository delegation.
+   */
+  async listCandidateSetsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionTopicQuestionCandidateSetRecord[]> {
+    return this.repository.listCandidateSetsByTitleCardId(titleCardId);
+  }
+
+  /**
+   * T-087 Phase 3.3 read-only projection — list TopicQuestionCandidates for a
+   * CandidateSet so the reviewer workbench's selection form can render a
+   * proper picker instead of a free-text id field.
+   */
+  async listCandidatesByCandidateSetId(
+    candidateSetId: string,
+  ): Promise<TopicSelectionTopicQuestionCandidateRecord[]> {
+    return this.repository.listCandidatesByCandidateSetId(candidateSetId);
   }
 }

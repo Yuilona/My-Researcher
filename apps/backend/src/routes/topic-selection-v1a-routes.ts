@@ -470,8 +470,6 @@ const adjudicationBody = bodyAndParamsSchema(['support_packet_id', 'final_decisi
   final_decision: { enum: [...TOPIC_SELECTION_NEED_ADJUDICATION_DECISIONS] },
   rationale: stringId,
   adjudicated_by: topicSelectionActorRefSchema,
-  human_actor: topicSelectionActorRefSchema,
-  human_rationale: nullableStringId,
   rejected_reason: { anyOf: [{ enum: [...TOPIC_SELECTION_NEED_REJECTED_REASONS] }, { type: 'null' }] },
   loopback_target: { enum: [...TOPIC_SELECTION_NEED_LOOPBACK_TARGETS] },
   required_actions: stringArray,
@@ -485,6 +483,13 @@ const adjudicationBody = bodyAndParamsSchema(['support_packet_id', 'final_decisi
   decision_payload: recordPayload,
   policy_version_id: nullableStringId,
 }, { needCandidateId: stringId });
+
+const humanConfirmationBody = bodyAndParamsSchema(['human_actor', 'human_rationale'], {
+  workspace_id: nullableStringId,
+  human_actor: topicSelectionActorRefSchema,
+  human_rationale: stringId,
+  policy_version_id: nullableStringId,
+}, { adjudicationResultId: stringId });
 
 const v1bInputBundleBody = bodySchema(['validated_need_id'], {
   validated_need_id: stringId,
@@ -670,6 +675,11 @@ export async function registerTopicSelectionV1aRoutes(
     { schema: adjudicationBody },
     controller.adjudicateNeed,
   );
+  fastify.post(
+    '/topic-selection/v1a/adjudications/:adjudicationResultId/human-confirmations',
+    { schema: humanConfirmationBody },
+    controller.confirmValidatedNeed,
+  );
   fastify.post('/topic-selection/v1a/v1b-input-bundles', { schema: v1bInputBundleBody }, controller.publishV1bInputBundle);
   fastify.post('/topic-selection/v1a/quality-signals', { schema: qualitySignalBody }, controller.emitQualitySignal);
   fastify.post<{ Body: InterpretQualitySignalBody; Params: { qualitySignalId: string } }>(
@@ -689,6 +699,51 @@ export async function registerTopicSelectionV1aRoutes(
   );
   fastify.post('/topic-selection/v1a/accepted-risks', { schema: acceptedRiskBody }, controller.acceptRisk);
   fastify.get('/topic-selection/v1a/work-queue/open', controller.listOpenWorkQueueItems);
+  // T-087 D1 read-only projections: list v1a authority/workflow objects per title-card.
+  fastify.get(
+    '/topic-selection/v1a/title-cards/:titleCardId/search-plans',
+    { schema: paramsSchema({ titleCardId: stringId }) },
+    controller.listSearchPlansByTitleCard,
+  );
+  fastify.get(
+    '/topic-selection/v1a/title-cards/:titleCardId/evidence-maps',
+    { schema: paramsSchema({ titleCardId: stringId }) },
+    controller.listEvidenceMapsByTitleCard,
+  );
+  fastify.get(
+    '/topic-selection/v1a/title-cards/:titleCardId/need-candidates',
+    { schema: paramsSchema({ titleCardId: stringId }) },
+    controller.listNeedCandidatesByTitleCard,
+  );
+  fastify.get(
+    '/topic-selection/v1a/title-cards/:titleCardId/validated-needs',
+    { schema: paramsSchema({ titleCardId: stringId }) },
+    controller.listValidatedNeedsByTitleCard,
+  );
+  // T-087 Phase 2.5 — adjudication support packet picker driver.
+  fastify.get(
+    '/topic-selection/v1a/need-candidates/:needCandidateId/validation-support-packets',
+    { schema: paramsSchema({ needCandidateId: stringId }) },
+    controller.listValidationSupportPacketsByNeedCandidate,
+  );
+  // T-087 Phase 2.4 — negative memory inline display driver.
+  fastify.get(
+    '/topic-selection/v1a/need-candidates/:needCandidateId/memory-suggestions',
+    { schema: paramsSchema({ needCandidateId: stringId }) },
+    controller.listCandidateMemorySuggestionsByNeedCandidate,
+  );
+  // T-087 Phase 2.2 — SearchPlan recheck-request inline list.
+  fastify.get(
+    '/topic-selection/v1a/title-cards/:titleCardId/search-plan-recheck-requests',
+    { schema: paramsSchema({ titleCardId: stringId }) },
+    controller.listSearchPlanRecheckRequestsByTitleCard,
+  );
+  // T-087 Phase 2.3 — EvidenceMap drilldown driver.
+  fastify.get(
+    '/topic-selection/v1a/evidence-maps/:evidenceMapId/units',
+    { schema: paramsSchema({ evidenceMapId: stringId }) },
+    controller.listEvidenceUnitsByEvidenceMap,
+  );
   fastify.post<{ Body: OfflineDatasetBody }>(
     '/topic-selection/v1a/offline-evaluation/datasets',
     { schema: offlineDatasetBody, preValidation: normalizeOptionalBody },

@@ -1402,4 +1402,14 @@ export class TopicSelectionV1bTopicPackageService {
     }
     return false;
   }
+
+  /**
+   * T-087 Phase 3.1 read-only projection — list TopicPackages under a
+   * title-card. Pure repository delegation.
+   */
+  async listPackagesByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionTopicPackageRecord[]> {
+    return this.repository.listPackagesByTitleCardId(titleCardId);
+  }
 }

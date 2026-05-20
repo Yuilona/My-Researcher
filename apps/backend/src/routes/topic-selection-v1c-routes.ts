@@ -220,6 +220,22 @@ export async function registerTopicSelectionV1cRoutes(
   fastify: FastifyInstance,
   controller: TopicSelectionV1cController,
 ): Promise<void> {
+  // T-087 Phase 4 — reviewer workbench v1c read-only projections.
+  fastify.get(
+    '/topic-selection/v1c/title-cards/:titleCardId/promotion-gate-checks',
+    { schema: paramsSchema({ titleCardId: stringId }) },
+    controller.listPromotionGateChecksByTitleCard,
+  );
+  fastify.get(
+    '/topic-selection/v1c/title-cards/:titleCardId/promotion-decisions',
+    { schema: paramsSchema({ titleCardId: stringId }) },
+    controller.listPromotionDecisionsByTitleCard,
+  );
+  fastify.get(
+    '/topic-selection/v1c/title-cards/:titleCardId/paper-project-bridges',
+    { schema: paramsSchema({ titleCardId: stringId }) },
+    controller.listPaperProjectBridgesByTitleCard,
+  );
   fastify.post(
     '/topic-selection/v1c/promotion-input-snapshots',
     { schema: promotionInputSnapshotBody },

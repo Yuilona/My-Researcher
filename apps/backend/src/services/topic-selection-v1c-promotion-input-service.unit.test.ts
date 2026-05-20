@@ -321,6 +321,12 @@ class StubTopicPackageRepository implements TopicSelectionV1bTopicPackageReposit
     return this.packages.get(topicPackageId) ?? null;
   }
 
+  async listPackagesByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionTopicPackageRecord[]> {
+    return [...this.packages.values()].filter((pkg) => pkg.title_card_id === titleCardId);
+  }
+
   async findPackageByValueDispositionDecisionId(
     _valueDispositionDecisionId: string,
   ): Promise<TopicSelectionTopicPackageRecord | null> {

@@ -287,6 +287,18 @@ test('topic-selection v1a HTTP routes drive evidence-to-need validation through 
     };
     assert.equal(evidenceMap.evidence_map.support_unit_count, 1);
 
+    // T-087 Phase 2.3 — EvidenceUnit list by evidence-map drives the drilldown UI.
+    const unitsRes = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1a/evidence-maps/${encodeURIComponent(evidenceMap.evidence_map.evidence_map_id)}/units`,
+    });
+    assertStatus(unitsRes, 200);
+    const unitsList = unitsRes.json() as {
+      items: Array<{ evidence_unit_id: string; evidence_map_id: string; evidence_role: string }>;
+    };
+    assert.ok(unitsList.items.length > 0);
+    assert.ok(unitsList.items.every((unit) => unit.evidence_map_id === evidenceMap.evidence_map.evidence_map_id));
+
     const bundleRes = await app.inject({
       method: 'GET',
       url: `/topic-selection/v1a/evidence-maps/${encodeURIComponent(evidenceMap.evidence_map.evidence_map_id)}/need-validation-bundle`,
@@ -333,6 +345,16 @@ test('topic-selection v1a HTTP routes drive evidence-to-need validation through 
     assertStatus(packetRes, 201);
     const packet = packetRes.json() as { validation_support_packet_id: string };
 
+    // T-087 Phase 2.5 — packet picker driver: assert candidate-scoped list.
+    const packetListRes = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1a/need-candidates/${encodeURIComponent(candidate.need_candidate_id)}/validation-support-packets`,
+    });
+    assertStatus(packetListRes, 200);
+    const packetList = packetListRes.json() as { items: Array<{ validation_support_packet_id: string; need_candidate_id: string }> };
+    assert.ok(packetList.items.some((item) => item.validation_support_packet_id === packet.validation_support_packet_id));
+    assert.ok(packetList.items.every((item) => item.need_candidate_id === candidate.need_candidate_id));
+
     const adjudicationRes = await app.inject({
       method: 'POST',
       url: `/topic-selection/v1a/need-candidates/${encodeURIComponent(candidate.need_candidate_id)}/adjudications`,
@@ -341,26 +363,49 @@ test('topic-selection v1a HTTP routes drive evidence-to-need validation through 
         final_decision: 'validate',
         rationale: 'Human reviewer confirms the need and trace boundary.',
         adjudicated_by: { actor_type: 'human', actor_id: 'route-test-reviewer' },
-        human_actor: { actor_type: 'human', actor_id: 'route-test-reviewer' },
-        human_rationale: 'Support, baseline, context, and handoff refs are sufficient for v1b input.',
       },
     });
     assertStatus(adjudicationRes, 201);
     const adjudication = adjudicationRes.json() as {
-      adjudication_result: { output_validated_need_id: string | null };
-      validated_need: { validated_need_id: string };
-      v1b_input_bundle: { validated_need_id: string };
+      adjudication_result: { adjudication_result_id: string; output_validated_need_id: string | null };
+      validated_need: null;
+      v1b_input_bundle: null;
     };
-    assert.ok(adjudication.validated_need.validated_need_id);
-    assert.equal(adjudication.adjudication_result.output_validated_need_id, adjudication.validated_need.validated_need_id);
-    assert.equal(adjudication.v1b_input_bundle.validated_need_id, adjudication.validated_need.validated_need_id);
+    assert.ok(adjudication.adjudication_result.output_validated_need_id);
+    assert.equal(adjudication.validated_need, null);
+    assert.equal(adjudication.v1b_input_bundle, null);
+
+    const confirmationRes = await app.inject({
+      method: 'POST',
+      url: `/topic-selection/v1a/adjudications/${encodeURIComponent(
+        adjudication.adjudication_result.adjudication_result_id,
+      )}/human-confirmations`,
+      payload: {
+        human_actor: { actor_type: 'human', actor_id: 'route-test-reviewer' },
+        human_rationale: 'Support, baseline, context, and handoff refs are sufficient for v1b input.',
+      },
+    });
+    assertStatus(confirmationRes, 201);
+    const confirmation = confirmationRes.json() as {
+      validated_need: { validated_need_id: string };
+    };
+    assert.equal(adjudication.adjudication_result.output_validated_need_id, confirmation.validated_need.validated_need_id);
+
+    const v1bBundleRes = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1a/v1b-input-bundles',
+      payload: { validated_need_id: confirmation.validated_need.validated_need_id, created_by: 'system' },
+    });
+    assertStatus(v1bBundleRes, 201);
+    const v1bBundle = v1bBundleRes.json() as { validated_need_id: string };
+    assert.equal(v1bBundle.validated_need_id, confirmation.validated_need.validated_need_id);
 
     const qualitySignalRes = await app.inject({
       method: 'POST',
       url: '/topic-selection/v1a/quality-signals',
       payload: {
         title_card_id: titleCardId,
-        target_ref: ref('validated_need', adjudication.validated_need.validated_need_id, titleCardId),
+        target_ref: ref('validated_need', confirmation.validated_need.validated_need_id, titleCardId),
         stage: 'v1a',
         check_type: 'trace_review',
         verdict: 'warn',
@@ -386,9 +431,9 @@ test('topic-selection v1a HTTP routes drive evidence-to-need validation through 
       payload: {
         title_card_id: titleCardId,
         risk_type: 'residual_coverage_gap',
-        target_ref: ref('validated_need', adjudication.validated_need.validated_need_id, titleCardId),
+        target_ref: ref('validated_need', confirmation.validated_need.validated_need_id, titleCardId),
         scope_refs: [ref('search_plan', plan.search_plan.search_plan_id, titleCardId, plan.search_plan.plan_version)],
-        affected_object_refs: [ref('validated_need', adjudication.validated_need.validated_need_id, titleCardId)],
+        affected_object_refs: [ref('validated_need', confirmation.validated_need.validated_need_id, titleCardId)],
         rationale: 'Residual route-test coverage risk is bounded.',
         accepted_by: { actor_type: 'human', actor_id: 'route-test-reviewer' },
         recheck_condition: 'new counter-evidence appears',
@@ -468,6 +513,18 @@ test('topic-selection v1a HTTP routes drive evidence-to-need validation through 
     const queuedRecheck = queuedRecheckRes.json() as { queue_item: { handler_key: string } };
     assert.equal(queuedRecheck.queue_item.handler_key, 'revise_search_plan');
 
+    // T-087 Phase 2.2 — list SearchPlanRecheckRequests for the title-card.
+    const recheckListRes = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1a/title-cards/${encodeURIComponent(titleCardId)}/search-plan-recheck-requests`,
+    });
+    assertStatus(recheckListRes, 200);
+    const recheckList = recheckListRes.json() as {
+      items: Array<{ search_plan_recheck_request_id: string; title_card_id: string }>;
+    };
+    assert.ok(recheckList.items.length > 0);
+    assert.ok(recheckList.items.every((item) => item.title_card_id === titleCardId));
+
     const memoryRes = await app.inject({
       method: 'POST',
       url: `/topic-selection/v1a/candidate-memory-suggestions/${encodeURIComponent(recheckAdjudication.adjudication_result.output_memory_suggestion_ref.ref_id)}/materialize`,
@@ -477,6 +534,18 @@ test('topic-selection v1a HTTP routes drive evidence-to-need validation through 
     const memory = memoryRes.json() as { memory_entry: { effect_policy: string } };
     assert.equal(memory.memory_entry.effect_policy, 'warn');
 
+    // T-087 Phase 2.4 — list candidate memory suggestions for the recheck candidate.
+    const memoryListRes = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1a/need-candidates/${encodeURIComponent(recheckCandidate.need_candidate_id)}/memory-suggestions`,
+    });
+    assertStatus(memoryListRes, 200);
+    const memoryList = memoryListRes.json() as {
+      items: Array<{ source_need_candidate_id: string; suggestion_type: string }>;
+    };
+    assert.ok(memoryList.items.length > 0);
+    assert.ok(memoryList.items.every((item) => item.source_need_candidate_id === recheckCandidate.need_candidate_id));
+
     const queueRes = await app.inject({
       method: 'GET',
       url: '/topic-selection/v1a/work-queue/open',
@@ -484,6 +553,46 @@ test('topic-selection v1a HTTP routes drive evidence-to-need validation through 
     assertStatus(queueRes, 200);
     const queue = queueRes.json() as { items: Array<{ title_card_id: string | null }> };
     assert.ok(queue.items.some((item) => item.title_card_id === titleCardId));
+
+    // T-087 D1 read-only projections — assert the 4 list-by-title-card endpoints
+    // expose what the reviewer workbench needs, without changing decision-chain
+    // semantics. Each endpoint returns `{ items: [...] }` newest first.
+    const listSearchPlansRes = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1a/title-cards/${encodeURIComponent(titleCardId)}/search-plans`,
+    });
+    assertStatus(listSearchPlansRes, 200);
+    const searchPlanList = listSearchPlansRes.json() as { items: Array<{ title_card_id: string; search_plan_id: string }> };
+    assert.ok(searchPlanList.items.length > 0);
+    assert.ok(searchPlanList.items.every((item) => item.title_card_id === titleCardId));
+
+    const listEvidenceMapsRes = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1a/title-cards/${encodeURIComponent(titleCardId)}/evidence-maps`,
+    });
+    assertStatus(listEvidenceMapsRes, 200);
+    const evidenceMapList = listEvidenceMapsRes.json() as { items: Array<{ title_card_id: string; evidence_map_id: string }> };
+    assert.ok(evidenceMapList.items.length > 0);
+    assert.ok(evidenceMapList.items.every((item) => item.title_card_id === titleCardId));
+
+    const listNeedCandidatesRes = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1a/title-cards/${encodeURIComponent(titleCardId)}/need-candidates`,
+    });
+    assertStatus(listNeedCandidatesRes, 200);
+    const needCandidateList = listNeedCandidatesRes.json() as { items: Array<{ title_card_id: string; need_candidate_id: string }> };
+    assert.ok(needCandidateList.items.length > 0);
+    assert.ok(needCandidateList.items.every((item) => item.title_card_id === titleCardId));
+
+    const listValidatedNeedsRes = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1a/title-cards/${encodeURIComponent(titleCardId)}/validated-needs`,
+    });
+    assertStatus(listValidatedNeedsRes, 200);
+    const validatedNeedList = listValidatedNeedsRes.json() as { items: Array<{ title_card_id: string; validated_need_id: string }> };
+    // ValidatedNeed creation depends on adjudication outcome; just assert shape.
+    assert.ok(Array.isArray(validatedNeedList.items));
+    assert.ok(validatedNeedList.items.every((item) => item.title_card_id === titleCardId));
 
     const offlineRes = await app.inject({
       method: 'POST',

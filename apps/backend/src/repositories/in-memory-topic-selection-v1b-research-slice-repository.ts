@@ -68,6 +68,14 @@ implements TopicSelectionV1bResearchSliceRepository {
     return this.optionSets.get(optionSetId) ?? null;
   }
 
+  async listOptionSetsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionResearchSliceOptionSetRecord[]> {
+    return [...this.optionSets.values()]
+      .filter((record) => record.title_card_id === titleCardId)
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+  }
+
   async updateOptionSet(
     optionSetId: string,
     patch: Partial<Pick<

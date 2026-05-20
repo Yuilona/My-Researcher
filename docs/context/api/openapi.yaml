@@ -3163,6 +3163,166 @@ paths:
               schema:
                 $ref: '#/components/schemas/TopicSelectionV1aListResponse'
 
+  /topic-selection/v1a/title-cards/{titleCardId}/search-plans:
+    get:
+      operationId: listTopicSelectionV1aSearchPlansByTitleCard
+      summary: List v1a SearchPlans for a title-card (T-087 D1 reviewer workbench projection).
+      tags: [topic-selection-v1a]
+      parameters:
+        - in: path
+          name: titleCardId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: SearchPlans owned by the title-card, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aListResponse'
+
+  /topic-selection/v1a/title-cards/{titleCardId}/evidence-maps:
+    get:
+      operationId: listTopicSelectionV1aEvidenceMapsByTitleCard
+      summary: List v1a EvidenceMaps for a title-card (T-087 D1 reviewer workbench projection).
+      tags: [topic-selection-v1a]
+      parameters:
+        - in: path
+          name: titleCardId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: EvidenceMaps owned by the title-card, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aListResponse'
+
+  /topic-selection/v1a/title-cards/{titleCardId}/need-candidates:
+    get:
+      operationId: listTopicSelectionV1aNeedCandidatesByTitleCard
+      summary: List v1a NeedCandidates for a title-card (T-087 D1 reviewer workbench projection).
+      tags: [topic-selection-v1a]
+      parameters:
+        - in: path
+          name: titleCardId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: NeedCandidates owned by the title-card, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aListResponse'
+
+  /topic-selection/v1a/title-cards/{titleCardId}/validated-needs:
+    get:
+      operationId: listTopicSelectionV1aValidatedNeedsByTitleCard
+      summary: List v1a ValidatedNeeds for a title-card (T-087 D1 reviewer workbench projection).
+      tags: [topic-selection-v1a]
+      parameters:
+        - in: path
+          name: titleCardId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: ValidatedNeeds owned by the title-card, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aListResponse'
+
+  /topic-selection/v1a/need-candidates/{needCandidateId}/validation-support-packets:
+    get:
+      operationId: listTopicSelectionV1aSupportPacketsByNeedCandidate
+      summary: List validation-decision support packets for a need candidate (T-087 Phase 2.5 picker driver).
+      tags: [topic-selection-v1a]
+      parameters:
+        - in: path
+          name: needCandidateId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Support packets owned by the need candidate, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aListResponse'
+
+  /topic-selection/v1a/need-candidates/{needCandidateId}/memory-suggestions:
+    get:
+      operationId: listTopicSelectionV1aMemorySuggestionsByNeedCandidate
+      summary: List candidate-decision memory suggestions for a need candidate (T-087 Phase 2.4 negative-memory inline display).
+      tags: [topic-selection-v1a]
+      parameters:
+        - in: path
+          name: needCandidateId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Memory suggestions linked to the need candidate, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aListResponse'
+
+  /topic-selection/v1a/title-cards/{titleCardId}/search-plan-recheck-requests:
+    get:
+      operationId: listTopicSelectionV1aSearchPlanRecheckRequestsByTitleCard
+      summary: List SearchPlan recheck requests for a title-card (T-087 Phase 2.2 reviewer workbench inline list).
+      tags: [topic-selection-v1a]
+      parameters:
+        - in: path
+          name: titleCardId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: SearchPlan recheck requests owned by the title-card, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aListResponse'
+
+  /topic-selection/v1a/evidence-maps/{evidenceMapId}/units:
+    get:
+      operationId: listTopicSelectionV1aEvidenceUnitsByEvidenceMap
+      summary: List EvidenceUnits for an EvidenceMap (T-087 Phase 2.3 drilldown driver).
+      tags: [topic-selection-v1a]
+      parameters:
+        - in: path
+          name: evidenceMapId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: EvidenceUnits owned by the EvidenceMap.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1aListResponse'
+
   /topic-selection/v1a/offline-evaluation/datasets:
     post:
       operationId: createTopicSelectionV1aOfflineEvaluationDataset
@@ -3345,6 +3505,126 @@ paths:
                 $ref: '#/components/schemas/TopicSelectionV1aListResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1b/title-cards/{titleCardId}/research-slice-option-sets:
+    get:
+      operationId: listTopicSelectionV1bResearchSliceOptionSetsByTitleCard
+      summary: List ResearchSliceOptionSets under a title-card (T-087 Phase 3.1 read-only projection).
+      tags: [topic-selection-v1b]
+      parameters:
+        - in: path
+          name: titleCardId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: ResearchSliceOptionSets owned by the title-card, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1bListResponse'
+
+  /topic-selection/v1b/title-cards/{titleCardId}/topic-question-candidate-sets:
+    get:
+      operationId: listTopicSelectionV1bTopicQuestionCandidateSetsByTitleCard
+      summary: List TopicQuestionCandidateSets under a title-card (T-087 Phase 3.1 read-only projection).
+      tags: [topic-selection-v1b]
+      parameters:
+        - in: path
+          name: titleCardId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: TopicQuestionCandidateSets owned by the title-card, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1bListResponse'
+
+  /topic-selection/v1b/title-cards/{titleCardId}/topic-value-assessments:
+    get:
+      operationId: listTopicSelectionV1bTopicValueAssessmentsByTitleCard
+      summary: List TopicValueAssessments under a title-card (T-087 Phase 3.1 read-only projection).
+      tags: [topic-selection-v1b]
+      parameters:
+        - in: path
+          name: titleCardId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: TopicValueAssessments owned by the title-card, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1bListResponse'
+
+  /topic-selection/v1b/title-cards/{titleCardId}/topic-packages:
+    get:
+      operationId: listTopicSelectionV1bTopicPackagesByTitleCard
+      summary: List TopicPackage(draft) under a title-card (T-087 Phase 3.1 read-only projection).
+      tags: [topic-selection-v1b]
+      parameters:
+        - in: path
+          name: titleCardId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: TopicPackage drafts owned by the title-card, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1bListResponse'
+
+  /topic-selection/v1b/research-slice-option-sets/{optionSetId}/options:
+    get:
+      operationId: listTopicSelectionV1bResearchSliceOptionsByOptionSet
+      summary: List ResearchSliceOptions for an OptionSet (T-087 Phase 3.2 selection picker driver).
+      tags: [topic-selection-v1b]
+      parameters:
+        - in: path
+          name: optionSetId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: ResearchSliceOptions owned by the OptionSet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1bListResponse'
+
+  /topic-selection/v1b/topic-question-candidate-sets/{candidateSetId}/candidates:
+    get:
+      operationId: listTopicSelectionV1bTopicQuestionCandidatesByCandidateSet
+      summary: List TopicQuestionCandidates for a CandidateSet (T-087 Phase 3.3 selection picker driver).
+      tags: [topic-selection-v1b]
+      parameters:
+        - in: path
+          name: candidateSetId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: TopicQuestionCandidates owned by the CandidateSet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1bListResponse'
 
   /topic-selection/v1b/intake-snapshots:
     post:
@@ -3845,6 +4125,66 @@ paths:
                 $ref: '#/components/schemas/TopicSelectionV1bListResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /topic-selection/v1c/title-cards/{titleCardId}/promotion-gate-checks:
+    get:
+      operationId: listTopicSelectionV1cPromotionGateChecksByTitleCard
+      summary: List PromotionGateChecks under a title-card (T-087 Phase 4 read-only projection).
+      tags: [topic-selection-v1c]
+      parameters:
+        - in: path
+          name: titleCardId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: PromotionGateChecks owned by the title-card, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cListResponse'
+
+  /topic-selection/v1c/title-cards/{titleCardId}/promotion-decisions:
+    get:
+      operationId: listTopicSelectionV1cPromotionDecisionsByTitleCard
+      summary: List PromotionDecisions under a title-card (T-087 Phase 4 read-only projection).
+      tags: [topic-selection-v1c]
+      parameters:
+        - in: path
+          name: titleCardId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: PromotionDecisions owned by the title-card, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cListResponse'
+
+  /topic-selection/v1c/title-cards/{titleCardId}/paper-project-bridges:
+    get:
+      operationId: listTopicSelectionV1cPaperProjectBridgesByTitleCard
+      summary: List PaperProjectBridges under a title-card (T-087 Phase 4 read-only projection).
+      tags: [topic-selection-v1c]
+      parameters:
+        - in: path
+          name: titleCardId
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: PaperProjectBridges owned by the title-card, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1cListResponse'
 
   /topic-selection/v1c/promotion-input-snapshots:
     post:

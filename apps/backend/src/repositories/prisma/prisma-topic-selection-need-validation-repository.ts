@@ -19,6 +19,8 @@ import type {
   TopicSelectionNeedCandidateStatusPatch,
   TopicSelectionNeedValidationAdjudicationWriteInput,
   TopicSelectionNeedValidationAdjudicationWriteResult,
+  TopicSelectionNeedValidationHumanConfirmationWriteInput,
+  TopicSelectionNeedValidationHumanConfirmationWriteResult,
   TopicSelectionNeedValidationRepository,
 } from '../topic-selection-need-validation.repository.js';
 
@@ -517,9 +519,35 @@ export class PrismaTopicSelectionNeedValidationRepository implements TopicSelect
     return toNeedCandidateRecord(row);
   }
 
+  async createNeedCandidatesBatch(
+    records: TopicSelectionNeedCandidateRecord[],
+  ): Promise<TopicSelectionNeedCandidateRecord[]> {
+    if (records.length === 0) {
+      return [];
+    }
+    const rows = await this.prisma.$transaction((tx) =>
+      Promise.all(records.map((record) =>
+        tx.topicSelectionNeedCandidate.create({
+          data: this.toNeedCandidateCreateInput(record),
+        }),
+      )),
+    );
+    return rows.map(toNeedCandidateRecord);
+  }
+
   async findNeedCandidateById(needCandidateId: string): Promise<TopicSelectionNeedCandidateRecord | null> {
     const row = await this.prisma.topicSelectionNeedCandidate.findUnique({ where: { id: needCandidateId } });
     return row ? toNeedCandidateRecord(row) : null;
+  }
+
+  async listNeedCandidatesByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionNeedCandidateRecord[]> {
+    const rows = await this.prisma.topicSelectionNeedCandidate.findMany({
+      where: { titleCardId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toNeedCandidateRecord);
   }
 
   async updateNeedCandidateStatus(
@@ -647,6 +675,34 @@ export class PrismaTopicSelectionNeedValidationRepository implements TopicSelect
   async findValidatedNeedById(validatedNeedId: string): Promise<TopicSelectionValidatedNeedRecord | null> {
     const row = await this.prisma.topicSelectionValidatedNeed.findUnique({ where: { id: validatedNeedId } });
     return row ? toValidatedNeedRecord(row) : null;
+  }
+
+  async confirmValidatedNeed(
+    input: TopicSelectionNeedValidationHumanConfirmationWriteInput,
+  ): Promise<TopicSelectionNeedValidationHumanConfirmationWriteResult> {
+    return this.prisma.$transaction(async (tx) => {
+      const validatedNeed = await tx.topicSelectionValidatedNeed.create({
+        data: this.toValidatedNeedCreateInput(input.validated_need),
+      });
+      const candidate = await tx.topicSelectionNeedCandidate.update({
+        where: { id: input.validated_need.source_need_candidate_id },
+        data: this.toCandidatePatchInput(input.candidate_patch),
+      });
+      return {
+        validated_need: toValidatedNeedRecord(validatedNeed),
+        need_candidate: toNeedCandidateRecord(candidate),
+      };
+    });
+  }
+
+  async listValidatedNeedsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionValidatedNeedRecord[]> {
+    const rows = await this.prisma.topicSelectionValidatedNeed.findMany({
+      where: { titleCardId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toValidatedNeedRecord);
   }
 
   async createV1aToV1bInputBundle(

@@ -79,6 +79,14 @@ implements TopicSelectionV1cPaperProjectBridgeRepository {
     return this.bridges.get(paperProjectBridgeId) ?? null;
   }
 
+  async listBridgesByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionPaperProjectBridgeRecord[]> {
+    return [...this.bridges.values()]
+      .filter((record) => record.title_card_id === titleCardId)
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+  }
+
   async findBridgeBySourcePromotionDecisionId(
     sourcePromotionDecisionId: string,
   ): Promise<TopicSelectionPaperProjectBridgeRecord | null> {

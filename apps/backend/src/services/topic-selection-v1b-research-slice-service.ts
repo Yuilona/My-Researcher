@@ -205,6 +205,8 @@ export class TopicSelectionV1bResearchSliceService {
                 'Copy upstream refs exactly; do not introduce new unmet-need proof.',
                 'Use hard_blockers only for absolute impossibility; put ordinary risks or caveats in dependency_risks and main_risks.',
                 'For every option, copy each planning_input.non_goals string verbatim into excluded_boundaries.',
+                'Only use refs from planning_input.evidence_role_bundle.*_unit_refs inside support_evidence_refs, challenge_evidence_refs, baseline_evidence_refs, and context_evidence_refs.',
+                'Do not place v1b_intake_snapshot_ref, readiness_assessment_ref, research_constraint_profile_ref, search refs, or literature snapshot refs in evidence ref arrays; mention those refs in details_payload or dependency_risks only when needed.',
               ].join(' '),
             },
             {
@@ -779,23 +781,38 @@ export class TopicSelectionV1bResearchSliceService {
     if (!output || !Array.isArray(output.options) || output.options.length === 0) {
       throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'ResearchSlice planning returned no options.');
     }
-    const knownEvidenceIds = new Set(
-      this.flattenEvidenceRoleBundle(planningInput.evidence_role_bundle).map((ref) => ref.ref_id),
+    const canonicalEvidenceRefs = this.flattenEvidenceRoleBundle(planningInput.evidence_role_bundle);
+    const knownEvidenceIds = new Set(canonicalEvidenceRefs.map((ref) => ref.ref_id));
+    const canonicalEvidenceById = new Map(canonicalEvidenceRefs.map((ref) => [ref.ref_id, ref]));
+    const knownSourceIds = new Set(
+      this.compilePlanningSourceRefs(planningInput).map((ref) => ref.ref_id),
+    );
+    const knownNonEvidenceIds = new Set(
+      [...knownSourceIds].filter((refId) => !knownEvidenceIds.has(refId)),
     );
     const qualityFlags: string[] = [];
     const now = this.now();
     let highRiskOptionCount = 0;
     const options = output.options.map((draft, index) => {
-      this.validateDraft(draft, planningInput, knownEvidenceIds, index);
+      const normalizedEvidence = this.normalizeDraftEvidenceRefs(
+        draft,
+        knownEvidenceIds,
+        knownNonEvidenceIds,
+        canonicalEvidenceById,
+      );
+      const normalizedDraft = normalizedEvidence.draft;
+      const droppedNonEvidenceRefs = normalizedEvidence.droppedNonEvidenceRefs;
+      const canonicalizedEvidenceRefs = normalizedEvidence.canonicalizedEvidenceRefs;
+      this.validateDraft(normalizedDraft, planningInput, knownEvidenceIds, index);
       const optionId = this.idFactory('research_slice_option');
-      const hasHardBlocker = draft.hard_blockers.length > 0;
-      const isHighRisk = this.isHighRiskDraft(draft);
+      const hasHardBlocker = normalizedDraft.hard_blockers.length > 0;
+      const isHighRisk = this.isHighRiskDraft(normalizedDraft);
       const explicitClaimViolations = this.explicitClaimCeilingViolations(
         planningInput.claim_ceiling,
-        [draft.expected_claim, draft.fallback_claim],
+        [normalizedDraft.expected_claim, normalizedDraft.fallback_claim],
       );
       if (
-        draft.claim_ceiling_alignment.status === 'exceeds'
+        normalizedDraft.claim_ceiling_alignment.status === 'exceeds'
         || explicitClaimViolations.length > 0
       ) {
         throw new AppError(
@@ -805,19 +822,27 @@ export class TopicSelectionV1bResearchSliceService {
         );
       }
       const uncertainClaimAlignment =
-        draft.claim_ceiling_alignment.status === 'uncertain'
-        || draft.claim_ceiling_alignment.confidence === null
-        || draft.claim_ceiling_alignment.confidence === undefined
-        || draft.claim_ceiling_alignment.confidence < 0.6;
+        normalizedDraft.claim_ceiling_alignment.status === 'uncertain'
+        || normalizedDraft.claim_ceiling_alignment.confidence === null
+        || normalizedDraft.claim_ceiling_alignment.confidence === undefined
+        || normalizedDraft.claim_ceiling_alignment.confidence < 0.6;
       const requiresHumanReview =
-        draft.requires_human_review ||
+        normalizedDraft.requires_human_review ||
         isHighRisk ||
         uncertainClaimAlignment ||
-        draft.confidence === null ||
-        draft.confidence === undefined ||
-        draft.confidence < 0.6;
+        normalizedDraft.confidence === null ||
+        normalizedDraft.confidence === undefined ||
+        normalizedDraft.confidence < 0.6 ||
+        droppedNonEvidenceRefs.length > 0 ||
+        canonicalizedEvidenceRefs.length > 0;
       if (hasHardBlocker) {
         qualityFlags.push('HARD_BLOCKED_OPTIONS_PRESENT');
+      }
+      if (droppedNonEvidenceRefs.length > 0) {
+        qualityFlags.push('NON_EVIDENCE_REFS_REMOVED_FROM_SLICE_OPTION');
+      }
+      if (canonicalizedEvidenceRefs.length > 0) {
+        qualityFlags.push('EVIDENCE_REFS_CANONICALIZED');
       }
       if (requiresHumanReview) {
         qualityFlags.push('HUMAN_REVIEW_REQUIRED');
@@ -827,7 +852,7 @@ export class TopicSelectionV1bResearchSliceService {
       }
       const status = hasHardBlocker
         ? 'blocked'
-        : draft.option_key === output.recommended_option_key
+        : normalizedDraft.option_key === output.recommended_option_key
           ? 'recommended'
           : 'candidate';
       return {
@@ -836,47 +861,49 @@ export class TopicSelectionV1bResearchSliceService {
         title_card_id: titleCardId,
         research_slice_option_set_id: optionSetId,
         option_ordinal: index + 1,
-        option_key: draft.option_key,
+        option_key: normalizedDraft.option_key,
         status,
-        source_validated_need_refs: draft.source_validated_need_refs,
-        slice_statement: draft.slice_statement,
-        problem_space: draft.problem_space,
-        target_setting: draft.target_setting,
-        target_community: draft.target_community,
-        included_boundaries: draft.included_boundaries,
-        excluded_boundaries: draft.excluded_boundaries,
-        contribution_type_candidate: draft.contribution_type_candidate,
-        support_evidence_refs: draft.support_evidence_refs,
-        challenge_evidence_refs: draft.challenge_evidence_refs,
-        baseline_evidence_refs: draft.baseline_evidence_refs,
-        context_evidence_refs: draft.context_evidence_refs,
-        resource_assumptions: draft.resource_assumptions,
-        data_assumptions: draft.data_assumptions,
-        evaluation_path: draft.evaluation_path,
-        baseline_assumptions: draft.baseline_assumptions,
-        hard_blockers: draft.hard_blockers,
-        dependency_risks: draft.dependency_risks,
-        slice_budget: draft.slice_budget,
-        expected_claim: draft.expected_claim,
-        fallback_claim: draft.fallback_claim,
-        observable_success_criteria: draft.observable_success_criteria,
-        main_risks: draft.main_risks,
-        baseline_risk: draft.baseline_risk,
-        execution_risk: draft.execution_risk,
-        scope_risk: draft.scope_risk,
-        claim_ceiling_alignment: draft.claim_ceiling_alignment,
-        confidence: draft.confidence ?? null,
+        source_validated_need_refs: normalizedDraft.source_validated_need_refs,
+        slice_statement: normalizedDraft.slice_statement,
+        problem_space: normalizedDraft.problem_space,
+        target_setting: normalizedDraft.target_setting,
+        target_community: normalizedDraft.target_community,
+        included_boundaries: normalizedDraft.included_boundaries,
+        excluded_boundaries: normalizedDraft.excluded_boundaries,
+        contribution_type_candidate: normalizedDraft.contribution_type_candidate,
+        support_evidence_refs: normalizedDraft.support_evidence_refs,
+        challenge_evidence_refs: normalizedDraft.challenge_evidence_refs,
+        baseline_evidence_refs: normalizedDraft.baseline_evidence_refs,
+        context_evidence_refs: normalizedDraft.context_evidence_refs,
+        resource_assumptions: normalizedDraft.resource_assumptions,
+        data_assumptions: normalizedDraft.data_assumptions,
+        evaluation_path: normalizedDraft.evaluation_path,
+        baseline_assumptions: normalizedDraft.baseline_assumptions,
+        hard_blockers: normalizedDraft.hard_blockers,
+        dependency_risks: normalizedDraft.dependency_risks,
+        slice_budget: normalizedDraft.slice_budget,
+        expected_claim: normalizedDraft.expected_claim,
+        fallback_claim: normalizedDraft.fallback_claim,
+        observable_success_criteria: normalizedDraft.observable_success_criteria,
+        main_risks: normalizedDraft.main_risks,
+        baseline_risk: normalizedDraft.baseline_risk,
+        execution_risk: normalizedDraft.execution_risk,
+        scope_risk: normalizedDraft.scope_risk,
+        claim_ceiling_alignment: normalizedDraft.claim_ceiling_alignment,
+        confidence: normalizedDraft.confidence ?? null,
         requires_human_review: requiresHumanReview,
         human_review_triggers: [
-          ...draft.human_review_triggers,
+          ...normalizedDraft.human_review_triggers,
           ...(isHighRisk ? ['high_risk_option'] : []),
           ...(uncertainClaimAlignment ? ['uncertain_claim_ceiling_alignment'] : []),
-          ...(draft.confidence === null || draft.confidence === undefined || draft.confidence < 0.6
+          ...(normalizedDraft.confidence === null || normalizedDraft.confidence === undefined || normalizedDraft.confidence < 0.6
             ? ['low_option_confidence']
             : []),
+          ...(droppedNonEvidenceRefs.length > 0 ? ['non_evidence_refs_removed'] : []),
+          ...(canonicalizedEvidenceRefs.length > 0 ? ['evidence_refs_canonicalized'] : []),
         ],
         details_payload: {
-          ...draft.details_payload,
+          ...normalizedDraft.details_payload,
           inherited_constraints: {
             claim_ceiling: planningInput.claim_ceiling,
             non_goals: planningInput.non_goals,
@@ -885,6 +912,12 @@ export class TopicSelectionV1bResearchSliceService {
             available_assets: planningInput.available_assets,
             feasibility_budget: planningInput.feasibility_budget,
           },
+          ...(droppedNonEvidenceRefs.length > 0
+            ? { evidence_ref_normalization: { dropped_non_evidence_refs: droppedNonEvidenceRefs } }
+            : {}),
+          ...(canonicalizedEvidenceRefs.length > 0
+            ? { evidence_ref_canonicalization: { canonicalized_evidence_refs: canonicalizedEvidenceRefs } }
+            : {}),
         },
         created_at: now,
       } satisfies TopicSelectionResearchSliceOptionRecord;
@@ -962,6 +995,47 @@ export class TopicSelectionV1bResearchSliceService {
         `ResearchSlice option ${ordinal} cites unknown evidence ref ${unknownEvidence.ref_id}.`,
       );
     }
+  }
+
+  private normalizeDraftEvidenceRefs(
+    draft: TopicSelectionResearchSliceOptionDraft,
+    knownEvidenceIds: Set<string>,
+    knownNonEvidenceIds: Set<string>,
+    canonicalEvidenceById: Map<string, TopicSelectionFunctionalRef>,
+  ): {
+    draft: TopicSelectionResearchSliceOptionDraft;
+    droppedNonEvidenceRefs: TopicSelectionFunctionalRef[];
+    canonicalizedEvidenceRefs: TopicSelectionFunctionalRef[];
+  } {
+    const droppedNonEvidenceRefs: TopicSelectionFunctionalRef[] = [];
+    const canonicalizedEvidenceRefs: TopicSelectionFunctionalRef[] = [];
+    const keepEvidenceRefs = (refs: TopicSelectionFunctionalRef[]): TopicSelectionFunctionalRef[] =>
+      refs.flatMap((ref) => {
+        if (knownEvidenceIds.has(ref.ref_id)) {
+          const canonical = canonicalEvidenceById.get(ref.ref_id) ?? ref;
+          if (this.refKey(canonical) !== this.refKey(ref)) {
+            canonicalizedEvidenceRefs.push(canonical);
+          }
+          return [canonical];
+        }
+        if (knownNonEvidenceIds.has(ref.ref_id)) {
+          droppedNonEvidenceRefs.push(ref);
+          return [];
+        }
+        return [ref];
+      });
+
+    return {
+      draft: {
+        ...draft,
+        support_evidence_refs: keepEvidenceRefs(draft.support_evidence_refs),
+        challenge_evidence_refs: keepEvidenceRefs(draft.challenge_evidence_refs),
+        baseline_evidence_refs: keepEvidenceRefs(draft.baseline_evidence_refs),
+        context_evidence_refs: keepEvidenceRefs(draft.context_evidence_refs),
+      },
+      droppedNonEvidenceRefs: this.uniqueRefs(droppedNonEvidenceRefs),
+      canonicalizedEvidenceRefs: this.uniqueRefs(canonicalizedEvidenceRefs),
+    };
   }
 
   private async persistFailedPlanRun(input: {
@@ -1584,6 +1658,15 @@ export class TopicSelectionV1bResearchSliceService {
     return result;
   }
 
+  private refKey(ref: TopicSelectionFunctionalRef): string {
+    return [
+      ref.ref_type,
+      ref.ref_id,
+      ref.version_id ?? '',
+      ref.title_card_id ?? '',
+    ].join(':');
+  }
+
   private uniqueStrings(values: string[]): string[] {
     return [...new Set(values.filter((value) => value.trim().length > 0))];
   }
@@ -1631,5 +1714,27 @@ export class TopicSelectionV1bResearchSliceService {
     return new AppError(502, 'INTERNAL_ERROR', this.errorMessage(error), {
       plan_research_slice_run_id: planRunId,
     });
+  }
+
+  /**
+   * T-087 Phase 3.1 read-only projection — list ResearchSliceOptionSets under
+   * a title-card. Pure repository delegation; no decision-chain semantics
+   * changed.
+   */
+  async listOptionSetsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionResearchSliceOptionSetRecord[]> {
+    return this.repository.listOptionSetsByTitleCardId(titleCardId);
+  }
+
+  /**
+   * T-087 Phase 3.2 read-only projection — list ResearchSliceOptions for an
+   * OptionSet so the reviewer workbench's selection form can render a
+   * proper picker instead of a free-text id field.
+   */
+  async listOptionsByOptionSetId(
+    optionSetId: string,
+  ): Promise<TopicSelectionResearchSliceOptionRecord[]> {
+    return this.repository.listOptionsByOptionSetId(optionSetId);
   }
 }

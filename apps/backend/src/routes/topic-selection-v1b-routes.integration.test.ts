@@ -784,20 +784,39 @@ async function createV1bInputBundle(app: FastifyInstance, suffix: string) {
       final_decision: 'validate',
       rationale: 'Human reviewer confirms the need and trace boundary.',
       adjudicated_by: { actor_type: 'human', actor_id: 'route-test-reviewer' },
-      human_actor: { actor_type: 'human', actor_id: 'route-test-reviewer' },
-      human_rationale: 'Support, challenge, baseline, context, and handoff refs are sufficient for v1b input.',
     },
   });
   assertStatus(adjudicationRes, 201);
   const adjudication = adjudicationRes.json() as {
-    validated_need: { validated_need_id: string };
-    v1b_input_bundle: { v1b_input_bundle_id: string };
+    adjudication_result: { adjudication_result_id: string; output_validated_need_id: string | null };
   };
+  assert.ok(adjudication.adjudication_result.output_validated_need_id);
+
+  const confirmationRes = await app.inject({
+    method: 'POST',
+    url: `/topic-selection/v1a/adjudications/${encodeURIComponent(
+      adjudication.adjudication_result.adjudication_result_id,
+    )}/human-confirmations`,
+    payload: {
+      human_actor: { actor_type: 'human', actor_id: 'route-test-reviewer' },
+      human_rationale: 'Support, challenge, baseline, context, and handoff refs are sufficient for v1b input.',
+    },
+  });
+  assertStatus(confirmationRes, 201);
+  const confirmation = confirmationRes.json() as { validated_need: { validated_need_id: string } };
+
+  const v1bBundleRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1a/v1b-input-bundles',
+    payload: { validated_need_id: confirmation.validated_need.validated_need_id, created_by: 'system' },
+  });
+  assertStatus(v1bBundleRes, 201);
+  const v1bBundle = v1bBundleRes.json() as { v1b_input_bundle_id: string };
 
   return {
     titleCardId,
-    validatedNeedId: adjudication.validated_need.validated_need_id,
-    v1bInputBundleId: adjudication.v1b_input_bundle.v1b_input_bundle_id,
+    validatedNeedId: confirmation.validated_need.validated_need_id,
+    v1bInputBundleId: v1bBundle.v1b_input_bundle_id,
   };
 }
 
@@ -1249,6 +1268,43 @@ test('topic-selection v1b HTTP routes drive v1b input bundle to draft package an
         'topic_selection_topic_value_assessment',
       ],
     );
+
+    // T-087 Phase 3.1 — assert the 4 new list-by-title-card projections.
+    const sliceSets = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1b/title-cards/${encodeURIComponent(result.titleCardId)}/research-slice-option-sets`,
+    });
+    assertStatus(sliceSets, 200);
+    const sliceSetsPayload = sliceSets.json() as { items: Array<{ research_slice_option_set_id: string; title_card_id: string }> };
+    assert.ok(sliceSetsPayload.items.length > 0);
+    assert.ok(sliceSetsPayload.items.every((item) => item.title_card_id === result.titleCardId));
+
+    const questionSets = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1b/title-cards/${encodeURIComponent(result.titleCardId)}/topic-question-candidate-sets`,
+    });
+    assertStatus(questionSets, 200);
+    const questionSetsPayload = questionSets.json() as { items: Array<{ topic_question_candidate_set_id: string; title_card_id: string }> };
+    assert.ok(questionSetsPayload.items.length > 0);
+    assert.ok(questionSetsPayload.items.every((item) => item.title_card_id === result.titleCardId));
+
+    const valueAssessments = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1b/title-cards/${encodeURIComponent(result.titleCardId)}/topic-value-assessments`,
+    });
+    assertStatus(valueAssessments, 200);
+    const valueAssessmentsPayload = valueAssessments.json() as { items: Array<{ topic_value_assessment_id: string; title_card_id: string }> };
+    assert.ok(valueAssessmentsPayload.items.length > 0);
+    assert.ok(valueAssessmentsPayload.items.every((item) => item.title_card_id === result.titleCardId));
+
+    const packages = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1b/title-cards/${encodeURIComponent(result.titleCardId)}/topic-packages`,
+    });
+    assertStatus(packages, 200);
+    const packagesPayload = packages.json() as { items: Array<{ topic_package_id: string; title_card_id: string }> };
+    assert.ok(packagesPayload.items.length > 0);
+    assert.ok(packagesPayload.items.every((item) => item.title_card_id === result.titleCardId));
   } finally {
     await app.close();
   }

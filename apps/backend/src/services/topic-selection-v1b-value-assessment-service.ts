@@ -1817,4 +1817,14 @@ export class TopicSelectionV1bValueAssessmentService {
       assess_topic_value_run_id: runId,
     });
   }
+
+  /**
+   * T-087 Phase 3.1 read-only projection — list TopicValueAssessments under
+   * a title-card. Pure repository delegation.
+   */
+  async listAssessmentsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionTopicValueAssessmentRecord[]> {
+    return this.repository.listAssessmentsByTitleCardId(titleCardId);
+  }
 }

@@ -400,6 +400,16 @@ implements TopicSelectionV1bResearchSliceRepository {
     return row ? toOptionSetRecord(row) : null;
   }
 
+  async listOptionSetsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionResearchSliceOptionSetRecord[]> {
+    const rows = await this.prisma.topicSelectionResearchSliceOptionSet.findMany({
+      where: { titleCardId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toOptionSetRecord);
+  }
+
   async updateOptionSet(
     optionSetId: string,
     patch: Partial<Pick<

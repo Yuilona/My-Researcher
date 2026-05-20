@@ -270,6 +270,38 @@ export async function registerTopicSelectionV1bRoutes(
   fastify: FastifyInstance,
   controller: TopicSelectionV1bController,
 ): Promise<void> {
+  // T-087 Phase 3.1 — reviewer workbench v1b read-only projections.
+  fastify.get(
+    '/topic-selection/v1b/title-cards/:titleCardId/research-slice-option-sets',
+    { schema: paramsSchema({ titleCardId: stringId }) },
+    controller.listResearchSliceOptionSetsByTitleCard,
+  );
+  fastify.get(
+    '/topic-selection/v1b/title-cards/:titleCardId/topic-question-candidate-sets',
+    { schema: paramsSchema({ titleCardId: stringId }) },
+    controller.listTopicQuestionCandidateSetsByTitleCard,
+  );
+  fastify.get(
+    '/topic-selection/v1b/title-cards/:titleCardId/topic-value-assessments',
+    { schema: paramsSchema({ titleCardId: stringId }) },
+    controller.listTopicValueAssessmentsByTitleCard,
+  );
+  fastify.get(
+    '/topic-selection/v1b/title-cards/:titleCardId/topic-packages',
+    { schema: paramsSchema({ titleCardId: stringId }) },
+    controller.listTopicPackagesByTitleCard,
+  );
+  // T-087 Phase 3.2/3.3 — picker drivers for selection-decision forms.
+  fastify.get(
+    '/topic-selection/v1b/research-slice-option-sets/:optionSetId/options',
+    { schema: paramsSchema({ optionSetId: stringId }) },
+    controller.listResearchSliceOptionsByOptionSet,
+  );
+  fastify.get(
+    '/topic-selection/v1b/topic-question-candidate-sets/:candidateSetId/candidates',
+    { schema: paramsSchema({ candidateSetId: stringId }) },
+    controller.listTopicQuestionCandidatesByCandidateSet,
+  );
   fastify.post('/topic-selection/v1b/intake-snapshots', { schema: intakeSnapshotBody }, controller.createIntakeSnapshot);
   fastify.post(
     '/topic-selection/v1b/research-constraint-profiles',

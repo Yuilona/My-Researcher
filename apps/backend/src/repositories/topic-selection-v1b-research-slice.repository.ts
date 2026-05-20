@@ -49,6 +49,14 @@ export interface TopicSelectionV1bResearchSliceRepository {
     options: TopicSelectionResearchSliceOptionRecord[];
   }>;
   findOptionSetById(optionSetId: string): Promise<TopicSelectionResearchSliceOptionSetRecord | null>;
+  /**
+   * T-087 Phase 3.1 read-only projection — list ResearchSliceOptionSets under
+   * a title-card so the reviewer workbench v1b Slice surface can list them
+   * without changing decision-chain semantics.
+   */
+  listOptionSetsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionResearchSliceOptionSetRecord[]>;
   updateOptionSet(
     optionSetId: string,
     patch: Partial<Pick<

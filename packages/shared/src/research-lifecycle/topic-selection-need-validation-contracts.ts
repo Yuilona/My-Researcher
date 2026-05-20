@@ -137,6 +137,543 @@ export const TOPIC_SELECTION_CANDIDATE_MEMORY_SUGGESTION_STATUSES = [
 export type TopicSelectionCandidateMemorySuggestionStatus =
   (typeof TOPIC_SELECTION_CANDIDATE_MEMORY_SUGGESTION_STATUSES)[number];
 
+export const TOPIC_SELECTION_AGENT_EXECUTION_MODES = [
+  'mocked_llm',
+  'codex_assisted',
+  'provider_llm',
+] as const;
+export type TopicSelectionAgentExecutionMode = (typeof TOPIC_SELECTION_AGENT_EXECUTION_MODES)[number];
+
+export const TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_NODE_STATUSES = [
+  'succeeded',
+  'blocked',
+  'require_human_review',
+] as const;
+export type TopicSelectionGenerateNeedCandidateNodeStatus =
+  (typeof TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_NODE_STATUSES)[number];
+
+export const TOPIC_SELECTION_NEED_DISCOVERY_TERMINAL_RESULTS = [
+  'finalize',
+  'blocked',
+  'require_human_review',
+] as const;
+export type TopicSelectionNeedDiscoveryTerminalResult =
+  (typeof TOPIC_SELECTION_NEED_DISCOVERY_TERMINAL_RESULTS)[number];
+
+export const TOPIC_SELECTION_CANDIDATE_DRAFT_ADMISSION_DECISIONS = [
+  'admit',
+  'reject_artifact_only',
+  'require_human_review',
+  'return_for_supplemental_round',
+  'merge_hint_only',
+] as const;
+export type TopicSelectionCandidateDraftAdmissionDecision =
+  (typeof TOPIC_SELECTION_CANDIDATE_DRAFT_ADMISSION_DECISIONS)[number];
+
+export const TOPIC_SELECTION_SUPPLEMENTAL_ROUND_ROUTING_DECISIONS = [
+  'run_supplemental_round',
+  'reject_without_supplement',
+  'block',
+  'require_human_review',
+  'finalize_with_admitted_batch',
+] as const;
+export type TopicSelectionSupplementalRoundRoutingDecisionKind =
+  (typeof TOPIC_SELECTION_SUPPLEMENTAL_ROUND_ROUTING_DECISIONS)[number];
+
+export const TOPIC_SELECTION_NEED_DISCOVERY_DEBATE_ROLES = [
+  'explorer',
+  'deep_critic',
+  'arbiter',
+] as const;
+export type TopicSelectionNeedDiscoveryDebateRole =
+  (typeof TOPIC_SELECTION_NEED_DISCOVERY_DEBATE_ROLES)[number];
+
+export const TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_ERROR_CODES = [
+  'MISSING_EVIDENCE_MAP',
+  'MISSING_EVIDENCE_SOURCE_REFS',
+  'MISSING_CONTEXT_PACKET',
+  'MALFORMED_CONTEXT_PACKET',
+  'STALE_CONTEXT_PACKET',
+  'NO_GROUNDED_NEED_CANDIDATE',
+  'PSEUDO_GAP_ONLY',
+  'INVALID_RANKED_CANDIDATE_DRAFT_BATCH',
+  'CANDIDATE_DRAFT_ADMISSION_FAILED',
+  'UNRESOLVED_CANDIDATE_DRAFT_REFS',
+  'MALFORMED_NEED_CANDIDATE_OUTPUT',
+  'NO_ADMISSIBLE_NEED_CANDIDATE',
+  'NO_ADMITTED_DRAFTS',
+  'DRAFT_NOT_ADMITTED',
+  'UNRESOLVED_PERSISTENCE_REFS',
+  'DUPLICATE_NEED_CANDIDATE',
+  'NEED_CANDIDATE_VERSION_FAILED',
+  'TOO_MANY_NEED_CANDIDATES',
+  'PERSIST_NEED_CANDIDATE_BATCH_FAILED',
+] as const;
+export type TopicSelectionGenerateNeedCandidateErrorCode =
+  (typeof TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_ERROR_CODES)[number];
+
+export const TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_ARTIFACT_KEYS = [
+  'exploration_context_packet',
+  'arbiter_context_packet',
+  'debate_role_output',
+  'debate_role_level_summary',
+  'debate_issue_frame',
+  'debate_final_synthesis',
+  'ranked_candidate_draft_batch',
+  'minimum_schema_validation_report',
+  'candidate_draft_admission_report',
+  'supplemental_round_routing_decision',
+  'persist_need_candidate_batch_command',
+  'discovery_audit',
+] as const;
+export type TopicSelectionGenerateNeedCandidateArtifactKey =
+  (typeof TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_ARTIFACT_KEYS)[number];
+
+export const TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_REDACTION_POLICIES = [
+  'topic_selection_generate_need_candidate_artifact_redaction_v1',
+] as const;
+export type TopicSelectionGenerateNeedCandidateRedactionPolicy =
+  (typeof TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_REDACTION_POLICIES)[number];
+
+export const TOPIC_SELECTION_NEED_DISCOVERY_CONTEXT_FAMILIES = [
+  'exploration_context',
+  'arbiter_context',
+] as const;
+export type TopicSelectionNeedDiscoveryContextFamily =
+  (typeof TOPIC_SELECTION_NEED_DISCOVERY_CONTEXT_FAMILIES)[number];
+
+export const TOPIC_SELECTION_NEED_DISCOVERY_CONTEXT_REDACTION_POLICIES = [
+  'topic_selection_need_discovery_context_redaction_v1',
+] as const;
+export type TopicSelectionNeedDiscoveryContextRedactionPolicy =
+  (typeof TOPIC_SELECTION_NEED_DISCOVERY_CONTEXT_REDACTION_POLICIES)[number];
+
+export type TopicSelectionArtifactFunctionalRef = TopicSelectionFunctionalRef & {
+  ref_type: 'artifact_ref';
+};
+
+export interface TopicSelectionGenerateNeedCandidateNodeInput {
+  schema_version: string;
+  workflow_run_id: string;
+  node_attempt_id: string;
+  topic_scope_ref: TopicSelectionFunctionalRef;
+  evidence_map_ref: TopicSelectionFunctionalRef;
+  evidence_strength_ref: TopicSelectionFunctionalRef;
+  resource_sample_set_ref?: TopicSelectionFunctionalRef | null;
+  candidate_pool_projection_ref?: TopicSelectionFunctionalRef | null;
+  search_snapshot_refs: TopicSelectionFunctionalRef[];
+  resource_snapshot_refs: TopicSelectionFunctionalRef[];
+  exploration_context_ref: TopicSelectionArtifactFunctionalRef;
+  arbiter_context_ref: TopicSelectionArtifactFunctionalRef;
+  execution_mode: TopicSelectionAgentExecutionMode;
+  profile_id: string;
+  policy_version: string;
+  operator_reuse_approval_ref?: TopicSelectionFunctionalRef | null;
+}
+
+export interface TopicSelectionNeedCandidateDraft {
+  draft_id: string;
+  rank: number;
+  candidate_need: string;
+  unmet_need_statement: string;
+  mechanism_type: TopicSelectionNeedMechanismType;
+  mechanism_summary?: string | null;
+  mechanism_payload: Record<string, unknown>;
+  scope_notes?: string | null;
+  non_goal_notes?: string | null;
+  prior_art_status: TopicSelectionNeedPriorArtStatus;
+  evidence_role_bundle: TopicSelectionEvidenceRoleBundle;
+  conflict_refs: TopicSelectionFunctionalRef[];
+  strength_assessment_refs: TopicSelectionFunctionalRef[];
+  accepted_risk_refs: TopicSelectionFunctionalRef[];
+  gap_codes: string[];
+  speculative: boolean;
+  confidence?: number | null;
+}
+
+export interface TopicSelectionRankedCandidateDraftBatchMetadata {
+  batch_id: string;
+  node_attempt_id: string;
+  terminal_result: TopicSelectionNeedDiscoveryTerminalResult;
+  ranking_rationale: string;
+  max_persisted_candidates: number;
+}
+
+export interface TopicSelectionRejectedNeedCandidateFraming {
+  framing_id: string;
+  reason_code: string;
+  summary: string;
+  source_draft_id?: string | null;
+  refs: TopicSelectionFunctionalRef[];
+}
+
+export interface TopicSelectionNeedCandidateUnresolvedPoint {
+  unresolved_point_id: string;
+  reason_code: string;
+  summary: string;
+  routed_to: 'supplemental_round' | 'human_review' | 'blocked';
+  refs: TopicSelectionFunctionalRef[];
+}
+
+export interface TopicSelectionRankedCandidateDraftBatch {
+  schema_version: string;
+  draft_batch: TopicSelectionRankedCandidateDraftBatchMetadata;
+  drafts: TopicSelectionNeedCandidateDraft[];
+  rejected_framings: TopicSelectionRejectedNeedCandidateFraming[];
+  unresolved_points: TopicSelectionNeedCandidateUnresolvedPoint[];
+}
+
+export type TopicSelectionMinimumValidationIssueSeverity = 'blocking' | 'warning';
+
+export interface TopicSelectionRankedCandidateDraftBatchMinimumValidationIssue {
+  issue_code: string;
+  severity: TopicSelectionMinimumValidationIssueSeverity;
+  message: string;
+  draft_id?: string | null;
+  field_path?: string | null;
+  refs: TopicSelectionFunctionalRef[];
+}
+
+export interface TopicSelectionRankedCandidateDraftBatchMinimumValidationReport {
+  schema_version: string;
+  batch_id: string;
+  node_attempt_id: string;
+  valid: boolean;
+  terminal_result: TopicSelectionNeedDiscoveryTerminalResult;
+  batch_payload_hash: string;
+  draft_count: number;
+  max_persisted_candidates: number;
+  checked_at: string;
+  issue_count: number;
+  blocking_issue_count: number;
+  warning_issue_count: number;
+  blocking_reason_codes: string[];
+  warning_codes: string[];
+  issues: TopicSelectionRankedCandidateDraftBatchMinimumValidationIssue[];
+}
+
+export interface TopicSelectionCandidateDraftAdmissionResult {
+  draft_id: string;
+  rank: number;
+  decision: TopicSelectionCandidateDraftAdmissionDecision;
+  reason_codes: string[];
+  blocking_reason_codes: string[];
+  resolved_ref_counts: {
+    support: number;
+    challenge: number;
+    baseline: number;
+    context: number;
+  };
+  normalized_candidate_key: string | null;
+  duplicate_candidate_refs: TopicSelectionFunctionalRef[];
+  required_human_review_points: TopicSelectionFunctionalRef[];
+  supplemental_questions: string[];
+  admitted_draft_ref?: TopicSelectionFunctionalRef | null;
+  merge_target_ref?: TopicSelectionFunctionalRef | null;
+}
+
+export interface TopicSelectionCandidateDraftAdmissionReport {
+  schema_version: string;
+  batch_id: string;
+  node_attempt_id: string;
+  terminal_result: TopicSelectionNeedDiscoveryTerminalResult;
+  draft_results: TopicSelectionCandidateDraftAdmissionResult[];
+  valid_draft_count: number;
+  rejected_draft_count: number;
+  merge_hint_count: number;
+  blocking_reason_codes: string[];
+}
+
+export interface TopicSelectionSupplementalRoundQuestion {
+  question_id: string;
+  source_draft_id: string;
+  question: string;
+  reason_code: string;
+}
+
+export interface TopicSelectionSupplementalRoundRoutingDecision {
+  schema_version: string;
+  batch_id: string;
+  node_attempt_id: string;
+  current_round_index: number;
+  remaining_round_budget: number;
+  routing_decision: TopicSelectionSupplementalRoundRoutingDecisionKind;
+  source_draft_ids: string[];
+  trigger_reason_codes: string[];
+  supplemental_questions: TopicSelectionSupplementalRoundQuestion[];
+  allowed_roles: string[];
+  forbidden_actions: string[];
+  stop_condition?: string | null;
+}
+
+export interface TopicSelectionPersistNeedCandidateBatchDraft {
+  draft_id: string;
+  rank: number;
+  candidate_need: string;
+  unmet_need_statement: string;
+  mechanism_type: TopicSelectionNeedMechanismType;
+  mechanism_summary?: string | null;
+  mechanism_payload: Record<string, unknown>;
+  scope_notes?: string | null;
+  non_goal_notes?: string | null;
+  prior_art_status: TopicSelectionNeedPriorArtStatus;
+  evidence_role_bundle: TopicSelectionEvidenceRoleBundle;
+  conflict_refs: TopicSelectionFunctionalRef[];
+  strength_assessment_refs: TopicSelectionFunctionalRef[];
+  accepted_risk_refs: TopicSelectionFunctionalRef[];
+  gap_codes: string[];
+  speculative: boolean;
+  confidence?: number | null;
+  normalized_candidate_key: string;
+  source_admission_decision_ref: TopicSelectionFunctionalRef;
+}
+
+export interface TopicSelectionPersistNeedCandidateBatchCommand {
+  schema_version: string;
+  node_attempt_id: string;
+  workflow_run_id: string;
+  topic_scope_ref: TopicSelectionFunctionalRef;
+  evidence_map_ref: TopicSelectionFunctionalRef;
+  resource_sample_set_ref?: TopicSelectionFunctionalRef | null;
+  ranked_candidate_draft_batch_artifact_ref: TopicSelectionArtifactFunctionalRef;
+  admission_report_artifact_ref: TopicSelectionArtifactFunctionalRef;
+  supplemental_routing_artifact_refs: TopicSelectionArtifactFunctionalRef[];
+  admitted_drafts: TopicSelectionPersistNeedCandidateBatchDraft[];
+  idempotency_key: string;
+}
+
+export interface TopicSelectionGenerateNeedCandidateNodeResultArtifactRefs {
+  ranked_candidate_draft_batch?: TopicSelectionArtifactFunctionalRef | null;
+  minimum_schema_validation_report?: TopicSelectionArtifactFunctionalRef | null;
+  candidate_draft_admission_report?: TopicSelectionArtifactFunctionalRef | null;
+  supplemental_round_routing_decisions: TopicSelectionArtifactFunctionalRef[];
+  persist_need_candidate_batch_command?: TopicSelectionArtifactFunctionalRef | null;
+  discovery_audit?: TopicSelectionArtifactFunctionalRef | null;
+}
+
+export interface TopicSelectionGenerateNeedCandidateNodeResult {
+  schema_version: string;
+  workflow_run_id: string;
+  node_attempt_id: string;
+  status: TopicSelectionGenerateNeedCandidateNodeStatus;
+  terminal_result: TopicSelectionNeedDiscoveryTerminalResult;
+  persisted_candidate_refs: TopicSelectionFunctionalRef[];
+  candidate_pool_projection_ref?: TopicSelectionFunctionalRef | null;
+  candidate_pool_projection_hash?: string | null;
+  artifact_refs: TopicSelectionGenerateNeedCandidateNodeResultArtifactRefs;
+  warning_codes: string[];
+  error_code?: TopicSelectionGenerateNeedCandidateErrorCode | null;
+}
+
+export type GenerateNeedCandidateNodeInput = TopicSelectionGenerateNeedCandidateNodeInput;
+export type GenerateNeedCandidateNodeResult = TopicSelectionGenerateNeedCandidateNodeResult;
+export type RankedCandidateDraftBatch = TopicSelectionRankedCandidateDraftBatch;
+export type RankedCandidateDraftBatchMinimumValidationReport =
+  TopicSelectionRankedCandidateDraftBatchMinimumValidationReport;
+export type CandidateDraftAdmissionReport = TopicSelectionCandidateDraftAdmissionReport;
+export type SupplementalRoundRoutingDecision = TopicSelectionSupplementalRoundRoutingDecision;
+export type PersistNeedCandidateBatchCommand = TopicSelectionPersistNeedCandidateBatchCommand;
+
+export interface TopicSelectionNeedDiscoveryContextCompression {
+  compression_version: string;
+  layer_keys: string[];
+  source_token_estimate?: number | null;
+  compressed_token_estimate?: number | null;
+}
+
+export interface TopicSelectionNeedDiscoveryContextEnvelope {
+  schema_version: string;
+  node_id: 'topic-selection.v1a.generate-need-candidate.v1';
+  workflow_run_id: string;
+  node_attempt_id: string;
+  context_family: TopicSelectionNeedDiscoveryContextFamily;
+  input_refs: TopicSelectionFunctionalRef[];
+  input_refs_hash: string;
+  context_compiler_version: string;
+  policy_version: string;
+  output_schema_version: string;
+  profile_id: string;
+  execution_mode: TopicSelectionAgentExecutionMode;
+  cache_key: string;
+  cache_hit: boolean;
+  redaction_policy: TopicSelectionNeedDiscoveryContextRedactionPolicy;
+  created_at: string;
+  memory_digest_hash: string;
+  candidate_pool_hash: string;
+  payload_hash: string;
+  compression: TopicSelectionNeedDiscoveryContextCompression;
+}
+
+export interface TopicSelectionNeedDiscoveryExplorationContextPayload {
+  topic_scope: Record<string, unknown>;
+  evidence_signal_digest: Record<string, unknown>;
+  resource_sample_digest: Record<string, unknown>;
+  search_coverage_digest: Record<string, unknown>;
+  sibling_candidate_digest: Record<string, unknown>;
+  decision_memory_digest: Record<string, unknown>;
+  exploration_prompts: string[];
+  challenge_prompts: string[];
+  allowed_outputs: string[];
+  forbidden_outputs: string[];
+}
+
+export interface TopicSelectionNeedDiscoveryArbiterContextPayload {
+  node_policy_ref: TopicSelectionFunctionalRef;
+  output_schema_ref: TopicSelectionFunctionalRef;
+  authority_boundary: Record<string, unknown>;
+  max_persisted_candidates: number;
+  deterministic_gate_checklist: string[];
+  role_level_summaries: Record<string, unknown>[];
+  candidate_pool_digest: Record<string, unknown>;
+  evidence_ref_table: Record<string, unknown>[];
+  rejected_framing_table: Record<string, unknown>[];
+  unresolved_points: Record<string, unknown>[];
+  batch_ranking_rules: string[];
+  persistence_rules: string[];
+  failure_rules: string[];
+}
+
+export interface TopicSelectionNeedDiscoveryCandidateAngle {
+  angle_id: string;
+  summary: string;
+  candidate_need_hint?: string | null;
+  evidence_refs: TopicSelectionFunctionalRef[];
+}
+
+export interface TopicSelectionNeedDiscoveryExplorerNotes {
+  schema_version: string;
+  debate_loop_id: string;
+  round_index: number;
+  role: 'explorer';
+  stage: string;
+  agent_instance_id: string;
+  candidate_angles: TopicSelectionNeedDiscoveryCandidateAngle[];
+  evidence_refs: TopicSelectionFunctionalRef[];
+  unresolved_questions: string[];
+  warnings: string[];
+}
+
+export interface TopicSelectionNeedDiscoveryCritiquePoint {
+  critique_id: string;
+  summary: string;
+  severity: 'low' | 'medium' | 'high';
+  evidence_refs: TopicSelectionFunctionalRef[];
+}
+
+export interface TopicSelectionNeedDiscoveryDeepCriticNotes {
+  schema_version: string;
+  debate_loop_id: string;
+  round_index: number;
+  role: 'deep_critic';
+  stage: string;
+  agent_instance_id: string;
+  critique_points: TopicSelectionNeedDiscoveryCritiquePoint[];
+  failure_modes: string[];
+  missing_evidence_questions: string[];
+  evidence_refs: TopicSelectionFunctionalRef[];
+  warnings: string[];
+}
+
+export interface TopicSelectionNeedDiscoveryRoleLevelSummary {
+  schema_version: string;
+  debate_loop_id: string;
+  round_index: number;
+  role: 'explorer' | 'deep_critic';
+  source_invocation_attempt_ids: string[];
+  source_artifact_refs: TopicSelectionArtifactFunctionalRef[];
+  summary: string;
+  candidate_need_signals: string[];
+  risk_signals: string[];
+  evidence_refs: TopicSelectionFunctionalRef[];
+  unresolved_questions: string[];
+}
+
+export interface TopicSelectionNeedDiscoveryDebateIssueFrame {
+  schema_version: string;
+  debate_loop_id: string;
+  round_index: number;
+  role: 'arbiter';
+  stage: 'issue_framing';
+  frame_id: string;
+  focused_questions: string[];
+  requested_roles: Array<'explorer' | 'deep_critic'>;
+  source_role_summary_refs: TopicSelectionArtifactFunctionalRef[];
+  stop_condition?: string | null;
+}
+
+export interface TopicSelectionNeedDiscoveryDebateFinalSynthesisArtifact {
+  schema_version: string;
+  debate_loop_id: string;
+  round_index: number;
+  role: 'arbiter';
+  stage: 'final_synthesis';
+  final_invocation_attempt_id: string;
+  final_invocation_audit_ref?: TopicSelectionArtifactFunctionalRef | null;
+  issue_frame_ref: TopicSelectionArtifactFunctionalRef;
+  role_level_summary_refs: TopicSelectionArtifactFunctionalRef[];
+  ranked_candidate_draft_batch_hash: string;
+  terminal_result: TopicSelectionNeedDiscoveryTerminalResult;
+  draft_count: number;
+  rejected_framing_count: number;
+  unresolved_point_count: number;
+}
+
+export type TopicSelectionNeedDiscoveryContextPacket =
+  | (TopicSelectionNeedDiscoveryContextEnvelope & {
+      context_family: 'exploration_context';
+      payload: TopicSelectionNeedDiscoveryExplorationContextPayload;
+    })
+  | (TopicSelectionNeedDiscoveryContextEnvelope & {
+      context_family: 'arbiter_context';
+      payload: TopicSelectionNeedDiscoveryArbiterContextPayload;
+    });
+
+export interface TopicSelectionNeedDiscoveryCompiledContextPair {
+  schema_version: string;
+  node_id: 'topic-selection.v1a.generate-need-candidate.v1';
+  workflow_run_id: string;
+  node_attempt_id: string;
+  exploration_context_ref: TopicSelectionArtifactFunctionalRef;
+  arbiter_context_ref: TopicSelectionArtifactFunctionalRef;
+  exploration_context_hash: string;
+  arbiter_context_hash: string;
+  exploration_cache_key: string;
+  arbiter_cache_key: string;
+  artifact_refs: TopicSelectionGenerateNeedCandidateArtifactRefEntry[];
+}
+
+export interface TopicSelectionGenerateNeedCandidateArtifactSnapshot {
+  schema_version: string;
+  node_id: 'topic-selection.v1a.generate-need-candidate.v1';
+  workflow_run_id: string;
+  node_attempt_id: string;
+  artifact_key: TopicSelectionGenerateNeedCandidateArtifactKey;
+  payload_schema: string;
+  redaction_policy: TopicSelectionGenerateNeedCandidateRedactionPolicy;
+  redacted: boolean;
+  redacted_paths: string[];
+  source_refs: TopicSelectionFunctionalRef[];
+  payload_hash: string;
+  payload: Record<string, unknown>;
+}
+
+export interface TopicSelectionGenerateNeedCandidateArtifactRefEntry {
+  artifact_key: TopicSelectionGenerateNeedCandidateArtifactKey;
+  artifact_ref: TopicSelectionArtifactFunctionalRef;
+  artifact_hash: string;
+  payload_hash: string;
+  payload_schema: string;
+  redacted_paths: string[];
+}
+
+export interface TopicSelectionGenerateNeedCandidateArtifactRefBundle {
+  schema_version: string;
+  node_id: 'topic-selection.v1a.generate-need-candidate.v1';
+  workflow_run_id: string;
+  node_attempt_id: string;
+  artifact_refs: TopicSelectionGenerateNeedCandidateArtifactRefEntry[];
+}
+
 export interface TopicSelectionNeedCandidateRecord {
   need_candidate_id: string;
   workspace_id?: string | null;
@@ -366,8 +903,835 @@ const nullableNumber = { anyOf: [numberValue, { type: 'null' }] } as const;
 const booleanValue = { type: 'boolean' } as const;
 const stringArray = { type: 'array', items: stringId } as const;
 const objectPayload = { type: 'object', additionalProperties: true } as const;
+const objectArray = { type: 'array', items: objectPayload } as const;
 const functionalRefArray = { type: 'array', items: topicSelectionFunctionalRefSchema } as const;
 const nullableFunctionalRef = { anyOf: [topicSelectionFunctionalRefSchema, { type: 'null' }] } as const;
+const artifactFunctionalRefSchema = {
+  ...topicSelectionFunctionalRefSchema,
+  properties: {
+    ...topicSelectionFunctionalRefSchema.properties,
+    ref_type: { enum: ['artifact_ref'] },
+  },
+} as const;
+const artifactRefArray = { type: 'array', items: artifactFunctionalRefSchema } as const;
+const nullableArtifactRef = { anyOf: [artifactFunctionalRefSchema, { type: 'null' }] } as const;
+const nullableString = { anyOf: [stringId, { type: 'null' }] } as const;
+
+const topicSelectionNeedCandidateDraftSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'draft_id',
+    'rank',
+    'candidate_need',
+    'unmet_need_statement',
+    'mechanism_type',
+    'mechanism_payload',
+    'prior_art_status',
+    'evidence_role_bundle',
+    'conflict_refs',
+    'strength_assessment_refs',
+    'accepted_risk_refs',
+    'gap_codes',
+    'speculative',
+  ],
+  properties: {
+    draft_id: stringId,
+    rank: numberValue,
+    candidate_need: stringId,
+    unmet_need_statement: stringId,
+    mechanism_type: { enum: [...TOPIC_SELECTION_NEED_MECHANISM_TYPES] },
+    mechanism_summary: nullableString,
+    mechanism_payload: objectPayload,
+    scope_notes: nullableString,
+    non_goal_notes: nullableString,
+    prior_art_status: { enum: [...TOPIC_SELECTION_NEED_PRIOR_ART_STATUSES] },
+    evidence_role_bundle: topicSelectionEvidenceRoleBundleSchema,
+    conflict_refs: functionalRefArray,
+    strength_assessment_refs: functionalRefArray,
+    accepted_risk_refs: functionalRefArray,
+    gap_codes: stringArray,
+    speculative: booleanValue,
+    confidence: nullableNumber,
+  },
+} as const;
+
+export const topicSelectionGenerateNeedCandidateNodeInputSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'workflow_run_id',
+    'node_attempt_id',
+    'topic_scope_ref',
+    'evidence_map_ref',
+    'evidence_strength_ref',
+    'search_snapshot_refs',
+    'resource_snapshot_refs',
+    'exploration_context_ref',
+    'arbiter_context_ref',
+    'execution_mode',
+    'profile_id',
+    'policy_version',
+  ],
+  properties: {
+    schema_version: stringId,
+    workflow_run_id: stringId,
+    node_attempt_id: stringId,
+    topic_scope_ref: topicSelectionFunctionalRefSchema,
+    evidence_map_ref: topicSelectionFunctionalRefSchema,
+    evidence_strength_ref: topicSelectionFunctionalRefSchema,
+    resource_sample_set_ref: nullableFunctionalRef,
+    candidate_pool_projection_ref: nullableFunctionalRef,
+    search_snapshot_refs: functionalRefArray,
+    resource_snapshot_refs: functionalRefArray,
+    exploration_context_ref: artifactFunctionalRefSchema,
+    arbiter_context_ref: artifactFunctionalRefSchema,
+    execution_mode: { enum: [...TOPIC_SELECTION_AGENT_EXECUTION_MODES] },
+    profile_id: stringId,
+    policy_version: stringId,
+    operator_reuse_approval_ref: nullableFunctionalRef,
+  },
+} as const;
+
+export const topicSelectionRankedCandidateDraftBatchSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['schema_version', 'draft_batch', 'drafts', 'rejected_framings', 'unresolved_points'],
+  properties: {
+    schema_version: stringId,
+    draft_batch: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['batch_id', 'node_attempt_id', 'terminal_result', 'ranking_rationale', 'max_persisted_candidates'],
+      properties: {
+        batch_id: stringId,
+        node_attempt_id: stringId,
+        terminal_result: { enum: [...TOPIC_SELECTION_NEED_DISCOVERY_TERMINAL_RESULTS] },
+        ranking_rationale: stringId,
+        max_persisted_candidates: numberValue,
+      },
+    },
+    drafts: { type: 'array', items: topicSelectionNeedCandidateDraftSchema },
+    rejected_framings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['framing_id', 'reason_code', 'summary', 'refs'],
+        properties: {
+          framing_id: stringId,
+          reason_code: stringId,
+          summary: stringId,
+          source_draft_id: nullableStringId,
+          refs: functionalRefArray,
+        },
+      },
+    },
+    unresolved_points: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['unresolved_point_id', 'reason_code', 'summary', 'routed_to', 'refs'],
+        properties: {
+          unresolved_point_id: stringId,
+          reason_code: stringId,
+          summary: stringId,
+          routed_to: { enum: ['supplemental_round', 'human_review', 'blocked'] },
+          refs: functionalRefArray,
+        },
+      },
+    },
+  },
+} as const;
+
+const topicSelectionRankedCandidateDraftBatchMinimumValidationIssueSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['issue_code', 'severity', 'message', 'refs'],
+  properties: {
+    issue_code: stringId,
+    severity: { enum: ['blocking', 'warning'] },
+    message: stringId,
+    draft_id: nullableStringId,
+    field_path: nullableStringId,
+    refs: functionalRefArray,
+  },
+} as const;
+
+export const topicSelectionRankedCandidateDraftBatchMinimumValidationReportSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'batch_id',
+    'node_attempt_id',
+    'valid',
+    'terminal_result',
+    'batch_payload_hash',
+    'draft_count',
+    'max_persisted_candidates',
+    'checked_at',
+    'issue_count',
+    'blocking_issue_count',
+    'warning_issue_count',
+    'blocking_reason_codes',
+    'warning_codes',
+    'issues',
+  ],
+  properties: {
+    schema_version: stringId,
+    batch_id: stringId,
+    node_attempt_id: stringId,
+    valid: booleanValue,
+    terminal_result: { enum: [...TOPIC_SELECTION_NEED_DISCOVERY_TERMINAL_RESULTS] },
+    batch_payload_hash: stringId,
+    draft_count: numberValue,
+    max_persisted_candidates: numberValue,
+    checked_at: stringId,
+    issue_count: numberValue,
+    blocking_issue_count: numberValue,
+    warning_issue_count: numberValue,
+    blocking_reason_codes: stringArray,
+    warning_codes: stringArray,
+    issues: {
+      type: 'array',
+      items: topicSelectionRankedCandidateDraftBatchMinimumValidationIssueSchema,
+    },
+  },
+} as const;
+
+export const topicSelectionCandidateDraftAdmissionReportSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'batch_id',
+    'node_attempt_id',
+    'terminal_result',
+    'draft_results',
+    'valid_draft_count',
+    'rejected_draft_count',
+    'merge_hint_count',
+    'blocking_reason_codes',
+  ],
+  properties: {
+    schema_version: stringId,
+    batch_id: stringId,
+    node_attempt_id: stringId,
+    terminal_result: { enum: [...TOPIC_SELECTION_NEED_DISCOVERY_TERMINAL_RESULTS] },
+    draft_results: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'draft_id',
+          'rank',
+          'decision',
+          'reason_codes',
+          'blocking_reason_codes',
+          'resolved_ref_counts',
+          'normalized_candidate_key',
+          'duplicate_candidate_refs',
+          'required_human_review_points',
+          'supplemental_questions',
+        ],
+        properties: {
+          draft_id: stringId,
+          rank: numberValue,
+          decision: { enum: [...TOPIC_SELECTION_CANDIDATE_DRAFT_ADMISSION_DECISIONS] },
+          reason_codes: stringArray,
+          blocking_reason_codes: stringArray,
+          resolved_ref_counts: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['support', 'challenge', 'baseline', 'context'],
+            properties: {
+              support: numberValue,
+              challenge: numberValue,
+              baseline: numberValue,
+              context: numberValue,
+            },
+          },
+          normalized_candidate_key: nullableStringId,
+          duplicate_candidate_refs: functionalRefArray,
+          required_human_review_points: functionalRefArray,
+          supplemental_questions: stringArray,
+          admitted_draft_ref: nullableFunctionalRef,
+          merge_target_ref: nullableFunctionalRef,
+        },
+      },
+    },
+    valid_draft_count: numberValue,
+    rejected_draft_count: numberValue,
+    merge_hint_count: numberValue,
+    blocking_reason_codes: stringArray,
+  },
+} as const;
+
+export const topicSelectionSupplementalRoundRoutingDecisionSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'batch_id',
+    'node_attempt_id',
+    'current_round_index',
+    'remaining_round_budget',
+    'routing_decision',
+    'source_draft_ids',
+    'trigger_reason_codes',
+    'supplemental_questions',
+    'allowed_roles',
+    'forbidden_actions',
+  ],
+  properties: {
+    schema_version: stringId,
+    batch_id: stringId,
+    node_attempt_id: stringId,
+    current_round_index: numberValue,
+    remaining_round_budget: numberValue,
+    routing_decision: { enum: [...TOPIC_SELECTION_SUPPLEMENTAL_ROUND_ROUTING_DECISIONS] },
+    source_draft_ids: stringArray,
+    trigger_reason_codes: stringArray,
+    supplemental_questions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['question_id', 'source_draft_id', 'question', 'reason_code'],
+        properties: {
+          question_id: stringId,
+          source_draft_id: stringId,
+          question: stringId,
+          reason_code: stringId,
+        },
+      },
+    },
+    allowed_roles: stringArray,
+    forbidden_actions: stringArray,
+    stop_condition: nullableStringId,
+  },
+} as const;
+
+export const topicSelectionPersistNeedCandidateBatchCommandSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'node_attempt_id',
+    'workflow_run_id',
+    'topic_scope_ref',
+    'evidence_map_ref',
+    'ranked_candidate_draft_batch_artifact_ref',
+    'admission_report_artifact_ref',
+    'supplemental_routing_artifact_refs',
+    'admitted_drafts',
+    'idempotency_key',
+  ],
+  properties: {
+    schema_version: stringId,
+    node_attempt_id: stringId,
+    workflow_run_id: stringId,
+    topic_scope_ref: topicSelectionFunctionalRefSchema,
+    evidence_map_ref: topicSelectionFunctionalRefSchema,
+    resource_sample_set_ref: nullableFunctionalRef,
+    ranked_candidate_draft_batch_artifact_ref: artifactFunctionalRefSchema,
+    admission_report_artifact_ref: artifactFunctionalRefSchema,
+    supplemental_routing_artifact_refs: artifactRefArray,
+    admitted_drafts: {
+      type: 'array',
+      items: {
+        ...topicSelectionNeedCandidateDraftSchema,
+        required: [
+          ...topicSelectionNeedCandidateDraftSchema.required,
+          'normalized_candidate_key',
+          'source_admission_decision_ref',
+        ],
+        properties: {
+          ...topicSelectionNeedCandidateDraftSchema.properties,
+          normalized_candidate_key: stringId,
+          source_admission_decision_ref: topicSelectionFunctionalRefSchema,
+        },
+      },
+    },
+    idempotency_key: stringId,
+  },
+} as const;
+
+export const topicSelectionGenerateNeedCandidateNodeResultSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'workflow_run_id',
+    'node_attempt_id',
+    'status',
+    'terminal_result',
+    'persisted_candidate_refs',
+    'artifact_refs',
+    'warning_codes',
+  ],
+  properties: {
+    schema_version: stringId,
+    workflow_run_id: stringId,
+    node_attempt_id: stringId,
+    status: { enum: [...TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_NODE_STATUSES] },
+    terminal_result: { enum: [...TOPIC_SELECTION_NEED_DISCOVERY_TERMINAL_RESULTS] },
+    persisted_candidate_refs: functionalRefArray,
+    candidate_pool_projection_ref: nullableFunctionalRef,
+    candidate_pool_projection_hash: nullableStringId,
+    artifact_refs: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['supplemental_round_routing_decisions'],
+      properties: {
+        ranked_candidate_draft_batch: nullableArtifactRef,
+        minimum_schema_validation_report: nullableArtifactRef,
+        candidate_draft_admission_report: nullableArtifactRef,
+        supplemental_round_routing_decisions: artifactRefArray,
+        persist_need_candidate_batch_command: nullableArtifactRef,
+        discovery_audit: nullableArtifactRef,
+      },
+    },
+    warning_codes: stringArray,
+    error_code: { anyOf: [{ enum: [...TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_ERROR_CODES] }, { type: 'null' }] },
+  },
+} as const;
+
+export const topicSelectionNeedDiscoveryContextCompressionSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['compression_version', 'layer_keys'],
+  properties: {
+    compression_version: stringId,
+    layer_keys: stringArray,
+    source_token_estimate: nullableNumber,
+    compressed_token_estimate: nullableNumber,
+  },
+} as const;
+
+const topicSelectionNeedDiscoveryContextEnvelopeRequired = [
+  'schema_version',
+  'node_id',
+  'workflow_run_id',
+  'node_attempt_id',
+  'context_family',
+  'input_refs',
+  'input_refs_hash',
+  'context_compiler_version',
+  'policy_version',
+  'output_schema_version',
+  'profile_id',
+  'execution_mode',
+  'cache_key',
+  'cache_hit',
+  'redaction_policy',
+  'created_at',
+  'memory_digest_hash',
+  'candidate_pool_hash',
+  'payload_hash',
+  'compression',
+] as const;
+
+const topicSelectionNeedDiscoveryContextEnvelopeProperties = {
+  schema_version: stringId,
+  node_id: { enum: ['topic-selection.v1a.generate-need-candidate.v1'] },
+  workflow_run_id: stringId,
+  node_attempt_id: stringId,
+  context_family: { enum: [...TOPIC_SELECTION_NEED_DISCOVERY_CONTEXT_FAMILIES] },
+  input_refs: functionalRefArray,
+  input_refs_hash: stringId,
+  context_compiler_version: stringId,
+  policy_version: stringId,
+  output_schema_version: stringId,
+  profile_id: stringId,
+  execution_mode: { enum: [...TOPIC_SELECTION_AGENT_EXECUTION_MODES] },
+  cache_key: stringId,
+  cache_hit: booleanValue,
+  redaction_policy: { enum: [...TOPIC_SELECTION_NEED_DISCOVERY_CONTEXT_REDACTION_POLICIES] },
+  created_at: stringId,
+  memory_digest_hash: stringId,
+  candidate_pool_hash: stringId,
+  payload_hash: stringId,
+  compression: topicSelectionNeedDiscoveryContextCompressionSchema,
+} as const;
+
+export const topicSelectionNeedDiscoveryExplorationContextPayloadSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'topic_scope',
+    'evidence_signal_digest',
+    'resource_sample_digest',
+    'search_coverage_digest',
+    'sibling_candidate_digest',
+    'decision_memory_digest',
+    'exploration_prompts',
+    'challenge_prompts',
+    'allowed_outputs',
+    'forbidden_outputs',
+  ],
+  properties: {
+    topic_scope: objectPayload,
+    evidence_signal_digest: objectPayload,
+    resource_sample_digest: objectPayload,
+    search_coverage_digest: objectPayload,
+    sibling_candidate_digest: objectPayload,
+    decision_memory_digest: objectPayload,
+    exploration_prompts: stringArray,
+    challenge_prompts: stringArray,
+    allowed_outputs: stringArray,
+    forbidden_outputs: stringArray,
+  },
+} as const;
+
+export const topicSelectionNeedDiscoveryArbiterContextPayloadSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'node_policy_ref',
+    'output_schema_ref',
+    'authority_boundary',
+    'max_persisted_candidates',
+    'deterministic_gate_checklist',
+    'role_level_summaries',
+    'candidate_pool_digest',
+    'evidence_ref_table',
+    'rejected_framing_table',
+    'unresolved_points',
+    'batch_ranking_rules',
+    'persistence_rules',
+    'failure_rules',
+  ],
+  properties: {
+    node_policy_ref: topicSelectionFunctionalRefSchema,
+    output_schema_ref: topicSelectionFunctionalRefSchema,
+    authority_boundary: objectPayload,
+    max_persisted_candidates: numberValue,
+    deterministic_gate_checklist: stringArray,
+    role_level_summaries: objectArray,
+    candidate_pool_digest: objectPayload,
+    evidence_ref_table: objectArray,
+    rejected_framing_table: objectArray,
+    unresolved_points: objectArray,
+    batch_ranking_rules: stringArray,
+    persistence_rules: stringArray,
+    failure_rules: stringArray,
+  },
+} as const;
+
+const topicSelectionNeedDiscoveryCandidateAngleSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['angle_id', 'summary', 'evidence_refs'],
+  properties: {
+    angle_id: stringId,
+    summary: stringId,
+    candidate_need_hint: nullableStringId,
+    evidence_refs: functionalRefArray,
+  },
+} as const;
+
+export const topicSelectionNeedDiscoveryExplorerNotesSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'debate_loop_id',
+    'round_index',
+    'role',
+    'stage',
+    'agent_instance_id',
+    'candidate_angles',
+    'evidence_refs',
+    'unresolved_questions',
+    'warnings',
+  ],
+  properties: {
+    schema_version: stringId,
+    debate_loop_id: stringId,
+    round_index: numberValue,
+    role: { const: 'explorer' },
+    stage: stringId,
+    agent_instance_id: stringId,
+    candidate_angles: {
+      type: 'array',
+      items: topicSelectionNeedDiscoveryCandidateAngleSchema,
+    },
+    evidence_refs: functionalRefArray,
+    unresolved_questions: stringArray,
+    warnings: stringArray,
+  },
+} as const;
+
+const topicSelectionNeedDiscoveryCritiquePointSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['critique_id', 'summary', 'severity', 'evidence_refs'],
+  properties: {
+    critique_id: stringId,
+    summary: stringId,
+    severity: { enum: ['low', 'medium', 'high'] },
+    evidence_refs: functionalRefArray,
+  },
+} as const;
+
+export const topicSelectionNeedDiscoveryDeepCriticNotesSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'debate_loop_id',
+    'round_index',
+    'role',
+    'stage',
+    'agent_instance_id',
+    'critique_points',
+    'failure_modes',
+    'missing_evidence_questions',
+    'evidence_refs',
+    'warnings',
+  ],
+  properties: {
+    schema_version: stringId,
+    debate_loop_id: stringId,
+    round_index: numberValue,
+    role: { const: 'deep_critic' },
+    stage: stringId,
+    agent_instance_id: stringId,
+    critique_points: {
+      type: 'array',
+      items: topicSelectionNeedDiscoveryCritiquePointSchema,
+    },
+    failure_modes: stringArray,
+    missing_evidence_questions: stringArray,
+    evidence_refs: functionalRefArray,
+    warnings: stringArray,
+  },
+} as const;
+
+export const topicSelectionNeedDiscoveryRoleLevelSummarySchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'debate_loop_id',
+    'round_index',
+    'role',
+    'source_invocation_attempt_ids',
+    'source_artifact_refs',
+    'summary',
+    'candidate_need_signals',
+    'risk_signals',
+    'evidence_refs',
+    'unresolved_questions',
+  ],
+  properties: {
+    schema_version: stringId,
+    debate_loop_id: stringId,
+    round_index: numberValue,
+    role: { enum: ['explorer', 'deep_critic'] },
+    source_invocation_attempt_ids: stringArray,
+    source_artifact_refs: artifactRefArray,
+    summary: stringId,
+    candidate_need_signals: stringArray,
+    risk_signals: stringArray,
+    evidence_refs: functionalRefArray,
+    unresolved_questions: stringArray,
+  },
+} as const;
+
+export const topicSelectionNeedDiscoveryDebateIssueFrameSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'debate_loop_id',
+    'round_index',
+    'role',
+    'stage',
+    'frame_id',
+    'focused_questions',
+    'requested_roles',
+    'source_role_summary_refs',
+  ],
+  properties: {
+    schema_version: stringId,
+    debate_loop_id: stringId,
+    round_index: numberValue,
+    role: { const: 'arbiter' },
+    stage: { const: 'issue_framing' },
+    frame_id: stringId,
+    focused_questions: stringArray,
+    requested_roles: {
+      type: 'array',
+      items: { enum: ['explorer', 'deep_critic'] },
+    },
+    source_role_summary_refs: artifactRefArray,
+    stop_condition: nullableStringId,
+  },
+} as const;
+
+export const topicSelectionNeedDiscoveryDebateFinalSynthesisArtifactSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'debate_loop_id',
+    'round_index',
+    'role',
+    'stage',
+    'final_invocation_attempt_id',
+    'issue_frame_ref',
+    'role_level_summary_refs',
+    'ranked_candidate_draft_batch_hash',
+    'terminal_result',
+    'draft_count',
+    'rejected_framing_count',
+    'unresolved_point_count',
+  ],
+  properties: {
+    schema_version: stringId,
+    debate_loop_id: stringId,
+    round_index: numberValue,
+    role: { const: 'arbiter' },
+    stage: { const: 'final_synthesis' },
+    final_invocation_attempt_id: stringId,
+    final_invocation_audit_ref: nullableArtifactRef,
+    issue_frame_ref: artifactFunctionalRefSchema,
+    role_level_summary_refs: artifactRefArray,
+    ranked_candidate_draft_batch_hash: stringId,
+    terminal_result: { enum: [...TOPIC_SELECTION_NEED_DISCOVERY_TERMINAL_RESULTS] },
+    draft_count: numberValue,
+    rejected_framing_count: numberValue,
+    unresolved_point_count: numberValue,
+  },
+} as const;
+
+export const topicSelectionNeedDiscoveryContextPacketSchema = {
+  anyOf: [
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: [...topicSelectionNeedDiscoveryContextEnvelopeRequired, 'payload'],
+      properties: {
+        ...topicSelectionNeedDiscoveryContextEnvelopeProperties,
+        context_family: { enum: ['exploration_context'] },
+        payload: topicSelectionNeedDiscoveryExplorationContextPayloadSchema,
+      },
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: [...topicSelectionNeedDiscoveryContextEnvelopeRequired, 'payload'],
+      properties: {
+        ...topicSelectionNeedDiscoveryContextEnvelopeProperties,
+        context_family: { enum: ['arbiter_context'] },
+        payload: topicSelectionNeedDiscoveryArbiterContextPayloadSchema,
+      },
+    },
+  ],
+} as const;
+
+export const topicSelectionGenerateNeedCandidateArtifactSnapshotSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'node_id',
+    'workflow_run_id',
+    'node_attempt_id',
+    'artifact_key',
+    'payload_schema',
+    'redaction_policy',
+    'redacted',
+    'redacted_paths',
+    'source_refs',
+    'payload_hash',
+    'payload',
+  ],
+  properties: {
+    schema_version: stringId,
+    node_id: { enum: ['topic-selection.v1a.generate-need-candidate.v1'] },
+    workflow_run_id: stringId,
+    node_attempt_id: stringId,
+    artifact_key: { enum: [...TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_ARTIFACT_KEYS] },
+    payload_schema: stringId,
+    redaction_policy: { enum: [...TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_REDACTION_POLICIES] },
+    redacted: booleanValue,
+    redacted_paths: stringArray,
+    source_refs: functionalRefArray,
+    payload_hash: stringId,
+    payload: objectPayload,
+  },
+} as const;
+
+export const topicSelectionGenerateNeedCandidateArtifactRefEntrySchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['artifact_key', 'artifact_ref', 'artifact_hash', 'payload_hash', 'payload_schema', 'redacted_paths'],
+  properties: {
+    artifact_key: { enum: [...TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_ARTIFACT_KEYS] },
+    artifact_ref: artifactFunctionalRefSchema,
+    artifact_hash: stringId,
+    payload_hash: stringId,
+    payload_schema: stringId,
+    redacted_paths: stringArray,
+  },
+} as const;
+
+export const topicSelectionNeedDiscoveryCompiledContextPairSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'node_id',
+    'workflow_run_id',
+    'node_attempt_id',
+    'exploration_context_ref',
+    'arbiter_context_ref',
+    'exploration_context_hash',
+    'arbiter_context_hash',
+    'exploration_cache_key',
+    'arbiter_cache_key',
+    'artifact_refs',
+  ],
+  properties: {
+    schema_version: stringId,
+    node_id: { enum: ['topic-selection.v1a.generate-need-candidate.v1'] },
+    workflow_run_id: stringId,
+    node_attempt_id: stringId,
+    exploration_context_ref: artifactFunctionalRefSchema,
+    arbiter_context_ref: artifactFunctionalRefSchema,
+    exploration_context_hash: stringId,
+    arbiter_context_hash: stringId,
+    exploration_cache_key: stringId,
+    arbiter_cache_key: stringId,
+    artifact_refs: {
+      type: 'array',
+      items: topicSelectionGenerateNeedCandidateArtifactRefEntrySchema,
+    },
+  },
+} as const;
+
+export const topicSelectionGenerateNeedCandidateArtifactRefBundleSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['schema_version', 'node_id', 'workflow_run_id', 'node_attempt_id', 'artifact_refs'],
+  properties: {
+    schema_version: stringId,
+    node_id: { enum: ['topic-selection.v1a.generate-need-candidate.v1'] },
+    workflow_run_id: stringId,
+    node_attempt_id: stringId,
+    artifact_refs: {
+      type: 'array',
+      items: topicSelectionGenerateNeedCandidateArtifactRefEntrySchema,
+    },
+  },
+} as const;
 
 export const topicSelectionNeedCandidateRecordSchema = {
   type: 'object',

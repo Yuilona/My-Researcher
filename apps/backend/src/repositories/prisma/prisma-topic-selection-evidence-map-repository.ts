@@ -395,6 +395,16 @@ export class PrismaTopicSelectionEvidenceMapRepository implements TopicSelection
     return row ? toEvidenceMapRecord(row) : null;
   }
 
+  async listEvidenceMapsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionEvidenceMapRecord[]> {
+    const rows = await this.prisma.topicSelectionEvidenceMap.findMany({
+      where: { titleCardId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toEvidenceMapRecord);
+  }
+
   async updateEvidenceMapFreshness(
     evidenceMapId: string,
     freshnessStatus: TopicSelectionEvidenceFreshnessStatus,

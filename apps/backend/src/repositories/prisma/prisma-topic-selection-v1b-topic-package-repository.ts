@@ -436,6 +436,16 @@ implements TopicSelectionV1bTopicPackageRepository {
     return row ? toPackageRecord(row) : null;
   }
 
+  async listPackagesByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionTopicPackageRecord[]> {
+    const rows = await this.prisma.titleCardPackage.findMany({
+      where: { titleCardId },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return rows.map(toPackageRecord);
+  }
+
   async findPackageByValueDispositionDecisionId(
     valueDispositionDecisionId: string,
   ): Promise<TopicSelectionTopicPackageRecord | null> {

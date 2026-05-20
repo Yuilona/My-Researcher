@@ -301,6 +301,56 @@ test('invalid LLM option output records failed run and blocks option persistence
   assert.equal(failedRun?.option_set_id, null);
 });
 
+test('known non-evidence planning refs in evidence slots are removed with a quality flag', async () => {
+  const planningInput = makePlanningInput();
+  const invalidEvidenceRef = planningInput.v1b_intake_snapshot_ref;
+  const output = makeLlmOutput(planningInput, [
+    makeDraft(planningInput, {
+      support_evidence_refs: [
+        planningInput.evidence_role_bundle.support_unit_refs[0]!,
+        invalidEvidenceRef,
+      ],
+    }),
+  ]);
+  const ctx = makeContext({ planningInput, llmOutput: output });
+
+  const result = await planOnce(ctx);
+  const option = result.options[0]!;
+
+  assert.equal(result.plan_run.status, 'succeeded');
+  assert.equal(option.support_evidence_refs.some((item) => item.ref_id === invalidEvidenceRef.ref_id), false);
+  assert.equal(result.plan_run.quality_flags.includes('NON_EVIDENCE_REFS_REMOVED_FROM_SLICE_OPTION'), true);
+  assert.equal(option.requires_human_review, true);
+  assert.equal(option.human_review_triggers.includes('non_evidence_refs_removed'), true);
+  const normalization = option.details_payload.evidence_ref_normalization as Record<string, unknown>;
+  assert.ok(Array.isArray(normalization.dropped_non_evidence_refs));
+});
+
+test('known evidence refs are canonicalized before ResearchSlice persistence', async () => {
+  const planningInput = makePlanningInput();
+  const canonicalSupportRef = planningInput.evidence_role_bundle.support_unit_refs[0]!;
+  const driftedSupportRef = {
+    ...canonicalSupportRef,
+    title_card_id: 'title_card_drifted',
+  };
+  const output = makeLlmOutput(planningInput, [
+    makeDraft(planningInput, {
+      support_evidence_refs: [driftedSupportRef],
+    }),
+  ]);
+  const ctx = makeContext({ planningInput, llmOutput: output });
+
+  const result = await planOnce(ctx);
+  const option = result.options[0]!;
+
+  assert.deepEqual(option.support_evidence_refs, [canonicalSupportRef]);
+  assert.equal(result.plan_run.quality_flags.includes('EVIDENCE_REFS_CANONICALIZED'), true);
+  assert.equal(option.requires_human_review, true);
+  assert.equal(option.human_review_triggers.includes('evidence_refs_canonicalized'), true);
+  const canonicalization = option.details_payload.evidence_ref_canonicalization as Record<string, unknown>;
+  assert.ok(Array.isArray(canonicalization.canonicalized_evidence_refs));
+});
+
 test('claim-ceiling exceeding options are blocked before option persistence', async () => {
   const planningInput = makePlanningInput();
   const invalidOutput = makeLlmOutput(planningInput, [

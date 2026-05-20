@@ -77,6 +77,14 @@ implements TopicSelectionV1bTopicQuestionRepository {
     return this.candidateSets.get(candidateSetId) ?? null;
   }
 
+  async listCandidateSetsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionTopicQuestionCandidateSetRecord[]> {
+    return [...this.candidateSets.values()]
+      .filter((record) => record.title_card_id === titleCardId)
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+  }
+
   async findQuestionFrameById(frameId: string): Promise<TopicSelectionQuestionFrameRecord | null> {
     return this.questionFrames.get(frameId) ?? null;
   }

@@ -12,6 +12,7 @@ keys:
   - LLM_CREDENTIALS_RESOLVER
   - OPENAI_API_KEY
   - DASHSCOPE_API_KEY
+  - DASHSCOPE_API_KEY_CODING
   - DASHSCOPE_BASE_URL
 
 # Prefixes that mark an environment/config key as LLM-related.

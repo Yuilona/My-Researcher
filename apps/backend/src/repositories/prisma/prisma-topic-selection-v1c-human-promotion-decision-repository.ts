@@ -239,6 +239,16 @@ implements TopicSelectionV1cHumanPromotionDecisionRepository {
     return row ? toPromotionDecisionRecord(row) : null;
   }
 
+  async listPromotionDecisionsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionPromotionDecisionRecord[]> {
+    const rows = await this.prisma.topicSelectionPromotionDecision.findMany({
+      where: { titleCardId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toPromotionDecisionRecord);
+  }
+
   async findCommitmentProfileById(
     promotionCommitmentProfileId: string,
   ): Promise<TopicSelectionPromotionCommitmentProfileRecord | null> {

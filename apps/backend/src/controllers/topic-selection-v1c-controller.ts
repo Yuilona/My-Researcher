@@ -409,4 +409,51 @@ export class TopicSelectionV1cController {
       return handleError(reply, error);
     }
   };
+
+  /**
+   * T-087 Phase 4 — list PromotionGateChecks for a title-card.
+   */
+  listPromotionGateChecksByTitleCard = async (
+    request: ParamsRequest<{ titleCardId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.promotionGate.listGateChecksByTitleCardId(request.params.titleCardId);
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  /**
+   * T-087 Phase 4 — list PromotionDecisions for a title-card.
+   */
+  listPromotionDecisionsByTitleCard = async (
+    request: ParamsRequest<{ titleCardId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.humanPromotionDecision.listPromotionDecisionsByTitleCardId(
+        request.params.titleCardId,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  /**
+   * T-087 Phase 4 — list PaperProjectBridges for a title-card.
+   */
+  listPaperProjectBridgesByTitleCard = async (
+    request: ParamsRequest<{ titleCardId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.paperProjectBridge.listBridgesByTitleCardId(request.params.titleCardId);
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
 }

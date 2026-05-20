@@ -1,0 +1,579 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import type {
+  TopicSelectionFunctionalRef,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-control-plane-contracts';
+import type {
+  TopicSelectionAgentExecutionMode,
+  TopicSelectionGenerateNeedCandidateNodeInput,
+  TopicSelectionArtifactFunctionalRef,
+  TopicSelectionNeedDiscoveryArbiterContextPayload,
+  TopicSelectionNeedDiscoveryDebateIssueFrame,
+  TopicSelectionNeedDiscoveryDeepCriticNotes,
+  TopicSelectionNeedDiscoveryExplorerNotes,
+  TopicSelectionNeedDiscoveryExplorationContextPayload,
+  TopicSelectionRankedCandidateDraftBatch,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-need-validation-contracts';
+import { AppError } from '../errors/app-error.js';
+import { InMemoryTopicSelectionControlPlaneRepository } from '../repositories/in-memory-topic-selection-control-plane-repository.js';
+import { TopicSelectionAgentOrchestratorService } from './topic-selection-agent-orchestrator-service.js';
+import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
+import type {
+  LlmCallTelemetry,
+  LlmStructuredOutputRequest,
+  LlmStructuredOutputResponse,
+} from './llm-gateway.js';
+import { TopicSelectionNeedDiscoveryArtifactBoundaryService } from './topic-selection-need-discovery-artifact-boundary-service.js';
+import { TopicSelectionNeedDiscoveryContextCompilerService } from './topic-selection-need-discovery-context-compiler-service.js';
+import {
+  type TopicSelectionNeedDiscoveryDebateMockedOutputs,
+  TopicSelectionNeedDiscoveryDebateLoopService,
+} from './topic-selection-need-discovery-debate-loop-service.js';
+import { TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID } from './topic-selection-model-profile-registry-service.js';
+
+class ThrowingLlmGateway {
+  readonly calls: LlmStructuredOutputRequest[] = [];
+
+  async createStructuredOutput<T>(
+    request: LlmStructuredOutputRequest,
+  ): Promise<LlmStructuredOutputResponse<T>> {
+    this.calls.push(request);
+    throw new Error('provider LLM should not be called by mocked debate tests');
+  }
+}
+
+class ProviderDebateGateway {
+  readonly calls: LlmStructuredOutputRequest[] = [];
+
+  async createStructuredOutput<T>(
+    request: LlmStructuredOutputRequest,
+  ): Promise<LlmStructuredOutputResponse<T>> {
+    this.calls.push(request);
+    const output = this.outputForSchema(request.schemaName);
+    return {
+      parsed: output as T,
+      raw: { output },
+      telemetry: telemetryForRequest(request),
+    };
+  }
+
+  private outputForSchema(schemaName: string): unknown {
+    if (schemaName === 'topic_selection_need_discovery_explorer_notes') {
+      return explorerNotes(`explorer_${this.calls.length}`, `angle_${this.calls.length}`);
+    }
+    if (schemaName === 'topic_selection_need_discovery_deep_critic_notes') {
+      return deepCriticNotes();
+    }
+    if (schemaName === 'topic_selection_need_discovery_debate_issue_frame') {
+      return issueFrame();
+    }
+    if (schemaName === 'topic_selection_ranked_candidate_draft_batch') {
+      return rankedBatch();
+    }
+    throw new Error(`unexpected schema: ${schemaName}`);
+  }
+}
+
+function telemetryForRequest(request: LlmStructuredOutputRequest): LlmCallTelemetry {
+  return {
+    provider_id: request.model.providerId,
+    model_id: request.model.modelId,
+    profile_id: request.model.profileId ?? null,
+    prompt_template_id: request.prompt.promptTemplateId,
+    prompt_template_version: request.prompt.version,
+    elapsed_ms: 12,
+    request_count: 1,
+    retry_count: 0,
+    timeout_count: 0,
+    rate_limit_count: 0,
+    input_tokens: null,
+    output_tokens: null,
+    embedding_input_tokens: null,
+    total_tokens: null,
+    cost_usd: null,
+  };
+}
+
+async function makeRuntime(options: {
+  llmGateway?: ThrowingLlmGateway | ProviderDebateGateway;
+  executionMode?: TopicSelectionAgentExecutionMode;
+} = {}) {
+  const repository = new InMemoryTopicSelectionControlPlaneRepository();
+  let sequence = 0;
+  const controlPlane = new TopicSelectionControlPlaneService(repository, {
+    idFactory: (prefix) => `${prefix}_${++sequence}`,
+    now: () => '2026-05-19T00:00:00.000Z',
+  });
+  const artifactBoundary = new TopicSelectionNeedDiscoveryArtifactBoundaryService(controlPlane);
+  const contextCompiler = new TopicSelectionNeedDiscoveryContextCompilerService(artifactBoundary, {
+    now: () => '2026-05-19T00:00:00.000Z',
+  });
+  const llmGateway = options.llmGateway ?? new ThrowingLlmGateway();
+  const agentOrchestrator = new TopicSelectionAgentOrchestratorService({
+    controlPlane,
+    llmGateway,
+    now: () => '2026-05-19T00:00:00.000Z',
+  });
+  const debateLoop = new TopicSelectionNeedDiscoveryDebateLoopService({
+    agentOrchestrator,
+    artifactBoundary,
+  });
+  const compiledContext = await contextCompiler.compileContextPair({
+    workspace_id: 'workspace_001',
+    title_card_id: 'title_card_001',
+    workflow_run_id: 'workflow_run_001',
+    input_snapshot_id: 'input_snapshot_001',
+    node_attempt_id: 'node_attempt_001',
+    input_refs: [
+      ref('topic_scope', 'topic_scope_001'),
+      ref('evidence_map', 'evidence_map_001'),
+      ref('evidence_strength_assessment', 'strength_001'),
+      ref('resource_sample_set', 'sample_set_001'),
+    ],
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    profile_id: TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID,
+    execution_mode: options.executionMode ?? 'mocked_llm',
+    exploration_payload: explorationPayload(),
+    arbiter_payload: arbiterPayload(),
+    created_by: 'system',
+  });
+
+  return {
+    debateLoop,
+    repository,
+    llmGateway,
+    compiledContext,
+  };
+}
+
+function ref(refType: string, refId: string): TopicSelectionFunctionalRef {
+  return {
+    ref_type: refType,
+    ref_id: refId,
+    title_card_id: 'title_card_001',
+  };
+}
+
+function artifactRef(refId: string): TopicSelectionArtifactFunctionalRef {
+  return {
+    ref_type: 'artifact_ref',
+    ref_id: refId,
+    title_card_id: 'title_card_001',
+  };
+}
+
+function explorationPayload(): TopicSelectionNeedDiscoveryExplorationContextPayload {
+  return {
+    topic_scope: {
+      title_card_id: 'title_card_001',
+      domain: 'RAG fine-tuning safety',
+    },
+    evidence_signal_digest: {
+      support_count: 2,
+      challenge_count: 1,
+    },
+    resource_sample_digest: {
+      sample_set_id: 'sample_set_001',
+      role_counts: { support: 2, challenge: 1, baseline: 1 },
+    },
+    search_coverage_digest: {
+      coverage: 'partial',
+    },
+    sibling_candidate_digest: {
+      candidate_count: 0,
+    },
+    decision_memory_digest: {
+      required_challenges: ['avoid pseudo-gap framing'],
+    },
+    exploration_prompts: ['Generate specific, evidence-grounded candidate needs.'],
+    challenge_prompts: ['Identify prior-art conflicts and pseudo-gap risks.'],
+    allowed_outputs: ['ranked_candidate_draft_batch'],
+    forbidden_outputs: ['need_candidate_authority_write', 'validated_need_write'],
+  };
+}
+
+function arbiterPayload(): TopicSelectionNeedDiscoveryArbiterContextPayload {
+  return {
+    node_policy_ref: ref('node_policy', 'generate_need_candidate_v1'),
+    output_schema_ref: ref('schema', 'ranked_candidate_draft_batch_v1'),
+    authority_boundary: {
+      authority_object: 'NeedCandidate',
+      forbidden: ['NeedCandidateSet', 'ValidatedNeed', 'TopicQuestionContract'],
+    },
+    max_persisted_candidates: 5,
+    deterministic_gate_checklist: ['schema_validation', 'admission_gates'],
+    role_level_summaries: [{ role: 'debate', summary: 'role-level summaries are artifact refs' }],
+    candidate_pool_digest: { candidate_count: 0 },
+    evidence_ref_table: [
+      { evidence_ref: ref('evidence_unit', 'support_001'), role: 'support' },
+      { evidence_ref: ref('evidence_unit', 'challenge_001'), role: 'challenge' },
+      { evidence_ref: ref('evidence_unit', 'baseline_001'), role: 'baseline' },
+      { evidence_ref: ref('evidence_conflict', 'conflict_001'), role: 'challenge' },
+      { evidence_ref: ref('evidence_strength_assessment', 'strength_001'), role: 'strength' },
+    ],
+    rejected_framing_table: [],
+    unresolved_points: [],
+    batch_ranking_rules: ['rank grounded drafts first'],
+    persistence_rules: ['artifact-only until admission gates'],
+    failure_rules: ['block when malformed'],
+  };
+}
+
+function nodeInput(
+  compiledContext: Awaited<ReturnType<typeof makeRuntime>>['compiledContext'],
+): TopicSelectionGenerateNeedCandidateNodeInput {
+  return {
+    schema_version: 'v1',
+    workflow_run_id: 'workflow_run_001',
+    node_attempt_id: 'node_attempt_001',
+    topic_scope_ref: ref('topic_scope', 'topic_scope_001'),
+    evidence_map_ref: ref('evidence_map', 'evidence_map_001'),
+    evidence_strength_ref: ref('evidence_strength_assessment', 'strength_001'),
+    resource_sample_set_ref: ref('resource_sample_set', 'sample_set_001'),
+    candidate_pool_projection_ref: null,
+    search_snapshot_refs: [ref('search_run', 'search_run_001')],
+    resource_snapshot_refs: [ref('literature_snapshot', 'literature_snapshot_001')],
+    exploration_context_ref: compiledContext.exploration_context_ref,
+    arbiter_context_ref: compiledContext.arbiter_context_ref,
+    execution_mode: 'mocked_llm',
+    profile_id: TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID,
+    policy_version: 'v1',
+    operator_reuse_approval_ref: null,
+  };
+}
+
+function explorerNotes(agentInstanceId: string, angleId: string): TopicSelectionNeedDiscoveryExplorerNotes {
+  return {
+    schema_version: 'v1',
+    debate_loop_id: 'debate_loop_001',
+    round_index: 1,
+    role: 'explorer',
+    stage: 'round_1_discovery',
+    agent_instance_id: agentInstanceId,
+    candidate_angles: [
+      {
+        angle_id: angleId,
+        summary: 'Evaluate RAG fine-tuning risk interactions.',
+        candidate_need_hint: 'Need a risk-aware evaluation workflow for RAG fine-tuning.',
+        evidence_refs: [ref('evidence_unit', 'support_001')],
+      },
+    ],
+    evidence_refs: [ref('evidence_unit', 'support_001')],
+    unresolved_questions: ['Which retrieval risks survive fine-tuning?'],
+    warnings: [],
+  };
+}
+
+function deepCriticNotes(): TopicSelectionNeedDiscoveryDeepCriticNotes {
+  return {
+    schema_version: 'v1',
+    debate_loop_id: 'debate_loop_001',
+    round_index: 1,
+    role: 'deep_critic',
+    stage: 'round_1_discovery',
+    agent_instance_id: 'deep_critic_1',
+    critique_points: [
+      {
+        critique_id: 'critique_001',
+        summary: 'Pseudo-gap risk unless challenge evidence is carried into evaluation.',
+        severity: 'high',
+        evidence_refs: [ref('evidence_unit', 'challenge_001')],
+      },
+    ],
+    failure_modes: ['overstating novelty without benchmark comparison'],
+    missing_evidence_questions: ['What benchmark baseline exists?'],
+    evidence_refs: [ref('evidence_unit', 'challenge_001')],
+    warnings: ['baseline coverage is thin'],
+  };
+}
+
+function issueFrame(): TopicSelectionNeedDiscoveryDebateIssueFrame {
+  return {
+    schema_version: 'v1',
+    debate_loop_id: 'debate_loop_001',
+    round_index: 1,
+    role: 'arbiter',
+    stage: 'issue_framing',
+    frame_id: 'issue_frame_001',
+    focused_questions: ['Can the candidate need stay grounded while carrying the challenge evidence?'],
+    requested_roles: ['explorer', 'deep_critic'],
+    source_role_summary_refs: [artifactRef('role_summary_explorer'), artifactRef('role_summary_deep_critic')],
+    stop_condition: null,
+  };
+}
+
+function rankedBatch(): TopicSelectionRankedCandidateDraftBatch {
+  return {
+    schema_version: 'v1',
+    draft_batch: {
+      batch_id: 'draft_batch_001',
+      node_attempt_id: 'node_attempt_001',
+      terminal_result: 'finalize',
+      ranking_rationale: 'Arbiter selected the grounded need and retained risk evidence.',
+      max_persisted_candidates: 5,
+    },
+    drafts: [
+      {
+        draft_id: 'draft_001',
+        rank: 1,
+        candidate_need: 'Need a risk-aware evaluation workflow for RAG fine-tuning.',
+        unmet_need_statement: 'Existing studies do not isolate retrieval-risk effects during fine-tuning.',
+        mechanism_type: 'evaluation_gap',
+        mechanism_summary: 'Risk-aware evaluation gap.',
+        mechanism_payload: { axis: 'retrieval-risk' },
+        scope_notes: 'CS literature workflow only.',
+        non_goal_notes: null,
+        prior_art_status: 'partial_solution_known',
+        evidence_role_bundle: {
+          support_unit_refs: [ref('evidence_unit', 'support_001')],
+          challenge_unit_refs: [ref('evidence_unit', 'challenge_001')],
+          baseline_unit_refs: [ref('evidence_unit', 'baseline_001')],
+          context_unit_refs: [],
+        },
+        conflict_refs: [ref('evidence_conflict', 'conflict_001')],
+        strength_assessment_refs: [ref('evidence_strength_assessment', 'strength_001')],
+        accepted_risk_refs: [],
+        gap_codes: ['risk_evaluation_gap'],
+        speculative: false,
+        confidence: 0.82,
+      },
+    ],
+    rejected_framings: [],
+    unresolved_points: [],
+  };
+}
+
+function debateMockedOutputs(
+  overrides: Partial<TopicSelectionNeedDiscoveryDebateMockedOutputs> = {},
+): TopicSelectionNeedDiscoveryDebateMockedOutputs {
+  return {
+    explorer: [
+      { fixture_id: 'fixture_explorer_1', output: explorerNotes('explorer_1', 'angle_001') },
+      { fixture_id: 'fixture_explorer_2', output: explorerNotes('explorer_2', 'angle_002') },
+    ],
+    deep_critic: [
+      { fixture_id: 'fixture_deep_critic_1', output: deepCriticNotes() },
+    ],
+    arbiter_issue_frame: {
+      fixture_id: 'fixture_arbiter_issue_frame',
+      output: issueFrame(),
+    },
+    arbiter_final: {
+      fixture_id: 'fixture_arbiter_final',
+      output: rankedBatch(),
+    },
+    ...overrides,
+  };
+}
+
+test('need-discovery debate loop records role outputs, summaries, issue frame, and final synthesis', async () => {
+  const { debateLoop, repository, llmGateway, compiledContext } = await makeRuntime();
+  const result = await debateLoop.runNeedDiscoveryDebate({
+    workspace_id: 'workspace_001',
+    title_card_id: 'title_card_001',
+    node_input: nodeInput(compiledContext),
+    run_mode: 'acceptance',
+    exploration_context_packet: compiledContext.exploration_context_packet,
+    arbiter_context_packet: compiledContext.arbiter_context_packet,
+    debate_loop_id: 'debate_loop_001',
+    mocked_outputs: debateMockedOutputs(),
+  });
+
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.ranked_candidate_draft_batch?.drafts.length, 1);
+  assert.equal(result.role_invocation_results.length, 4);
+  assert.equal(result.role_output_artifacts.length, 3);
+  assert.equal(result.role_level_summary_artifacts.length, 2);
+  assert.equal(result.issue_frame_artifact?.artifact_key, 'debate_issue_frame');
+  assert.equal(result.final_synthesis_artifact?.artifact_key, 'debate_final_synthesis');
+  assert.equal(result.final_invocation_result.provenance.executor_kind, 'multi_agent_debate');
+  assert.equal(result.final_invocation_result.provenance.debate_extension?.role, 'arbiter');
+  assert.equal(result.final_invocation_result.provenance.debate_extension?.stage, 'final_synthesis');
+  assert.deepEqual(
+    result.final_invocation_result.provenance.debate_extension?.parent_invocation_attempt_ids,
+    result.role_invocation_results.map((invocation) => invocation.provenance.invocation_attempt_id),
+  );
+  assert.equal(llmGateway.calls.length, 0);
+
+  const artifacts = await repository.listArtifactRefsByWorkflowRunId('workflow_run_001');
+  const artifactPayloads = artifacts.map((artifact) => JSON.stringify(artifact.payload));
+  assert.equal(artifactPayloads.some((payload) => payload.includes('"artifact_key":"debate_role_output"')), true);
+  assert.equal(artifactPayloads.some((payload) => payload.includes('"artifact_key":"debate_role_level_summary"')), true);
+  assert.equal(artifactPayloads.some((payload) => payload.includes('"artifact_key":"debate_issue_frame"')), true);
+  assert.equal(artifactPayloads.some((payload) => payload.includes('"artifact_key":"debate_final_synthesis"')), true);
+  assert.equal(artifactPayloads.some((payload) => payload.includes('hidden_reasoning')), false);
+});
+
+test('need-discovery debate loop uses contract defaults for provider role instances and model options', async () => {
+  const providerGateway = new ProviderDebateGateway();
+  const { debateLoop, llmGateway, compiledContext } = await makeRuntime({
+    llmGateway: providerGateway,
+    executionMode: 'provider_llm',
+  });
+  const result = await debateLoop.runNeedDiscoveryDebate({
+    workspace_id: 'workspace_001',
+    title_card_id: 'title_card_001',
+    node_input: {
+      ...nodeInput(compiledContext),
+      execution_mode: 'provider_llm',
+    },
+    run_mode: 'acceptance',
+    exploration_context_packet: compiledContext.exploration_context_packet,
+    arbiter_context_packet: compiledContext.arbiter_context_packet,
+    debate_loop_id: 'debate_loop_001',
+  });
+
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.role_invocation_results.length, 4);
+  assert.equal(llmGateway.calls.length, 5);
+  assert.deepEqual(
+    llmGateway.calls.map((call) => call.schemaName),
+    [
+      'topic_selection_need_discovery_explorer_notes',
+      'topic_selection_need_discovery_explorer_notes',
+      'topic_selection_need_discovery_deep_critic_notes',
+      'topic_selection_need_discovery_debate_issue_frame',
+      'topic_selection_ranked_candidate_draft_batch',
+    ],
+  );
+  assert.equal(llmGateway.calls.every((call) => call.model.providerId === 'openai'), true);
+  assert.equal(llmGateway.calls.every((call) => call.model.modelId === 'gpt-5.4-mini'), true);
+  assert.equal(
+    llmGateway.calls.every((call) =>
+      (call.normalizedParams as { reasoning_depth?: string } | undefined)?.reasoning_depth === 'medium',
+    ),
+    true,
+  );
+  assert.equal(llmGateway.calls.every((call) => Object.keys(call.providerOverrides ?? {}).length === 0), true);
+});
+
+test('need-discovery debate loop supports slot-level Codex substitution while final synthesis stays provider-backed', async () => {
+  const providerGateway = new ProviderDebateGateway();
+  const { debateLoop, llmGateway, compiledContext } = await makeRuntime({
+    llmGateway: providerGateway,
+    executionMode: 'provider_llm',
+  });
+  const result = await debateLoop.runNeedDiscoveryDebate({
+    workspace_id: 'workspace_001',
+    title_card_id: 'title_card_001',
+    node_input: {
+      ...nodeInput(compiledContext),
+      execution_mode: 'provider_llm',
+    },
+    run_mode: 'acceptance',
+    exploration_context_packet: compiledContext.exploration_context_packet,
+    arbiter_context_packet: compiledContext.arbiter_context_packet,
+    debate_loop_id: 'debate_loop_001',
+    slot_execution_overrides: {
+      'explorer.round_1_discovery': 'codex_assisted',
+    },
+    codex_responses: {
+      explorer: [
+        {
+          operator_label: 'codex_local_explorer',
+          output: explorerNotes('explorer_1', 'angle_codex_001'),
+        },
+      ],
+    },
+  });
+
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.role_invocation_results.length, 3);
+  assert.equal(result.role_invocation_results[0]?.provenance.execution_mode, 'codex_assisted');
+  assert.equal(result.role_invocation_results[0]?.provenance.source_kind, 'codex_response');
+  assert.equal(result.final_invocation_result.provenance.execution_mode, 'provider_llm');
+  assert.equal(result.final_invocation_result.provenance.source_kind, 'provider_response');
+  assert.deepEqual(
+    llmGateway.calls.map((call) => call.schemaName),
+    [
+      'topic_selection_need_discovery_deep_critic_notes',
+      'topic_selection_need_discovery_debate_issue_frame',
+      'topic_selection_ranked_candidate_draft_batch',
+    ],
+  );
+});
+
+test('need-discovery debate loop forbids Codex substitution for final synthesis slot', async () => {
+  const { debateLoop, compiledContext } = await makeRuntime();
+  await assert.rejects(
+    () => debateLoop.runNeedDiscoveryDebate({
+      title_card_id: 'title_card_001',
+      node_input: nodeInput(compiledContext),
+      run_mode: 'acceptance',
+      exploration_context_packet: compiledContext.exploration_context_packet,
+      arbiter_context_packet: compiledContext.arbiter_context_packet,
+      debate_loop_id: 'debate_loop_001',
+      slot_execution_overrides: {
+        'arbiter.final_synthesis': 'codex_assisted',
+      },
+      mocked_outputs: debateMockedOutputs(),
+    }),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
+});
+
+test('need-discovery debate loop requires every mandatory mocked role', async () => {
+  const { debateLoop, compiledContext } = await makeRuntime();
+  await assert.rejects(
+    () => debateLoop.runNeedDiscoveryDebate({
+      title_card_id: 'title_card_001',
+      node_input: nodeInput(compiledContext),
+      run_mode: 'acceptance',
+      exploration_context_packet: compiledContext.exploration_context_packet,
+      arbiter_context_packet: compiledContext.arbiter_context_packet,
+      debate_loop_id: 'debate_loop_001',
+      mocked_outputs: debateMockedOutputs({ deep_critic: [] }),
+    }),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
+});
+
+test('need-discovery debate loop keeps blocked arbiter issue-frame invocation in role results', async () => {
+  const { debateLoop, compiledContext } = await makeRuntime();
+  const malformedIssueFrame = {
+    ...issueFrame(),
+    requested_roles: ['grounding_auditor'],
+  } as unknown as TopicSelectionNeedDiscoveryDebateIssueFrame;
+
+  const result = await debateLoop.runNeedDiscoveryDebate({
+    title_card_id: 'title_card_001',
+    node_input: nodeInput(compiledContext),
+    run_mode: 'acceptance',
+    exploration_context_packet: compiledContext.exploration_context_packet,
+    arbiter_context_packet: compiledContext.arbiter_context_packet,
+    debate_loop_id: 'debate_loop_001',
+    mocked_outputs: debateMockedOutputs({
+      arbiter_issue_frame: {
+        fixture_id: 'fixture_malformed_arbiter_issue_frame',
+        output: malformedIssueFrame,
+      },
+    }),
+  });
+
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'SCHEMA_VALIDATION_FAILED');
+  assert.equal(result.role_invocation_results.length, 4);
+  assert.equal(result.role_invocation_results.at(-1)?.provenance.debate_extension?.stage, 'issue_framing');
+  assert.equal(result.role_output_artifacts.length, 3);
+  assert.equal(result.role_level_summary_artifacts.length, 2);
+  assert.equal(result.issue_frame_artifact, null);
+  assert.equal(result.final_synthesis_artifact, null);
+});
+
+test('need-discovery debate loop enforces round boundary', async () => {
+  const { debateLoop, compiledContext } = await makeRuntime();
+  await assert.rejects(
+    () => debateLoop.runNeedDiscoveryDebate({
+      title_card_id: 'title_card_001',
+      node_input: nodeInput(compiledContext),
+      run_mode: 'acceptance',
+      exploration_context_packet: compiledContext.exploration_context_packet,
+      arbiter_context_packet: compiledContext.arbiter_context_packet,
+      debate_loop_id: 'debate_loop_001',
+      round_index: 4,
+      mocked_outputs: debateMockedOutputs(),
+    }),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
+});

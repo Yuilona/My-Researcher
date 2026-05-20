@@ -43,6 +43,12 @@ export interface TopicSelectionSearchResourceRepository {
     coverageRowIntents: TopicSelectionCoverageRowIntentRecord[],
   ): Promise<TopicSelectionSearchPlanWithCoverageIntentsResult>;
   findSearchPlanById(searchPlanId: string): Promise<TopicSelectionSearchPlanRecord | null>;
+  /**
+   * T-087 D1 read-only projection — list SearchPlans under a title-card.
+   * Reverse-chronological order; powers the reviewer workbench v1a
+   * SearchPlan surface.
+   */
+  listSearchPlansByTitleCardId(titleCardId: string): Promise<TopicSelectionSearchPlanRecord[]>;
 
   createCoverageExecutionObservation(
     record: TopicSelectionCoverageExecutionObservationRecord,
@@ -77,6 +83,14 @@ export interface TopicSelectionSearchResourceRepository {
   findSearchPlanRecheckRequestById(
     requestId: string,
   ): Promise<TopicSelectionSearchPlanRecheckRequestRecord | null>;
+  /**
+   * T-087 Phase 2.2 read-only projection — list SearchPlanRecheckRequests
+   * under a title-card so the reviewer workbench v1a SearchPlan surface can
+   * show open/closed revision requests inline.
+   */
+  listSearchPlanRecheckRequestsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionSearchPlanRecheckRequestRecord[]>;
   updateSearchPlanRecheckRequest(
     requestId: string,
     patch: Partial<Omit<

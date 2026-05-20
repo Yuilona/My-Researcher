@@ -115,6 +115,12 @@ class SeededTopicPackageRepository implements TopicSelectionV1bTopicPackageRepos
     return topicPackageId === this.topicPackage.topic_package_id ? this.topicPackage : null;
   }
 
+  async listPackagesByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionTopicPackageRecord[]> {
+    return this.topicPackage.title_card_id === titleCardId ? [this.topicPackage] : [];
+  }
+
   async findPackageByValueDispositionDecisionId(
     valueDispositionDecisionId: string,
   ): Promise<TopicSelectionTopicPackageRecord | null> {
@@ -1171,6 +1177,30 @@ test('topic-selection v1c HTTP routes drive ready bundle to bridge and downstrea
       assertStatus(readRes, 200);
     }
 
+    // T-087 Phase 4 — assert the 3 new list-by-title-card projections after
+    // creating gate-check + decision (bridge listed further below).
+    const tcGateChecksRes = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1c/title-cards/${encodeURIComponent(repository.topicPackage.title_card_id)}/promotion-gate-checks`,
+    });
+    assertStatus(tcGateChecksRes, 200);
+    const tcGateChecks = tcGateChecksRes.json() as {
+      items: Array<{ promotion_gate_check_id: string; title_card_id: string }>;
+    };
+    assert.ok(tcGateChecks.items.length > 0);
+    assert.ok(tcGateChecks.items.every((item) => item.title_card_id === repository.topicPackage.title_card_id));
+
+    const tcPromotionDecisionsRes = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1c/title-cards/${encodeURIComponent(repository.topicPackage.title_card_id)}/promotion-decisions`,
+    });
+    assertStatus(tcPromotionDecisionsRes, 200);
+    const tcPromotionDecisions = tcPromotionDecisionsRes.json() as {
+      items: Array<{ promotion_decision_id: string; title_card_id: string }>;
+    };
+    assert.ok(tcPromotionDecisions.items.length > 0);
+    assert.ok(tcPromotionDecisions.items.every((item) => item.title_card_id === repository.topicPackage.title_card_id));
+
     const bridgeRes = await app.inject({
       method: 'POST',
       url: '/topic-selection/v1c/paper-project-bridges',
@@ -1213,6 +1243,19 @@ test('topic-selection v1c HTTP routes drive ready bundle to bridge and downstrea
     assert.equal(bridge.paper_project_bridge.paper_project_intake_ref, null);
     assert.equal(bridge.paper_project_bridge.target_paper_project_ref, null);
     assert.equal(bridge.paper_project_bridge.source_promotion_decision_id, human.promotion_decision.promotion_decision_id);
+
+    // T-087 Phase 4 — bridges list-by-title-card projection (after bridge creation).
+    const tcBridgesRes = await app.inject({
+      method: 'GET',
+      url: `/topic-selection/v1c/title-cards/${encodeURIComponent(repository.topicPackage.title_card_id)}/paper-project-bridges`,
+    });
+    assertStatus(tcBridgesRes, 200);
+    const tcBridges = tcBridgesRes.json() as {
+      items: Array<{ paper_project_bridge_id: string; title_card_id: string }>;
+    };
+    assert.ok(tcBridges.items.length > 0);
+    assert.ok(tcBridges.items.every((item) => item.title_card_id === repository.topicPackage.title_card_id));
+
     assert.equal(bridge.paper_project_bridge.promotion_input_snapshot_id, snapshot.promotion_input_snapshot_id);
     assert.equal(bridge.paper_project_bridge.promotion_input_snapshot_hash, snapshot.promotion_input_snapshot_hash);
     assert.equal(bridge.paper_project_bridge.conditions[0]?.condition_code, 'verify_claim_ceiling');

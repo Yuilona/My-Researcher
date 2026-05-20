@@ -511,6 +511,16 @@ export class PrismaTopicSelectionSearchResourceRepository implements TopicSelect
     return row ? toSearchPlanRecord(row) : null;
   }
 
+  async listSearchPlansByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionSearchPlanRecord[]> {
+    const rows = await this.prisma.topicSelectionSearchPlan.findMany({
+      where: { titleCardId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toSearchPlanRecord);
+  }
+
   async createCoverageExecutionObservation(
     record: TopicSelectionCoverageExecutionObservationRecord,
   ): Promise<TopicSelectionCoverageExecutionObservationRecord> {
@@ -684,6 +694,16 @@ export class PrismaTopicSelectionSearchResourceRepository implements TopicSelect
   ): Promise<TopicSelectionSearchPlanRecheckRequestRecord | null> {
     const row = await this.prisma.topicSelectionSearchPlanRecheckRequest.findUnique({ where: { id: requestId } });
     return row ? toRecheckRequestRecord(row) : null;
+  }
+
+  async listSearchPlanRecheckRequestsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionSearchPlanRecheckRequestRecord[]> {
+    const rows = await this.prisma.topicSelectionSearchPlanRecheckRequest.findMany({
+      where: { titleCardId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toRecheckRequestRecord);
   }
 
   async updateSearchPlanRecheckRequest(

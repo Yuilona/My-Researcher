@@ -1,0 +1,64 @@
+# 06 Workflow Matrix
+
+## Purpose
+This matrix is the semantic entry for T-089. Every ordinary agent, multi-agent debate, Codex-assisted, provider-backed, deterministic, or human-review decision must bind to a concrete `node_id`.
+
+Narrative sections may explain rationale, but they must not define behavior that is absent from this matrix.
+
+## Required Fields
+- `node_id`
+- `stage`
+- `authority_object`
+- `executor_kind`
+- `default_execution_mode`
+- `codex_allowed`
+- `provider_required`
+- `debate_allowed`
+- `human_review_required`
+- `input_refs`
+- `output_refs`
+- `blocking_conditions`
+- `deterministic_validators`
+- `audit_refs`
+- `artifact_refs`
+- `covered_scenarios`
+
+## Matrix
+| node_id | stage | authority_object | executor_kind | default_execution_mode | codex_allowed | provider_required | debate_allowed | human_review_required | input_refs | output_refs | blocking_conditions | deterministic_validators | audit_refs | artifact_refs | covered_scenarios |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `topic-selection.resource-sampling.create-sample-set.v1` | resource_sampling | `TopicSelectionResourceSampleSet` | single_agent | codex_assisted | yes | no | yes | no | topic scope; literature resource refs | sample set; sample items; sampling audit refs | see `07-node-policies.md` | eligibility; guardrails; role balance; sample hash | sampling audit | candidate pool; classifier output; guardrail decisions | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1`; `topic-selection.provider-stability.v1`; `topic-selection.debate.resource-sampling-polarity.v1` |
+| `topic-selection.v1a.build-evidence-map.v1` | v1a | `TopicSelectionEvidenceMap` | deterministic | none | no | no | no | no | sample set; selected literature refs; search/resource refs | evidence map | see `07-node-policies.md` | evidence source readiness; role/relevance checks | control-plane trace | evidence map artifact refs | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1`; `topic-selection.v1b.non-advance-negative.v1` |
+| `topic-selection.v1a.generate-need-candidate.v1` | v1a | `NeedCandidate` | single_agent | codex_assisted | yes | no | yes | no | evidence map; evidence strength assessment; search snapshots; sibling NeedCandidate refs | need candidate refs; candidate-pool projection refs; rejected/alternative framing artifact refs | see `07-node-policies.md` | bounded candidate creation; pool comparison; per-candidate support/challenge coverage; pseudo-gap checks | candidate discovery audit | candidate discovery rationale refs | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1`; `topic-selection.v1b.non-advance-negative.v1`; `topic-selection.provider-stability.v1`; `topic-selection.debate.v1a-need-discovery.v1` |
+| `topic-selection.v1a.validate-need-adjudication.v1` | v1a | `ValidateNeedAdjudicationResult` | single_agent | codex_assisted | yes | no | no | no | selected need candidate; sibling NeedCandidate refs; support packet; evidence/search snapshots | adjudication result; support packet | see `07-node-policies.md` | selected-candidate consistency; readiness gate; blocker/recheck checks | adjudication audit | adjudication support artifacts | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1`; `topic-selection.v1b.non-advance-negative.v1`; `topic-selection.provider-stability.v1` |
+| `topic-selection.v1a.human-confirm-need.v1` | v1a | `ValidatedNeed` | human_review | none | no | no | no | yes | adjudication result; human confirmation input | validated need | see `07-node-policies.md` | final decision; human confirmation; non-validate handling | human decision record | confirmation artifact refs | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1`; `topic-selection.v1b.non-advance-negative.v1` |
+| `topic-selection.v1a.publish-v1b-input-bundle.v1` | v1a | `TopicSelectionV1bInputBundle` | deterministic | none | no | no | no | no | validated need; adjudication; evidence/search snapshots; risk/recheck refs | v1b input bundle | see `07-node-policies.md` | validated output exists; refs current; handoff completeness | lineage trace | v1b bundle snapshot | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1`; `topic-selection.v1b.non-advance-negative.v1` |
+| `topic-selection.v1b.build-intake-constraint-profile.v1` | v1b | `TopicSelectionV1bIntakeConstraintProfile` | deterministic | none | no | no | no | no | v1b input bundle | intake snapshot; constraint profile | see `07-node-policies.md` | bundle currentness; inherited boundary checks | control-plane trace | intake/profile artifacts | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1`; `topic-selection.v1b.non-advance-negative.v1` |
+| `topic-selection.v1b.plan-research-slice.v1` | v1b | `ResearchSlice` | single_agent | codex_assisted | yes | no | no | no | intake snapshot; constraint profile; evidence refs | option set; selection decision; research slice | see `07-node-policies.md` | slice boundary; alternatives/rejections; claim ceiling | slice selection audit | slice option artifacts | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1`; `topic-selection.v1b.non-advance-negative.v1`; `topic-selection.provider-stability.v1` |
+| `topic-selection.v1b.form-topic-question-contract.v1` | v1b | `TopicQuestionContract` | single_agent | codex_assisted | yes | no | no | no | selected research slice; validated need refs | topic question; contract; answerability plan | see `07-node-policies.md` | answerability; boundary; prohibited claims; falsification conditions | question selection audit | question candidate artifacts | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1`; `topic-selection.v1b.non-advance-negative.v1`; `topic-selection.provider-stability.v1` |
+| `topic-selection.v1b.assess-topic-value.v1` | v1b | `TopicValueAssessment` | single_agent | codex_assisted | yes | no | yes | no | topic question contract; value assessment input | value assessment; reasoning memo | see `07-node-policies.md` | value dimensions; reviewer risk; negative memory check | value assessment audit | value reasoning artifacts | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1`; `topic-selection.v1b.non-advance-negative.v1`; `topic-selection.provider-stability.v1`; `topic-selection.debate.v1b-value-tension.v1` |
+| `topic-selection.v1b.decide-value-disposition.v1` | v1b | `ValueDispositionDecision` | deterministic | none | no | no | no | no | value assessment; reasoning memo | disposition decision; package draft input when advance | see `07-node-policies.md` | allowed dispositions; non-advance null outputs | disposition audit | disposition artifact refs | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1`; `topic-selection.v1b.non-advance-negative.v1` |
+| `topic-selection.v1b.create-topic-package-draft.v1` | v1b | `TopicPackageDraft` | deterministic | none | no | no | no | no | package draft input; value/question/slice/need refs | topic package draft | see `07-node-policies.md` | advance-only gate; authority refs complete | package creation trace | package draft snapshot | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1` |
+| `topic-selection.v1b.assess-package-readiness.v1` | v1b | `TopicPackageReadinessAssessment` | deterministic | none | no | no | no | no | topic package draft; trace/risk/recheck refs | trace boundary check; readiness assessment | see `07-node-policies.md` | trace; boundary; risk; recheck gates | readiness audit | readiness artifacts | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1` |
+| `topic-selection.v1b.publish-v1c-input-bundle.v1` | v1b | `TopicSelectionV1bToV1cInputBundle` | deterministic | none | no | no | no | no | ready package; readiness assessment | v1c input bundle | see `07-node-policies.md` | ready-for-promotion-review; refs current | lineage trace | v1c bundle snapshot | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1` |
+| `topic-selection.v1c.create-promotion-input-snapshot.v1` | v1c | `PromotionInputSnapshot` | deterministic | none | no | no | no | no | v1c input bundle | promotion input snapshot; handoff | see `07-node-policies.md` | bundle freshness; package readiness; closure status | snapshot trace | promotion input snapshot artifact | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1` |
+| `topic-selection.v1c.generate-promotion-support.v1` | v1c | `PromotionDecisionSupport` | single_agent | codex_assisted | yes | no | yes | no | promotion input snapshot | promotion support; promotion dossier | see `07-node-policies.md` | accepted-risk coverage; argument mini-check | support generation audit | support/dossier artifacts | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1`; `topic-selection.provider-stability.v1`; `topic-selection.debate.v1c-promotion-support-risk.v1` |
+| `topic-selection.v1c.run-promotion-gate.v1` | v1c | `PromotionGateCheck` | deterministic | none | no | no | no | no | promotion support; dossier; input snapshot | gate check; gate handoff | see `07-node-policies.md` | gate disposition; blockers; required actions | gate audit | gate check artifacts | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1` |
+| `topic-selection.v1c.human-promotion-decision.v1` | v1c | `PromotionDecision` | human_review | none | no | no | no | yes | gate handoff; human decision input | human promotion decision; promotion decision; commitment profile | see `07-node-policies.md` | human confirmation; promote/non-promote rules | human decision record | promotion decision artifact refs | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1` |
+| `topic-selection.v1c.create-paper-project-bridge.v1` | v1c | `PaperProjectBridge` | deterministic | none | no | no | no | no | promotion decision; commitment profile; package refs | paper project bridge | see `07-node-policies.md` | current promote decision; uniqueness; bridge hash | bridge trace | bridge handoff artifacts | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1`; `topic-selection.downstream.feedback-recheck.v1` |
+| `topic-selection.downstream.paper-project-intake.v1` | downstream | `PaperProjectIntake` | deterministic | none | no | no | no | no | active paper project bridge | PaperProject intake result; downstream refs | see `07-node-policies.md` | active bridge; bridge hash; workspace guard; idempotency | intake trace | intake artifact refs | `topic-selection.real-e2e.canary.v1`; `topic-selection.real-e2e.scale-quality.v1`; `topic-selection.downstream.feedback-recheck.v1` |
+| `topic-selection.downstream.feedback-recheck.v1` | downstream | `DownstreamTopicFeedback` | deterministic | none | no | no | no | no | bridge consumer feedback; source refs | feedback record; recheck request; impact summary | see `07-node-policies.md` | source lineage; typed loopback target; immutable upstream authority | feedback/recheck trace | feedback artifact refs | `topic-selection.downstream.feedback-recheck.v1` |
+
+## Node Policy Notes
+Record node-specific rationale here only after the matrix row exists.
+
+### Debate Rejection Reasons
+- Need adjudication debate is rejected for the initial matrix because adjudication consumes a selected `NeedCandidate` plus sibling candidate-pool context, applies structured routing, and relies on human confirmation for final validation authority.
+- Promotion gate debate is rejected for the initial matrix because the gate must remain deterministic over support, dossier, snapshot, blockers, and accepted-risk refs.
+- Downstream feedback/recheck debate is rejected for the initial matrix because first-pass routing should remain typed and deterministic; later debate requires a matrix update.
+
+### Provider Required Reasons
+- No initial node is provider-required. Provider execution is scenario-driven or explicit override until a future node policy updates this matrix.
+
+### Codex Allowed Reasons
+- Codex is allowed for initial single-agent nodes to support the personal local-first cost model while preserving shared schema validation, guardrails, and provenance.
+- Codex is not allowed for deterministic or human-review nodes because those nodes do not invoke model-like execution.

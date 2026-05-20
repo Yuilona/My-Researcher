@@ -42,9 +42,26 @@ export type TopicSelectionNeedValidationAdjudicationWriteResult = {
   v1b_input_bundle?: TopicSelectionV1aToV1bInputBundleRecord | null;
 };
 
+export type TopicSelectionNeedValidationHumanConfirmationWriteInput = {
+  validated_need: TopicSelectionValidatedNeedRecord;
+  candidate_patch: TopicSelectionNeedCandidateStatusPatch;
+};
+
+export type TopicSelectionNeedValidationHumanConfirmationWriteResult = {
+  validated_need: TopicSelectionValidatedNeedRecord;
+  need_candidate: TopicSelectionNeedCandidateRecord;
+};
+
 export interface TopicSelectionNeedValidationRepository {
   createNeedCandidate(record: TopicSelectionNeedCandidateRecord): Promise<TopicSelectionNeedCandidateRecord>;
+  createNeedCandidatesBatch(records: TopicSelectionNeedCandidateRecord[]): Promise<TopicSelectionNeedCandidateRecord[]>;
   findNeedCandidateById(needCandidateId: string): Promise<TopicSelectionNeedCandidateRecord | null>;
+  /**
+   * T-087 D1 read-only projection — list NeedCandidates under a title-card.
+   * Reverse-chronological order; intended to drive the reviewer workbench
+   * v1a NeedCandidate surface without changing decision-chain semantics.
+   */
+  listNeedCandidatesByTitleCardId(titleCardId: string): Promise<TopicSelectionNeedCandidateRecord[]>;
   updateNeedCandidateStatus(
     needCandidateId: string,
     patch: TopicSelectionNeedCandidateStatusPatch,
@@ -81,6 +98,14 @@ export interface TopicSelectionNeedValidationRepository {
   ): Promise<TopicSelectionValidateNeedAdjudicationResultRecord[]>;
 
   findValidatedNeedById(validatedNeedId: string): Promise<TopicSelectionValidatedNeedRecord | null>;
+  confirmValidatedNeed(
+    input: TopicSelectionNeedValidationHumanConfirmationWriteInput,
+  ): Promise<TopicSelectionNeedValidationHumanConfirmationWriteResult>;
+  /**
+   * T-087 D1 read-only projection — list ValidatedNeeds under a title-card.
+   * Reverse-chronological order; reviewer workbench v1a ValidatedNeed surface.
+   */
+  listValidatedNeedsByTitleCardId(titleCardId: string): Promise<TopicSelectionValidatedNeedRecord[]>;
   createV1aToV1bInputBundle(
     record: TopicSelectionV1aToV1bInputBundleRecord,
   ): Promise<TopicSelectionV1aToV1bInputBundleRecord>;

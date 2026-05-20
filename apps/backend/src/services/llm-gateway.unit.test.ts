@@ -202,6 +202,7 @@ test('LLM gateway maps DashScope chat completion JSON output and telemetry', asy
     messages: [{ role: 'user', content: 'return ok' }],
     schemaName: 'ok_schema',
     schema: { type: 'object', properties: { ok: { type: 'boolean' } } },
+    providerOverrides: { enable_thinking: false },
   });
 
   assert.equal(response.parsed.ok, true);
@@ -212,6 +213,7 @@ test('LLM gateway maps DashScope chat completion JSON output and telemetry', asy
   assert.equal(calls[0]?.input, 'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions');
   assert.equal(calls[0]?.body.model, 'qwen3.6-plus');
   assert.deepEqual(calls[0]?.body.response_format, { type: 'json_object' });
+  assert.deepEqual(calls[0]?.body.extra_body, { enable_thinking: false });
 });
 
 test('LLM gateway retries rate limits and records canonical telemetry', async () => {

@@ -1180,17 +1180,13 @@ test('T-068 node-level backend decision-chain acceptance uses deterministic mock
       state.validationSupportPacketId = packet.validation_support_packet_id;
     });
 
-    await t.test('v1a negative boundary rejects system-only validate adjudication', async () => {
+    await t.test('v1a negative boundary rejects system-only human confirmation', async () => {
       const error = await requestError(
         app,
         'POST',
-        `/topic-selection/v1a/need-candidates/${encodeURIComponent(requireState(state, 'needCandidateId'))}/adjudications`,
+        '/topic-selection/v1a/adjudications/missing-adjudication/human-confirmations',
         400,
         {
-          support_packet_id: requireState(state, 'validationSupportPacketId'),
-          final_decision: 'validate',
-          rationale: 'System-only validation must not produce a ValidatedNeed.',
-          adjudicated_by: { actor_type: 'system' },
           human_actor: { actor_type: 'system' },
           human_rationale: 'Invalid fixture branch.',
         },
@@ -1201,12 +1197,13 @@ test('T-068 node-level backend decision-chain acceptance uses deterministic mock
     await t.test('v1a node 08 records human adjudication and v1b handoff', async () => {
       const adjudication = await requestJson<{
         adjudication_result: {
+          adjudication_result_id: string;
           final_decision: string;
-          human_decision_id: string;
+          human_decision_id: string | null;
           output_validated_need_id: string | null;
         };
-        validated_need: { validated_need_id: string; source_need_candidate_id: string };
-        v1b_input_bundle: { v1b_input_bundle_id: string; validated_need_id: string; support_packet_id: string };
+        validated_need: null;
+        v1b_input_bundle: null;
       }>(
         app,
         'POST',
@@ -1217,20 +1214,50 @@ test('T-068 node-level backend decision-chain acceptance uses deterministic mock
           final_decision: 'validate',
           rationale: 'Human reviewer confirms the need and trace boundary.',
           adjudicated_by: FIXTURE.actor.human,
-          human_actor: FIXTURE.actor.human,
-          human_rationale: 'Support, challenge, baseline, context, and handoff refs are sufficient for v1b input.',
         },
       );
 
       assert.equal(adjudication.adjudication_result.final_decision, 'validate');
-      assert.ok(adjudication.adjudication_result.human_decision_id);
-      assert.equal(adjudication.adjudication_result.output_validated_need_id, adjudication.validated_need.validated_need_id);
-      assert.equal(adjudication.validated_need.source_need_candidate_id, requireState(state, 'needCandidateId'));
-      assert.equal(adjudication.v1b_input_bundle.validated_need_id, adjudication.validated_need.validated_need_id);
-      assert.equal(adjudication.v1b_input_bundle.support_packet_id, requireState(state, 'validationSupportPacketId'));
+      assert.equal(adjudication.adjudication_result.human_decision_id, null);
+      assert.ok(adjudication.adjudication_result.output_validated_need_id);
+      assert.equal(adjudication.validated_need, null);
+      assert.equal(adjudication.v1b_input_bundle, null);
 
-      state.validatedNeedId = adjudication.validated_need.validated_need_id;
-      state.v1bInputBundleId = adjudication.v1b_input_bundle.v1b_input_bundle_id;
+      const confirmation = await requestJson<{
+        validated_need: { validated_need_id: string; source_need_candidate_id: string };
+        need_candidate: { result_validated_need_id: string | null };
+      }>(
+        app,
+        'POST',
+        `/topic-selection/v1a/adjudications/${encodeURIComponent(
+          adjudication.adjudication_result.adjudication_result_id,
+        )}/human-confirmations`,
+        201,
+        {
+          human_actor: FIXTURE.actor.human,
+          human_rationale: 'Support, challenge, baseline, context, and handoff refs are sufficient for v1b input.',
+        },
+      );
+      assert.equal(adjudication.adjudication_result.output_validated_need_id, confirmation.validated_need.validated_need_id);
+      assert.equal(confirmation.validated_need.source_need_candidate_id, requireState(state, 'needCandidateId'));
+      assert.equal(confirmation.need_candidate.result_validated_need_id, confirmation.validated_need.validated_need_id);
+
+      const bundle = await requestJson<{
+        v1b_input_bundle_id: string;
+        validated_need_id: string;
+        support_packet_id: string;
+      }>(
+        app,
+        'POST',
+        '/topic-selection/v1a/v1b-input-bundles',
+        201,
+        { validated_need_id: confirmation.validated_need.validated_need_id, created_by: 'system' },
+      );
+      assert.equal(bundle.validated_need_id, confirmation.validated_need.validated_need_id);
+      assert.equal(bundle.support_packet_id, requireState(state, 'validationSupportPacketId'));
+
+      state.validatedNeedId = confirmation.validated_need.validated_need_id;
+      state.v1bInputBundleId = bundle.v1b_input_bundle_id;
     });
 
     await t.test('v1a invariant rejects duplicate adjudication after ValidatedNeed authority closes candidate', async () => {
@@ -1244,8 +1271,6 @@ test('T-068 node-level backend decision-chain acceptance uses deterministic mock
           final_decision: 'validate',
           rationale: 'A second validate attempt must not mint a duplicate ValidatedNeed.',
           adjudicated_by: FIXTURE.actor.human,
-          human_actor: FIXTURE.actor.human,
-          human_rationale: 'Duplicate validation should be blocked.',
         },
       );
       assert.equal(error.error.code, 'GATE_CONSTRAINT_FAILED');

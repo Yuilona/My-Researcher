@@ -462,6 +462,16 @@ implements TopicSelectionV1bTopicQuestionRepository {
     return row ? toCandidateSetRecord(row) : null;
   }
 
+  async listCandidateSetsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionTopicQuestionCandidateSetRecord[]> {
+    const rows = await this.prisma.topicSelectionTopicQuestionCandidateSet.findMany({
+      where: { titleCardId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toCandidateSetRecord);
+  }
+
   async findQuestionFrameById(frameId: string): Promise<TopicSelectionQuestionFrameRecord | null> {
     const row = await this.prisma.topicSelectionQuestionFrame.findUnique({
       where: { id: frameId },

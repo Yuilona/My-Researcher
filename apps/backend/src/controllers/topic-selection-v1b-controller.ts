@@ -287,4 +287,94 @@ export class TopicSelectionV1bController {
       return handleError(reply, error);
     }
   };
+
+  /**
+   * T-087 Phase 3.1 — list ResearchSliceOptionSets for a title-card.
+   */
+  listResearchSliceOptionSetsByTitleCard = async (
+    request: ParamsRequest<{ titleCardId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.researchSlice.listOptionSetsByTitleCardId(request.params.titleCardId);
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  /**
+   * T-087 Phase 3.1 — list TopicQuestionCandidateSets for a title-card.
+   */
+  listTopicQuestionCandidateSetsByTitleCard = async (
+    request: ParamsRequest<{ titleCardId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.topicQuestion.listCandidateSetsByTitleCardId(request.params.titleCardId);
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  /**
+   * T-087 Phase 3.1 — list TopicValueAssessments for a title-card.
+   */
+  listTopicValueAssessmentsByTitleCard = async (
+    request: ParamsRequest<{ titleCardId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.valueAssessment.listAssessmentsByTitleCardId(request.params.titleCardId);
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  /**
+   * T-087 Phase 3.1 — list TopicPackages for a title-card.
+   */
+  listTopicPackagesByTitleCard = async (
+    request: ParamsRequest<{ titleCardId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.topicPackage.listPackagesByTitleCardId(request.params.titleCardId);
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  /**
+   * T-087 Phase 3.2 — list ResearchSliceOptions for an OptionSet picker.
+   */
+  listResearchSliceOptionsByOptionSet = async (
+    request: ParamsRequest<{ optionSetId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.researchSlice.listOptionsByOptionSetId(request.params.optionSetId);
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  /**
+   * T-087 Phase 3.3 — list TopicQuestionCandidates for a CandidateSet picker.
+   */
+  listTopicQuestionCandidatesByCandidateSet = async (
+    request: ParamsRequest<{ candidateSetId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.topicQuestion.listCandidatesByCandidateSetId(request.params.candidateSetId);
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
 }

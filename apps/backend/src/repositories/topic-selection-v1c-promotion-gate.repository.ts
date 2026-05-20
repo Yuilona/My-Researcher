@@ -65,6 +65,14 @@ export interface TopicSelectionV1cPromotionGateRepository {
   findGateCheckById(
     promotionGateCheckId: string,
   ): Promise<TopicSelectionPromotionGateCheckRecord | null>;
+  /**
+   * T-087 Phase 4 read-only projection — list PromotionGateChecks under a
+   * title-card so the reviewer workbench v1c GateCheck surface can iterate
+   * over them without going through individual support_run_keys.
+   */
+  listGateChecksByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionPromotionGateCheckRecord[]>;
 
   findBundleByGateCheckId(
     promotionGateCheckId: string,

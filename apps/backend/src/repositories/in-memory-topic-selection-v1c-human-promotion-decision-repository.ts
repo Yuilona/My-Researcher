@@ -139,6 +139,14 @@ implements TopicSelectionV1cHumanPromotionDecisionRepository {
     return this.promotionDecisions.get(promotionDecisionId) ?? null;
   }
 
+  async listPromotionDecisionsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionPromotionDecisionRecord[]> {
+    return [...this.promotionDecisions.values()]
+      .filter((record) => record.title_card_id === titleCardId)
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+  }
+
   async findCommitmentProfileById(
     promotionCommitmentProfileId: string,
   ): Promise<TopicSelectionPromotionCommitmentProfileRecord | null> {

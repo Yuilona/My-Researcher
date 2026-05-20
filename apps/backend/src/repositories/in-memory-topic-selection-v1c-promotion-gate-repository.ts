@@ -123,6 +123,14 @@ implements TopicSelectionV1cPromotionGateRepository {
     return this.gateChecks.get(promotionGateCheckId) ?? null;
   }
 
+  async listGateChecksByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionPromotionGateCheckRecord[]> {
+    return [...this.gateChecks.values()]
+      .filter((record) => record.title_card_id === titleCardId)
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+  }
+
   async findBundleByGateCheckId(
     promotionGateCheckId: string,
   ): Promise<TopicSelectionV1cPromotionGateRecordBundle | null> {

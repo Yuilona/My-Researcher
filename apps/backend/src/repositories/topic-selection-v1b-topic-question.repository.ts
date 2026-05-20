@@ -53,6 +53,13 @@ export interface TopicSelectionV1bTopicQuestionRepository {
   findCandidateSetById(
     candidateSetId: string,
   ): Promise<TopicSelectionTopicQuestionCandidateSetRecord | null>;
+  /**
+   * T-087 Phase 3.1 read-only projection — list TopicQuestionCandidateSets
+   * under a title-card.
+   */
+  listCandidateSetsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionTopicQuestionCandidateSetRecord[]>;
   findQuestionFrameById(frameId: string): Promise<TopicSelectionQuestionFrameRecord | null>;
   listCandidatesByCandidateSetId(
     candidateSetId: string,

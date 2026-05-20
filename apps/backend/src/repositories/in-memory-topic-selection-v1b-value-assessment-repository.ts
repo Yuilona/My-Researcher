@@ -75,6 +75,14 @@ implements TopicSelectionV1bValueAssessmentRepository {
     return this.assessments.get(assessmentId) ?? null;
   }
 
+  async listAssessmentsByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionTopicValueAssessmentRecord[]> {
+    return [...this.assessments.values()]
+      .filter((record) => record.title_card_id === titleCardId)
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+  }
+
   async findInputSnapshotById(
     inputSnapshotId: string,
   ): Promise<TopicSelectionTopicValueAssessmentInputSnapshotRecord | null> {

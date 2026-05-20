@@ -101,6 +101,14 @@ implements TopicSelectionV1bTopicPackageRepository {
     return this.packages.get(topicPackageId) ?? null;
   }
 
+  async listPackagesByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionTopicPackageRecord[]> {
+    return [...this.packages.values()]
+      .filter((record) => record.title_card_id === titleCardId)
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+  }
+
   async findPackageByValueDispositionDecisionId(
     valueDispositionDecisionId: string,
   ): Promise<TopicSelectionTopicPackageRecord | null> {

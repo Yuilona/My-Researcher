@@ -9,12 +9,15 @@ import { buildApp } from '../../apps/backend/src/app.ts';
 import { BackendLlmGateway } from '../../apps/backend/src/services/llm-gateway.ts';
 
 const TOPIC_ID = process.env.TOPIC_SELECTION_REAL_TOPIC_ID ?? 'ai-rag-finetuning-2022-2026';
+const PROVIDER_ID = process.env.TOPIC_SELECTION_REAL_PROVIDER_ID === 'dashscope' ? 'dashscope' : 'openai';
 const MODEL_ID = process.env.TOPIC_SELECTION_REAL_MODEL_ID ?? 'gpt-5.4-mini';
 const LITERATURE_LIMIT = Number.parseInt(process.env.TOPIC_SELECTION_REAL_LITERATURE_LIMIT ?? '16', 10);
 const LLM_TIMEOUT_MS = Number.parseInt(process.env.TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS ?? '180000', 10);
+const LLM_MAX_RETRIES = Number.parseInt(process.env.TOPIC_SELECTION_REAL_LLM_MAX_RETRIES ?? '3', 10);
 const USE_MOCK_LLM = process.env.TOPIC_SELECTION_REAL_FLOW_MOCK_LLM === '1';
 const ALLOW_NON_ADVANCE_V1B = process.env.TOPIC_SELECTION_REAL_ALLOW_NON_ADVANCE_V1B === '1';
 const QUALITY_NEGATIVE_MODE = process.env.TOPIC_SELECTION_REAL_QUALITY_NEGATIVE_MODE === '1';
+const EXISTING_RESOURCE_SAMPLE_SET_ID = process.env.TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID?.trim() || null;
 const RUN_ID = process.env.TOPIC_SELECTION_REAL_RUN_ID ?? uniqueId('real-e2e');
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
@@ -137,7 +140,7 @@ function valueDispositionForAssessment(valueAssessment) {
 
 function realFlowModel(profileId) {
   return {
-    providerId: 'openai',
+    providerId: PROVIDER_ID,
     modelId: MODEL_ID,
     profileId,
   };
@@ -620,7 +623,7 @@ function makeRealFlowLlmGateway() {
   }
   return new BackendLlmGateway({
     defaultTimeoutMs: LLM_TIMEOUT_MS,
-    defaultMaxRetries: 1,
+    defaultMaxRetries: LLM_MAX_RETRIES,
   });
 }
 
@@ -1057,11 +1060,23 @@ async function runV1a(app, selectedResources) {
       final_decision: 'validate',
       rationale: 'Real-flow reviewer confirms this is a valid bounded need for v1b drafting rehearsal.',
       adjudicated_by: { actor_type: 'human', actor_id: 'real-flow-reviewer' },
+    },
+  );
+  const confirmation = await requestJson(
+    app,
+    'POST',
+    `/topic-selection/v1a/adjudications/${encodeURIComponent(adjudication.adjudication_result.adjudication_result_id)}/human-confirmations`,
+    201,
+    {
       human_actor: { actor_type: 'human', actor_id: 'real-flow-reviewer' },
       human_rationale:
         'Role-balanced support, challenge, baseline, and context evidence are sufficient to test the downstream decision chain.',
     },
   );
+  const v1bInputBundle = await requestJson(app, 'POST', '/topic-selection/v1a/v1b-input-bundles', 201, {
+    validated_need_id: confirmation.validated_need.validated_need_id,
+    created_by: 'system',
+  });
 
   return {
     titleCardId,
@@ -1072,8 +1087,8 @@ async function runV1a(app, selectedResources) {
     evidenceMapId: evidenceMap.evidence_map.evidence_map_id,
     needCandidateId: candidate.need_candidate_id,
     validationSupportPacketId: packet.validation_support_packet_id,
-    validatedNeedId: adjudication.validated_need.validated_need_id,
-    v1bInputBundleId: adjudication.v1b_input_bundle.v1b_input_bundle_id,
+    validatedNeedId: confirmation.validated_need.validated_need_id,
+    v1bInputBundleId: v1bInputBundle.v1b_input_bundle_id,
   };
 }
 
@@ -1708,17 +1723,26 @@ try {
     topicSelectionV1bLlmGateway: makeRealFlowLlmGateway(),
   });
 
-  currentStage = 'create resource sample set';
-  const resourceSample = await requestJson(app, 'POST', '/topic-selection/v1a/resource-samples', 201, {
-    topic_id: TOPIC_ID,
-    sample_size: LITERATURE_LIMIT,
-    model: {
-      provider_id: 'openai',
-      model_id: MODEL_ID,
-      profile_id: 'topic-selection-resource-sampling-classification',
-    },
-    created_by: 'system',
-  }, 'create resource sample set');
+  currentStage = EXISTING_RESOURCE_SAMPLE_SET_ID ? 'load existing resource sample set' : 'create resource sample set';
+  const resourceSample = EXISTING_RESOURCE_SAMPLE_SET_ID
+    ? await requestJson(
+      app,
+      'GET',
+      `/topic-selection/v1a/resource-samples/${encodeURIComponent(EXISTING_RESOURCE_SAMPLE_SET_ID)}`,
+      200,
+      undefined,
+      'load existing resource sample set',
+    )
+    : await requestJson(app, 'POST', '/topic-selection/v1a/resource-samples', 201, {
+      topic_id: TOPIC_ID,
+      sample_size: LITERATURE_LIMIT,
+      model: {
+        provider_id: PROVIDER_ID,
+        model_id: MODEL_ID,
+        profile_id: 'topic-selection-resource-sampling-classification',
+      },
+      created_by: 'system',
+    }, 'create resource sample set');
   await fs.writeFile(
     path.join(ARTIFACT_DIR, '00-resource-sample.json'),
     `${JSON.stringify(resourceSample, null, 2)}\n`,
@@ -1770,7 +1794,9 @@ try {
     artifact_dir: ARTIFACT_DIR,
     topic_id: TOPIC_ID,
     model_id: MODEL_ID,
+    provider_id: PROVIDER_ID,
     llm_mode: USE_MOCK_LLM ? 'deterministic_mock' : 'provider',
+    resource_sample_source: EXISTING_RESOURCE_SAMPLE_SET_ID ? 'existing_provider_sample_set' : 'created_in_run',
     resource_sample_set_id: resourceSample.sample_set.resource_sample_set_id,
     resource_sample_status: resourceSample.sample_set.status,
     resource_sample_warnings: resourceSample.sample_set.warnings,

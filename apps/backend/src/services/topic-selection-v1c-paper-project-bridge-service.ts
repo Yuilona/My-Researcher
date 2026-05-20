@@ -1054,4 +1054,14 @@ export class TopicSelectionV1cPaperProjectBridgeService {
     return this.hasText(record.ref_type as string | null)
       && this.hasText(record.ref_id as string | null);
   }
+
+  /**
+   * T-087 Phase 4 read-only projection — list PaperProjectBridges under a
+   * title-card. Pure repository delegation.
+   */
+  async listBridgesByTitleCardId(
+    titleCardId: string,
+  ): Promise<TopicSelectionPaperProjectBridgeRecord[]> {
+    return this.repository.listBridgesByTitleCardId(titleCardId);
+  }
 }
