@@ -1,0 +1,233 @@
+import type {
+  AgentWorkflowHarnessRun,
+  CreateAgentWorkflowHarnessRunResponse,
+  DecisionWorkQueueItem,
+  ImplementationGateResult,
+  ImplementationHarness,
+  ImplementationInputSnapshot,
+  ImplementationProposalArtifact,
+  ImplementationQualitySignal,
+  ImplementationTransitionAttempt,
+  ResolveDecisionWorkQueueItemRequest,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-ai-workflow-harness-contracts';
+
+import { AppError } from '../errors/app-error.js';
+import type {
+  AgentWorkflowHarnessRunPersistence,
+  PaperImplementationAiWorkflowHarnessRepository,
+} from './paper-implementation-ai-workflow-harness.repository.js';
+
+export class InMemoryPaperImplementationAiWorkflowHarnessRepository
+implements PaperImplementationAiWorkflowHarnessRepository {
+  private readonly harnesses = new Map<string, ImplementationHarness>();
+  private readonly harnessIdsByProject = new Map<string, string[]>();
+  private readonly snapshots = new Map<string, ImplementationInputSnapshot>();
+  private readonly snapshotIdsByProject = new Map<string, string[]>();
+  private readonly runs = new Map<string, AgentWorkflowHarnessRun>();
+  private readonly runIdsByProject = new Map<string, string[]>();
+  private readonly proposals = new Map<string, ImplementationProposalArtifact>();
+  private readonly proposalIdsByProject = new Map<string, string[]>();
+  private readonly qualitySignals = new Map<string, ImplementationQualitySignal>();
+  private readonly gateResults = new Map<string, ImplementationGateResult>();
+  private readonly transitionAttempts = new Map<string, ImplementationTransitionAttempt>();
+  private readonly queueItems = new Map<string, DecisionWorkQueueItem>();
+  private readonly queueItemIdsByProject = new Map<string, string[]>();
+  private readonly queueItemIdByProjectDedupKey = new Map<string, string>();
+
+  async createHarness(harness: ImplementationHarness): Promise<ImplementationHarness> {
+    this.assertNewId(this.harnesses, harness.harness_id, 'ImplementationHarness');
+    const stored = structuredClone(harness);
+    this.harnesses.set(stored.harness_id, stored);
+    this.pushId(this.harnessIdsByProject, stored.implementation_project_id, stored.harness_id);
+    return structuredClone(stored);
+  }
+
+  async findHarnessById(
+    implementationProjectId: string,
+    harnessId: string,
+  ): Promise<ImplementationHarness | null> {
+    const harness = this.harnesses.get(harnessId);
+    if (!harness || harness.implementation_project_id !== implementationProjectId) {
+      return null;
+    }
+    return structuredClone(harness);
+  }
+
+  async listHarnesses(implementationProjectId: string): Promise<ImplementationHarness[]> {
+    return (this.harnessIdsByProject.get(implementationProjectId) ?? [])
+      .map((id) => this.harnesses.get(id))
+      .filter((harness): harness is ImplementationHarness => Boolean(harness))
+      .map((harness) => structuredClone(harness));
+  }
+
+  async createInputSnapshot(
+    snapshot: ImplementationInputSnapshot,
+  ): Promise<ImplementationInputSnapshot> {
+    this.assertNewId(this.snapshots, snapshot.input_snapshot_id, 'ImplementationInputSnapshot');
+    const stored = structuredClone(snapshot);
+    this.snapshots.set(stored.input_snapshot_id, stored);
+    this.pushId(this.snapshotIdsByProject, stored.implementation_project_id, stored.input_snapshot_id);
+    return structuredClone(stored);
+  }
+
+  async findInputSnapshotById(
+    implementationProjectId: string,
+    inputSnapshotId: string,
+  ): Promise<ImplementationInputSnapshot | null> {
+    const snapshot = this.snapshots.get(inputSnapshotId);
+    if (!snapshot || snapshot.implementation_project_id !== implementationProjectId) {
+      return null;
+    }
+    return structuredClone(snapshot);
+  }
+
+  async listInputSnapshots(implementationProjectId: string): Promise<ImplementationInputSnapshot[]> {
+    return (this.snapshotIdsByProject.get(implementationProjectId) ?? [])
+      .map((id) => this.snapshots.get(id))
+      .filter((snapshot): snapshot is ImplementationInputSnapshot => Boolean(snapshot))
+      .map((snapshot) => structuredClone(snapshot));
+  }
+
+  async createAgentWorkflowHarnessRun(
+    persistence: AgentWorkflowHarnessRunPersistence,
+  ): Promise<CreateAgentWorkflowHarnessRunResponse> {
+    const run = persistence.harness_run;
+    this.assertNewId(this.runs, run.harness_run_id, 'AgentWorkflowHarnessRun');
+    for (const proposal of persistence.proposal_artifacts) {
+      this.assertNewId(this.proposals, proposal.proposal_artifact_id, 'ImplementationProposalArtifact');
+    }
+    for (const signal of persistence.quality_signals) {
+      this.assertNewId(this.qualitySignals, signal.quality_signal_id, 'ImplementationQualitySignal');
+    }
+    this.assertNewId(this.gateResults, persistence.gate_result.gate_result_id, 'ImplementationGateResult');
+    this.assertNewId(
+      this.transitionAttempts,
+      persistence.transition_attempt.transition_id,
+      'ImplementationTransitionAttempt',
+    );
+    for (const item of persistence.queue_items) {
+      this.assertQueueItemCanUpsert(item);
+    }
+
+    const storedRun = structuredClone(run);
+    this.runs.set(storedRun.harness_run_id, storedRun);
+    this.pushId(this.runIdsByProject, storedRun.implementation_project_id, storedRun.harness_run_id);
+
+    for (const proposal of persistence.proposal_artifacts) {
+      const storedProposal = structuredClone(proposal);
+      this.proposals.set(storedProposal.proposal_artifact_id, storedProposal);
+      this.pushId(
+        this.proposalIdsByProject,
+        storedProposal.implementation_project_id,
+        storedProposal.proposal_artifact_id,
+      );
+    }
+    for (const signal of persistence.quality_signals) {
+      this.qualitySignals.set(signal.quality_signal_id, structuredClone(signal));
+    }
+    this.gateResults.set(
+      persistence.gate_result.gate_result_id,
+      structuredClone(persistence.gate_result),
+    );
+    this.transitionAttempts.set(
+      persistence.transition_attempt.transition_id,
+      structuredClone(persistence.transition_attempt),
+    );
+
+    const queueItems = persistence.queue_items.map((item) => this.createOrReuseQueueItem(item));
+    return {
+      harness_run: structuredClone(persistence.harness_run),
+      proposal_artifacts: structuredClone(persistence.proposal_artifacts),
+      quality_signals: structuredClone(persistence.quality_signals),
+      gate_result: structuredClone(persistence.gate_result),
+      transition_attempt: structuredClone(persistence.transition_attempt),
+      queue_items: queueItems,
+    };
+  }
+
+  async listAgentWorkflowHarnessRuns(
+    implementationProjectId: string,
+  ): Promise<AgentWorkflowHarnessRun[]> {
+    return (this.runIdsByProject.get(implementationProjectId) ?? [])
+      .map((id) => this.runs.get(id))
+      .filter((run): run is AgentWorkflowHarnessRun => Boolean(run))
+      .map((run) => structuredClone(run));
+  }
+
+  async listProposalArtifacts(
+    implementationProjectId: string,
+  ): Promise<ImplementationProposalArtifact[]> {
+    return (this.proposalIdsByProject.get(implementationProjectId) ?? [])
+      .map((id) => this.proposals.get(id))
+      .filter((proposal): proposal is ImplementationProposalArtifact => Boolean(proposal))
+      .map((proposal) => structuredClone(proposal));
+  }
+
+  async listDecisionWorkQueueItems(
+    implementationProjectId: string,
+  ): Promise<DecisionWorkQueueItem[]> {
+    return (this.queueItemIdsByProject.get(implementationProjectId) ?? [])
+      .map((id) => this.queueItems.get(id))
+      .filter((item): item is DecisionWorkQueueItem => Boolean(item))
+      .map((item) => structuredClone(item));
+  }
+
+  async resolveDecisionWorkQueueItem(
+    implementationProjectId: string,
+    queueItemId: string,
+    resolution: ResolveDecisionWorkQueueItemRequest & { resolved_at: string },
+  ): Promise<DecisionWorkQueueItem> {
+    const existing = this.queueItems.get(queueItemId);
+    if (!existing || existing.implementation_project_id !== implementationProjectId) {
+      throw new AppError(404, 'NOT_FOUND', `DecisionWorkQueueItem ${queueItemId} not found.`);
+    }
+    const updated: DecisionWorkQueueItem = {
+      ...existing,
+      status: resolution.status,
+      resolved_at: resolution.resolved_at,
+      updated_at: resolution.resolved_at,
+    };
+    this.queueItems.set(queueItemId, structuredClone(updated));
+    return structuredClone(updated);
+  }
+
+  private createOrReuseQueueItem(item: DecisionWorkQueueItem): DecisionWorkQueueItem {
+    const dedupKey = this.queueDedupKey(item.implementation_project_id, item.dedup_key);
+    const existingId = this.queueItemIdByProjectDedupKey.get(dedupKey);
+    const existing = existingId ? this.queueItems.get(existingId) : null;
+    if (existing) {
+      return structuredClone(existing);
+    }
+    this.assertNewId(this.queueItems, item.queue_item_id, 'DecisionWorkQueueItem');
+    const stored = structuredClone(item);
+    this.queueItems.set(stored.queue_item_id, stored);
+    this.queueItemIdByProjectDedupKey.set(dedupKey, stored.queue_item_id);
+    this.pushId(this.queueItemIdsByProject, stored.implementation_project_id, stored.queue_item_id);
+    return structuredClone(stored);
+  }
+
+  private assertQueueItemCanUpsert(item: DecisionWorkQueueItem): void {
+    const dedupKey = this.queueDedupKey(item.implementation_project_id, item.dedup_key);
+    const existingId = this.queueItemIdByProjectDedupKey.get(dedupKey);
+    if (existingId) {
+      return;
+    }
+    this.assertNewId(this.queueItems, item.queue_item_id, 'DecisionWorkQueueItem');
+  }
+
+  private assertNewId<T>(map: Map<string, T>, id: string, label: string): void {
+    if (map.has(id)) {
+      throw new AppError(409, 'VERSION_CONFLICT', `${label} ${id} already exists.`);
+    }
+  }
+
+  private pushId(map: Map<string, string[]>, key: string, id: string): void {
+    const ids = map.get(key) ?? [];
+    ids.push(id);
+    map.set(key, ids);
+  }
+
+  private queueDedupKey(implementationProjectId: string, dedupKey: string): string {
+    return `${implementationProjectId}:${dedupKey}`;
+  }
+}

@@ -11,10 +11,53 @@ import type {
   RegisterNaturalLanguageFieldRoleRequest,
   ResolveTraceRepairQueueItemRequest,
 } from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-trace-contracts';
+import type {
+  AdmitCoreMotiveVersionRequest,
+  ApplyMotivePortfolioDecisionRequest,
+  CreateCoreMotiveDraftRequest,
+  CreateCrossBoardReviewRequest,
+  CreateEvidenceTransferBindingRequest,
+  CreateMotiveEvidenceBoardVersionRequest,
+  CreateMotiveEvolutionDecisionRequest,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-motive-contracts';
+import type {
+  AdmitValidationCycleRequest,
+  CompleteValidationCycleRequest,
+  CreateExperimentPlanLightRequest,
+  CreateFeasibilityProbeRequest,
+  CreateTechnicalRouteCandidateRequest,
+  CreateValidationCycleDraftRequest,
+  CreateValidationUpstreamFeedbackCandidateRequest,
+  DispatchValidationUpstreamFeedbackCandidateRequest,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-validation-contracts';
+import type {
+  AdmitResearchWorkOrderRequest,
+  CreateResearchWorkOrderDraftRequest,
+  RecordRunMonitorIntakeRequest,
+  SubmitResearchWorkOrderHarnessRunRequest,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-workorder-contracts';
+import type {
+  CreateClaimCandidateRequest,
+  CreateImplementationDossierRequest,
+  CreateResultInterpretationPacketRequest,
+  CreateWritingEntryPacketRequest,
+  RecordResultClaimFeedbackEventRequest,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-result-claim-dossier-contracts';
+import type {
+  CreateAgentWorkflowHarnessRunRequest,
+  CreateImplementationHarnessRequest,
+  CreateImplementationInputSnapshotRequest,
+  ResolveDecisionWorkQueueItemRequest,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-ai-workflow-harness-contracts';
 
 import { AppError } from '../errors/app-error.js';
 import { PaperImplementationIntakeBootstrapService } from '../services/paper-implementation-intake-bootstrap-service.js';
+import { PaperImplementationMotiveEvidenceBoardService } from '../services/paper-implementation-motive-evidence-board-service.js';
 import { PaperImplementationTraceKernelService } from '../services/paper-implementation-trace-kernel-service.js';
+import { PaperImplementationValidationCyclePlanningService } from '../services/paper-implementation-validation-cycle-planning-service.js';
+import { PaperImplementationWorkOrderExperimentBridgeService } from '../services/paper-implementation-workorder-experiment-bridge-service.js';
+import { PaperImplementationResultClaimDossierService } from '../services/paper-implementation-result-claim-dossier-service.js';
+import { PaperImplementationAiWorkflowHarnessService } from '../services/paper-implementation-ai-workflow-harness-service.js';
 
 type BodyRequest<T> = FastifyRequest<{ Body: T }>;
 type ParamsRequest<T> = FastifyRequest<{ Params: T }>;
@@ -48,6 +91,11 @@ export class PaperImplementationController {
   constructor(
     private readonly intakeBootstrap: PaperImplementationIntakeBootstrapService,
     private readonly traceKernel: PaperImplementationTraceKernelService,
+    private readonly motiveEvidenceBoard: PaperImplementationMotiveEvidenceBoardService,
+    private readonly validationCyclePlanning: PaperImplementationValidationCyclePlanningService,
+    private readonly workOrderExperimentBridge: PaperImplementationWorkOrderExperimentBridgeService,
+    private readonly resultClaimDossier: PaperImplementationResultClaimDossierService,
+    private readonly aiWorkflowHarness: PaperImplementationAiWorkflowHarnessService,
   ) {}
 
   bootstrapProject = async (
@@ -280,6 +328,944 @@ export class PaperImplementationController {
   ) => {
     try {
       const result = await this.traceKernel.resolveTraceRepairQueueItem(
+        request.params.implementation_project_id,
+        request.params.queue_item_id,
+        request.body,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createCoreMotiveDraft = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateCoreMotiveDraftRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.motiveEvidenceBoard.createCoreMotiveDraft(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  admitCoreMotiveVersion = async (
+    request: FastifyRequest<{
+      Params: {
+        implementation_project_id: string;
+        motive_id: string;
+        core_motive_version_id: string;
+      };
+      Body: AdmitCoreMotiveVersionRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.motiveEvidenceBoard.admitCoreMotiveVersion(
+        request.params.implementation_project_id,
+        request.params.motive_id,
+        request.params.core_motive_version_id,
+        request.body,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listCoreMotives = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.motiveEvidenceBoard.listCoreMotives(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  getCoreMotive = async (
+    request: ParamsRequest<{
+      implementation_project_id: string;
+      motive_id: string;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.motiveEvidenceBoard.getCoreMotive(
+        request.params.implementation_project_id,
+        request.params.motive_id,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listCoreMotiveVersions = async (
+    request: ParamsRequest<{
+      implementation_project_id: string;
+      motive_id: string;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.motiveEvidenceBoard.listCoreMotiveVersions(
+        request.params.implementation_project_id,
+        request.params.motive_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createMotiveEvidenceBoardVersion = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateMotiveEvidenceBoardVersionRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.motiveEvidenceBoard.createMotiveEvidenceBoardVersion(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listMotiveEvidenceBoards = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.motiveEvidenceBoard.listMotiveEvidenceBoards(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createEvidenceTransferBinding = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateEvidenceTransferBindingRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.motiveEvidenceBoard.createEvidenceTransferBinding(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listEvidenceTransferBindings = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.motiveEvidenceBoard.listEvidenceTransferBindings(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createCrossBoardReview = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateCrossBoardReviewRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.motiveEvidenceBoard.createCrossBoardReview(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  applyMotivePortfolioDecision = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: ApplyMotivePortfolioDecisionRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.motiveEvidenceBoard.applyMotivePortfolioDecision(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listMotivePortfolioDecisions = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.motiveEvidenceBoard.listMotivePortfolioDecisions(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createMotiveEvolutionDecision = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateMotiveEvolutionDecisionRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.motiveEvidenceBoard.createMotiveEvolutionDecision(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createValidationCycleDraft = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateValidationCycleDraftRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.validationCyclePlanning.createValidationCycleDraft(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  admitValidationCycle = async (
+    request: FastifyRequest<{
+      Params: {
+        implementation_project_id: string;
+        validation_cycle_id: string;
+      };
+      Body: AdmitValidationCycleRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.validationCyclePlanning.admitValidationCycle(
+        request.params.implementation_project_id,
+        request.params.validation_cycle_id,
+        request.body,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  completeValidationCycle = async (
+    request: FastifyRequest<{
+      Params: {
+        implementation_project_id: string;
+        validation_cycle_id: string;
+      };
+      Body: CompleteValidationCycleRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.validationCyclePlanning.completeValidationCycle(
+        request.params.implementation_project_id,
+        request.params.validation_cycle_id,
+        request.body,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listValidationCycles = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.validationCyclePlanning.listValidationCycles(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  getValidationCycle = async (
+    request: ParamsRequest<{
+      implementation_project_id: string;
+      validation_cycle_id: string;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.validationCyclePlanning.getValidationCycle(
+        request.params.implementation_project_id,
+        request.params.validation_cycle_id,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createTechnicalRouteCandidate = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateTechnicalRouteCandidateRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.validationCyclePlanning.createTechnicalRouteCandidate(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createFeasibilityProbe = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateFeasibilityProbeRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.validationCyclePlanning.createFeasibilityProbe(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createExperimentPlanLight = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateExperimentPlanLightRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.validationCyclePlanning.createExperimentPlanLight(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listValidationPlanningReviewItems = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.validationCyclePlanning.listValidationPlanningReviewItems(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createValidationUpstreamFeedbackCandidate = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateValidationUpstreamFeedbackCandidateRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.validationCyclePlanning.createValidationUpstreamFeedbackCandidate(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  dispatchValidationUpstreamFeedbackCandidate = async (
+    request: FastifyRequest<{
+      Params: {
+        implementation_project_id: string;
+        candidate_id: string;
+      };
+      Body: DispatchValidationUpstreamFeedbackCandidateRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.validationCyclePlanning.dispatchValidationUpstreamFeedbackCandidate(
+        request.params.implementation_project_id,
+        request.params.candidate_id,
+        request.body,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createResearchWorkOrderDraft = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateResearchWorkOrderDraftRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.workOrderExperimentBridge.createResearchWorkOrderDraft(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  admitResearchWorkOrder = async (
+    request: FastifyRequest<{
+      Params: {
+        implementation_project_id: string;
+        work_order_id: string;
+      };
+      Body: AdmitResearchWorkOrderRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.workOrderExperimentBridge.admitResearchWorkOrder(
+        request.params.implementation_project_id,
+        request.params.work_order_id,
+        request.body,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listResearchWorkOrders = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.workOrderExperimentBridge.listResearchWorkOrders(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  getResearchWorkOrder = async (
+    request: ParamsRequest<{
+      implementation_project_id: string;
+      work_order_id: string;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.workOrderExperimentBridge.getResearchWorkOrder(
+        request.params.implementation_project_id,
+        request.params.work_order_id,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  submitResearchWorkOrderHarnessRun = async (
+    request: FastifyRequest<{
+      Params: {
+        implementation_project_id: string;
+        work_order_id: string;
+      };
+      Body: SubmitResearchWorkOrderHarnessRunRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.workOrderExperimentBridge.submitHarnessRun(
+        request.params.implementation_project_id,
+        request.params.work_order_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listResearchWorkOrderHarnessRuns = async (
+    request: ParamsRequest<{
+      implementation_project_id: string;
+      work_order_id: string;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.workOrderExperimentBridge.listHarnessRuns(
+        request.params.implementation_project_id,
+        request.params.work_order_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  recordRunMonitorIntake = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: RecordRunMonitorIntakeRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.workOrderExperimentBridge.recordRunMonitorIntake(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listRunEvidenceUnits = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.workOrderExperimentBridge.listRunEvidenceUnits(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  getRunEvidenceUnit = async (
+    request: ParamsRequest<{
+      implementation_project_id: string;
+      run_evidence_unit_id: string;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.workOrderExperimentBridge.getRunEvidenceUnit(
+        request.params.implementation_project_id,
+        request.params.run_evidence_unit_id,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createResultInterpretationPacket = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateResultInterpretationPacketRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.resultClaimDossier.createResultInterpretationPacket(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listResultInterpretationPackets = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.resultClaimDossier.listResultInterpretationPackets(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  getResultInterpretationPacket = async (
+    request: ParamsRequest<{
+      implementation_project_id: string;
+      result_interpretation_packet_id: string;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.resultClaimDossier.getResultInterpretationPacket(
+        request.params.implementation_project_id,
+        request.params.result_interpretation_packet_id,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createClaimCandidate = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateClaimCandidateRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.resultClaimDossier.createClaimCandidate(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listClaimCandidates = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.resultClaimDossier.listClaimCandidates(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  getClaimCandidate = async (
+    request: ParamsRequest<{
+      implementation_project_id: string;
+      claim_candidate_id: string;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.resultClaimDossier.getClaimCandidate(
+        request.params.implementation_project_id,
+        request.params.claim_candidate_id,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createImplementationDossier = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateImplementationDossierRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.resultClaimDossier.createImplementationDossier(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listImplementationDossiers = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.resultClaimDossier.listImplementationDossiers(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  getImplementationDossier = async (
+    request: ParamsRequest<{
+      implementation_project_id: string;
+      dossier_id: string;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.resultClaimDossier.getImplementationDossier(
+        request.params.implementation_project_id,
+        request.params.dossier_id,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createWritingEntryPacket = async (
+    request: FastifyRequest<{
+      Params: {
+        implementation_project_id: string;
+        dossier_id: string;
+      };
+      Body: CreateWritingEntryPacketRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.resultClaimDossier.createWritingEntryPacket(
+        request.params.implementation_project_id,
+        request.params.dossier_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listWritingEntryPackets = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.resultClaimDossier.listWritingEntryPackets(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  recordResultClaimFeedbackEvent = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: RecordResultClaimFeedbackEventRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.resultClaimDossier.recordResultClaimFeedbackEvent(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createImplementationHarness = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateImplementationHarnessRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.aiWorkflowHarness.createImplementationHarness(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listImplementationHarnesses = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.aiWorkflowHarness.listImplementationHarnesses(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createImplementationInputSnapshot = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateImplementationInputSnapshotRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.aiWorkflowHarness.createImplementationInputSnapshot(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listImplementationInputSnapshots = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.aiWorkflowHarness.listImplementationInputSnapshots(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createAgentWorkflowHarnessRun = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: CreateAgentWorkflowHarnessRunRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.aiWorkflowHarness.createAgentWorkflowHarnessRun(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listAgentWorkflowHarnessRuns = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.aiWorkflowHarness.listAgentWorkflowHarnessRuns(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listImplementationProposalArtifacts = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.aiWorkflowHarness.listImplementationProposalArtifacts(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listDecisionWorkQueueItems = async (
+    request: ParamsRequest<{ implementation_project_id: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const items = await this.aiWorkflowHarness.listDecisionWorkQueueItems(
+        request.params.implementation_project_id,
+      );
+      return reply.send({ items });
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  resolveDecisionWorkQueueItem = async (
+    request: FastifyRequest<{
+      Params: {
+        implementation_project_id: string;
+        queue_item_id: string;
+      };
+      Body: ResolveDecisionWorkQueueItemRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.aiWorkflowHarness.resolveDecisionWorkQueueItem(
         request.params.implementation_project_id,
         request.params.queue_item_id,
         request.body,

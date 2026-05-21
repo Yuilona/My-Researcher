@@ -887,31 +887,31 @@ tasks:
     updated: 2026-05-20
   - id: T-094
     slug: paper-implementation-motive-evidence-board
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-013
     dev_docs_path: dev-docs/active/paper-implementation-motive-evidence-board
-    updated: 2026-05-20
+    updated: 2026-05-21
   - id: T-095
     slug: paper-implementation-validation-cycle-planning
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-013
     dev_docs_path: dev-docs/active/paper-implementation-validation-cycle-planning
-    updated: 2026-05-20
+    updated: 2026-05-21
   - id: T-096
     slug: paper-implementation-workorder-experiment-bridge
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-013
     dev_docs_path: dev-docs/active/paper-implementation-workorder-experiment-bridge
-    updated: 2026-05-20
+    updated: 2026-05-21
   - id: T-097
     slug: paper-implementation-trace-kernel
     status: done
@@ -923,22 +923,22 @@ tasks:
     updated: 2026-05-20
   - id: T-098
     slug: paper-implementation-result-claim-dossier
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-013
     dev_docs_path: dev-docs/active/paper-implementation-result-claim-dossier
-    updated: 2026-05-20
+    updated: 2026-05-21
   - id: T-099
     slug: paper-implementation-ai-workflow-harness
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-013
     dev_docs_path: dev-docs/active/paper-implementation-ai-workflow-harness
-    updated: 2026-05-20
+    updated: 2026-05-21
   - id: T-100
     slug: paper-implementation-desktop-workbench
     status: planned

@@ -1,11 +1,12 @@
 # T-095 Paper Implementation Validation Cycle Planning
 
 ## Status
-- State: planned
+- State: done
 - Parent task: `T-091 paper-implementation-full-landing`
 - Mapping: `M-001 > F-001 > R-013`
 - Flow node: validation cycle, route/probe planning, experiment-plan candidates
-- Next step: define planning contracts after T-094 exposes motive assertions and board gaps.
+- Completed: backend minimum closure for validation planning authority.
+- Next step: T-096 consumes admitted validation planning objects as WorkOrder-ready inputs.
 
 ## Goal
 - Turn motive/evidence-board gaps into validation cycles and route/probe/experiment plans.
@@ -19,9 +20,9 @@
 - Do not broaden upstream topic scope without human confirmation.
 
 ## Acceptance Criteria
-- [ ] `ValidationCycle` has criteria, budget, expected information gain, and stop conditions.
-- [ ] Validation scheduling respects `CoreMotiveSet`, `MotivePortfolioDecision`, active-motive limits, and current portfolio priority.
-- [ ] Route/probe/experiment plan candidates are gated and trace-ready.
-- [ ] Low-information repeated cycles create `loop_budget_review` queue items instead of silently continuing.
-- [ ] Expensive or scope-broadening steps require human confirmation.
-- [ ] Handoff to T-096 can create `ResearchWorkOrderDraft` / `ResearchWorkOrder`.
+- [x] `ValidationCycle` has criteria, budget, expected information gain, and stop conditions.
+- [x] Validation scheduling respects admitted `CoreMotiveVersion`, active motive role, fresh motive state, and trace-ready board context.
+- [x] Route/probe/experiment plan candidates are planning-only, trace-ready, and do not call experiment-foundation.
+- [x] Low-information repeated cycles create `loop_budget_review` review items instead of silently continuing.
+- [x] Expensive or scope-broadening admission paths require human confirmation; unresolved baseline gaps block expensive/confirmatory plans.
+- [x] Handoff to T-096 can use admitted `ValidationCycle`, `TechnicalRouteCandidate`, `FeasibilityProbe`, and `ExperimentPlanLight` refs.

@@ -15,6 +15,15 @@ import type {
   TraceRepairQueueItem,
 } from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-trace-contracts';
 import type {
+  ValidationCycle,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-validation-contracts';
+import type {
+  RecordRunMonitorIntakeResponse,
+  ResearchWorkOrder,
+  ResearchWorkOrderHarnessRun,
+  RunEvidenceUnit,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-workorder-contracts';
+import type {
   TopicSelectionFunctionalRef,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-control-plane-contracts';
 import type {
@@ -31,12 +40,22 @@ import { buildApp } from '../app.js';
 import { PaperImplementationController } from '../controllers/paper-implementation-controller.js';
 import { AppError } from '../errors/app-error.js';
 import { InMemoryPaperImplementationRepository } from '../repositories/in-memory-paper-implementation-repository.js';
+import { InMemoryPaperImplementationAiWorkflowHarnessRepository } from '../repositories/in-memory-paper-implementation-ai-workflow-harness-repository.js';
+import { InMemoryPaperImplementationMotiveRepository } from '../repositories/in-memory-paper-implementation-motive-repository.js';
+import { InMemoryPaperImplementationResultClaimDossierRepository } from '../repositories/in-memory-paper-implementation-result-claim-dossier-repository.js';
 import { InMemoryPaperImplementationTraceRepository } from '../repositories/in-memory-paper-implementation-trace-repository.js';
+import { InMemoryPaperImplementationValidationRepository } from '../repositories/in-memory-paper-implementation-validation-repository.js';
+import { InMemoryPaperImplementationWorkOrderRepository } from '../repositories/in-memory-paper-implementation-workorder-repository.js';
 import {
   PaperImplementationIntakeBootstrapService,
   type PaperImplementationDownstreamFeedbackService,
 } from '../services/paper-implementation-intake-bootstrap-service.js';
+import { PaperImplementationAiWorkflowHarnessService } from '../services/paper-implementation-ai-workflow-harness-service.js';
+import { PaperImplementationMotiveEvidenceBoardService } from '../services/paper-implementation-motive-evidence-board-service.js';
+import { PaperImplementationResultClaimDossierService } from '../services/paper-implementation-result-claim-dossier-service.js';
 import { PaperImplementationTraceKernelService } from '../services/paper-implementation-trace-kernel-service.js';
+import { PaperImplementationValidationCyclePlanningService } from '../services/paper-implementation-validation-cycle-planning-service.js';
+import { PaperImplementationWorkOrderExperimentBridgeService } from '../services/paper-implementation-workorder-experiment-bridge-service.js';
 import type {
   TopicSelectionV1cDownstreamFeedbackRecheckResult,
 } from '../services/topic-selection-v1c-downstream-feedback-recheck-service.js';
@@ -51,6 +70,15 @@ function ref(refType: string, refId: string, versionId: string | null = null): T
     title_card_id: 'title_card_001',
     version_id: versionId,
   };
+}
+
+function assertStatus(
+  response: { statusCode: number; body: string },
+  expectedStatusCode: number,
+): void {
+  if (response.statusCode !== expectedStatusCode) {
+    throw new Error(`Expected ${expectedStatusCode}, got ${response.statusCode}: ${response.body}`);
+  }
 }
 
 function makeIdFactory() {
@@ -109,6 +137,213 @@ function traceLineageWithLiterature() {
       source_locator_refs: [ref('source_locator', 'source_locator_001')],
       citation_candidate_refs: [],
     },
+  };
+}
+
+function aiHarnessPayload() {
+  return {
+    harness_id: 'ai_harness_route_001',
+    policy_pack: {
+      context_policy_version_id: 'context_policy_route_v1',
+      trace_policy_version_id: 'trace_policy_route_v1',
+      evidence_policy_version_id: 'evidence_policy_route_v1',
+      experiment_policy_version_id: 'experiment_policy_route_v1',
+      retention_policy_version_id: 'retention_policy_route_v1',
+      evaluation_policy_version_id: 'evaluation_policy_route_v1',
+    },
+    runtime_bindings: {
+      control_plane_id: 'control_plane_route_001',
+      artifact_store_ref: ref('artifact_store', 'artifact_store_route_001'),
+      evidence_ledger_ref: ref('evidence_ledger', 'evidence_ledger_route_001'),
+      work_order_broker_ref: ref('work_order_broker', 'broker_route_001'),
+      run_monitor_ref: ref('run_monitor', 'monitor_route_001'),
+    },
+    invariants: {
+      require_input_snapshot: true,
+      require_trace_manifest: true,
+      require_artifact_refs: true,
+      forbid_untraced_claims: true,
+      forbid_memo_as_evidence: true,
+      retain_failed_runs: true,
+      separate_exploratory_and_confirmatory: true,
+    },
+    created_by: 'system',
+  };
+}
+
+function aiInputSnapshotPayload(targetRef: TopicSelectionFunctionalRef, traceManifestId: string) {
+  return {
+    input_snapshot_id: 'ai_input_snapshot_route_001',
+    target_ref: targetRef,
+    workflow_type: 'validation_cycle_planning',
+    context_policy_version_id: 'context_policy_route_v1',
+    included_context: {
+      motive_version_refs: [ref('core_motive_version', 'core_motive_route_001')],
+      board_version_refs: [ref('motive_evidence_board_version', 'board_route_001')],
+      assertion_refs: [],
+      evidence_binding_refs: [],
+      route_refs: [],
+      probe_refs: [],
+      experiment_plan_refs: [],
+      work_order_refs: [],
+      run_evidence_refs: [],
+      result_packet_refs: [],
+      accepted_risk_refs: [],
+      human_decision_refs: [],
+      trace_manifest_refs: [ref('trace_manifest', traceManifestId)],
+    },
+    excluded_context: {
+      excluded_refs: [],
+      exclusion_reasons: [],
+    },
+    freshness_constraints: {
+      exclude_stale_evidence: true,
+      exclude_invalidated_refs: true,
+    },
+    evidence_rules: {
+      memo_as_evidence_forbidden: true,
+      citation_requires_source_locator: true,
+    },
+    source_hashes: ['sha256:ai-route-context'],
+    created_by: 'system',
+  };
+}
+
+function aiWorkflowRunPayload(input: {
+  targetRef: TopicSelectionFunctionalRef;
+  traceManifestId: string;
+  harnessRunId?: string;
+  proposalArtifactId?: string;
+}) {
+  const harnessRunId = input.harnessRunId ?? 'ai_harness_run_route_001';
+  const proposalArtifactId = input.proposalArtifactId ?? 'ai_proposal_route_001';
+  return {
+    harness_run_id: harnessRunId,
+    harness_id: 'ai_harness_route_001',
+    input_snapshot_id: 'ai_input_snapshot_route_001',
+    workflow_type: 'validation_cycle_planning',
+    workflow_version: 'validation_cycle_planning.route.v1',
+    run_mode: 'mock',
+    execution_mode: 'mocked_llm',
+    model_profile_id: 'mock.paper-implementation.validation-cycle-planner.route.v1',
+    prompt_template_version_id: 'prompt_template_route_v1',
+    output_schema_version_id: 'validation_cycle_planning_output_route_v1',
+    raw_output_artifact_ref: ref('artifact', `${harnessRunId}_raw`),
+    parsed_output_artifact_ref: ref('artifact', `${harnessRunId}_parsed`),
+    spec: {
+      workflow_type: 'validation_cycle_planning',
+      workflow_version: 'validation_cycle_planning.route.v1',
+      input_policy: {
+        required_input_snapshot: true,
+        allowed_context_types: ['core_motive_version', 'motive_evidence_board_version', 'trace_manifest'],
+        forbidden_context_types: ['display_summary', 'rationale_memo'],
+        max_context_tokens: 12000,
+      },
+      prompt_policy: {
+        prompt_template_version_id: 'prompt_template_route_v1',
+        system_instruction_version_id: 'system_instruction_route_v1',
+        output_schema_version_id: 'validation_cycle_planning_output_route_v1',
+      },
+      model_policy: {
+        model_profile_id: 'mock.paper-implementation.validation-cycle-planner.route.v1',
+        temperature: 0.1,
+        allowed_tools: [],
+      },
+      output_policy: {
+        required_schema: 'validation_cycle_planning_output_route_v1',
+        natural_language_field_contract_version_id: 'nl_field_policy_route_v1',
+        required_ref_fields: ['trace_manifest_refs', 'source_refs'],
+        forbidden_outputs: ['authority_write', 'citation_from_memo'],
+      },
+      validation_policy: {
+        schema_validation: true,
+        reference_validation: true,
+        trace_validation: true,
+        claim_boundary_validation: true,
+      },
+      retry_policy: {
+        max_retries: 1,
+        retry_on_schema_failure: true,
+        retry_on_missing_refs: true,
+      },
+      audit_policy: {
+        save_prompt: true,
+        save_input_snapshot: true,
+        save_raw_output: true,
+        save_parsed_output: true,
+        save_validator_results: true,
+      },
+    },
+    proposal_artifacts: [{
+      proposal_artifact_id: proposalArtifactId,
+      artifact_kind: 'proposal_object',
+      target_ref: input.targetRef,
+      artifact_ref: ref('artifact', 'proposal_artifact_route_001'),
+      source_refs: [ref('core_motive_version', 'core_motive_route_001')],
+      trace_manifest_refs: [ref('trace_manifest', input.traceManifestId)],
+      payload: { proposal_only: true },
+    }],
+    quality_signal_candidates: [],
+    direct_authority_mutation_refs: [],
+    created_by: 'system',
+  };
+}
+
+function motiveDraftPayload() {
+  return {
+    motive_id: 'core_motive_route_001',
+    core_motive_version_id: 'core_motive_version_route_001',
+    motive_contract: {
+      short_name: 'Evidence synthesis conflation',
+      motivation_claim: 'Evidence synthesis can conflate adjacent claims.',
+      problem_pressure: 'False gap judgments affect paper planning.',
+      current_solution_insufficiency: 'Retrieval-only systems do not address synthesis conflation.',
+      unmet_or_failure_mechanism: 'Adjacent non-equivalent claims are compressed into one statement.',
+      target_setting: 'CS paper evidence synthesis.',
+      expected_contribution_path: 'Make claim conflation measurable and reducible.',
+      why_this_is_not_trivial: 'The failure appears after retrieval.',
+      why_existing_baselines_do_not_already_solve_it: 'Baselines optimize relevance, not claim equivalence.',
+      what_makes_this_researchable_now: 'Evidence locator infrastructure exists.',
+    },
+    scope_contract: {
+      included_scope: ['cross-paper synthesis'],
+      excluded_scope: ['general web QA'],
+      non_goals: ['broad model reliability'],
+    },
+    falsification_contract: {
+      invalidation_conditions: ['Controlled synthesis preserves distinct claims.'],
+      weakening_conditions: ['Only low-severity conflation remains.'],
+      minimum_evidence_to_continue: ['At least one literature or probe signal.'],
+      decisive_negative_conditions: ['Retrieval alone fully explains the issue.'],
+    },
+    claim_boundary: {
+      maximum_allowed_claim: 'The method reduces scoped claim conflation.',
+      minimum_defensible_contribution_claim: 'The analysis identifies a measurable failure mode.',
+      forbidden_overclaims: ['Do not claim broad model reliability.'],
+      claim_types_allowed: ['analysis_claim'],
+    },
+    source_refs: [ref('topic_package', 'topic_package_001', 'v1')],
+    assertions: [
+      {
+        assertion_id: 'motive_assertion_route_001',
+        assertion_type: 'failure_mechanism',
+        assertion_text: 'Claim conflation is a synthesis-level failure mechanism.',
+        importance: {
+          role: 'core',
+          must_hold_for_motive_to_continue: true,
+        },
+        validation_requirements: {
+          minimum_support_level: 'weak',
+          required_evidence_types: ['literature'],
+          required_counter_evidence_check: true,
+        },
+        falsification: {
+          what_would_contradict_this: ['Equivalent claims are always preserved.'],
+          what_would_weaken_this: ['Conflation is limited to missing abstracts.'],
+        },
+        expected_initial_status: 'untested',
+      },
+    ],
   };
 }
 
@@ -301,28 +536,197 @@ function makeRealService(): {
   downstreamFeedback: RecordingDownstreamFeedbackService;
   service: PaperImplementationIntakeBootstrapService;
   traceKernel: PaperImplementationTraceKernelService;
+  motiveEvidenceBoard: PaperImplementationMotiveEvidenceBoardService;
+  validationCyclePlanning: PaperImplementationValidationCyclePlanningService;
+  workOrderExperimentBridge: PaperImplementationWorkOrderExperimentBridgeService;
+  resultClaimDossier: PaperImplementationResultClaimDossierService;
+  aiWorkflowHarness: PaperImplementationAiWorkflowHarnessService;
 } {
   const downstreamFeedback = new RecordingDownstreamFeedbackService();
   const repository = new InMemoryPaperImplementationRepository();
   const traceRepository = new InMemoryPaperImplementationTraceRepository();
+  const motiveRepository = new InMemoryPaperImplementationMotiveRepository();
+  const validationRepository = new InMemoryPaperImplementationValidationRepository();
+  const workOrderRepository = new InMemoryPaperImplementationWorkOrderRepository();
+  const resultClaimDossierRepository = new InMemoryPaperImplementationResultClaimDossierRepository();
+  const aiWorkflowHarnessRepository = new InMemoryPaperImplementationAiWorkflowHarnessRepository();
   const idFactory = makeIdFactory();
+  const service = new PaperImplementationIntakeBootstrapService({
+    repository,
+    paperProjectBridgeService: new StubBridgeService(),
+    downstreamFeedbackService: downstreamFeedback,
+    idFactory,
+    now: () => NOW,
+  });
   return {
     downstreamFeedback,
-    service: new PaperImplementationIntakeBootstrapService({
-      repository,
-      paperProjectBridgeService: new StubBridgeService(),
-      downstreamFeedbackService: downstreamFeedback,
-      idFactory,
-      now: () => NOW,
-    }),
+    service,
     traceKernel: new PaperImplementationTraceKernelService({
       projectRepository: repository,
       traceRepository,
       idFactory,
       now: () => NOW,
     }),
+    motiveEvidenceBoard: new PaperImplementationMotiveEvidenceBoardService({
+      projectRepository: repository,
+      motiveRepository,
+      traceRepository,
+      idFactory,
+      now: () => NOW,
+    }),
+    validationCyclePlanning: new PaperImplementationValidationCyclePlanningService({
+      projectRepository: repository,
+      motiveRepository,
+      traceRepository,
+      validationRepository,
+      feedbackRecorder: service,
+      idFactory,
+      now: () => NOW,
+    }),
+    workOrderExperimentBridge: new PaperImplementationWorkOrderExperimentBridgeService({
+      projectRepository: repository,
+      traceRepository,
+      validationRepository,
+      workOrderRepository,
+      idFactory,
+      now: () => NOW,
+    }),
+    resultClaimDossier: new PaperImplementationResultClaimDossierService({
+      projectRepository: repository,
+      resultClaimRepository: resultClaimDossierRepository,
+      traceRepository,
+      validationRepository,
+      workOrderRepository,
+      feedbackRecorder: service,
+      idFactory,
+      now: () => NOW,
+    }),
+    aiWorkflowHarness: new PaperImplementationAiWorkflowHarnessService({
+      projectRepository: repository,
+      traceRepository,
+      harnessRepository: aiWorkflowHarnessRepository,
+      idFactory,
+      now: () => NOW,
+    }),
   };
 }
+
+test('PaperImplementation routes expose AI workflow harness proposal-only closure', async () => {
+  const app = Fastify({ logger: false });
+  const {
+    service,
+    traceKernel,
+    motiveEvidenceBoard,
+    validationCyclePlanning,
+    workOrderExperimentBridge,
+    resultClaimDossier,
+    aiWorkflowHarness,
+  } = makeRealService();
+  await registerPaperImplementationRoutes(
+    app,
+    new PaperImplementationController(
+      service,
+      traceKernel,
+      motiveEvidenceBoard,
+      validationCyclePlanning,
+      workOrderExperimentBridge,
+      resultClaimDossier,
+      aiWorkflowHarness,
+    ),
+  );
+  try {
+    const bootstrap = await app.inject({
+      method: 'POST',
+      url: '/paper-implementation/projects/bootstrap',
+      payload: {
+        paper_project_bridge_id: 'paper_project_bridge_001',
+        bridge_payload_hash: 'bridge_payload_hash_001',
+      },
+    });
+    assertStatus(bootstrap, 201);
+    const projectId = (bootstrap.json() as BootstrapImplementationProjectResponse)
+      .implementation_project.implementation_project_id;
+    const targetRef = ref('validation_cycle', 'validation_cycle_route_001');
+    const trace = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/trace-manifests`,
+      payload: {
+        target_ref: targetRef,
+        lineage: {
+          ...emptyTraceLineage(),
+          artifact: {
+            ...emptyTraceLineage().artifact,
+            log_artifact_refs: [ref('artifact', 'proposal_artifact_route_001')],
+          },
+          decision: {
+            ...emptyTraceLineage().decision,
+            human_decision_refs: [ref('human_decision', 'ai_route_decision_001')],
+          },
+        },
+        integrity: {},
+      },
+    });
+    assertStatus(trace, 201);
+    const traceBody = trace.json() as TraceManifest;
+    assert.equal(traceBody.trace_status, 'complete');
+
+    const harness = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/implementation-harnesses`,
+      payload: aiHarnessPayload(),
+    });
+    assertStatus(harness, 201);
+    const snapshot = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/implementation-input-snapshots`,
+      payload: aiInputSnapshotPayload(targetRef, traceBody.trace_manifest_id),
+    });
+    assertStatus(snapshot, 201);
+    const run = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/agent-workflow-harness-runs`,
+      payload: aiWorkflowRunPayload({
+        targetRef,
+        traceManifestId: traceBody.trace_manifest_id,
+      }),
+    });
+    assertStatus(run, 201);
+    assert.equal((run.json() as { harness_run: { run_status: string } }).harness_run.run_status, 'completed');
+    assert.equal('spec' in (run.json() as Record<string, unknown>), false);
+    assert.equal((run.json() as { queue_items: unknown[] }).queue_items.length, 0);
+
+    const malformedRun = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/agent-workflow-harness-runs`,
+      payload: {
+        ...aiWorkflowRunPayload({
+          harnessRunId: 'ai_harness_run_route_malformed',
+          proposalArtifactId: 'ai_proposal_route_malformed',
+          targetRef,
+          traceManifestId: traceBody.trace_manifest_id,
+        }),
+        input_snapshot_id: '',
+      },
+    });
+    assertStatus(malformedRun, 400);
+
+    const blocked = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/agent-workflow-harness-runs`,
+      payload: aiWorkflowRunPayload({
+        harnessRunId: 'ai_harness_run_route_blocked',
+        proposalArtifactId: 'ai_proposal_route_blocked',
+        targetRef,
+        traceManifestId: 'trace_manifest_missing',
+      }),
+    });
+    assertStatus(blocked, 201);
+    assert.equal((blocked.json() as { harness_run: { run_status: string } }).harness_run.run_status, 'blocked');
+    assert.equal((blocked.json() as { queue_items: Array<{ queue_type: string }> }).queue_items[0]?.queue_type, 'trace_repair');
+  } finally {
+    await app.close();
+  }
+});
 
 test('buildApp registers PaperImplementation routes and drives bootstrap happy path', async () => {
   const downstreamFeedback = new RecordingDownstreamFeedbackService();
@@ -358,7 +762,7 @@ test('buildApp registers PaperImplementation routes and drives bootstrap happy p
         bridge_payload_hash: 'bridge_payload_hash_001',
       },
     });
-    assert.equal(created.statusCode, 201);
+    assertStatus(created, 201);
     const createdBody = created.json() as BootstrapImplementationProjectResponse;
     assert.equal(createdBody.project_created, true);
     const projectId = createdBody.implementation_project.implementation_project_id;
@@ -483,10 +887,652 @@ test('buildApp registers PaperImplementation routes and drives bootstrap happy p
   }
 });
 
+test('PaperImplementation motive routes bootstrap draft admission and evidence board through buildApp', async () => {
+  const downstreamFeedback = new RecordingDownstreamFeedbackService();
+  const app = buildApp({
+    paperImplementationRepository: new InMemoryPaperImplementationRepository(),
+    paperImplementationTraceRepository: new InMemoryPaperImplementationTraceRepository(),
+    paperImplementationBridgeService: new StubBridgeService(),
+    paperImplementationDownstreamFeedbackService: downstreamFeedback,
+  });
+  try {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/paper-implementation/projects/bootstrap',
+      payload: {
+        paper_project_bridge_id: 'paper_project_bridge_001',
+        bridge_payload_hash: 'bridge_payload_hash_001',
+      },
+    });
+    assert.equal(created.statusCode, 201);
+    const projectId = (created.json() as BootstrapImplementationProjectResponse)
+      .implementation_project.implementation_project_id;
+
+    const draft = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/core-motives/drafts`,
+      payload: motiveDraftPayload(),
+    });
+    assertStatus(draft, 201);
+
+    const motiveTrace = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/trace-manifests`,
+      payload: {
+        target_ref: ref('core_motive_version', 'core_motive_version_route_001', 'v1'),
+        lineage: traceLineageWithLiterature(),
+      },
+    });
+    assertStatus(motiveTrace, 201);
+    const motiveTraceId = (motiveTrace.json() as TraceManifest).trace_manifest_id;
+
+    const admitted = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/core-motives/core_motive_route_001/versions/core_motive_version_route_001/admit`,
+      payload: {
+        trace_manifest_id: motiveTraceId,
+      },
+    });
+    assertStatus(admitted, 200);
+
+    const boardTrace = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/trace-manifests`,
+      payload: {
+        target_ref: ref('motive_evidence_board_version', 'motive_evidence_board_route_001', 'v1'),
+        lineage: traceLineageWithLiterature(),
+      },
+    });
+    assertStatus(boardTrace, 201);
+
+    const bindingTrace = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/trace-manifests`,
+      payload: {
+        target_ref: ref('evidence_binding', 'evidence_binding_route_001', 'v1'),
+        lineage: traceLineageWithLiterature(),
+      },
+    });
+    assertStatus(bindingTrace, 201);
+
+    const board = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/motive-evidence-boards`,
+      payload: {
+        board_version_id: 'motive_evidence_board_route_001',
+        motive_id: 'core_motive_route_001',
+        core_motive_version_id: 'core_motive_version_route_001',
+        trace_manifest_id: (boardTrace.json() as TraceManifest).trace_manifest_id,
+        board_summary: {
+          current_support_summary: 'Literature provides an initial signal.',
+          current_challenge_summary: 'No direct counter-evidence yet.',
+          unresolved_conflicts: [],
+          board_gap_summary: 'Needs validation probe.',
+          next_evidence_needed: ['Run a controlled synthesis probe.'],
+        },
+        bindings: [
+          {
+            binding_id: 'evidence_binding_route_001',
+            assertion_id: 'motive_assertion_route_001',
+            evidence_ref: ref('literature_evidence_unit', 'literature_evidence_unit_001'),
+            role: 'support',
+            scope: { dataset_scope: 'CS papers' },
+            strength: {
+              directness: 'moderate',
+              reliability: 'medium',
+              reproducibility: 'unknown',
+              freshness: 'fresh',
+            },
+            support_state: 'weak',
+            challenge_status: 'none',
+            interpretation: {
+              normalized_statement: 'Prior work reports related synthesis conflation.',
+              why_relevant_to_assertion: 'It supports the failure mechanism.',
+              limitations: ['Different benchmark setting.'],
+            },
+            trace_manifest_id: (bindingTrace.json() as TraceManifest).trace_manifest_id,
+          },
+        ],
+      },
+    });
+    assertStatus(board, 201);
+
+    const boards = await app.inject({
+      method: 'GET',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/motive-evidence-boards`,
+    });
+    assertStatus(boards, 200);
+    assert.equal((boards.json() as { items: unknown[] }).items.length, 1);
+
+    const transfers = await app.inject({
+      method: 'GET',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/evidence-transfer-bindings`,
+    });
+    assertStatus(transfers, 200);
+    assert.equal((transfers.json() as { items: unknown[] }).items.length, 0);
+
+    const validationDraft = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/validation-cycles/drafts`,
+      payload: {
+        validation_cycle_id: 'validation_cycle_route_001',
+        target: {
+          target_type: 'core_motive_version',
+          target_id: 'core_motive_version_route_001',
+          target_version_id: '1',
+        },
+        trigger: {
+          trigger_type: 'board_gap',
+          trigger_refs: [ref('motive_evidence_board_version', 'motive_evidence_board_route_001')],
+        },
+        cycle_type: 'route_feasibility',
+        validation_frame: {
+          validation_question: 'Can a low-cost probe answer the failure mechanism assertion?',
+          assumptions_under_test: ['The scoped route can isolate synthesis conflation.'],
+          assertions_under_test: [ref('motive_assertion', 'motive_assertion_route_001')],
+          decision_if_pass: 'Create a work-order-ready route plan.',
+          decision_if_fail: 'Emit upstream feedback or park the motive.',
+          decision_if_inconclusive: 'Narrow the validation question.',
+          expected_information_gain: 'medium',
+          why_this_cycle_now: 'The admitted board has a route gap.',
+        },
+        context: {
+          included_refs: {
+            motive_version_refs: [ref('core_motive_version', 'core_motive_version_route_001', '1')],
+            board_version_refs: [ref('motive_evidence_board_version', 'motive_evidence_board_route_001')],
+            evidence_refs: [ref('literature_evidence_unit', 'literature_evidence_unit_001')],
+            route_refs: [],
+            work_order_refs: [],
+            result_packet_refs: [],
+            experiment_plan_light_refs: [],
+          },
+          excluded_context_notes: [],
+        },
+        criteria: {
+          pass_conditions: ['The route can isolate synthesis conflation.'],
+          fail_conditions: ['The route cannot answer the assertion.'],
+          inconclusive_conditions: ['The route remains ambiguous.'],
+          stop_conditions: ['Stop after one failed feasibility check.'],
+          minimum_artifacts_required: ['Trace-ready validation memo.'],
+        },
+        budget: {
+          budget_id: 'validation_budget_route_001',
+          max_runtime: 'PT4H',
+          max_compute: 'local_cpu',
+          max_human_review_count: 1,
+          retry_budget: 0,
+        },
+      },
+    });
+    assertStatus(validationDraft, 201);
+
+    const validationTrace = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/trace-manifests`,
+      payload: {
+        target_ref: ref('validation_cycle', 'validation_cycle_route_001', 'v1'),
+        lineage: {
+          ...emptyTraceLineage(),
+          decision: {
+            ...emptyTraceLineage().decision,
+            human_decision_refs: [ref('human_decision', 'human_decision_route_001')],
+          },
+        },
+      },
+    });
+    assertStatus(validationTrace, 201);
+    assert.equal((validationTrace.json() as TraceManifest).trace_status, 'complete');
+
+    const admittedValidation = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/validation-cycles/validation_cycle_route_001/admit`,
+      payload: {
+        trace_manifest_id: (validationTrace.json() as TraceManifest).trace_manifest_id,
+      },
+    });
+    assertStatus(admittedValidation, 200);
+    const admittedValidationBody = admittedValidation.json() as ValidationCycle;
+    assert.equal(admittedValidationBody.trace_manifest_ref?.ref_type, 'trace_manifest');
+    assert.equal(admittedValidationBody.trace_manifest_ref?.ref_id, (validationTrace.json() as TraceManifest).trace_manifest_id);
+
+    const experimentPlanTrace = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/trace-manifests`,
+      payload: {
+        target_ref: ref('experiment_plan_light', 'experiment_plan_light_route_001', 'v1'),
+        lineage: {
+          ...emptyTraceLineage(),
+          experiment: {
+            ...emptyTraceLineage().experiment,
+            metric_refs: [ref('metric', 'claim_conflation_rate')],
+          },
+          decision: {
+            ...emptyTraceLineage().decision,
+            validation_cycle_refs: [ref('validation_cycle', 'validation_cycle_route_001')],
+          },
+          artifact: {
+            ...emptyTraceLineage().artifact,
+            dataset_refs: [ref('dataset_version', 'dataset_version_route_001')],
+            code_version_refs: [ref('code_version', 'code_version_route_001')],
+            config_refs: [ref('config', 'config_route_001')],
+          },
+        },
+      },
+    });
+    assertStatus(experimentPlanTrace, 201);
+
+    const experimentPlan = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/experiment-plan-lights`,
+      payload: {
+        experiment_plan_light_id: 'experiment_plan_light_route_001',
+        validation_cycle_id: 'validation_cycle_route_001',
+        run_mode: 'confirmatory',
+        plan_summary: 'Run a controlled synthesis conflation check.',
+        estimated_cost_class: 'medium',
+        baseline_gap_status: 'resolved',
+        primary_metric_refs: [ref('metric', 'claim_conflation_rate')],
+        dataset_version_refs: [ref('dataset_version', 'dataset_version_route_001')],
+        baseline_version_refs: [ref('baseline_version', 'baseline_version_route_001')],
+        code_version_refs: [ref('code_version', 'code_version_route_001')],
+        config_refs: [ref('config', 'config_route_001')],
+        budget_id: 'validation_budget_route_001',
+        stop_condition_refs: [ref('stop_rule', 'stop_rule_001')],
+        trace_manifest_id: (experimentPlanTrace.json() as TraceManifest).trace_manifest_id,
+      },
+    });
+    assertStatus(experimentPlan, 201);
+
+    const workOrderTrace = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/trace-manifests`,
+      payload: {
+        target_ref: ref('research_work_order', 'research_work_order_route_001', 'v1'),
+        lineage: {
+          ...emptyTraceLineage(),
+          experiment: {
+            ...emptyTraceLineage().experiment,
+            experiment_plan_refs: [ref('experiment_plan_light', 'experiment_plan_light_route_001')],
+          },
+          decision: {
+            ...emptyTraceLineage().decision,
+            validation_cycle_refs: [ref('validation_cycle', 'validation_cycle_route_001')],
+          },
+        },
+      },
+    });
+    assertStatus(workOrderTrace, 201);
+
+    const workOrderDraft = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/research-work-orders/drafts`,
+      payload: {
+        work_order_id: 'research_work_order_route_001',
+        validation_cycle_id: 'validation_cycle_route_001',
+        experiment_plan_light_id: 'experiment_plan_light_route_001',
+        run_type: 'confirmatory',
+        run_policy: {
+          run_policy_id: 'run_policy_route_001',
+          retry_budget: 0,
+          stop_condition_refs: [ref('stop_rule', 'stop_rule_001')],
+          allowed_mutation_refs: [],
+          autotune_policy: 'disabled',
+        },
+        experiment_bridge: {
+          run_recipe_ref: ref('experiment_run_recipe', 'run_recipe_route_001', 'v1'),
+          run_recipe_hash: 'run_recipe_hash_001',
+          version_lock_hash: 'version_lock_hash_001',
+          config_snapshot_hash: 'config_snapshot_hash_001',
+          result_validation_policy_ref: ref('result_validation_policy', 'result_validation_policy_001'),
+        },
+        trace_manifest_id: (workOrderTrace.json() as TraceManifest).trace_manifest_id,
+      },
+    });
+    assertStatus(workOrderDraft, 201);
+    assert.equal((workOrderDraft.json() as ResearchWorkOrder).work_order_status, 'draft');
+
+    const admittedWorkOrder = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/research-work-orders/research_work_order_route_001/admit`,
+      payload: {
+        admission_gate_result_id: 'work_order_gate_result_001',
+      },
+    });
+    assertStatus(admittedWorkOrder, 200);
+    assert.equal((admittedWorkOrder.json() as ResearchWorkOrder).work_order_status, 'admitted');
+
+    const harnessRun = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/research-work-orders/research_work_order_route_001/harness-runs`,
+      payload: {
+        idempotency_key: 'work_order_route_attempt_001',
+        external_job_ref: ref('experiment_foundation_run', 'experiment_foundation_run_001'),
+        external_job_hash: 'external_job_hash_001',
+      },
+    });
+    assertStatus(harnessRun, 201);
+    assert.equal((harnessRun.json() as ResearchWorkOrderHarnessRun).run_status, 'submitted');
+
+    const monitor = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/run-monitor-intakes`,
+      payload: {
+        work_order_id: 'research_work_order_route_001',
+        external_job_ref: ref('experiment_foundation_run', 'experiment_foundation_run_001'),
+        external_job_hash: 'external_job_hash_001',
+        monitor_event_kind: 'failed',
+        run_status: 'failed',
+        failure_summary: 'The controlled run failed before producing trusted result artifacts.',
+      },
+    });
+    assertStatus(monitor, 201);
+    const monitorBody = monitor.json() as RecordRunMonitorIntakeResponse;
+    assert.equal(monitorBody.monitor_intake.trust_status, 'trusted');
+    assert.equal(monitorBody.run_evidence_unit?.run_status, 'failed');
+
+    const runEvidenceUnits = await app.inject({
+      method: 'GET',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/run-evidence-units`,
+    });
+    assertStatus(runEvidenceUnits, 200);
+    assert.equal((runEvidenceUnits.json() as { items: RunEvidenceUnit[] }).items[0]?.work_order_id, 'research_work_order_route_001');
+    const routeRunEvidenceId = monitorBody.run_evidence_unit?.run_evidence_unit_id;
+    assert.ok(routeRunEvidenceId);
+
+    const resultTrace = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/trace-manifests`,
+      payload: {
+        target_ref: ref('result_interpretation_packet', 'result_interpretation_packet_route_001', 'v1'),
+        lineage: {
+          ...emptyTraceLineage(),
+          experiment: {
+            ...emptyTraceLineage().experiment,
+            run_evidence_refs: [ref('run_evidence_unit', routeRunEvidenceId)],
+            metric_refs: [ref('metric', 'claim_conflation_rate')],
+          },
+        },
+      },
+    });
+    assertStatus(resultTrace, 201);
+
+    const resultPacket = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/result-interpretation-packets`,
+      payload: {
+        result_interpretation_packet_id: 'result_interpretation_packet_route_001',
+        validation_cycle_id: 'validation_cycle_route_001',
+        experiment_plan_light_id: 'experiment_plan_light_route_001',
+        source: {
+          run_evidence_refs: [ref('run_evidence_unit', routeRunEvidenceId)],
+          validation_report_refs: [],
+          metric_refs: [ref('metric', 'claim_conflation_rate')],
+          failed_run_refs: [ref('run_evidence_unit', routeRunEvidenceId)],
+          inconclusive_run_refs: [],
+          stale_or_invalidated_evidence_refs: [],
+        },
+        result_summary: {
+          result_summary: 'The controlled run failed, so the claim must stay bounded.',
+          supports_assertion_refs: [],
+          challenges_assertion_refs: [ref('motive_assertion', 'motive_assertion_route_001')],
+          unexpected_findings: [],
+          failed_runs_accounted_for: true,
+          inconclusive_runs_accounted_for: true,
+          exploratory_confirmatory_separated: true,
+        },
+        reliability: {
+          failed_runs_retained: true,
+          confound_refs: [],
+          limitation_refs: [],
+          reliability_notes: ['Failed run retained as boundary evidence.'],
+        },
+        claim_implications: {
+          allowed_claim_ceiling: 'tentative',
+          forbidden_overclaims: ['broad model reliability'],
+          recommended_claim_refs: [],
+          required_followup_refs: [],
+        },
+        trace_manifest_id: (resultTrace.json() as TraceManifest).trace_manifest_id,
+      },
+    });
+    assertStatus(resultPacket, 201);
+
+    const claimTraceManifest = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/trace-manifests`,
+      payload: {
+        target_ref: ref('claim_candidate', 'claim_candidate_route_001', 'v1'),
+        lineage: {
+          ...emptyTraceLineage(),
+          literature: {
+            ...emptyTraceLineage().literature,
+            literature_evidence_refs: [ref('literature_evidence_unit', 'literature_evidence_unit_001')],
+          },
+          experiment: {
+            ...emptyTraceLineage().experiment,
+            run_evidence_refs: [ref('run_evidence_unit', routeRunEvidenceId)],
+            result_packet_refs: [ref('result_interpretation_packet', 'result_interpretation_packet_route_001')],
+          },
+        },
+      },
+    });
+    assertStatus(claimTraceManifest, 201);
+
+    const claimTracePacket = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/claim-trace-packets`,
+      payload: {
+        claim_ref: ref('claim_candidate', 'claim_candidate_route_001'),
+        claim_statement: 'The run exposes a bounded failure case.',
+        trace_manifest_id: (claimTraceManifest.json() as TraceManifest).trace_manifest_id,
+        lineage: {
+          ...emptyTraceLineage(),
+          literature: {
+            ...emptyTraceLineage().literature,
+            literature_evidence_refs: [ref('literature_evidence_unit', 'literature_evidence_unit_001')],
+          },
+          experiment: {
+            ...emptyTraceLineage().experiment,
+            run_evidence_refs: [ref('run_evidence_unit', routeRunEvidenceId)],
+            result_packet_refs: [ref('result_interpretation_packet', 'result_interpretation_packet_route_001')],
+          },
+        },
+        challenge: {
+          challenging_result_refs: [ref('run_evidence_unit', routeRunEvidenceId)],
+          counter_evidence_refs: [],
+          unresolved_objections: [],
+        },
+        scope: {
+          dataset_scope: 'Route dataset version.',
+          task_scope: 'Controlled synthesis conflation check.',
+          baseline_scope: 'Route baseline.',
+          method_scope: 'Configured route method.',
+          evaluation_scope: 'claim_conflation_rate metric.',
+        },
+        boundary: {
+          forbidden_overclaims: ['broad model reliability'],
+          claim_strength: 'tentative',
+          human_confirmation_required: false,
+        },
+      },
+    });
+    assertStatus(claimTracePacket, 201);
+
+    const claimCandidate = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/claim-candidates`,
+      payload: {
+        claim_candidate_id: 'claim_candidate_route_001',
+        claim_type: 'negative_result_claim',
+        claim_statement: 'The run exposes a bounded failure case.',
+        claim_strength: 'tentative',
+        result_interpretation_packet_ids: ['result_interpretation_packet_route_001'],
+        support_refs: [ref('run_evidence_unit', routeRunEvidenceId)],
+        challenge_refs: [],
+        scope: {
+          population_scope: 'Controlled synthesis conflation check.',
+          method_scope: 'Configured route method.',
+          dataset_scope: 'Route dataset version.',
+          metric_scope: 'claim_conflation_rate metric.',
+          negative_scope_notes: ['Run failed before trusted positive evidence.'],
+          excluded_scope_notes: ['No broad model reliability claim.'],
+        },
+        boundary: {
+          rationale: 'The failed run supports only a bounded negative result.',
+          forbidden_overclaims: ['broad model reliability'],
+          hidden_counter_evidence_refs: [],
+          required_followup_refs: [],
+        },
+        trace_manifest_id: (claimTraceManifest.json() as TraceManifest).trace_manifest_id,
+        claim_trace_packet_id: (claimTracePacket.json() as ClaimTracePacket).claim_trace_packet_id,
+      },
+    });
+    assertStatus(claimCandidate, 201);
+
+    const dossierTrace = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/trace-manifests`,
+      payload: {
+        target_ref: ref('implementation_dossier', 'implementation_dossier_route_001', 'v1'),
+        lineage: {
+          ...emptyTraceLineage(),
+          literature: {
+            ...emptyTraceLineage().literature,
+            literature_evidence_refs: [ref('literature_evidence_unit', 'literature_evidence_unit_001')],
+          },
+          experiment: {
+            ...emptyTraceLineage().experiment,
+            run_evidence_refs: [ref('run_evidence_unit', routeRunEvidenceId)],
+            result_packet_refs: [ref('result_interpretation_packet', 'result_interpretation_packet_route_001')],
+          },
+        },
+      },
+    });
+    assertStatus(dossierTrace, 201);
+
+    const dossier = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/implementation-dossiers`,
+      payload: {
+        dossier_id: 'implementation_dossier_route_001',
+        dossier_status: 'ready_for_writing',
+        result_interpretation_packet_ids: ['result_interpretation_packet_route_001'],
+        claim_candidate_ids: ['claim_candidate_route_001'],
+        claim_trace_packet_ids: [(claimTracePacket.json() as ClaimTracePacket).claim_trace_packet_id],
+        experiment_section: {
+          failed_run_refs: [ref('run_evidence_unit', routeRunEvidenceId)],
+          inconclusive_run_refs: [],
+          negative_result_refs: [ref('run_evidence_unit', routeRunEvidenceId)],
+          excluded_stale_or_invalidated_evidence_refs: [],
+          experiment_limitations: ['Failed run limits the claim ceiling.'],
+        },
+        claim_section: {
+          admitted_claim_refs: [ref('claim_candidate', 'claim_candidate_route_001')],
+          rejected_claim_refs: [],
+          forbidden_overclaims: ['broad model reliability'],
+          claim_ceiling: 'tentative',
+        },
+        readiness: {
+          readiness_gate_result_id: 'dossier_readiness_gate_route_001',
+          blocker_refs: [],
+          warning_refs: [],
+          readiness_notes: ['Ready as bounded negative result dossier.'],
+        },
+        trace_manifest_id: (dossierTrace.json() as TraceManifest).trace_manifest_id,
+        projection_policy_version_id: 'writing_projection_policy_v1',
+      },
+    });
+    assertStatus(dossier, 201);
+
+    const writingPacket = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/implementation-dossiers/implementation_dossier_route_001/writing-entry-packets`,
+      payload: {
+        projection_policy_version_id: 'writing_projection_policy_v1',
+      },
+    });
+    assertStatus(writingPacket, 201);
+    assert.equal((writingPacket.json() as { packet_status: string }).packet_status, 'current');
+
+    const untrustedMonitor = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/run-monitor-intakes`,
+      payload: {
+        external_job_ref: ref('experiment_foundation_run', 'orphan_run_001'),
+        external_job_hash: 'orphan_run_hash_001',
+        monitor_event_kind: 'result_available',
+        run_status: 'succeeded',
+      },
+    });
+    assertStatus(untrustedMonitor, 201);
+    const untrustedMonitorBody = untrustedMonitor.json() as RecordRunMonitorIntakeResponse;
+    assert.equal(untrustedMonitorBody.monitor_intake.trust_status, 'untrusted');
+    assert.equal(untrustedMonitorBody.run_evidence_unit, null);
+
+    const completedValidation = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/validation-cycles/validation_cycle_route_001/complete`,
+      payload: {
+        cycle_assessment: {
+          outcome: 'inconclusive',
+          information_gain_realized: 'low',
+          residual_uncertainties: ['Route feasibility still needs narrowing.'],
+          recommended_next_action: 'Review the route plan before another cycle.',
+          rationale: 'The cycle did not reduce the main uncertainty enough.',
+        },
+      },
+    });
+    assertStatus(completedValidation, 200);
+
+    const feedbackCandidate = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/validation-upstream-feedback-candidates`,
+      payload: {
+        validation_cycle_id: 'validation_cycle_route_001',
+        source_object_refs: [ref('validation_cycle', 'validation_cycle_route_001')],
+        feedback_type: 'infeasible_route',
+        severity: 'blocking',
+        summary: 'The route may be infeasible under admitted constraints.',
+      },
+    });
+    assertStatus(feedbackCandidate, 201);
+
+    const dispatched = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/validation-upstream-feedback-candidates/${encodeURIComponent((feedbackCandidate.json() as { candidate_id: string }).candidate_id)}/dispatch`,
+      payload: {},
+    });
+    assertStatus(dispatched, 200);
+    assert.equal(downstreamFeedback.calls[0]?.downstream_source_kind, 'paper_implementation');
+  } finally {
+    await app.close();
+  }
+});
+
 test('PaperImplementation routes expose bootstrap, idempotent duplicate, stale hash, and feedback behavior through real service', async () => {
   const app = Fastify({ logger: false });
-  const { downstreamFeedback, service, traceKernel } = makeRealService();
-  await registerPaperImplementationRoutes(app, new PaperImplementationController(service, traceKernel));
+  const {
+    downstreamFeedback,
+    service,
+    traceKernel,
+    motiveEvidenceBoard,
+    validationCyclePlanning,
+    workOrderExperimentBridge,
+    resultClaimDossier,
+    aiWorkflowHarness,
+  } = makeRealService();
+  await registerPaperImplementationRoutes(
+    app,
+    new PaperImplementationController(
+      service,
+      traceKernel,
+      motiveEvidenceBoard,
+      validationCyclePlanning,
+      workOrderExperimentBridge,
+      resultClaimDossier,
+      aiWorkflowHarness,
+    ),
+  );
   try {
     const created = await app.inject({
       method: 'POST',

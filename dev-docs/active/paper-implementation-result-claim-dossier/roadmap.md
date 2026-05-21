@@ -11,3 +11,7 @@ Use dossier readiness as the writing-prep authority boundary.
 
 ## Done When
 - Writing lane can consume ready dossier/packet projections without inferring evidence from loose runs or memos.
+
+## Status
+- Done on 2026-05-21.
+- Next flow package: T-099 paper-implementation-ai-harness.

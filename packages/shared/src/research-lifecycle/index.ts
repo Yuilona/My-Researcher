@@ -27,3 +27,12 @@ export * from './topic-selection-v1c-paper-project-bridge-contracts.js';
 export * from './topic-selection-v1c-downstream-feedback-recheck-contracts.js';
 export * from './paper-implementation-contracts.js';
 export * from './paper-implementation-trace-contracts.js';
+export * from './paper-implementation-motive-contracts.js';
+export * from './paper-implementation-validation-contracts.js';
+export * from './paper-implementation-workorder-contracts.js';
+export * from './paper-implementation-result-claim-dossier-contracts.js';
+export * from './paper-implementation-ai-workflow-harness-contracts.js';
+export {
+  type PaperImplementationWritingEntryPacket,
+  paperImplementationWritingEntryPacketSchema,
+} from './paper-implementation-result-claim-dossier-contracts.js';

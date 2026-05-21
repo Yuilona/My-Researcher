@@ -13,13 +13,13 @@
 | Package order | Task ID | Child package | Flow node | Coverage |
 |---|---|---|---|---|
 | 1 | `T-092` | `paper-implementation-contracts-and-gap-map` | object mapping and dependency review | done; owns current-state inventory, object/component map, queryability matrix, and child readiness checklist |
-| 2 | `T-093` | `paper-implementation-intake-bootstrap` | topic-selection handoff to implementation root | owns `ImplementationIntakeSnapshot -> ImplementationProject` |
-| 3 | `T-094` | `paper-implementation-motive-evidence-board` | motive/assertion/evidence-board/portfolio kernel | owns `CoreMotiveVersion`, evidence-board authority, and portfolio decisions |
-| 4 | `T-095` | `paper-implementation-validation-cycle-planning` | validation cycle and route/probe planning | owns validation planning before execution under budget and portfolio constraints |
-| 5 | `T-096` | `paper-implementation-workorder-experiment-bridge` | implementation work order to experiment foundation | owns WorkOrder, monitor intake, and `RunEvidenceUnit` ingestion |
-| 6 | `T-097` | `paper-implementation-trace-kernel` | trace/citation/memo guard | owns cross-cutting trace kernel |
-| 7 | `T-098` | `paper-implementation-result-claim-dossier` | result interpretation, claim boundary, dossier readiness | owns writing-prep authority |
-| 8 | `T-099` | `paper-implementation-ai-workflow-harness` | AI proposal runtime and implementation harness | owns proposal-only AI workflow shell plus project-level runtime governance contracts |
+| 2 | `T-093` | `paper-implementation-intake-bootstrap` | topic-selection handoff to implementation root | done; owns `ImplementationIntakeSnapshot -> ImplementationProject` |
+| 3 | `T-094` | `paper-implementation-motive-evidence-board` | motive/assertion/evidence-board/portfolio kernel | done; owns `CoreMotiveVersion`, evidence-board authority, and portfolio decisions |
+| 4 | `T-095` | `paper-implementation-validation-cycle-planning` | validation cycle and route/probe planning | done; owns validation planning before execution under budget and portfolio constraints |
+| 5 | `T-096` | `paper-implementation-workorder-experiment-bridge` | implementation work order to experiment foundation | done; owns WorkOrder, monitor intake, and `RunEvidenceUnit` ingestion |
+| 6 | `T-097` | `paper-implementation-trace-kernel` | trace/citation/memo guard | done; owns cross-cutting trace kernel |
+| 7 | `T-098` | `paper-implementation-result-claim-dossier` | result interpretation, claim boundary, dossier readiness | done; owns writing-prep authority |
+| 8 | `T-099` | `paper-implementation-ai-workflow-harness` | AI proposal runtime and implementation harness | done; owns proposal-only AI workflow shell plus project-level runtime governance contracts |
 | 9 | `T-100` | `paper-implementation-desktop-workbench` | desktop decision workbench | owns command/read-model UI surface |
 | 10 | `T-101` | `paper-implementation-contract-evaluation-suite` | full-flow evaluation | owns contract/replay/adversarial closure |
 
@@ -109,3 +109,36 @@ Before moving from one child flow to the next, review:
 
 ## Overall Decision
 The task package set is executable as a staged implementation plan. `T-092 paper-implementation-contracts-and-gap-map` is closed. Proceed with `T-093 paper-implementation-intake-bootstrap`, schedule `T-097 paper-implementation-trace-kernel` early, then continue through the confirmed D10 sequence while keeping `T-091` as the roadmap authority for decision conflicts.
+
+## 2026-05-21 T-094 Closure Review
+- `T-094 paper-implementation-motive-evidence-board` is closed as backend minimum closure.
+- The next child entry is `T-095 paper-implementation-validation-cycle-planning`.
+- T-095 must consume only admitted `CoreMotiveVersion` objects and trace-ready `MotiveEvidenceBoardVersion` outputs; draft/internal objects and board summaries alone are not ready inputs.
+- No D1-D10 roadmap decision was reopened.
+
+## 2026-05-21 T-095 Closure Review
+- `T-095 paper-implementation-validation-cycle-planning` is closed as backend minimum closure.
+- The next child entry is `T-096 paper-implementation-workorder-experiment-bridge`.
+- T-096 must consume admitted `ValidationCycle` and work-order-ready `ExperimentPlanLight` refs; no direct experiment execution is allowed from validation planning.
+- No D1-D10 roadmap decision was reopened.
+
+## 2026-05-21 T-096 Closure Review
+- `T-096 paper-implementation-workorder-experiment-bridge` is closed as backend minimum closure.
+- The next child entry is `T-098 paper-implementation-result-claim-dossier`.
+- T-098 must consume `RunEvidenceUnit`, result validation refs, validation-cycle refs, and trace refs; raw experiment-foundation platform state and untrusted monitor callbacks are not ready claim inputs.
+- WorkOrder statuses, run statuses, run type, dataset/code/config refs, external job refs, trace refs, and failure summaries are queryable in persistence.
+- No D1-D10 roadmap decision was reopened.
+
+## 2026-05-21 T-098 Closure Review
+- `T-098 paper-implementation-result-claim-dossier` is closed as backend minimum closure.
+- The next child entry is `T-099 paper-implementation-ai-workflow-harness`.
+- T-099 must consume backend read-model refs and trace-ready objects as proposal context; it must not turn AI output into authority state.
+- Result interpretation, claim candidate, dossier readiness, writing-entry packet projection, and result-driven feedback surfaces are available as refs/read models for AI proposal workflows.
+- No D1-D10 roadmap decision was reopened.
+
+## 2026-05-21 T-099 Closure Review
+- `T-099 paper-implementation-ai-workflow-harness` is closed as backend minimum closure.
+- The next child entry is `T-100 paper-implementation-desktop-workbench`.
+- T-100 must consume `ImplementationProposalArtifact`, `ImplementationGateResult`, `ImplementationTransitionAttempt`, and `DecisionWorkQueueItem` as backend read models; UI must still emit backend commands and never write authority state locally.
+- T-099 confirmed proposal-only AI workflow behavior, mock/product isolation, trace-manifest checks, memo-as-evidence blocking, and direct authority mutation blocking.
+- No D1-D10 roadmap decision was reopened.

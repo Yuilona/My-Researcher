@@ -4072,6 +4072,1156 @@ model PaperImplementationTraceRepairQueueItem {
   @@index([severity], map: "pitrq_severity_idx")
 }
 
+model PaperImplementationCoreMotiveIdentity {
+  id                      String   @id
+  implementationProjectId String
+  currentVersionId        String?
+  origin                  Json     @default("{}")
+  portfolioRole           String
+  roleSince               DateTime @db.Timestamptz(6)
+  roleDecisionId          String?
+  roleDecisionRef         Json?
+  lifecycleStatus         String
+  lineage                 Json     @default("{}")
+  mergedIntoMotiveId      String?
+  supersededByMotiveId    String?
+  control                 Json     @default("{}")
+  policyVersionId         String?
+  createdBy               String
+  createdAt               DateTime @db.Timestamptz(6)
+  updatedAt               DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "picmi_project_created_idx")
+  @@index([currentVersionId], map: "picmi_current_version_idx")
+  @@index([portfolioRole], map: "picmi_portfolio_role_idx")
+  @@index([roleDecisionId], map: "picmi_role_decision_idx")
+  @@index([lifecycleStatus], map: "picmi_lifecycle_idx")
+  @@index([mergedIntoMotiveId], map: "picmi_merged_into_idx")
+  @@index([supersededByMotiveId], map: "picmi_superseded_by_idx")
+  @@index([policyVersionId], map: "picmi_policy_version_idx")
+}
+
+model PaperImplementationCoreMotiveSet {
+  id                        String   @id
+  implementationProjectId   String   @unique(map: "picms_project_unique")
+  activeMotiveIds           String[] @default([])
+  primaryMotiveIds          String[] @default([])
+  secondaryMotiveIds        String[] @default([])
+  fallbackMotiveIds         String[] @default([])
+  supportingMotiveIds       String[] @default([])
+  parkedMotiveIds           String[] @default([])
+  abandonedMotiveIds        String[] @default([])
+  activeMotiveCount         Int
+  maxActiveMotives          Int
+  maxPrimaryMotives         Int
+  maxParallelRoutes         Int
+  latestPortfolioDecisionId String?
+  policyVersionId           String?
+  createdAt                 DateTime @db.Timestamptz(6)
+  updatedAt                 DateTime @db.Timestamptz(6)
+
+  @@index([activeMotiveCount], map: "picms_active_count_idx")
+  @@index([latestPortfolioDecisionId], map: "picms_latest_decision_idx")
+  @@index([policyVersionId], map: "picms_policy_version_idx")
+}
+
+model PaperImplementationCoreMotiveVersion {
+  id                      String    @id
+  implementationProjectId String
+  motiveId                String
+  versionNumber           Int
+  versionStatus           String
+  versionOrigin           Json      @default("{}")
+  motiveContract          Json      @default("{}")
+  scopeContract           Json      @default("{}")
+  boundaryToUpstream      Json      @default("{}")
+  falsificationContract   Json      @default("{}")
+  claimBoundary           Json      @default("{}")
+  routeInterface          Json      @default("{}")
+  sourceRefs              Json      @default("[]")
+  sourceResultPacketRefs  Json      @default("[]")
+  sourceHumanJudgmentRefs Json      @default("[]")
+  traceManifestId         String?
+  traceManifestRef        Json?
+  admissionGateResultId   String?
+  evolutionDecisionId     String?
+  hypothesisOnly          Boolean
+  policyVersionId         String?
+  createdBy               String
+  createdAt               DateTime  @db.Timestamptz(6)
+  admittedAt              DateTime? @db.Timestamptz(6)
+
+  @@unique([motiveId, versionNumber], map: "picmv_motive_version_unique")
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "picmv_project_created_idx")
+  @@index([motiveId, versionNumber], map: "picmv_motive_version_idx")
+  @@index([versionStatus], map: "picmv_status_idx")
+  @@index([traceManifestId], map: "picmv_trace_manifest_idx")
+  @@index([admissionGateResultId], map: "picmv_admission_gate_idx")
+  @@index([evolutionDecisionId], map: "picmv_evolution_decision_idx")
+  @@index([policyVersionId], map: "picmv_policy_version_idx")
+}
+
+model PaperImplementationCoreMotiveVersionState {
+  id                        String   @id
+  implementationProjectId   String
+  motiveId                  String
+  coreMotiveVersionId       String   @unique(map: "picmvs_version_unique")
+  reviewStatus              String
+  freshnessStatus           String
+  maturityLevel             String
+  boardReadinessStatus      String
+  evidenceStatus            String
+  feasibilityStatus         String
+  resultStatus              String
+  currentBoardVersionId     String?
+  latestValidationCycleId   String?
+  latestEvolutionDecisionId String?
+  blockerRefs               Json     @default("[]")
+  acceptedRiskRefs          Json     @default("[]")
+  updatedAt                 DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, maturityLevel], map: "picmvs_project_maturity_idx")
+  @@index([motiveId], map: "picmvs_motive_idx")
+  @@index([freshnessStatus], map: "picmvs_freshness_idx")
+  @@index([boardReadinessStatus], map: "picmvs_board_readiness_idx")
+  @@index([evidenceStatus], map: "picmvs_evidence_status_idx")
+  @@index([currentBoardVersionId], map: "picmvs_current_board_idx")
+  @@index([latestEvolutionDecisionId], map: "picmvs_latest_evolution_idx")
+}
+
+model PaperImplementationMotiveAssertion {
+  id                          String   @id
+  implementationProjectId     String
+  motiveId                    String
+  coreMotiveVersionId         String
+  assertionType               String
+  assertionText               String
+  importance                  Json     @default("{}")
+  importanceRole              String
+  mustHoldForMotiveToContinue Boolean
+  validationRequirements      Json     @default("{}")
+  minimumSupportLevel         String
+  falsification               Json     @default("{}")
+  status                      String
+  createdBy                   String
+  createdAt                   DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pima_project_created_idx")
+  @@index([coreMotiveVersionId], map: "pima_version_idx")
+  @@index([motiveId], map: "pima_motive_idx")
+  @@index([assertionType], map: "pima_assertion_type_idx")
+  @@index([importanceRole], map: "pima_importance_role_idx")
+  @@index([minimumSupportLevel], map: "pima_min_support_idx")
+  @@index([status], map: "pima_status_idx")
+}
+
+model PaperImplementationMotiveEvidenceBoardVersion {
+  id                      String   @id
+  implementationProjectId String
+  motiveId                String
+  coreMotiveVersionId     String
+  assertionRefs           Json     @default("[]")
+  evidenceBindingRefs     Json     @default("[]")
+  boardSummary            Json     @default("{}")
+  readinessStatus         String
+  blockerStatus           String
+  freshnessStatus         String
+  supportState            String
+  challengeStatus         String
+  acceptedRiskRefs        Json     @default("[]")
+  traceManifestId         String
+  traceManifestRef        Json     @default("{}")
+  createdBy               String
+  createdAt               DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pimebv_project_created_idx")
+  @@index([motiveId], map: "pimebv_motive_idx")
+  @@index([coreMotiveVersionId], map: "pimebv_version_idx")
+  @@index([readinessStatus], map: "pimebv_readiness_idx")
+  @@index([freshnessStatus], map: "pimebv_freshness_idx")
+  @@index([supportState], map: "pimebv_support_state_idx")
+  @@index([challengeStatus], map: "pimebv_challenge_status_idx")
+  @@index([traceManifestId], map: "pimebv_trace_manifest_idx")
+}
+
+model PaperImplementationEvidenceBinding {
+  id                      String   @id
+  implementationProjectId String
+  motiveId                String
+  coreMotiveVersionId     String
+  boardVersionId          String
+  assertionId             String
+  evidenceRef             Json     @default("{}")
+  sourceRefType           String
+  sourceRefId             String
+  sourceVersionId         String?
+  bindingRole             String
+  scope                   Json     @default("{}")
+  strength                Json     @default("{}")
+  supportState            String
+  challengeStatus         String
+  freshnessStatus         String
+  interpretation          Json     @default("{}")
+  traceManifestId         String
+  traceManifestRef        Json     @default("{}")
+  createdBy               String
+  createdAt               DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pieb_project_created_idx")
+  @@index([coreMotiveVersionId], map: "pieb_version_idx")
+  @@index([boardVersionId], map: "pieb_board_idx")
+  @@index([assertionId], map: "pieb_assertion_idx")
+  @@index([bindingRole], map: "pieb_binding_role_idx")
+  @@index([supportState], map: "pieb_support_state_idx")
+  @@index([challengeStatus], map: "pieb_challenge_status_idx")
+  @@index([sourceRefType, sourceRefId, sourceVersionId], map: "pieb_source_ref_idx")
+  @@index([freshnessStatus], map: "pieb_freshness_idx")
+  @@index([traceManifestId], map: "pieb_trace_manifest_idx")
+}
+
+model PaperImplementationEvidenceTransferBinding {
+  id                      String   @id
+  implementationProjectId String
+  source                  Json     @default("{}")
+  sourceBoardVersionId    String
+  sourceAssertionId       String
+  sourceEvidenceBindingId String
+  target                  Json     @default("{}")
+  targetBoardVersionId    String
+  targetAssertionId       String
+  transferRole            String
+  transferValidity        String
+  scopeMatch              Json     @default("{}")
+  rationale               String
+  reviewedBy              String?
+  traceManifestId         String
+  traceManifestRef        Json     @default("{}")
+  createdAt               DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pietb_project_created_idx")
+  @@index([sourceBoardVersionId], map: "pietb_source_board_idx")
+  @@index([sourceEvidenceBindingId], map: "pietb_source_binding_idx")
+  @@index([targetBoardVersionId], map: "pietb_target_board_idx")
+  @@index([transferRole], map: "pietb_role_idx")
+  @@index([transferValidity], map: "pietb_validity_idx")
+  @@index([traceManifestId], map: "pietb_trace_manifest_idx")
+}
+
+model PaperImplementationCrossBoardReview {
+  id                             String   @id
+  implementationProjectId        String
+  motiveRefs                     Json     @default("[]")
+  sharedEvidenceSuggestions      Json     @default("[]")
+  conflictWarnings               String[] @default([])
+  mergeSuggestions               String[] @default([])
+  splitSuggestions               String[] @default([])
+  routeReuseSuggestions          String[] @default([])
+  experimentReuseSuggestions     String[] @default([])
+  portfolioUpdateRecommendations String[] @default([])
+  recommendationPayload          Json     @default("{}")
+  createdBy                      String
+  createdAt                      DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "picbr_project_created_idx")
+}
+
+model PaperImplementationMotivePortfolioDecision {
+  id                       String    @id
+  implementationProjectId  String
+  motiveRolesAfterDecision Json      @default("{}")
+  primaryMotiveIds         String[]  @default([])
+  activeMotiveCount        Int
+  changes                  Json      @default("{}")
+  rationale                Json      @default("{}")
+  maxActiveMotives         Int
+  maxPrimaryMotives        Int
+  maxParallelRoutes        Int
+  proposedBy               String
+  confirmedBy              String?
+  confirmationLevel        String
+  policyVersionId          String?
+  createdAt                DateTime  @db.Timestamptz(6)
+  appliedAt                DateTime? @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pimpd_project_created_idx")
+  @@index([activeMotiveCount], map: "pimpd_active_count_idx")
+  @@index([maxActiveMotives], map: "pimpd_max_active_idx")
+  @@index([maxPrimaryMotives], map: "pimpd_max_primary_idx")
+  @@index([maxParallelRoutes], map: "pimpd_max_parallel_idx")
+  @@index([confirmedBy], map: "pimpd_confirmed_by_idx")
+  @@index([confirmationLevel], map: "pimpd_confirmation_idx")
+  @@index([policyVersionId], map: "pimpd_policy_version_idx")
+}
+
+model PaperImplementationMotiveEvolutionDecision {
+  id                             String   @id
+  implementationProjectId        String
+  sourceMotiveRefs               Json     @default("[]")
+  triggeringValidationCycleRefs  Json     @default("[]")
+  triggeringResultPacketRefs     Json     @default("[]")
+  triggeringCrossBoardReviewRefs Json     @default("[]")
+  triggeringHumanRequestRefs     Json     @default("[]")
+  evolutionType                  String
+  effectClass                    String
+  decisionSummary                String
+  decisionRationale              String
+  changeSet                      Json     @default("{}")
+  proposedOutputs                Json     @default("{}")
+  evidenceBasis                  Json     @default("{}")
+  impactAnalysis                 Json     @default("{}")
+  gate                           Json     @default("{}")
+  proposedBy                     String
+  confirmedBy                    String?
+  humanConfirmationRequired      Boolean
+  confirmationRef                Json?
+  applicationStatus              String
+  traceManifestId                String?
+  traceManifestRef               Json?
+  policyVersionId                String?
+  createdAt                      DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pimed_project_created_idx")
+  @@index([evolutionType], map: "pimed_evolution_type_idx")
+  @@index([effectClass], map: "pimed_effect_class_idx")
+  @@index([applicationStatus], map: "pimed_application_status_idx")
+  @@index([traceManifestId], map: "pimed_trace_manifest_idx")
+  @@index([policyVersionId], map: "pimed_policy_version_idx")
+}
+
+model PaperImplementationValidationCycleInputSnapshot {
+  id                      String   @id
+  implementationProjectId String
+  contextPolicyVersionId  String?
+  includedRefs            Json     @default("{}")
+  excludedContextNotes    String[] @default([])
+  inputSnapshotHash       String?
+  createdBy               String
+  createdAt               DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pivcis_project_created_idx")
+  @@index([contextPolicyVersionId], map: "pivcis_policy_idx")
+  @@index([inputSnapshotHash], map: "pivcis_hash_idx")
+}
+
+model PaperImplementationValidationCycle {
+  id                      String    @id
+  implementationProjectId String
+  inputSnapshotId         String
+  targetRefType           String
+  targetRefId             String
+  targetVersionId         String?
+  target                  Json      @default("{}")
+  triggerType             String
+  trigger                 Json      @default("{}")
+  cycleType               String
+  validationQuestion      String
+  validationFrame         Json      @default("{}")
+  context                 Json      @default("{}")
+  criteria                Json      @default("{}")
+  budgetId                String
+  budget                  Json      @default("{}")
+  expectedInformationGain String
+  cycleStatus             String
+  executionStatus         String
+  outputs                 Json      @default("{}")
+  cycleAssessment         Json?
+  decisionExit            String?
+  gateResultId            String?
+  traceManifestId         String?
+  traceManifestRef        Json?
+  confirmationLevel       String
+  confirmedBy             String?
+  policyVersionId         String?
+  createdBy               String
+  createdAt               DateTime  @db.Timestamptz(6)
+  updatedAt               DateTime  @db.Timestamptz(6)
+  admittedAt              DateTime? @db.Timestamptz(6)
+  completedAt             DateTime? @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pivc_project_created_idx")
+  @@index([inputSnapshotId], map: "pivc_input_snapshot_idx")
+  @@index([targetRefType, targetRefId, targetVersionId], map: "pivc_target_idx")
+  @@index([validationQuestion], map: "pivc_question_idx")
+  @@index([budgetId], map: "pivc_budget_idx")
+  @@index([expectedInformationGain], map: "pivc_info_gain_idx")
+  @@index([cycleStatus], map: "pivc_status_idx")
+  @@index([executionStatus], map: "pivc_execution_idx")
+  @@index([decisionExit], map: "pivc_decision_exit_idx")
+  @@index([gateResultId], map: "pivc_gate_result_idx")
+  @@index([traceManifestId], map: "pivc_trace_manifest_idx")
+  @@index([policyVersionId], map: "pivc_policy_idx")
+}
+
+model PaperImplementationTechnicalRouteCandidate {
+  id                         String   @id
+  implementationProjectId    String
+  validationCycleId          String?
+  motiveId                   String?
+  coreMotiveVersionId        String
+  routeSummary               String
+  routeStatus                String
+  expectedInformationGain    String
+  baselineGapStatus          String
+  scopeBoundaryRef           Json?
+  scopeBoundaryRefType       String?
+  scopeBoundaryRefId         String?
+  scopeBoundaryVersionId     String?
+  primaryMetricRefs          String[] @default([])
+  primaryMetricRefPayloads   Json     @default("[]")
+  secondaryMetricRefs        String[] @default([])
+  secondaryMetricRefPayloads Json     @default("[]")
+  datasetVersionRefs         String[] @default([])
+  datasetVersionRefPayloads  Json     @default("[]")
+  baselineVersionRefs        String[] @default([])
+  baselineVersionRefPayloads Json     @default("[]")
+  codeVersionRefs            String[] @default([])
+  codeVersionRefPayloads     Json     @default("[]")
+  configRefs                 String[] @default([])
+  configRefPayloads          Json     @default("[]")
+  confirmatoryMarker         Boolean
+  traceManifestId            String
+  traceManifestRef           Json     @default("{}")
+  createdBy                  String
+  createdAt                  DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pitrc_project_created_idx")
+  @@index([validationCycleId], map: "pitrc_cycle_idx")
+  @@index([coreMotiveVersionId], map: "pitrc_motive_version_idx")
+  @@index([routeStatus], map: "pitrc_status_idx")
+  @@index([expectedInformationGain], map: "pitrc_info_gain_idx")
+  @@index([baselineGapStatus], map: "pitrc_baseline_gap_idx")
+  @@index([scopeBoundaryRefType, scopeBoundaryRefId, scopeBoundaryVersionId], map: "pitrc_scope_boundary_idx")
+  @@index([confirmatoryMarker], map: "pitrc_confirmatory_idx")
+  @@index([traceManifestId], map: "pitrc_trace_manifest_idx")
+}
+
+model PaperImplementationFeasibilityProbe {
+  id                         String   @id
+  implementationProjectId    String
+  validationCycleId          String?
+  probeKind                  String
+  probeQuestion              String
+  probeStatus                String
+  expectedInformationGain    String
+  baselineGapStatus          String
+  scopeBoundaryRef           Json?
+  scopeBoundaryRefType       String?
+  scopeBoundaryRefId         String?
+  scopeBoundaryVersionId     String?
+  primaryMetricRefs          String[] @default([])
+  primaryMetricRefPayloads   Json     @default("[]")
+  secondaryMetricRefs        String[] @default([])
+  secondaryMetricRefPayloads Json     @default("[]")
+  datasetVersionRefs         String[] @default([])
+  datasetVersionRefPayloads  Json     @default("[]")
+  baselineVersionRefs        String[] @default([])
+  baselineVersionRefPayloads Json     @default("[]")
+  codeVersionRefs            String[] @default([])
+  codeVersionRefPayloads     Json     @default("[]")
+  configRefs                 String[] @default([])
+  configRefPayloads          Json     @default("[]")
+  confirmatoryMarker         Boolean
+  traceManifestId            String
+  traceManifestRef           Json     @default("{}")
+  createdBy                  String
+  createdAt                  DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pifp_project_created_idx")
+  @@index([validationCycleId], map: "pifp_cycle_idx")
+  @@index([probeKind], map: "pifp_kind_idx")
+  @@index([probeStatus], map: "pifp_status_idx")
+  @@index([expectedInformationGain], map: "pifp_info_gain_idx")
+  @@index([baselineGapStatus], map: "pifp_baseline_gap_idx")
+  @@index([scopeBoundaryRefType, scopeBoundaryRefId, scopeBoundaryVersionId], map: "pifp_scope_boundary_idx")
+  @@index([confirmatoryMarker], map: "pifp_confirmatory_idx")
+  @@index([traceManifestId], map: "pifp_trace_manifest_idx")
+}
+
+model PaperImplementationExperimentPlanLight {
+  id                         String   @id
+  implementationProjectId    String
+  validationCycleId          String?
+  routeCandidateId           String?
+  runMode                    String
+  planSummary                String
+  estimatedCostClass         String
+  baselineGapStatus          String
+  scopeBoundaryRef           Json?
+  scopeBoundaryRefType       String?
+  scopeBoundaryRefId         String?
+  scopeBoundaryVersionId     String?
+  primaryMetricRefs          String[] @default([])
+  primaryMetricRefPayloads   Json     @default("[]")
+  secondaryMetricRefs        String[] @default([])
+  secondaryMetricRefPayloads Json     @default("[]")
+  datasetVersionRefs         String[] @default([])
+  datasetVersionRefPayloads  Json     @default("[]")
+  baselineVersionRefs        String[] @default([])
+  baselineVersionRefPayloads Json     @default("[]")
+  codeVersionRefs            String[] @default([])
+  codeVersionRefPayloads     Json     @default("[]")
+  configRefs                 String[] @default([])
+  configRefPayloads          Json     @default("[]")
+  confirmatoryMarker         Boolean
+  budgetId                   String
+  stopConditionRefs          String[] @default([])
+  stopConditionRefPayloads   Json     @default("[]")
+  traceManifestId            String
+  traceManifestRef           Json     @default("{}")
+  createdBy                  String
+  createdAt                  DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "piepl_project_created_idx")
+  @@index([validationCycleId], map: "piepl_cycle_idx")
+  @@index([routeCandidateId], map: "piepl_route_candidate_idx")
+  @@index([runMode], map: "piepl_run_mode_idx")
+  @@index([estimatedCostClass], map: "piepl_cost_class_idx")
+  @@index([baselineGapStatus], map: "piepl_baseline_gap_idx")
+  @@index([scopeBoundaryRefType, scopeBoundaryRefId, scopeBoundaryVersionId], map: "piepl_scope_boundary_idx")
+  @@index([confirmatoryMarker], map: "piepl_confirmatory_idx")
+  @@index([budgetId], map: "piepl_budget_idx")
+  @@index([traceManifestId], map: "piepl_trace_manifest_idx")
+}
+
+model PaperImplementationValidationPlanningReviewItem {
+  id                      String    @id
+  implementationProjectId String
+  validationCycleId       String?
+  itemKind                String
+  status                  String
+  severity                String
+  blockerCode             String?
+  summary                 String
+  sourceRefs              Json      @default("[]")
+  createdAt               DateTime  @db.Timestamptz(6)
+  resolvedAt              DateTime? @db.Timestamptz(6)
+
+  @@index([implementationProjectId, status, createdAt(sort: Desc)], map: "pivpri_project_status_idx")
+  @@index([validationCycleId], map: "pivpri_cycle_idx")
+  @@index([itemKind], map: "pivpri_kind_idx")
+  @@index([severity], map: "pivpri_severity_idx")
+  @@index([blockerCode], map: "pivpri_blocker_idx")
+}
+
+model PaperImplementationValidationUpstreamFeedbackCandidate {
+  id                        String    @id
+  implementationProjectId   String
+  validationCycleId         String?
+  sourceObjectRefs          Json      @default("[]")
+  evidenceRefs              Json      @default("[]")
+  feedbackType              String
+  severity                  String
+  summary                   String
+  recommendedUpstreamAction String
+  candidateStatus           String
+  feedbackEventRef          Json?
+  createdBy                 String
+  createdAt                 DateTime  @db.Timestamptz(6)
+  dispatchedAt              DateTime? @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pivufc_project_created_idx")
+  @@index([validationCycleId], map: "pivufc_cycle_idx")
+  @@index([feedbackType], map: "pivufc_feedback_type_idx")
+  @@index([severity], map: "pivufc_severity_idx")
+  @@index([recommendedUpstreamAction], map: "pivufc_upstream_action_idx")
+  @@index([candidateStatus], map: "pivufc_status_idx")
+}
+
+model PaperImplementationResearchWorkOrder {
+  id                         String    @id
+  implementationProjectId    String
+  validationCycleId          String
+  experimentPlanLightId      String?
+  runType                    String
+  workOrderStatus            String
+  runPolicyId                String
+  retryBudget                Int
+  computeLimitRef            Json?
+  computeLimitRefType        String?
+  computeLimitRefId          String?
+  computeLimitVersionId      String?
+  stopConditionRefs          String[]  @default([])
+  stopConditionRefPayloads   Json      @default("[]")
+  allowedMutationRefPayloads Json      @default("[]")
+  autotunePolicy             String
+  experimentBridge           Json      @default("{}")
+  runRecipeRef               Json      @default("{}")
+  runRecipeRefType           String
+  runRecipeRefId             String
+  runRecipeVersionId         String?
+  runRecipeHash              String
+  versionLockHash            String?
+  configSnapshotHash         String?
+  trainingTaskSpecRef        Json?
+  trainingTaskSpecRefType    String?
+  trainingTaskSpecRefId      String?
+  trainingTaskSpecVersionId  String?
+  trainingTaskSpecHash       String?
+  externalJobRef             Json?
+  externalJobRefType         String?
+  externalJobRefId           String?
+  externalJobVersionId       String?
+  externalJobHash            String?
+  motiveRefs                 String[]  @default([])
+  motiveRefPayloads          Json      @default("[]")
+  assertionRefs              String[]  @default([])
+  assertionRefPayloads       Json      @default("[]")
+  datasetVersionRefs         String[]  @default([])
+  datasetVersionRefPayloads  Json      @default("[]")
+  baselineVersionRefs        String[]  @default([])
+  baselineVersionRefPayloads Json      @default("[]")
+  codeVersionRefs            String[]  @default([])
+  codeVersionRefPayloads     Json      @default("[]")
+  configRefs                 String[]  @default([])
+  configRefPayloads          Json      @default("[]")
+  traceManifestId            String
+  traceManifestRef           Json      @default("{}")
+  admissionGateResultId      String?
+  policyVersionId            String?
+  createdBy                  String
+  createdAt                  DateTime  @db.Timestamptz(6)
+  updatedAt                  DateTime  @db.Timestamptz(6)
+  admittedAt                 DateTime? @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pirwo_project_created_idx")
+  @@index([validationCycleId], map: "pirwo_cycle_idx")
+  @@index([experimentPlanLightId], map: "pirwo_plan_idx")
+  @@index([runType], map: "pirwo_run_type_idx")
+  @@index([workOrderStatus], map: "pirwo_status_idx")
+  @@index([runPolicyId], map: "pirwo_policy_idx")
+  @@index([retryBudget], map: "pirwo_retry_budget_idx")
+  @@index([computeLimitRefType, computeLimitRefId, computeLimitVersionId], map: "pirwo_compute_limit_idx")
+  @@index([runRecipeRefType, runRecipeRefId, runRecipeVersionId], map: "pirwo_recipe_idx")
+  @@index([trainingTaskSpecRefType, trainingTaskSpecRefId, trainingTaskSpecVersionId], map: "pirwo_task_spec_idx")
+  @@index([externalJobRefType, externalJobRefId, externalJobVersionId], map: "pirwo_external_job_idx")
+  @@index([traceManifestId], map: "pirwo_trace_manifest_idx")
+  @@index([admissionGateResultId], map: "pirwo_gate_idx")
+}
+
+model PaperImplementationWorkOrderHarnessRun {
+  id                      String    @id
+  implementationProjectId String
+  workOrderId             String
+  runStatus               String
+  runAttempt              Int
+  idempotencyKey          String
+  externalJobRef          Json      @default("{}")
+  externalJobRefType      String
+  externalJobRefId        String
+  externalJobVersionId    String?
+  externalJobHash         String
+  submittedAt             DateTime  @db.Timestamptz(6)
+  completedAt             DateTime? @db.Timestamptz(6)
+  createdBy               String
+  createdAt               DateTime  @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "piwohr_project_created_idx")
+  @@index([workOrderId], map: "piwohr_work_order_idx")
+  @@index([runStatus], map: "piwohr_status_idx")
+  @@index([idempotencyKey], map: "piwohr_idempotency_idx")
+  @@index([externalJobRefType, externalJobRefId, externalJobVersionId], map: "piwohr_external_job_idx")
+}
+
+model PaperImplementationRunMonitorIntake {
+  id                              String   @id
+  implementationProjectId         String
+  workOrderId                     String?
+  externalJobRef                  Json?
+  externalJobRefType              String?
+  externalJobRefId                String?
+  externalJobVersionId            String?
+  externalJobHash                 String?
+  monitorEventKind                String
+  runStatus                       String
+  trustStatus                     String
+  resultRef                       Json?
+  resultRefType                   String?
+  resultRefId                     String?
+  resultVersionId                 String?
+  resultHash                      String?
+  resultValidationReportRef       Json?
+  resultValidationReportRefType   String?
+  resultValidationReportRefId     String?
+  resultValidationReportVersionId String?
+  resultValidationReportHash      String?
+  evidenceCandidateRefs           String[] @default([])
+  evidenceCandidateRefPayloads    Json     @default("[]")
+  evidenceCandidateHashes         String[] @default([])
+  failureSummary                  String?
+  rawPayload                      Json     @default("{}")
+  receivedAt                      DateTime @db.Timestamptz(6)
+  createdBy                       String
+
+  @@index([implementationProjectId, receivedAt(sort: Desc)], map: "pirmi_project_received_idx")
+  @@index([workOrderId], map: "pirmi_work_order_idx")
+  @@index([externalJobRefType, externalJobRefId, externalJobVersionId], map: "pirmi_external_job_idx")
+  @@index([monitorEventKind], map: "pirmi_event_kind_idx")
+  @@index([runStatus], map: "pirmi_run_status_idx")
+  @@index([trustStatus], map: "pirmi_trust_idx")
+  @@index([resultRefType, resultRefId, resultVersionId], map: "pirmi_result_idx")
+  @@index([resultValidationReportRefId], map: "pirmi_validation_report_idx")
+}
+
+model PaperImplementationRunEvidenceUnit {
+  id                              String   @id
+  implementationProjectId         String
+  workOrderId                     String
+  validationCycleId               String
+  experimentPlanLightId           String?
+  monitorIntakeId                 String
+  externalJobRef                  Json?
+  externalJobRefType              String?
+  externalJobRefId                String?
+  externalJobVersionId            String?
+  externalJobHash                 String?
+  runType                         String
+  runStatus                       String
+  trustedStatus                   String
+  datasetVersionRefs              String[] @default([])
+  datasetVersionRefPayloads       Json     @default("[]")
+  baselineVersionRefs             String[] @default([])
+  baselineVersionRefPayloads      Json     @default("[]")
+  codeVersionRefs                 String[] @default([])
+  codeVersionRefPayloads          Json     @default("[]")
+  configRefs                      String[] @default([])
+  configRefPayloads               Json     @default("[]")
+  resultRef                       Json?
+  resultRefType                   String?
+  resultRefId                     String?
+  resultVersionId                 String?
+  resultHash                      String?
+  resultValidationReportRef       Json?
+  resultValidationReportRefType   String?
+  resultValidationReportRefId     String?
+  resultValidationReportVersionId String?
+  resultValidationReportHash      String?
+  evidenceCandidateRefs           String[] @default([])
+  evidenceCandidateRefPayloads    Json     @default("[]")
+  evidenceCandidateHashes         String[] @default([])
+  failureSummaryId                String?
+  failureSummary                  String?
+  traceManifestId                 String
+  traceManifestRef                Json     @default("{}")
+  createdBy                       String
+  createdAt                       DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pireu_project_created_idx")
+  @@index([workOrderId], map: "pireu_work_order_idx")
+  @@index([validationCycleId], map: "pireu_cycle_idx")
+  @@index([experimentPlanLightId], map: "pireu_plan_idx")
+  @@index([monitorIntakeId], map: "pireu_monitor_idx")
+  @@index([externalJobRefType, externalJobRefId, externalJobVersionId], map: "pireu_external_job_idx")
+  @@index([runType], map: "pireu_run_type_idx")
+  @@index([runStatus], map: "pireu_run_status_idx")
+  @@index([trustedStatus], map: "pireu_trusted_idx")
+  @@index([resultValidationReportRefId], map: "pireu_validation_report_idx")
+  @@index([failureSummaryId], map: "pireu_failure_summary_idx")
+  @@index([traceManifestId], map: "pireu_trace_manifest_idx")
+}
+
+model PaperImplementationResultInterpretationPacket {
+  id                                    String   @id
+  implementationProjectId               String
+  validationCycleId                     String
+  experimentPlanLightId                 String?
+  sourceRunEvidenceRefs                 String[] @default([])
+  sourceRunEvidenceRefPayloads          Json     @default("[]")
+  validationReportRefs                  String[] @default([])
+  validationReportRefPayloads           Json     @default("[]")
+  metricRefs                            String[] @default([])
+  metricRefPayloads                     Json     @default("[]")
+  failedRunRefs                         String[] @default([])
+  failedRunRefPayloads                  Json     @default("[]")
+  inconclusiveRunRefs                   String[] @default([])
+  inconclusiveRunRefPayloads            Json     @default("[]")
+  staleOrInvalidatedEvidenceRefs        String[] @default([])
+  staleOrInvalidatedEvidenceRefPayloads Json     @default("[]")
+  sourcePayload                         Json     @default("{}")
+  resultSummary                         Json     @default("{}")
+  reliability                           Json     @default("{}")
+  claimImplications                     Json     @default("{}")
+  interpretationGateStatus              String
+  failedRunsAccountedFor                Boolean
+  inconclusiveRunsAccountedFor          Boolean
+  exploratoryConfirmatorySeparated      Boolean
+  allowedClaimCeiling                   String
+  forbiddenOverclaimCount               Int
+  traceManifestId                       String
+  traceManifestRef                      Json     @default("{}")
+  policyVersionId                       String?
+  createdBy                             String
+  createdAt                             DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pirip_project_created_idx")
+  @@index([validationCycleId], map: "pirip_cycle_idx")
+  @@index([experimentPlanLightId], map: "pirip_plan_idx")
+  @@index([interpretationGateStatus], map: "pirip_gate_status_idx")
+  @@index([failedRunsAccountedFor], map: "pirip_failed_accounted_idx")
+  @@index([inconclusiveRunsAccountedFor], map: "pirip_inconclusive_accounted_idx")
+  @@index([allowedClaimCeiling], map: "pirip_claim_ceiling_idx")
+  @@index([forbiddenOverclaimCount], map: "pirip_forbidden_count_idx")
+  @@index([traceManifestId], map: "pirip_trace_manifest_idx")
+  @@index([policyVersionId], map: "pirip_policy_idx")
+}
+
+model PaperImplementationClaimCandidate {
+  id                                    String   @id
+  implementationProjectId               String
+  claimType                             String
+  claimStatement                        String
+  claimStrength                         String
+  claimStatus                           String
+  boundaryGateStatus                    String
+  resultInterpretationPacketRefs        String[] @default([])
+  resultInterpretationPacketRefPayloads Json     @default("[]")
+  supportRefs                           String[] @default([])
+  supportRefPayloads                    Json     @default("[]")
+  challengeRefs                         String[] @default([])
+  challengeRefPayloads                  Json     @default("[]")
+  scope                                 Json     @default("{}")
+  boundary                              Json     @default("{}")
+  traceManifestId                       String
+  traceManifestRef                      Json     @default("{}")
+  claimTracePacketId                    String?
+  claimTracePacketRef                   Json?
+  humanConfirmationRequired             Boolean
+  humanConfirmationRef                  Json?
+  humanConfirmationRefType              String?
+  humanConfirmationRefId                String?
+  humanConfirmationVersionId            String?
+  forbiddenOverclaimCount               Int
+  policyVersionId                       String?
+  createdBy                             String
+  createdAt                             DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "piccl_project_created_idx")
+  @@index([claimType], map: "piccl_type_idx")
+  @@index([claimStrength], map: "piccl_strength_idx")
+  @@index([claimStatus], map: "piccl_status_idx")
+  @@index([boundaryGateStatus], map: "piccl_boundary_status_idx")
+  @@index([traceManifestId], map: "piccl_trace_manifest_idx")
+  @@index([claimTracePacketId], map: "piccl_claim_trace_idx")
+  @@index([humanConfirmationRequired], map: "piccl_confirm_required_idx")
+  @@index([humanConfirmationRefType, humanConfirmationRefId, humanConfirmationVersionId], map: "piccl_confirmation_ref_idx")
+  @@index([forbiddenOverclaimCount], map: "piccl_forbidden_count_idx")
+  @@index([policyVersionId], map: "piccl_policy_idx")
+}
+
+model PaperImplementationDossier {
+  id                                 String   @id
+  implementationProjectId            String
+  dossierVersion                     Int
+  dossierStatus                      String
+  dossierTraceStatus                 String
+  resultInterpretationPacketRefs     String[] @default([])
+  resultInterpretationPacketPayloads Json     @default("[]")
+  claimCandidateRefs                 String[] @default([])
+  claimCandidateRefPayloads          Json     @default("[]")
+  claimTracePacketRefs               String[] @default([])
+  claimTracePacketRefPayloads        Json     @default("[]")
+  runEvidenceRefs                    String[] @default([])
+  runEvidenceRefPayloads             Json     @default("[]")
+  validationCycleRefs                String[] @default([])
+  validationCycleRefPayloads         Json     @default("[]")
+  traceManifestRefs                  String[] @default([])
+  traceManifestRefPayloads           Json     @default("[]")
+  sourcePayload                      Json     @default("{}")
+  experimentSection                  Json     @default("{}")
+  claimSection                       Json     @default("{}")
+  readiness                          Json     @default("{}")
+  traceManifestId                    String
+  traceManifestRef                   Json     @default("{}")
+  failedRunCount                     Int
+  inconclusiveRunCount               Int
+  forbiddenOverclaimCount            Int
+  readinessGateResultId              String?
+  projectionPolicyVersionId          String?
+  dossierHash                        String
+  reopenCondition                    String?
+  abandonReason                      String?
+  policyVersionId                    String?
+  createdBy                          String
+  createdAt                          DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pid_project_created_idx")
+  @@index([implementationProjectId, dossierVersion], map: "pid_project_version_idx")
+  @@index([dossierStatus], map: "pid_status_idx")
+  @@index([dossierTraceStatus], map: "pid_trace_status_idx")
+  @@index([readinessGateResultId], map: "pid_readiness_gate_idx")
+  @@index([traceManifestId], map: "pid_trace_manifest_idx")
+  @@index([failedRunCount], map: "pid_failed_run_count_idx")
+  @@index([forbiddenOverclaimCount], map: "pid_forbidden_count_idx")
+  @@index([projectionPolicyVersionId], map: "pid_projection_policy_idx")
+  @@index([dossierHash], map: "pid_hash_idx")
+  @@index([policyVersionId], map: "pid_policy_idx")
+}
+
+model PaperImplementationWritingEntryPacket {
+  id                        String   @id
+  implementationProjectId   String
+  dossierId                 String
+  dossierVersion            Int
+  dossierHash               String
+  dossierStatus             String
+  readinessGateResultId     String
+  traceManifestId           String
+  traceManifestRef          Json     @default("{}")
+  projectionPolicyVersionId String
+  packetStatus              String
+  writingTargetRef          Json?
+  writingTargetRefType      String?
+  writingTargetRefId        String?
+  writingTargetVersionId    String?
+  packetPayload             Json     @default("{}")
+  createdBy                 String
+  createdAt                 DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "piwep_project_created_idx")
+  @@index([dossierId, dossierVersion], map: "piwep_dossier_version_idx")
+  @@index([dossierStatus], map: "piwep_dossier_status_idx")
+  @@index([readinessGateResultId], map: "piwep_readiness_gate_idx")
+  @@index([traceManifestId], map: "piwep_trace_manifest_idx")
+  @@index([projectionPolicyVersionId], map: "piwep_projection_policy_idx")
+  @@index([packetStatus], map: "piwep_status_idx")
+  @@index([writingTargetRefType, writingTargetRefId, writingTargetVersionId], map: "piwep_writing_target_idx")
+}
+
+model PaperImplementationHarness {
+  id                        String   @id
+  implementationProjectId   String
+  harnessStatus             String
+  contextPolicyVersionId    String
+  tracePolicyVersionId      String
+  evidencePolicyVersionId   String
+  experimentPolicyVersionId String
+  retentionPolicyVersionId  String
+  evaluationPolicyVersionId String
+  policyPack                Json     @default("{}")
+  controlPlaneId            String
+  artifactStoreRef          Json     @default("{}")
+  evidenceLedgerRef         Json     @default("{}")
+  workOrderBrokerRef        Json     @default("{}")
+  runMonitorRef             Json     @default("{}")
+  runtimeBindings           Json     @default("{}")
+  invariants                Json     @default("{}")
+  auditRefs                 Json     @default("{}")
+  createdBy                 String
+  createdAt                 DateTime @db.Timestamptz(6)
+  updatedAt                 DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pi_harness_project_created_idx")
+  @@index([implementationProjectId, harnessStatus], map: "pi_harness_project_status_idx")
+  @@index([contextPolicyVersionId], map: "pi_harness_context_policy_idx")
+  @@index([tracePolicyVersionId], map: "pi_harness_trace_policy_idx")
+  @@index([controlPlaneId], map: "pi_harness_control_plane_idx")
+}
+
+model PaperImplementationInputSnapshot {
+  id                      String   @id
+  implementationProjectId String
+  targetRefType           String
+  targetRefId             String
+  targetVersionId         String?
+  targetRef               Json     @default("{}")
+  workflowType            String
+  contextPolicyVersionId  String
+  includedContext         Json     @default("{}")
+  excludedContext         Json     @default("{}")
+  freshnessStatus         String
+  excludeStaleEvidence    Boolean
+  excludeInvalidatedRefs  Boolean
+  memoAsEvidenceForbidden Boolean
+  citationRequiresLocator Boolean
+  sourceHashes            String[] @default([])
+  snapshotHash            String
+  createdBy               String
+  createdAt               DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pi_input_project_created_idx")
+  @@index([implementationProjectId, workflowType], map: "pi_input_project_workflow_idx")
+  @@index([targetRefType, targetRefId, targetVersionId], map: "pi_input_target_idx")
+  @@index([contextPolicyVersionId], map: "pi_input_context_policy_idx")
+  @@index([freshnessStatus], map: "pi_input_freshness_idx")
+  @@index([snapshotHash], map: "pi_input_hash_idx")
+}
+
+model PaperImplementationAgentWorkflowHarnessRun {
+  id                          String   @id
+  implementationProjectId     String
+  harnessId                   String
+  inputSnapshotId             String
+  workflowType                String
+  workflowVersion             String
+  runMode                     String
+  executionMode               String
+  modelProfileId              String
+  promptTemplateVersionId     String
+  outputSchemaVersionId       String
+  rawOutputArtifactRef        Json     @default("{}")
+  parsedOutputArtifactRef     Json?
+  specPayload                 Json     @default("{}")
+  schemaValidationStatus      String
+  referenceValidationStatus   String
+  traceValidationStatus       String
+  nlFieldRoleValidationStatus String
+  memoAsEvidenceDetected      Boolean
+  directStateMutationDetected Boolean
+  blockedReasons              String[] @default([])
+  runStatus                   String
+  proposalArtifactIds         String[] @default([])
+  qualitySignalIds            String[] @default([])
+  gateResultId                String?
+  transitionAttemptId         String?
+  createdBy                   String
+  createdAt                   DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pi_awhr_project_created_idx")
+  @@index([harnessId], map: "pi_awhr_harness_idx")
+  @@index([inputSnapshotId], map: "pi_awhr_input_idx")
+  @@index([workflowType, runStatus], map: "pi_awhr_workflow_status_idx")
+  @@index([modelProfileId], map: "pi_awhr_model_profile_idx")
+  @@index([runMode, executionMode], map: "pi_awhr_run_execution_mode_idx")
+  @@index([schemaValidationStatus], map: "pi_awhr_schema_status_idx")
+  @@index([referenceValidationStatus], map: "pi_awhr_ref_status_idx")
+  @@index([traceValidationStatus], map: "pi_awhr_trace_status_idx")
+  @@index([gateResultId], map: "pi_awhr_gate_idx")
+}
+
+model PaperImplementationProposalArtifact {
+  id                       String   @id
+  implementationProjectId  String
+  harnessRunId             String
+  artifactKind             String
+  targetRefType            String
+  targetRefId              String
+  targetVersionId          String?
+  targetRef                Json     @default("{}")
+  artifactRef              Json?
+  sourceRefPayloads        Json     @default("[]")
+  traceManifestRefPayloads Json     @default("[]")
+  proposalStatus           String
+  payload                  Json     @default("{}")
+  createdBy                String
+  createdAt                DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pi_proposal_project_created_idx")
+  @@index([harnessRunId], map: "pi_proposal_run_idx")
+  @@index([artifactKind, proposalStatus], map: "pi_proposal_kind_status_idx")
+  @@index([targetRefType, targetRefId, targetVersionId], map: "pi_proposal_target_idx")
+  @@index([proposalStatus], map: "pi_proposal_status_idx")
+}
+
+model PaperImplementationQualitySignal {
+  id                      String   @id
+  implementationProjectId String
+  harnessRunId            String?
+  signalType              String
+  severity                String
+  targetRefType           String
+  targetRefId             String
+  targetVersionId         String?
+  targetRef               Json     @default("{}")
+  summary                 String
+  sourceRefPayloads       Json     @default("[]")
+  payload                 Json     @default("{}")
+  policyVersionId         String?
+  createdBy               String
+  createdAt               DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pi_quality_project_created_idx")
+  @@index([harnessRunId], map: "pi_quality_run_idx")
+  @@index([signalType, severity], map: "pi_quality_type_severity_idx")
+  @@index([targetRefType, targetRefId, targetVersionId], map: "pi_quality_target_idx")
+  @@index([policyVersionId], map: "pi_quality_policy_idx")
+}
+
+model PaperImplementationGateResult {
+  id                      String   @id
+  implementationProjectId String
+  gateType                String
+  targetRefType           String
+  targetRefId             String
+  targetVersionId         String?
+  targetRef               Json     @default("{}")
+  result                  String
+  checks                  Json     @default("[]")
+  blockers                String[] @default([])
+  warnings                String[] @default([])
+  acceptedRiskRefPayloads Json     @default("[]")
+  requiredActions         String[] @default([])
+  policyVersionId         String?
+  createdAt               DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pi_gate_project_created_idx")
+  @@index([gateType, result], map: "pi_gate_type_result_idx")
+  @@index([targetRefType, targetRefId, targetVersionId], map: "pi_gate_target_idx")
+  @@index([policyVersionId], map: "pi_gate_policy_idx")
+}
+
+model PaperImplementationTransitionAttempt {
+  id                        String   @id
+  implementationProjectId   String
+  transitionKey             String
+  targetRefType             String
+  targetRefId               String
+  targetVersionId           String?
+  targetRef                 Json     @default("{}")
+  inputRefPayloads          Json     @default("[]")
+  outputRefPayloads         Json     @default("[]")
+  actorType                 String
+  actorId                   String?
+  transitionPolicyVersionId String
+  contextPolicyVersionId    String?
+  tracePolicyVersionId      String
+  gateResultRefPayloads     Json     @default("[]")
+  outcome                   String
+  blockers                  String[] @default([])
+  acceptedRiskRefPayloads   Json     @default("[]")
+  harnessRunRefPayloads     Json     @default("[]")
+  traceManifestRefPayloads  Json     @default("[]")
+  createdAt                 DateTime @db.Timestamptz(6)
+
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pi_transition_project_created_idx")
+  @@index([transitionKey, outcome], map: "pi_transition_key_outcome_idx")
+  @@index([targetRefType, targetRefId, targetVersionId], map: "pi_transition_target_idx")
+  @@index([transitionPolicyVersionId], map: "pi_transition_policy_idx")
+}
+
+model PaperImplementationDecisionWorkQueueItem {
+  id                      String    @id
+  implementationProjectId String
+  queueType               String
+  stage                   String
+  targetRefType           String
+  targetRefId             String
+  targetVersionId         String?
+  targetRef               Json      @default("{}")
+  priority                String
+  status                  String
+  blockingTransitionKeys  String[]  @default([])
+  dedupKey                String
+  allowedHandlers         String[]  @default([])
+  recommendedActions      String[]  @default([])
+  createdFromRefPayloads  Json      @default("[]")
+  policyVersionId         String?
+  retryCount              Int       @default(0)
+  retryBudget             Int       @default(0)
+  cooldownUntil           DateTime? @db.Timestamptz(6)
+  resolutionNote          String?
+  resolvedBy              String?
+  resolvedAt              DateTime? @db.Timestamptz(6)
+  createdAt               DateTime  @db.Timestamptz(6)
+  updatedAt               DateTime  @db.Timestamptz(6)
+
+  @@unique([implementationProjectId, dedupKey], map: "pi_queue_project_dedup_key")
+  @@index([implementationProjectId, createdAt(sort: Desc)], map: "pi_queue_project_created_idx")
+  @@index([queueType, status], map: "pi_queue_type_status_idx")
+  @@index([targetRefType, targetRefId, targetVersionId], map: "pi_queue_target_idx")
+  @@index([priority, status], map: "pi_queue_priority_status_idx")
+  @@index([policyVersionId], map: "pi_queue_policy_idx")
+  @@index([cooldownUntil], map: "pi_queue_cooldown_idx")
+}
+
 model TopicSelectionRecheckEvent {
   id                String    @id
   workspaceId       String?

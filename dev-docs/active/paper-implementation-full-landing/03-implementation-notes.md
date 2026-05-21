@@ -137,4 +137,35 @@
 ## Open Notes
 - D1-D10 are confirmed and child task packages `T-092` through `T-101` have been created.
 - Coverage review is recorded in `06-child-task-coverage-review.md`; after the design-doc audit supplement, no unowned functional gap remains.
-- Next step is to begin `T-093 paper-implementation-intake-bootstrap`, while scheduling T-097 early as the cross-cutting trace prerequisite.
+- Closed child tasks: `T-092`, `T-093`, `T-097`, `T-094`, `T-095`, `T-096`, `T-098`, `T-099`.
+- Next step is `T-100 paper-implementation-desktop-workbench`.
+
+## 2026-05-21 - T-094 Closure
+- Closed `T-094 paper-implementation-motive-evidence-board` as backend minimum closure.
+- Landed shared contracts, Prisma persistence, repository/service layers, REST routes, and tests for motive identity, motive set, motive version, assertions, evidence boards, evidence bindings, cross-board reviews, portfolio decisions, and motive evolution decisions.
+- Confirmed `research-argument` remains legacy/transition only and no T-094 authority state was added under it.
+- Confirmed T-095 entry conditions: use admitted, trace-complete motive versions and board outputs; do not schedule validation from drafts or display summaries alone.
+
+## 2026-05-21 - T-095 Closure
+- Closed `T-095 paper-implementation-validation-cycle-planning` as backend minimum closure.
+- Landed validation-cycle planning contracts, persistence, repository/service layers, REST routes, and tests for validation cycles, route candidates, probes, experiment plan lights, loop-budget review items, and upstream feedback candidates.
+- Confirmed T-096 entry conditions: consume admitted validation cycles and work-order-ready planning refs; do not execute experiments directly from validation planning.
+
+## 2026-05-21 - T-096 Closure
+- Closed `T-096 paper-implementation-workorder-experiment-bridge` as backend minimum closure.
+- Landed `ResearchWorkOrder`, harness run, monitor intake, and `RunEvidenceUnit` contracts, persistence, repositories, service gates, REST routes, and tests.
+- Confirmed experiment-foundation remains referenced by refs/hashes only; no experiment-foundation asset/result payload is copied as PaperImplementation authority.
+- Confirmed monitor callbacks without `work_order_id` are untrusted and cannot create run evidence.
+- Confirmed failed, cancelled, inconclusive, and negative trusted runs are retained as `RunEvidenceUnit`.
+- Confirmed T-098 entry conditions: interpret `RunEvidenceUnit` plus validation/trace refs; do not read raw platform output or bypass result interpretation.
+
+## 2026-05-21 - T-098 Closure
+- Closed `T-098 paper-implementation-result-claim-dossier` as backend minimum closure.
+- Landed result interpretation, claim candidate, dossier, writing-entry packet projection, and result-driven feedback contracts, persistence, repositories, service gates, REST routes, and tests.
+- Confirmed T-099 entry conditions: consume read-model refs and trace-ready result/claim/dossier objects as proposal context only; do not admit authority state from AI output.
+
+## 2026-05-21 - T-099 Closure
+- Closed `T-099 paper-implementation-ai-workflow-harness` as backend minimum closure.
+- Landed `ImplementationHarness`, `ImplementationInputSnapshot`, agent workflow harness run, proposal artifact, quality signal, gate result, transition attempt, and `DecisionWorkQueueItem` contracts, persistence, repositories, service gates, REST routes, and tests.
+- Confirmed proposal-only AI workflow behavior: model output cannot mutate motive, validation, work-order, result, claim, dossier, writing, or topic-selection authority.
+- Confirmed T-100 entry conditions: desktop workbench consumes backend proposal/queue/readiness read models and emits backend commands only.

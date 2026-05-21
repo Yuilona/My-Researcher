@@ -19,7 +19,12 @@ import { InMemoryExperimentFoundationExecutionRepository } from './repositories/
 import { InMemoryExperimentFoundationRepository } from './repositories/in-memory-experiment-foundation-repository.js';
 import { InMemoryLiteratureRepository } from './repositories/in-memory-literature-repository.js';
 import { InMemoryPaperImplementationRepository } from './repositories/in-memory-paper-implementation-repository.js';
+import { InMemoryPaperImplementationAiWorkflowHarnessRepository } from './repositories/in-memory-paper-implementation-ai-workflow-harness-repository.js';
+import { InMemoryPaperImplementationMotiveRepository } from './repositories/in-memory-paper-implementation-motive-repository.js';
+import { InMemoryPaperImplementationResultClaimDossierRepository } from './repositories/in-memory-paper-implementation-result-claim-dossier-repository.js';
 import { InMemoryPaperImplementationTraceRepository } from './repositories/in-memory-paper-implementation-trace-repository.js';
+import { InMemoryPaperImplementationValidationRepository } from './repositories/in-memory-paper-implementation-validation-repository.js';
+import { InMemoryPaperImplementationWorkOrderRepository } from './repositories/in-memory-paper-implementation-workorder-repository.js';
 import { ResearchLifecycleController } from './controllers/research-lifecycle-controller.js';
 import { InMemoryResearchLifecycleRepository } from './repositories/in-memory-research-lifecycle-repository.js';
 import { InMemoryTopicSelectionControlPlaneRepository } from './repositories/in-memory-topic-selection-control-plane-repository.js';
@@ -46,7 +51,12 @@ import { PrismaExperimentFoundationExecutionRepository } from './repositories/pr
 import { PrismaExperimentFoundationRepository } from './repositories/prisma/prisma-experiment-foundation-repository.js';
 import { PrismaLiteratureRepository } from './repositories/prisma/prisma-literature-repository.js';
 import { PrismaPaperImplementationRepository } from './repositories/prisma/prisma-paper-implementation-repository.js';
+import { PrismaPaperImplementationAiWorkflowHarnessRepository } from './repositories/prisma/prisma-paper-implementation-ai-workflow-harness-repository.js';
+import { PrismaPaperImplementationMotiveRepository } from './repositories/prisma/prisma-paper-implementation-motive-repository.js';
+import { PrismaPaperImplementationResultClaimDossierRepository } from './repositories/prisma/prisma-paper-implementation-result-claim-dossier-repository.js';
 import { PrismaPaperImplementationTraceRepository } from './repositories/prisma/prisma-paper-implementation-trace-repository.js';
+import { PrismaPaperImplementationValidationRepository } from './repositories/prisma/prisma-paper-implementation-validation-repository.js';
+import { PrismaPaperImplementationWorkOrderRepository } from './repositories/prisma/prisma-paper-implementation-workorder-repository.js';
 import { PrismaResearchLifecycleRepository } from './repositories/prisma/prisma-research-lifecycle-repository.js';
 import { InMemoryTitleCardManagementRepository } from './repositories/title-card-management.repository.js';
 import { PrismaTitleCardManagementRepository } from './repositories/prisma/prisma-title-card-management-repository.js';
@@ -88,7 +98,12 @@ import type { ExperimentFoundationExecutionRepository } from './repositories/exp
 import type { ExperimentFoundationRepository } from './repositories/experiment-foundation.repository.js';
 import type { LiteratureRepository } from './repositories/literature-repository.js';
 import type { PaperImplementationRepository } from './repositories/paper-implementation.repository.js';
+import type { PaperImplementationAiWorkflowHarnessRepository } from './repositories/paper-implementation-ai-workflow-harness.repository.js';
+import type { PaperImplementationMotiveRepository } from './repositories/paper-implementation-motive.repository.js';
+import type { PaperImplementationResultClaimDossierRepository } from './repositories/paper-implementation-result-claim-dossier.repository.js';
 import type { PaperImplementationTraceRepository } from './repositories/paper-implementation-trace.repository.js';
+import type { PaperImplementationValidationRepository } from './repositories/paper-implementation-validation.repository.js';
+import type { PaperImplementationWorkOrderRepository } from './repositories/paper-implementation-workorder.repository.js';
 import type { ResearchLifecycleRepository } from './repositories/research-lifecycle-repository.js';
 import type { TitleCardManagementRepository } from './repositories/title-card-management.repository.js';
 import type { TopicSelectionControlPlaneRepository } from './repositories/topic-selection-control-plane.repository.js';
@@ -124,7 +139,12 @@ import {
   PaperImplementationIntakeBootstrapService,
   type PaperImplementationDownstreamFeedbackService,
 } from './services/paper-implementation-intake-bootstrap-service.js';
+import { PaperImplementationAiWorkflowHarnessService } from './services/paper-implementation-ai-workflow-harness-service.js';
+import { PaperImplementationMotiveEvidenceBoardService } from './services/paper-implementation-motive-evidence-board-service.js';
+import { PaperImplementationResultClaimDossierService } from './services/paper-implementation-result-claim-dossier-service.js';
 import { PaperImplementationTraceKernelService } from './services/paper-implementation-trace-kernel-service.js';
+import { PaperImplementationValidationCyclePlanningService } from './services/paper-implementation-validation-cycle-planning-service.js';
+import { PaperImplementationWorkOrderExperimentBridgeService } from './services/paper-implementation-workorder-experiment-bridge-service.js';
 import { ResearchLifecycleService } from './services/research-lifecycle-service.js';
 import {
   TitleCardManagementService,
@@ -163,7 +183,12 @@ export type BuildAppOptions = {
   topicSelectionV1bLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
   topicSelectionV1cPromotionGateLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
   paperImplementationRepository?: PaperImplementationRepository;
+  paperImplementationMotiveRepository?: PaperImplementationMotiveRepository;
   paperImplementationTraceRepository?: PaperImplementationTraceRepository;
+  paperImplementationValidationRepository?: PaperImplementationValidationRepository;
+  paperImplementationWorkOrderRepository?: PaperImplementationWorkOrderRepository;
+  paperImplementationResultClaimDossierRepository?: PaperImplementationResultClaimDossierRepository;
+  paperImplementationAiWorkflowHarnessRepository?: PaperImplementationAiWorkflowHarnessRepository;
   paperImplementationBridgeService?: TopicSelectionPaperProjectBridgeHandoffProvider;
   paperImplementationDownstreamFeedbackService?: PaperImplementationDownstreamFeedbackService;
 };
@@ -274,8 +299,18 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   );
   const paperImplementationRepository = options.paperImplementationRepository
     ?? createPaperImplementationRepository(storeConfig.paperImplementationStrategy);
+  const paperImplementationMotiveRepository = options.paperImplementationMotiveRepository
+    ?? createPaperImplementationMotiveRepository(storeConfig.paperImplementationStrategy);
   const paperImplementationTraceRepository = options.paperImplementationTraceRepository
     ?? createPaperImplementationTraceRepository(storeConfig.paperImplementationStrategy);
+  const paperImplementationValidationRepository = options.paperImplementationValidationRepository
+    ?? createPaperImplementationValidationRepository(storeConfig.paperImplementationStrategy);
+  const paperImplementationWorkOrderRepository = options.paperImplementationWorkOrderRepository
+    ?? createPaperImplementationWorkOrderRepository(storeConfig.paperImplementationStrategy);
+  const paperImplementationResultClaimDossierRepository = options.paperImplementationResultClaimDossierRepository
+    ?? createPaperImplementationResultClaimDossierRepository(storeConfig.paperImplementationStrategy);
+  const paperImplementationAiWorkflowHarnessRepository = options.paperImplementationAiWorkflowHarnessRepository
+    ?? createPaperImplementationAiWorkflowHarnessRepository(storeConfig.paperImplementationStrategy);
   const auditStore = new FileGovernanceDeliveryAuditStore({
     filePath: process.env.GOVERNANCE_DELIVERY_AUDIT_LOG_PATH,
   });
@@ -433,9 +468,45 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     projectRepository: paperImplementationRepository,
     traceRepository: paperImplementationTraceRepository,
   });
+  const paperImplementationMotiveEvidenceBoardService = new PaperImplementationMotiveEvidenceBoardService({
+    projectRepository: paperImplementationRepository,
+    motiveRepository: paperImplementationMotiveRepository,
+    traceRepository: paperImplementationTraceRepository,
+  });
+  const paperImplementationValidationCyclePlanningService = new PaperImplementationValidationCyclePlanningService({
+    projectRepository: paperImplementationRepository,
+    motiveRepository: paperImplementationMotiveRepository,
+    traceRepository: paperImplementationTraceRepository,
+    validationRepository: paperImplementationValidationRepository,
+    feedbackRecorder: paperImplementationIntakeBootstrapService,
+  });
+  const paperImplementationWorkOrderExperimentBridgeService = new PaperImplementationWorkOrderExperimentBridgeService({
+    projectRepository: paperImplementationRepository,
+    traceRepository: paperImplementationTraceRepository,
+    validationRepository: paperImplementationValidationRepository,
+    workOrderRepository: paperImplementationWorkOrderRepository,
+  });
+  const paperImplementationResultClaimDossierService = new PaperImplementationResultClaimDossierService({
+    projectRepository: paperImplementationRepository,
+    resultClaimRepository: paperImplementationResultClaimDossierRepository,
+    traceRepository: paperImplementationTraceRepository,
+    validationRepository: paperImplementationValidationRepository,
+    workOrderRepository: paperImplementationWorkOrderRepository,
+    feedbackRecorder: paperImplementationIntakeBootstrapService,
+  });
+  const paperImplementationAiWorkflowHarnessService = new PaperImplementationAiWorkflowHarnessService({
+    projectRepository: paperImplementationRepository,
+    traceRepository: paperImplementationTraceRepository,
+    harnessRepository: paperImplementationAiWorkflowHarnessRepository,
+  });
   const paperImplementationController = new PaperImplementationController(
     paperImplementationIntakeBootstrapService,
     paperImplementationTraceKernelService,
+    paperImplementationMotiveEvidenceBoardService,
+    paperImplementationValidationCyclePlanningService,
+    paperImplementationWorkOrderExperimentBridgeService,
+    paperImplementationResultClaimDossierService,
+    paperImplementationAiWorkflowHarnessService,
   );
   const topicSelectionV1cController = new TopicSelectionV1cController(
     topicSelectionV1cPromotionInputService,
@@ -864,6 +935,61 @@ function createPaperImplementationTraceRepository(
   }
 
   return new InMemoryPaperImplementationTraceRepository();
+}
+
+function createPaperImplementationMotiveRepository(
+  strategy: RepositoryStrategy,
+): PaperImplementationMotiveRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaPaperImplementationMotiveRepository(prisma);
+  }
+
+  return new InMemoryPaperImplementationMotiveRepository();
+}
+
+function createPaperImplementationValidationRepository(
+  strategy: RepositoryStrategy,
+): PaperImplementationValidationRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaPaperImplementationValidationRepository(prisma);
+  }
+
+  return new InMemoryPaperImplementationValidationRepository();
+}
+
+function createPaperImplementationWorkOrderRepository(
+  strategy: RepositoryStrategy,
+): PaperImplementationWorkOrderRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaPaperImplementationWorkOrderRepository(prisma);
+  }
+
+  return new InMemoryPaperImplementationWorkOrderRepository();
+}
+
+function createPaperImplementationResultClaimDossierRepository(
+  strategy: RepositoryStrategy,
+): PaperImplementationResultClaimDossierRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaPaperImplementationResultClaimDossierRepository(prisma);
+  }
+
+  return new InMemoryPaperImplementationResultClaimDossierRepository();
+}
+
+function createPaperImplementationAiWorkflowHarnessRepository(
+  strategy: RepositoryStrategy,
+): PaperImplementationAiWorkflowHarnessRepository {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaPaperImplementationAiWorkflowHarnessRepository(prisma);
+  }
+
+  return new InMemoryPaperImplementationAiWorkflowHarnessRepository();
 }
 
 function createAutoPullScheduler(service: AutoPullService): AutoPullScheduler | null {

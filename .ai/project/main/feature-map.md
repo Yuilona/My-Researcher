@@ -107,12 +107,12 @@ Project: `main`
 | T-091 paper-implementation-full-landing | planned | dev-docs/active/paper-implementation-full-landing |
 | T-092 paper-implementation-contracts-and-gap-map | done | dev-docs/active/paper-implementation-contracts-and-gap-map |
 | T-093 paper-implementation-intake-bootstrap | done | dev-docs/active/paper-implementation-intake-bootstrap |
-| T-094 paper-implementation-motive-evidence-board | planned | dev-docs/active/paper-implementation-motive-evidence-board |
-| T-095 paper-implementation-validation-cycle-planning | planned | dev-docs/active/paper-implementation-validation-cycle-planning |
-| T-096 paper-implementation-workorder-experiment-bridge | planned | dev-docs/active/paper-implementation-workorder-experiment-bridge |
+| T-094 paper-implementation-motive-evidence-board | done | dev-docs/active/paper-implementation-motive-evidence-board |
+| T-095 paper-implementation-validation-cycle-planning | done | dev-docs/active/paper-implementation-validation-cycle-planning |
+| T-096 paper-implementation-workorder-experiment-bridge | done | dev-docs/active/paper-implementation-workorder-experiment-bridge |
 | T-097 paper-implementation-trace-kernel | done | dev-docs/active/paper-implementation-trace-kernel |
-| T-098 paper-implementation-result-claim-dossier | planned | dev-docs/active/paper-implementation-result-claim-dossier |
-| T-099 paper-implementation-ai-workflow-harness | planned | dev-docs/active/paper-implementation-ai-workflow-harness |
+| T-098 paper-implementation-result-claim-dossier | done | dev-docs/active/paper-implementation-result-claim-dossier |
+| T-099 paper-implementation-ai-workflow-harness | done | dev-docs/active/paper-implementation-ai-workflow-harness |
 | T-100 paper-implementation-desktop-workbench | planned | dev-docs/active/paper-implementation-desktop-workbench |
 | T-101 paper-implementation-contract-evaluation-suite | planned | dev-docs/active/paper-implementation-contract-evaluation-suite |
 

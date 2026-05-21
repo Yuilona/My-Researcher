@@ -8,24 +8,24 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 101 (planned: 11, in-progress: 3, blocked: 0, done: 20, archived: 67)
+- Tasks: 101 (planned: 6, in-progress: 3, blocked: 0, done: 25, archived: 67)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
+| T-094 paper-implementation-motive-evidence-board | done | F-001 | dev-docs/active/paper-implementation-motive-evidence-board |
+| T-095 paper-implementation-validation-cycle-planning | done | F-001 | dev-docs/active/paper-implementation-validation-cycle-planning |
+| T-096 paper-implementation-workorder-experiment-bridge | done | F-001 | dev-docs/active/paper-implementation-workorder-experiment-bridge |
+| T-098 paper-implementation-result-claim-dossier | done | F-001 | dev-docs/active/paper-implementation-result-claim-dossier |
+| T-099 paper-implementation-ai-workflow-harness | done | F-001 | dev-docs/active/paper-implementation-ai-workflow-harness |
 | T-023 research-argument-control-plane-v1 | in-progress | F-001 | dev-docs/active/research-argument-control-plane-v1 |
 | T-087 topic-selection-desktop-workbench-v1abc | archived | F-001 | dev-docs/archive/topic-selection-desktop-workbench-v1abc |
 | T-088 topic-selection-workflow-runtime-foundation | in-progress | F-001 | dev-docs/active/topic-selection-workflow-runtime-foundation |
 | T-091 paper-implementation-full-landing | planned | F-001 | dev-docs/active/paper-implementation-full-landing |
 | T-092 paper-implementation-contracts-and-gap-map | done | F-001 | dev-docs/active/paper-implementation-contracts-and-gap-map |
 | T-093 paper-implementation-intake-bootstrap | done | F-001 | dev-docs/active/paper-implementation-intake-bootstrap |
-| T-094 paper-implementation-motive-evidence-board | planned | F-001 | dev-docs/active/paper-implementation-motive-evidence-board |
-| T-095 paper-implementation-validation-cycle-planning | planned | F-001 | dev-docs/active/paper-implementation-validation-cycle-planning |
-| T-096 paper-implementation-workorder-experiment-bridge | planned | F-001 | dev-docs/active/paper-implementation-workorder-experiment-bridge |
 | T-097 paper-implementation-trace-kernel | done | F-001 | dev-docs/active/paper-implementation-trace-kernel |
-| T-098 paper-implementation-result-claim-dossier | planned | F-001 | dev-docs/active/paper-implementation-result-claim-dossier |
-| T-099 paper-implementation-ai-workflow-harness | planned | F-001 | dev-docs/active/paper-implementation-ai-workflow-harness |
 | T-100 paper-implementation-desktop-workbench | planned | F-001 | dev-docs/active/paper-implementation-desktop-workbench |
 | T-101 paper-implementation-contract-evaluation-suite | planned | F-001 | dev-docs/active/paper-implementation-contract-evaluation-suite |
 | T-089 topic-selection-agent-workflow-review | planned | F-001 | dev-docs/active/topic-selection-agent-workflow-review |

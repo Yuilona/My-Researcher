@@ -16,3 +16,11 @@
 - Failed runs are evidence ledger entries, not disposable logs.
 - Run results without `work_order_id` are untrusted and cannot enter claim support.
 - `RunEvidenceUnit` must expose queryable run type, status, dataset/code/config refs, and trace refs.
+
+## Implemented Boundary
+- Shared contract: `paper-implementation-workorder-contracts.ts` owns `ResearchWorkOrder`, harness run, monitor intake, and `RunEvidenceUnit`.
+- Persistence: Prisma tables keep gate/trace/work-order/run fields columnized; rich callback payload remains JSON payload only.
+- Backend service: `PaperImplementationWorkOrderExperimentBridgeService` admits work orders only from active `ImplementationProject` and admitted `ValidationCycle`.
+- Experiment-foundation bridge: `run_recipe_ref/hash`, `training_task_spec_ref/hash`, `external_job_ref/hash`, result refs, and validation report refs are lineage pointers, not copied authority payloads.
+- Monitor trust rule: callbacks without `work_order_id` are persisted as untrusted intake records and do not produce `RunEvidenceUnit`.
+- T-098 entry: consume `RunEvidenceUnit` plus validation/trace refs; do not read raw experiment-foundation platform state for claim interpretation.
