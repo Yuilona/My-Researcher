@@ -1,11 +1,11 @@
 # T-100 Paper Implementation Desktop Workbench
 
 ## Status
-- State: planned
+- State: done
 - Parent task: `T-091 paper-implementation-full-landing`
 - Mapping: `M-001 > F-001 > R-013`
 - Flow node: queue-first desktop workbench
-- Next step: start after backend command/read-model contracts exist.
+- Next step: T-101 can add contract/evaluation coverage for UI command/read-model paths.
 
 ## Goal
 - Expose `PaperImplementationWorkbench` under `论文管理`.
@@ -18,8 +18,15 @@
 - Do not synthesize readiness in client state.
 
 ## Acceptance Criteria
-- [ ] Workbench consumes backend read-models and emits backend commands.
-- [ ] Queue item detail shows source refs, trace, gate result, blockers, risks, stale/hash status, and actions.
-- [ ] Portfolio decision and upstream feedback items are displayed as backend queue/read-model items, not client-only state.
-- [ ] Confirmation surfaces capture scoped confirmation records only.
-- [ ] UI follows repo `data-ui` + token/contract path.
+- [x] Workbench consumes backend read-models and emits backend commands.
+- [x] Queue item detail shows source refs, trace, gate result, blockers, risks, stale/hash status, and actions.
+- [x] Portfolio decision and upstream feedback items are displayed as backend queue/read-model items, not client-only state.
+- [x] Confirmation surfaces capture scoped confirmation records only.
+- [x] UI follows repo `data-ui` + token/contract path.
+
+## Closure
+- Added `PaperImplementationWorkbench` under `论文管理` as a coarse queue-first UI surface.
+- The workbench loads `ImplementationProject` by project id or bridge id, can bootstrap through the existing backend command, and reads T-093 through T-099 backend read-model endpoints.
+- Queue aggregation is derived from backend objects only: `DecisionWorkQueueItem`, trace repair queue items, validation review items, upstream feedback candidates, portfolio decisions, failed workflows, failed/negative/inconclusive runs, claim-boundary blockers, and dossier readiness blockers.
+- Commands are backend-only: decision queue resolve/dismiss/supersede, trace repair resolve, upstream feedback dispatch, and portfolio decision apply.
+- No writing editor, experiment console duplication, local authority writer, or client-synthesized readiness was added.

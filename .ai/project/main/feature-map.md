@@ -113,7 +113,7 @@ Project: `main`
 | T-097 paper-implementation-trace-kernel | done | dev-docs/active/paper-implementation-trace-kernel |
 | T-098 paper-implementation-result-claim-dossier | done | dev-docs/active/paper-implementation-result-claim-dossier |
 | T-099 paper-implementation-ai-workflow-harness | done | dev-docs/active/paper-implementation-ai-workflow-harness |
-| T-100 paper-implementation-desktop-workbench | planned | dev-docs/active/paper-implementation-desktop-workbench |
+| T-100 paper-implementation-desktop-workbench | done | dev-docs/active/paper-implementation-desktop-workbench |
 | T-101 paper-implementation-contract-evaluation-suite | planned | dev-docs/active/paper-implementation-contract-evaluation-suite |
 
 ### F-002 Desktop Frontend Foundation

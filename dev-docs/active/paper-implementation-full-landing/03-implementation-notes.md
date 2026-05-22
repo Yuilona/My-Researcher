@@ -137,8 +137,8 @@
 ## Open Notes
 - D1-D10 are confirmed and child task packages `T-092` through `T-101` have been created.
 - Coverage review is recorded in `06-child-task-coverage-review.md`; after the design-doc audit supplement, no unowned functional gap remains.
-- Closed child tasks: `T-092`, `T-093`, `T-097`, `T-094`, `T-095`, `T-096`, `T-098`, `T-099`.
-- Next step is `T-100 paper-implementation-desktop-workbench`.
+- Closed child tasks: `T-092`, `T-093`, `T-097`, `T-094`, `T-095`, `T-096`, `T-098`, `T-099`, `T-100`.
+- Next step is `T-101 paper-implementation-contract-evaluation-suite`.
 
 ## 2026-05-21 - T-094 Closure
 - Closed `T-094 paper-implementation-motive-evidence-board` as backend minimum closure.
@@ -169,3 +169,9 @@
 - Landed `ImplementationHarness`, `ImplementationInputSnapshot`, agent workflow harness run, proposal artifact, quality signal, gate result, transition attempt, and `DecisionWorkQueueItem` contracts, persistence, repositories, service gates, REST routes, and tests.
 - Confirmed proposal-only AI workflow behavior: model output cannot mutate motive, validation, work-order, result, claim, dossier, writing, or topic-selection authority.
 - Confirmed T-100 entry conditions: desktop workbench consumes backend proposal/queue/readiness read models and emits backend commands only.
+
+## 2026-05-21 - T-100 Closure
+- Closed `T-100 paper-implementation-desktop-workbench` as desktop minimum closure.
+- Landed `PaperImplementationWorkbench` under `论文管理` with backend-backed project lookup, queue aggregation, queue detail, read-model tables, and command panels.
+- Confirmed the UI does not synthesize readiness and does not write authority state locally; it emits only existing backend commands.
+- Confirmed T-101 entry conditions: evaluation should cover UI command/read-model paths, authority bypass prevention, and screenshot/browser verification once the browser test harness is available.

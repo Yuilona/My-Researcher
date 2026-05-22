@@ -8,7 +8,7 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 101 (planned: 6, in-progress: 3, blocked: 0, done: 25, archived: 67)
+- Tasks: 101 (planned: 5, in-progress: 3, blocked: 0, done: 26, archived: 67)
 
 ## Recent tasks
 
@@ -19,6 +19,7 @@ Project: `main`
 | T-096 paper-implementation-workorder-experiment-bridge | done | F-001 | dev-docs/active/paper-implementation-workorder-experiment-bridge |
 | T-098 paper-implementation-result-claim-dossier | done | F-001 | dev-docs/active/paper-implementation-result-claim-dossier |
 | T-099 paper-implementation-ai-workflow-harness | done | F-001 | dev-docs/active/paper-implementation-ai-workflow-harness |
+| T-100 paper-implementation-desktop-workbench | done | F-001 | dev-docs/active/paper-implementation-desktop-workbench |
 | T-023 research-argument-control-plane-v1 | in-progress | F-001 | dev-docs/active/research-argument-control-plane-v1 |
 | T-087 topic-selection-desktop-workbench-v1abc | archived | F-001 | dev-docs/archive/topic-selection-desktop-workbench-v1abc |
 | T-088 topic-selection-workflow-runtime-foundation | in-progress | F-001 | dev-docs/active/topic-selection-workflow-runtime-foundation |
@@ -26,7 +27,6 @@ Project: `main`
 | T-092 paper-implementation-contracts-and-gap-map | done | F-001 | dev-docs/active/paper-implementation-contracts-and-gap-map |
 | T-093 paper-implementation-intake-bootstrap | done | F-001 | dev-docs/active/paper-implementation-intake-bootstrap |
 | T-097 paper-implementation-trace-kernel | done | F-001 | dev-docs/active/paper-implementation-trace-kernel |
-| T-100 paper-implementation-desktop-workbench | planned | F-001 | dev-docs/active/paper-implementation-desktop-workbench |
 | T-101 paper-implementation-contract-evaluation-suite | planned | F-001 | dev-docs/active/paper-implementation-contract-evaluation-suite |
 | T-089 topic-selection-agent-workflow-review | planned | F-001 | dev-docs/active/topic-selection-agent-workflow-review |
 | T-090 experiment-foundation-capability-validation | planned | F-001 | dev-docs/active/experiment-foundation-capability-validation |

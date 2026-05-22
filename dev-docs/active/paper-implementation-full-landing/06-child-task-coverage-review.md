@@ -20,7 +20,7 @@
 | 6 | `T-097` | `paper-implementation-trace-kernel` | trace/citation/memo guard | done; owns cross-cutting trace kernel |
 | 7 | `T-098` | `paper-implementation-result-claim-dossier` | result interpretation, claim boundary, dossier readiness | done; owns writing-prep authority |
 | 8 | `T-099` | `paper-implementation-ai-workflow-harness` | AI proposal runtime and implementation harness | done; owns proposal-only AI workflow shell plus project-level runtime governance contracts |
-| 9 | `T-100` | `paper-implementation-desktop-workbench` | desktop decision workbench | owns command/read-model UI surface |
+| 9 | `T-100` | `paper-implementation-desktop-workbench` | desktop decision workbench | done; owns command/read-model UI surface |
 | 10 | `T-101` | `paper-implementation-contract-evaluation-suite` | full-flow evaluation | owns contract/replay/adversarial closure |
 
 ## Execution Order Baseline
@@ -141,4 +141,11 @@ The task package set is executable as a staged implementation plan. `T-092 paper
 - The next child entry is `T-100 paper-implementation-desktop-workbench`.
 - T-100 must consume `ImplementationProposalArtifact`, `ImplementationGateResult`, `ImplementationTransitionAttempt`, and `DecisionWorkQueueItem` as backend read models; UI must still emit backend commands and never write authority state locally.
 - T-099 confirmed proposal-only AI workflow behavior, mock/product isolation, trace-manifest checks, memo-as-evidence blocking, and direct authority mutation blocking.
+- No D1-D10 roadmap decision was reopened.
+
+## 2026-05-21 T-100 Closure Review
+- `T-100 paper-implementation-desktop-workbench` is closed as desktop minimum closure.
+- The next child entry is `T-101 paper-implementation-contract-evaluation-suite`.
+- T-101 must verify UI command/read-model paths by renderer tests or route-level substitutes, because screenshot verification was blocked by missing Chrome in the current environment.
+- T-100 confirmed queue-first backend read-model consumption and backend-only commands for decision queue resolution, trace repair resolution, upstream feedback dispatch, and portfolio decision apply.
 - No D1-D10 roadmap decision was reopened.
