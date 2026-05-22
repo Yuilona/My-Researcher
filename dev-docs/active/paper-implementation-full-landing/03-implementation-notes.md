@@ -138,7 +138,7 @@
 - D1-D10 are confirmed and child task packages `T-092` through `T-101` have been created.
 - Coverage review is recorded in `06-child-task-coverage-review.md`; after the design-doc audit supplement, no unowned functional gap remains.
 - Closed child tasks: `T-092`, `T-093`, `T-097`, `T-094`, `T-095`, `T-096`, `T-098`, `T-099`, `T-100`.
-- Next step is `T-101 paper-implementation-contract-evaluation-suite`.
+- T-101 is closed; the parent package is ready to close.
 
 ## 2026-05-21 - T-094 Closure
 - Closed `T-094 paper-implementation-motive-evidence-board` as backend minimum closure.
@@ -175,3 +175,14 @@
 - Landed `PaperImplementationWorkbench` under `论文管理` with backend-backed project lookup, queue aggregation, queue detail, read-model tables, and command panels.
 - Confirmed the UI does not synthesize readiness and does not write authority state locally; it emits only existing backend commands.
 - Confirmed T-101 entry conditions: evaluation should cover UI command/read-model paths, authority bypass prevention, and screenshot/browser verification once the browser test harness is available.
+
+## 2026-05-22 - T-101 And Parent Closure
+- Closed `T-101 paper-implementation-contract-evaluation-suite`.
+- Added repeatable evaluation evidence for D1-D10, frozen rules FR-01 through FR-12, design-doc runtime components, full-flow replay, blocked/adversarial fixtures, queryability, and UI command/read-model boundaries.
+- Confirmed no unowned high-risk gap remains for V1 paper implementation landing.
+- T-091 parent package is closed with all child tasks done.
+
+## 2026-05-22 - Final Cleanup And Commit Review
+- Rechecked the full PaperImplementation task package set and confirmed the flow remains coherent from intake bootstrap through trace, motive, validation, work order, dossier, AI harness, desktop workbench, and final evaluation.
+- Rechecked code boundaries for double-track risk: no PaperImplementation product path reintroduces `research-argument` authority or treats `PaperProjectBridge` as the implementation aggregate root.
+- T-101 quality repair is included in the parent closure evidence: failed-run evidence is modeled as a negative-result claim in the final replay, missing trace and confirmation bypass are blocked directly, and route-level command/read-model smoke is included.

@@ -21,7 +21,7 @@
 | 7 | `T-098` | `paper-implementation-result-claim-dossier` | result interpretation, claim boundary, dossier readiness | done; owns writing-prep authority |
 | 8 | `T-099` | `paper-implementation-ai-workflow-harness` | AI proposal runtime and implementation harness | done; owns proposal-only AI workflow shell plus project-level runtime governance contracts |
 | 9 | `T-100` | `paper-implementation-desktop-workbench` | desktop decision workbench | done; owns command/read-model UI surface |
-| 10 | `T-101` | `paper-implementation-contract-evaluation-suite` | full-flow evaluation | owns contract/replay/adversarial closure |
+| 10 | `T-101` | `paper-implementation-contract-evaluation-suite` | full-flow evaluation | done; owns contract/replay/adversarial/queryability closure |
 
 ## Execution Order Baseline
 | Execution step | Task ID | Reason |
@@ -148,4 +148,12 @@ The task package set is executable as a staged implementation plan. `T-092 paper
 - The next child entry is `T-101 paper-implementation-contract-evaluation-suite`.
 - T-101 must verify UI command/read-model paths by renderer tests or route-level substitutes, because screenshot verification was blocked by missing Chrome in the current environment.
 - T-100 confirmed queue-first backend read-model consumption and backend-only commands for decision queue resolution, trace repair resolution, upstream feedback dispatch, and portfolio decision apply.
+- No D1-D10 roadmap decision was reopened.
+
+## 2026-05-22 T-101 Closure Review
+- `T-101 paper-implementation-contract-evaluation-suite` is closed.
+- Added full-flow replay from implementation intake through dossier readiness and writing packet projection.
+- Added blocked/adversarial checks for hash drift, missing citation locator, display-summary hard-gate misuse, orphan monitor callback, AI direct authority mutation, upstream feedback boundary, and JSON-only queryability risks.
+- Added design-doc component coverage and residual-risk report; remaining risks are non-blocking and owned.
+- Parent `T-091 paper-implementation-full-landing` can close with no unowned V1 blocker.
 - No D1-D10 roadmap decision was reopened.

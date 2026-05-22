@@ -860,13 +860,13 @@ tasks:
     updated: 2026-05-19
   - id: T-091
     slug: paper-implementation-full-landing
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-013
     dev_docs_path: dev-docs/active/paper-implementation-full-landing
-    updated: 2026-05-20
+    updated: 2026-05-22
   - id: T-092
     slug: paper-implementation-contracts-and-gap-map
     status: done
@@ -950,10 +950,10 @@ tasks:
     updated: 2026-05-21
   - id: T-101
     slug: paper-implementation-contract-evaluation-suite
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-013
     dev_docs_path: dev-docs/active/paper-implementation-contract-evaluation-suite
-    updated: 2026-05-20
+    updated: 2026-05-22

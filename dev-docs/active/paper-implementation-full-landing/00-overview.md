@@ -1,10 +1,10 @@
 # 00 Overview
 
 ## Status
-- State: planned
+- State: done
 - Task ID: `T-091`
 - Feature / Milestone / Requirement: `F-001` / `M-001` / `R-013`
-- Next step: begin `paper-implementation-contracts-and-gap-map` implementation review.
+- Next step: post-landing review or future hardening tasks may proceed from the T-101 closure evidence.
 
 ## Goal
 - Create the parent package for full paper implementation landing under the user-facing `论文管理` module.
@@ -30,10 +30,15 @@
 - [x] Roadmap lists decision points required before child implementation tasks.
 - [x] Child task packages are created from the confirmed D10 list.
 - [x] Child task coverage review confirms no unowned gap.
-- [ ] No product code changes are made under this parent package.
+- [x] No product code changes are made under this parent package.
 
 ## Child-task Policy
 - Child tasks have been created from the confirmed D10 list.
 - Child tasks must use `parent-task:T-091` in `.ai-task.yaml`.
 - Child tasks must declare changed module ownership before code/config edits.
 - Child tasks must declare flow node, inputs, outputs, authority writer, gates, trace, command/read-model/API surface, and verification.
+
+## Closure
+- Closed child tasks: `T-092`, `T-093`, `T-097`, `T-094`, `T-095`, `T-096`, `T-098`, `T-099`, `T-100`, `T-101`.
+- Parent closure review: `dev-docs/active/paper-implementation-contract-evaluation-suite/10-parent-closure-review.md`.
+- No unowned V1 blocker remains.

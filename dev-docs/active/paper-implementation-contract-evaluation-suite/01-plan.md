@@ -1,13 +1,13 @@
 # 01 Plan
 
 ## Phases
-1. Build D1-D10 frozen-rule test matrix.
-2. Build design-doc component coverage matrix for control plane, portfolio, WorkOrder harness, trace, feedback, and evaluation components.
-3. Add contract tests for each flow-node child.
-4. Add replay/adversarial fixtures for stale refs, missing trace, memo-as-evidence, failed-run omission, overclaim, confirmation bypass, portfolio drift, runtime harness bypass, and upstream authority mutation.
-5. Add queryability tests for required gate/queue/trace/run/claim/dossier fields.
-6. Add dossier readiness and packet projection tests.
-7. Produce parent closure review and residual-risk report.
+1. [x] Build D1-D10 frozen-rule test matrix.
+2. [x] Build design-doc component coverage matrix for control plane, portfolio, WorkOrder harness, trace, feedback, and evaluation components.
+3. [x] Add contract tests for each flow-node child.
+4. [x] Add replay/adversarial fixtures for stale refs, missing trace, memo-as-evidence, failed-run omission, overclaim, confirmation bypass, portfolio drift, runtime harness bypass, and upstream authority mutation.
+5. [x] Add queryability tests for required gate/queue/trace/run/claim/dossier fields.
+6. [x] Add dossier readiness and packet projection tests.
+7. [x] Produce parent closure review and residual-risk report.
 
 ## Review Before Closure
 - Confirm every child task has verification evidence.
@@ -19,3 +19,7 @@
 ## Verification
 - Contract/replay/mutation/adversarial/queryability tests.
 - Governance lint and parent closure review.
+
+## Final Evidence
+- Targeted T-101 test: `apps/backend/src/services/paper-implementation-contract-evaluation-suite.unit.test.ts`.
+- Documentation artifacts: `06-evaluation-matrix.md` through `10-parent-closure-review.md`.

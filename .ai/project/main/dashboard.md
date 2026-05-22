@@ -8,12 +8,14 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 101 (planned: 5, in-progress: 3, blocked: 0, done: 26, archived: 67)
+- Tasks: 101 (planned: 3, in-progress: 3, blocked: 0, done: 28, archived: 67)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
+| T-091 paper-implementation-full-landing | done | F-001 | dev-docs/active/paper-implementation-full-landing |
+| T-101 paper-implementation-contract-evaluation-suite | done | F-001 | dev-docs/active/paper-implementation-contract-evaluation-suite |
 | T-094 paper-implementation-motive-evidence-board | done | F-001 | dev-docs/active/paper-implementation-motive-evidence-board |
 | T-095 paper-implementation-validation-cycle-planning | done | F-001 | dev-docs/active/paper-implementation-validation-cycle-planning |
 | T-096 paper-implementation-workorder-experiment-bridge | done | F-001 | dev-docs/active/paper-implementation-workorder-experiment-bridge |
@@ -23,11 +25,9 @@ Project: `main`
 | T-023 research-argument-control-plane-v1 | in-progress | F-001 | dev-docs/active/research-argument-control-plane-v1 |
 | T-087 topic-selection-desktop-workbench-v1abc | archived | F-001 | dev-docs/archive/topic-selection-desktop-workbench-v1abc |
 | T-088 topic-selection-workflow-runtime-foundation | in-progress | F-001 | dev-docs/active/topic-selection-workflow-runtime-foundation |
-| T-091 paper-implementation-full-landing | planned | F-001 | dev-docs/active/paper-implementation-full-landing |
 | T-092 paper-implementation-contracts-and-gap-map | done | F-001 | dev-docs/active/paper-implementation-contracts-and-gap-map |
 | T-093 paper-implementation-intake-bootstrap | done | F-001 | dev-docs/active/paper-implementation-intake-bootstrap |
 | T-097 paper-implementation-trace-kernel | done | F-001 | dev-docs/active/paper-implementation-trace-kernel |
-| T-101 paper-implementation-contract-evaluation-suite | planned | F-001 | dev-docs/active/paper-implementation-contract-evaluation-suite |
 | T-089 topic-selection-agent-workflow-review | planned | F-001 | dev-docs/active/topic-selection-agent-workflow-review |
 | T-090 experiment-foundation-capability-validation | planned | F-001 | dev-docs/active/experiment-foundation-capability-validation |
 | T-075 experiment-foundation-candidate-promotion-contracts | done | F-001 | dev-docs/active/experiment-foundation-candidate-promotion-contracts |
