@@ -4,7 +4,7 @@
 1. Confirm S1 contracts are stable.
 2. Add Prisma models through DB SSOT only when approved.
 3. Implement repository interfaces returning domain DTOs.
-4. Implement services for assets, candidates, readiness, recipe generation, materialization request records, results, evidence, and sidecars.
+4. Implement services for assets, candidates, readiness, recipe/run-recipe records, materialization request records, results, evidence, and sidecars.
 5. Implement REST routes and integration tests.
 6. Refresh docs/context after schema changes.
 

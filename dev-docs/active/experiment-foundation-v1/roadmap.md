@@ -1,5 +1,9 @@
 # Experiment Foundation V1 - Roadmap
 
+## Post-closure Scope Note - 2026-05-19
+- This roadmap is the broad V1 concept map. The implemented minimum chain is T-070 through T-078.
+- Any remaining roadmap entries for dedicated recipe/materialization generation services, typed asset CRUD/search, candidate import, tuning sessions, paper-project sidecar attachment, live DB migration, or real cloud SDK credentials are follow-up task scope, not hidden work inside the completed minimum chain.
+
 ## Goal
 - 建立一个位于桌面信息架构中“文献管理”下方的 `experiment-foundation` 模块，用可复用的 dataset、benchmark、baseline、evaluation protocol、run recipe 与外部训练平台控制管道支撑论文实施阶段。
 
@@ -118,7 +122,7 @@ experiment-foundation
   - Prisma schema/migrations if persisted asset models are added
   - context docs under `docs/context/`
 - External interfaces/APIs:
-  - New `experiment-foundation` REST surface for assets, protocols, readiness checks, and recipe generation
+  - New `experiment-foundation` REST surface for registry records, protocols, readiness checks, recipe/run-recipe payload records, materialization records, execution jobs, and evidence refs
   - New method recipe surfaces for strategy/preset/template/hypothesis/search-space/ablation records
   - New fine-tuning surfaces for base model, fine-tuning dataset, fine-tuning strategy, fine-tuning task spec, and fine-tuning result records
   - New evaluation surfaces for metrics/test/statistical/reporting/comparison protocol records
@@ -175,7 +179,7 @@ This section is a non-binding, early hypothesis to help confirm expected project
   - benchmark asset CRUD/search
   - baseline asset CRUD/search
   - evaluation protocol CRUD/search
-  - run recipe generation
+  - recipe/run-recipe record create/update/search
   - asset readiness check
   - literature-derived candidate import
   - training task materialization
@@ -525,7 +529,7 @@ This section is a non-binding, early hypothesis to help confirm expected project
   - frontend typecheck command selected after UI package inspection
 - Automated tests:
   - shared contract schema tests
-  - backend service/route tests for assets, candidate flow, readiness, and run recipe generation
+  - backend service/route tests for assets, candidate flow, readiness, recipe/run-recipe records, materialization records, and execution jobs
   - adapter contract tests for external training task submission, status sync, result collection, and cancellation
   - UI contract/governance checks for desktop workbench
 - Manual checks:
@@ -533,9 +537,9 @@ This section is a non-binding, early hypothesis to help confirm expected project
   - register baseline asset
   - import candidate from literature key content
   - search and bind reusable assets
-  - compose a run recipe from asset + method recipe + evaluation protocol records
+  - persist or inspect a locked run recipe produced outside the desktop UI
   - create a fine-tuning task from base model + fine-tuning dataset + strategy refs
-  - generate a run recipe with traceable refs
+  - verify a run recipe carries traceable refs and hashes
   - create/reuse an Aliyun OSS or PAI Dataset mirror for an approved dataset version
   - submit a training task through a configured adapter
   - sync external job status and collect a structured result

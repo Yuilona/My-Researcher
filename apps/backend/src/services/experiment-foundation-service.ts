@@ -224,13 +224,6 @@ const RECORD_KIND_CONFIG: Record<ExperimentFoundationRecordKind, RecordKindConfi
     hashFields: ['training_task_spec_hash', 'artifact_hash'],
     familyFields: ['result_kind'],
   },
-  external_training_job: {
-    schema: contracts.experimentFoundationExternalTrainingJobSchema,
-    idFields: ['external_job_id'],
-    hashFields: ['external_job_hash', 'training_task_spec_hash', 'materialization_result_hash'],
-    statusFields: ['job_status'],
-    familyFields: ['adapter_kind'],
-  },
   experiment_result: {
     schema: contracts.experimentFoundationExperimentResultSchema,
     idFields: ['experiment_result_id'],

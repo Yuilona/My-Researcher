@@ -6,13 +6,13 @@
 - Next step: hand off to `T-077 experiment-foundation-execution-adapters`.
 
 ## Goal
-- Implement durable metadata storage and REST surfaces for experiment-foundation assets, protocols, readiness checks, recipe generation, materialization requests, candidates, results, evidence, and sidecars while preserving domain DTO boundaries.
+- Implement durable metadata storage and REST surfaces for experiment-foundation assets, protocols, readiness checks, recipe/run-recipe records, materialization request records, candidates, results, evidence, and sidecars while preserving domain DTO boundaries.
 
 ## Non-goals
 - Do not apply the generated migration to a live database in this task.
 - Do not expose platform-private adapter payloads through public API.
 - Do not store raw datasets or large artifacts in Postgres.
-- Do not implement execution adapters, LLM extraction, canonical asset synthesis, or desktop UI.
+- Do not implement execution adapters, LLM extraction, recipe generation, materialization generation, canonical asset synthesis, or desktop UI.
 
 ## Responsibilities
 - Add Prisma models only through DB SSOT when approved.

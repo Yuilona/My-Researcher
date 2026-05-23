@@ -66,7 +66,7 @@
 | Recipe draft | selected/candidate refs and params | editable incomplete draft | draft cannot submit or materialize |
 | RunRecipe lock | validated refs, versions, hashes, readiness | immutable platform-neutral RunRecipe + version lock | no vendor/platform/private fields |
 | Materialization | RunRecipe lock + platform selection + adapter version | TrainingTaskSpec + adapter metadata ref/hash | materialization is reproducible and fine-tuning uses profile |
-| Execution | TrainingTaskSpec + adapter metadata + idempotency key | ExternalTrainingJob + event log | mirror freshness and policy approval are checked |
+| Execution | TrainingTaskSpec + adapter metadata + idempotency key | ExternalTrainingJob + event log | mirror freshness and policy approval are checked; job state is not writable through generic registry records |
 | Result collection | job refs + artifacts/logs/config snapshots | ExperimentResult/FineTuningResult | result packet has metrics, artifacts, logs, config, protocol context |
 | Result validation | result + protocol version/hash | ResultValidationReport + blocker codes | invalid result cannot become evidence |
 | Evidence creation | valid result + validation report + facts | EvidenceCandidate | no final claim text or acceptance field |
@@ -75,9 +75,10 @@
 
 ## Current Gap Review
 - No uncovered high-risk review point remains after this split.
-- The main execution dependency is ordering: dataset and benchmark/protocol contracts must close before version locks; version locks must close before materialization; materialization and result contracts must close before adapters and UI.
+- The main execution dependency is now closed for the minimum chain: dataset and benchmark/protocol contracts closed before version locks; version locks closed before materialization; materialization and result contracts closed before adapters and UI.
 - The project contract lacks native child-task edges. Mitigation: child packages carry `parent-task:T-043` keywords, parent docs carry this matrix, and registry tasks map to `R-012`.
 - The registry does not encode child execution order. Mitigation: parent `06-child-task-review.md` and each child `01-plan.md` carry closure gates; governance lint confirms identity/mapping, while humans follow the documented order.
+- Remaining product gaps are not child-task misses in T-069~T-078. They are explicit follow-up scopes: productized tuning workflow, candidate extraction/import, typed asset APIs/UI beyond generic registry, dedicated paper-project sidecar bridge, live DB migration smoke, and real Aliyun SDK/credential hardening.
 
 ## Overall Implementation Order
 1. `experiment-foundation-design-review-sync`
@@ -121,3 +122,9 @@
 - `T-078 experiment-foundation-desktop-workbench`: done; desktop consumes registry/readiness/promotion/execution APIs without owning experiment semantics.
 - T-070~T-078 minimum implementation chain: complete.
 - Parent closure note: original roadmap also names richer tuning workflow records and real cloud SDK/credential hardening; keep those as explicit follow-up decisions rather than silently treating them as implemented.
+
+## Post-cleanup Review Status - 2026-05-19
+- T-069~T-078 remain the complete minimum implementation chain.
+- T-043 remains `planned` only as the parent closure/backlog umbrella; do not start a second experiment-foundation implementation track under adjacent modules.
+- Any remaining work must be opened as new follow-up task packages that consume the existing experiment-foundation contracts, registry/readiness APIs, execution APIs, and sidecar refs.
+- T-090 `experiment-foundation-capability-validation` is the first explicit follow-up package. It owns scenario-level testing of automation, external interactions, and adjacent-flow robustness for the already-closed minimum chain.

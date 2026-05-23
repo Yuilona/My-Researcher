@@ -1,5 +1,29 @@
 # 04 Verification
 
+## 2026-05-19 - Deep cleanup and closure re-review
+- Scope: experiment-foundation semantic-drift cleanup after T-078.
+- Fixes verified:
+  - [pass] removed obsolete T-078 temporary UI-gate evidence directories under `.ai/.tmp/ui/`
+  - [pass] split parent acceptance criteria into closed minimum chain and explicit follow-up scope
+  - [pass] removed stale parent TODO wording that made completed T-070~T-078 work look unimplemented
+  - [pass] removed `external_training_job` from generic registry record kinds so job state is only writable through the T-077 execution table/API
+- Commands:
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared typecheck`
+  - [pass] `pnpm --filter @paper-engineering-assistant/shared test`
+  - [pass] `pnpm --filter @paper-engineering-assistant/backend typecheck`
+  - [pass] targeted `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/experiment-foundation-service.unit.test.ts`
+  - [pass] targeted `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/experiment-foundation-execution-service.unit.test.ts`
+  - [pass] `pnpm --filter @paper-engineering-assistant/desktop typecheck`
+  - [pass] `DATABASE_URL=postgresql://user:pass@localhost:5432/paper_engineering_assistant pnpm --filter @paper-engineering-assistant/backend prisma:validate`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+  - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+  - [pass] `git diff --check`
+  - [blocked external] `pnpm --filter @paper-engineering-assistant/backend test` still requires real `DATABASE_URL` for existing T-054/T-067 topic-selection Prisma HTTP smoke tests; experiment-foundation targeted backend tests passed.
+- Result:
+  - [pass] `T-069` through `T-078` remain closed for the minimum operational chain.
+  - [pass] `T-043` remains `planned` only as parent closure/backlog umbrella.
+  - [pass] follow-up requirements are explicitly listed instead of being implied as hidden work inside the completed child packages.
+
 ## 2026-05-18 - T-077 landing verification
 - Scope: execution adapters minimum backend closure.
 - Commands:
@@ -145,7 +169,7 @@
 - Actual:
   - [pass] removed stale fine-tuning object naming, selected-platform wording, platform-specific leakage wording, old candidate lifecycle, and old benchmark leaderboard-ref wording from active experiment-foundation docs
   - [pass] added `07-quality-closure-review.md`
-  - [pass] repo scan confirms product functionality is not yet closed: shared contracts/tests, DB/API, UI, adapters, and result/evidence sidecar are not implemented
+  - [pass] repo scan confirmed that, at that time, product functionality was not yet closed: shared contracts/tests, DB/API, UI, adapters, and result/evidence sidecar were not implemented
   - [pass] `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
   - [pass] `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
 

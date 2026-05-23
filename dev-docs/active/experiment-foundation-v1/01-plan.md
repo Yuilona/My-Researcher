@@ -1,5 +1,9 @@
 # 01 Plan
 
+## Post-closure Scope Note - 2026-05-19
+- This original plan contains the full conceptual product roadmap. T-070~T-078 closed the minimum operational chain through shared contracts, generic registry/readiness APIs, execution APIs, and desktop JSON workbench.
+- Mentions of dedicated recipe/materialization generation services, typed asset CRUD/search UX, candidate import automation, tuning workflow services, and paper-project bridge services are follow-up scope unless a later task package explicitly owns them.
+
 ## Phases
 1. Discovery and semantic freeze
 2. Contracts and data model
@@ -136,7 +140,7 @@
   - create/update/search/detail
   - readiness check
   - candidate triage/promote/reject
-  - run recipe generation
+  - recipe/run-recipe record create/update/search
 - Add route/service tests.
 
 ### Phase 4 - Literature-to-asset candidate flow

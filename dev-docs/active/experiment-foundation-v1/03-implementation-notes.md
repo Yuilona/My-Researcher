@@ -1,5 +1,15 @@
 # 03 Implementation Notes
 
+## Closure/backlog alignment - 2026-05-19
+- Re-reviewed the repo after T-078 and the post-review desktop fixes.
+- Cleaned obsolete temporary UI-gate evidence directories under `.ai/.tmp/ui/` for the T-078 runs; durable verification evidence remains in task docs.
+- Clarified the parent acceptance criteria into two groups:
+  - T-070~T-078 minimum operational chain that is now closed;
+  - explicit follow-up scope that must be tracked as new task packages rather than hidden continuation work under T-043.
+- Parent T-043 remains `planned` as the closure/backlog umbrella because the original conceptual scope includes productized tuning workflow, full base-model/fine-tuning-dataset registries, dedicated paper-project bridge UI/API, candidate extraction, and real cloud SDK/credential hardening.
+- No second experiment-foundation implementation track should be created in `literature`, `research-argument`, or `paper-project`; those modules should consume refs/sidecars from the existing experiment-foundation registry/API.
+- Removed the generic registry `external_training_job` record kind so external job state has a single owner: the T-077 execution table/API. Registry records may reference jobs, but must not create/update job state.
+
 ## T-077 execution adapters landing - 2026-05-18
 - Completed `T-077 experiment-foundation-execution-adapters`.
 - Added minimum execution backend closure: `ExternalTrainingJob` shared/API contracts, dedicated external job persistence, memory/Prisma repositories, service/controller/routes, LocalScript execution, mockable Aliyun PAI-DLC boundary, readiness/materialization/idempotency gates, cancellation, stage events, partial refs, result validation, and evidence candidate creation.
@@ -19,7 +29,7 @@
 - Candidate status remains separate from canonical asset lifecycle; canonical asset/protocol/method schemas now explicitly reject candidate lifecycle fields.
 - Auto-promotion is gated by grounded source/provenance, confidence >= `0.8`, low risk, no duplicate, complete fields, clear policy, and deterministic rule trace refs.
 - Promotion outputs canonical refs/hashes only; no canonical DTOs, execution payloads, result/evidence records, paper claims, or platform-private fields are allowed in candidate/promotion contracts.
-- Boundary remains product-layer incomplete: no candidate import/extraction service, Prisma/API/UI, or actual canonical asset creation logic was added in T-075.
+- Boundary in T-075 remained shared-contract-only: it did not add candidate import/extraction service, persistence/API/UI, or actual canonical asset creation logic. Later T-076/T-078 add generic registry/API/UI surfaces, while candidate extraction and canonical asset synthesis remain follow-up scope.
 - Mainline next owner is `T-076 experiment-foundation-persistence-api-readiness`.
 
 ## T-074 result/evidence/sidecar contract landing - 2026-05-17
@@ -66,7 +76,7 @@
   - adapter-private payloads are barred from `RunRecipe` and public domain DTOs
 - Added `07-quality-closure-review.md` to separate two conclusions:
   - T-069 design/governance closure is complete
-  - product-level experiment-foundation functionality is not closed because contracts, DB/API, UI, adapters, and evidence sidecar are still unimplemented
+  - at that time, product-level experiment-foundation functionality was not closed because contracts, DB/API, UI, adapters, and evidence sidecar were still unimplemented
 - Next owner remains `T-070 experiment-foundation-dataset-registry-contracts`.
 
 ## Child task split and design review coverage - 2026-05-17
@@ -339,25 +349,11 @@
 ## Deviations from plan
 - None yet.
 
-## Open implementation TODOs
-- Execute slices in order unless a later slice is explicitly split behind feature flags.
-- Start with `S1` shared contracts + schema tests.
-- In `S1`, create `packages/shared/src/research-lifecycle/experiment-foundation-contracts.ts`.
-- In `S1`, update `packages/shared/src/research-lifecycle/index.ts` and `packages/shared/package.json` exports.
-- In `S1`, add `packages/shared/src/research-lifecycle/experiment-foundation-contracts.schema.test.ts`.
-- In `S1`, do not change Prisma, backend routes, desktop UI, platform adapters, or execution logic.
-- After `S1`, proceed through `S2` persistence/repository skeleton, `S3` asset API/readiness, `S4` literature candidate flow, `S5` recipe/tuning/evaluation facts, `S6` paper sidecar bridge, `S7` LocalScript pipeline, `S8` Aliyun adapter, and `S9` desktop workbench.
-- After decisions, inspect exact desktop route/nav structure before adding UI.
-- If persistence is required, route through DB SSOT workflow before changing Prisma schema.
-- Implement adapter scope according to confirmed `DP-07`: LocalScriptAdapter + AliyunPaiDlcAdapter only.
-- Keep platform credentials as refs only; do not store secret values in task specs or docs.
-- Keep storage semantics aligned with confirmed `DP-02` before implementing dataset contracts.
-- Keep result collection semantics aligned with confirmed `DP-08` before implementing adapter result parsing.
-- Keep candidate promotion semantics aligned with confirmed `DP-03`: auto-promote low-risk, escalate only risky/incomplete cases.
-- Keep baseline/benchmark semantics aligned with confirmed `DP-04`: baseline is comparison implementation, benchmark is comparison protocol, and full benchmark is not a catalog-entry blocker.
-- Keep RunRecipe semantics aligned with confirmed `DP-05`: `RecipeDraft -> RunRecipe -> TrainingTaskSpec`, with RunRecipe locked and platform-neutral.
+## Remaining follow-up TODOs
+- Keep platform credentials as refs only; do not store secret values in task specs, registry payloads, adapter metadata refs, or docs.
 - Keep PaperProject integration aligned with confirmed `DP-06`: use `PaperExperimentSidecar` frozen trace refs and do not copy reusable asset DTOs into core paper-project contracts.
-- Keep method recipe/tuning semantics aligned with confirmed `DP-09`: allow human/LLM-in-loop tuning with explicit proposals, decisions, trials, and result links, but do not build automatic hyperparameter search.
-- Keep evaluation semantics aligned with confirmed `DP-10`: structured fact layer supports paper tables and implementation decisions, but not full leaderboard or paper table rendering.
-- Keep UI naming aligned with confirmed `DP-01`: desktop label is `实验基座`; canonical domain remains `experiment-foundation`.
-- Keep project hub sync/lint current after task registration.
+- Track first-class tuning workflow work as a new task package if/when implementing `TuningSession`, `TuningProposal`, `TuningDecision`, and `TuningTrial`.
+- Track real Aliyun SDK/credential hardening as a new task package; the T-077 adapter is intentionally SDK-free and mockable.
+- Track candidate extraction/import as a new task package; current T-075/T-076 scope starts from grounded candidate payloads and promotion requests.
+- Track typed asset workbench/API expansion as a new task package; current T-076/T-078 minimum loop uses the generic registry over frozen domain DTO payloads.
+- Keep project hub sync/lint current after any follow-up task registration.

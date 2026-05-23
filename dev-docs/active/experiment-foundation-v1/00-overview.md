@@ -2,7 +2,7 @@
 
 ## Status
 - State: planned
-- Next step: T-078 已完成；进行母包 closure decision，确认是否接受 T-070~T-078 最小闭环，或另拆 tuning workflow / real cloud SDK hardening / paper-project bridge 专项。
+- Next step: run `T-090 experiment-foundation-capability-validation` to prove the T-070~T-078 minimum chain through scenario-level automation, external-boundary, and adjacent-flow robustness tests. Keep T-043 open only as the parent closure/backlog umbrella.
 
 ## Parent / Child Task Model
 - This package is the parent package for experiment-foundation V1.
@@ -46,6 +46,9 @@
 - 用户希望在桌面 UI 中把“实验基座”放到“文献管理”下方，并先通过任务包和 roadmap 对齐决策点。
 
 ## Canonical scope
+- This section records the full conceptual scope agreed during planning. The repo implementation currently closed by `T-070` through `T-078` is the minimum operational chain documented in the acceptance section below.
+- Objects that are named here but not implemented by the minimum chain, such as first-class tuning sessions or full base-model/fine-tuning-dataset registries, are follow-up scope. They must not be silently reintroduced inside desktop UI, research-argument, paper-project, or literature modules.
+
 - User-facing module label: `实验基座`
 - Canonical domain name: `experiment-foundation`
 - Layer 1 - reusable asset layer:
@@ -174,26 +177,36 @@
 - Each slice MUST keep its own verification entry in `04-verification.md`.
 
 ## Acceptance criteria (high level)
-- [x] `dev-docs/active/experiment-foundation-v1/` 包含 `roadmap + 00~05 + .ai-task.yaml`。
-- [x] 模块命名和边界通过决策点确认，不回退为“论文管理”大桶。
-- [ ] V1 contracts 定义 reusable assets、candidate provenance、readiness report 和 run recipe。
-- [ ] V1 contracts 显式区分固定可复用资产、可参数化方法配方、评估协议和外部执行控制面。
-- [ ] 后端可登记、检索、查看、更新、校验 dataset/baseline/benchmark/protocol 资产。
-- [ ] V1 contracts 显式区分 baseline 的“被比较对象”语义和 benchmark 的“比较协议”语义。
-- [ ] 数据资产支持 local canonical registry、local file refs、optional cloud mirror refs 和 checksum validation。
-- [ ] 常见训练/推理策略、优化器 preset、模型结构模板、实验假设、超参空间和消融计划能作为 `RunRecipe` 的可组合输入。
-- [ ] 人/LLM 在回路的调参流程能记录 tuning session、proposal、decision、trial、result 和 evidence candidate 的联动关系。
-- [ ] V1 contracts 支持 `RecipeDraft -> RunRecipe -> TrainingTaskSpec` 三层流转，且 `RunRecipe` 不携带平台私有字段。
-- [ ] 评估事实层能结构化记录 metric observations、comparison observations、decision signals 和 paper-table-ready fact sets。
-- [ ] 实施阶段能基于事实层判断是否继续、调整、重跑或放弃某个实验方向。
-- [ ] 大模型微调作为一等场景建模，支持 base model、fine-tuning dataset、fine-tuning strategy、fine-tuning task spec、fine-tuning result 和专项 readiness gate。
-- [ ] 文献 key-content 可生成资产候选；低风险完整候选可由规则自动晋升，高风险或信息缺失候选才升级人工审查。
-- [ ] Research-argument/paper-project 只消费 asset refs 或 sidecar refs，不复制资产详情。
-- [ ] `PaperExperimentSidecar` 能回答 paper 使用了哪些 recipe、result、evidence、dataset/baseline/benchmark/protocol 版本和 hash。
-- [x] Desktop UI 在“文献管理”下方提供实验基座入口，且不新增 legacy CSS 依赖。
-- [ ] Readiness checks 能阻断缺 license、缺 version/hash、缺 split/protocol、缺 baseline entrypoint 的实施准备。
-- [ ] 实验基座固定 `Resolve -> Validate -> Materialize -> Submit -> Monitor -> Collect -> Validate Result` 管道。
-- [ ] 训练任务通过平台适配器提交到外部训练平台，并能同步状态、收集结果和生成 evidence candidate。
-- [ ] 阿里云场景中，训练任务通过 OSS/PAI Dataset 执行镜像供 PAI-DLC 使用，结果从 OSS/平台 artifact 回收到本地 `ExperimentResult`。
-- [ ] 大模型微调任务通过 specialized `TrainingTaskSpec` profile 提交外部训练平台，结果先进入 `FineTuningResult` / `EvidenceCandidate`，不直接生成论文 claim。
-- [ ] 相关 typecheck/tests/governance lint 通过，docs/context 更新完成。
+### Minimum V1 operational chain closed by T-070 through T-078
+- [x] `dev-docs/active/experiment-foundation-v1/` contains `roadmap + 00~07 + .ai-task.yaml`.
+- [x] Module naming and boundaries are confirmed; `experiment-foundation` remains independent from literature/research-argument/paper-project buckets.
+- [x] Shared contracts define the closed minimum surface for reusable dataset/benchmark/baseline/protocol assets, candidate provenance, readiness reports, version locks, `RecipeDraft`, `RunRecipe`, materialization, execution jobs, results, evidence, and sidecars.
+- [x] Contracts separate reusable assets, method recipe components, evaluation protocol/facts, and external execution control.
+- [x] Contracts separate baseline as comparison target from benchmark/evaluation protocol as comparison rules.
+- [x] Dataset contracts support local canonical registry refs, local file refs, optional execution mirrors, checksum manifests, split protocols, and data policies.
+- [x] `RecipeDraft -> RunRecipe -> TrainingTaskSpec` is modeled, with `RunRecipe` locked and platform-neutral.
+- [x] Evaluation facts can record metric observations, comparison observations, decision signals, and paper-table fact sets without becoming claims or leaderboards.
+- [x] Fine-tuning cannot bypass the main path; it flows through fine-tuning external lock refs, `RunRecipe`, `TrainingTaskSpec(profile_kind = llm_fine_tuning)`, `FineTuningResult`, and eligible `EvidenceCandidate`.
+- [x] Candidate contracts and backend promotion persistence keep candidate lifecycle separate from canonical asset lifecycle.
+- [x] Generic registry/readiness APIs can create, list, read, upsert, and readiness-check frozen DTO payloads for dataset/baseline/benchmark/protocol and related records.
+- [x] External training jobs are owned by the T-077 execution table/API only; registry records can reference jobs but cannot create a parallel job state.
+- [x] `PaperExperimentSidecar` stores refs, locks, hashes, snapshots, and event refs instead of copying reusable asset DTOs.
+- [x] Desktop UI appears below “文献管理”, uses data-ui/token-governed styling, and does not recreate legacy CSS.
+- [x] Readiness checks block key minimum cases such as missing hashes, non-ready dataset versions, stale mirrors, incomplete locks, invalid result states, and candidate promotion ineligibility.
+- [x] LocalScript execution proves the minimum `Validate -> Submit -> Monitor -> Collect -> Validate Result` backend path; Aliyun PAI-DLC is implemented as a mockable SDK-free boundary with mirror/policy gates.
+- [x] Training jobs can be submitted/synced/cancelled/collected through the T-077 execution API and can create result/validation/evidence records.
+- [x] Typecheck/tests/governance lint and DB context refresh were run for the landed slices; live DB migration application remains out of scope.
+
+### Explicit follow-up scope, not closed by the minimum chain
+- [ ] Dedicated typed CRUD/search UX and typed backend endpoints beyond the generic JSON registry.
+- [ ] Literature key-content extraction/import service that creates asset candidates automatically from papers.
+- [ ] Actual canonical asset creation/synthesis from promotion results; current promotion persists decisions and requires existing canonical refs.
+- [ ] First-class `TuningSession`, `TuningProposal`, `TuningDecision`, and `TuningTrial` product workflow.
+- [ ] Full `BaseModelAsset` and `FineTuningDatasetAsset` registry behavior; current V1 models fine-tuning through locks, task profiles, candidates, and dataset usage.
+- [ ] Dedicated recipe-generation and materialization-generation services; current desktop writes already-frozen payloads through registry upsert.
+- [ ] Dedicated paper-project bridge UI/API that attaches `PaperExperimentSidecar` refs into paper-project workflow.
+- [ ] Real Aliyun SDK/credential hardening and production cloud submission; current Aliyun path is a credential-free mockable adapter boundary.
+- [ ] Applying generated migrations to a live development database and running full DB-backed smoke tests.
+
+### Follow-up validation package
+- `T-090 experiment-foundation-capability-validation` owns the deep functional test pass for the closed minimum chain. It must validate automation, external interactions, and cross-flow robustness without expanding product semantics.

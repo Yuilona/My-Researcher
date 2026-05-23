@@ -2474,7 +2474,7 @@ test('ExternalTrainingJob schemas accept canonical payloads and route wrappers',
     'cancelled',
     'unknown',
   ]);
-  assert.equal([...EXPERIMENT_FOUNDATION_RECORD_KINDS].includes('external_training_job'), true);
+  assert.equal((EXPERIMENT_FOUNDATION_RECORD_KINDS as readonly string[]).includes('external_training_job'), false);
   assert.equal(
     await validateWithSchema(experimentFoundationExternalTrainingJobSchema, externalTrainingJobPayload()),
     200,
@@ -3464,6 +3464,7 @@ test('Candidate and promotion schemas reject execution, result, paper-claim, and
 test('experiment-foundation persistence/api wrapper schemas accept canonical payloads', async () => {
   assert.equal([...EXPERIMENT_FOUNDATION_RECORD_KINDS].includes('run_recipe'), true);
   assert.equal([...EXPERIMENT_FOUNDATION_RECORD_KINDS].includes('dataset_asset_candidate'), true);
+  assert.equal((EXPERIMENT_FOUNDATION_RECORD_KINDS as readonly string[]).includes('external_training_job'), false);
 
   assert.equal(
     await validateWithRouteSchema(createExperimentFoundationRecordRequestSchema, {
@@ -3471,6 +3472,13 @@ test('experiment-foundation persistence/api wrapper schemas accept canonical pay
       payload: datasetAssetPayload(),
     }),
     200,
+  );
+  assert.equal(
+    await validateWithRouteSchema(createExperimentFoundationRecordRequestSchema, {
+      record_kind: 'external_training_job',
+      payload: externalTrainingJobPayload(),
+    }),
+    400,
   );
   assert.equal(
     await validateWithSchema(experimentFoundationStoredRecordSchema, storedExperimentFoundationRecordPayload()),

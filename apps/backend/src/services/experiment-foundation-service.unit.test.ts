@@ -620,6 +620,19 @@ test('experiment-foundation routes create/list/read records and return service v
     });
     assert.equal(invalidResponse.statusCode, 400);
     assert.equal(invalidResponse.json().error.code, 'INVALID_PAYLOAD');
+
+    const jobRegistryResponse = await app.inject({
+      method: 'POST',
+      url: '/experiment-foundation/records',
+      payload: {
+        record_kind: 'external_training_job',
+        payload: {
+          external_job_id: 'external_job_001',
+        },
+      },
+    });
+    assert.equal(jobRegistryResponse.statusCode, 400);
+    assert.equal(jobRegistryResponse.json().error.code, 'INVALID_PAYLOAD');
   } finally {
     await app.close();
   }

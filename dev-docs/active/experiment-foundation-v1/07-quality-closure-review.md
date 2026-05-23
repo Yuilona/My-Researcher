@@ -3,6 +3,18 @@
 ## Purpose
 本文件用于把外部设计审查报告的高价值观点，对照当前 repo 实际状态，收口为母包级质量结论。
 
+## Deep Re-review - 2026-05-19
+结论：repo 已满足 T-070~T-078 定义的实验基座最小可操作闭环，但不满足母包最初概念范围中的所有产品化功能要求。因此：
+- `T-069` through `T-078`: closed.
+- `T-043 experiment-foundation-v1`: remains `planned` as parent closure/backlog umbrella, not as an implementation lane.
+- No new experiment-foundation semantics should be implemented inside `literature`, `research-argument`, or `paper-project`; those modules should consume existing refs/sidecars.
+
+Post-review cleanup:
+- Removed obsolete temporary UI-gate evidence directories for T-078 from `.ai/.tmp/ui/`.
+- Split parent acceptance wording into minimum closed criteria and explicit follow-up scope.
+- Replaced stale parent implementation TODOs that still described already-completed S1/S2/S7/S9 work.
+- Removed `external_training_job` from generic registry record kinds so execution job state has one owner: the T-077 execution table/API.
+
 结论分两层：
 - 任务治理和设计分包已经闭环：`T-069` 已把审查观点吸收进母包和子包边界。
 - 产品最小实现链路已经闭环：T-070~T-075 shared contracts/schema tests、T-076 DB/API/readiness、T-077 execution adapters、T-078 desktop workbench 已形成最小可操作链路。
@@ -41,9 +53,31 @@
 | Shared contracts | `experiment-foundation-contracts.ts` contains T-070 through T-075 contract subsets | Closed for frozen shared contract surface |
 | Contract tests | `experiment-foundation-contracts.schema.test.ts` covers forbidden-field aliases, platform-private boundaries, evidence guards, sidecar no-copy guards, candidate gates, and execution job API wrappers | Closed for shared-contract slices |
 | Persistence/API | T-076 adds generic registry/readiness persistence, repositories/services, REST routes, readiness gates, and candidate promotion persistence | Closed for minimum backend loop |
-| Execution adapters | T-077 adds ExternalTrainingJob persistence, LocalScript execution, mocked Aliyun PAI-DLC boundary, submit/sync/cancel/collect APIs, result validation, and evidence creation | Closed for minimum backend loop |
+| Execution adapters | T-077 adds dedicated `ExternalTrainingJob` persistence, LocalScript execution, mocked Aliyun PAI-DLC boundary, submit/sync/cancel/collect APIs, result validation, and evidence creation; job state is not writable through generic registry records | Closed for minimum backend loop |
 | Desktop UI | `coreNavItems` now places `实验基座` below `文献管理`; `ExperimentFoundationModule` exposes registry/readiness/promotion/recipe/materialization/job/evidence views | Closed for minimum operational workbench |
 | Evidence/paper integration | T-074 defines sidecar contracts; T-077 creates result/evidence records; T-078 exposes evidence and sidecar records through registry/evidence views | Minimum closed; dedicated paper-project bridge UI remains follow-up |
+
+## Full Requirement Closure Review
+| Requirement area | Repo status | Closure |
+|---|---|---|
+| Dataset/benchmark/baseline/protocol contracts | Shared contracts and negative schema tests exist | Closed |
+| Version locks, recipe path, materialization boundary | Shared contracts enforce platform-neutral `RunRecipe` and materialized `TrainingTaskSpec` | Closed for minimum chain |
+| Persistence/API/readiness | Generic registry, readiness reports, repositories, services, REST routes, and candidate promotion persistence exist | Closed for minimum chain |
+| Execution and evidence | LocalScript path and mocked Aliyun boundary create job/result/validation/evidence records | Closed for minimum chain |
+| Desktop workbench | Registry/readiness/promotion/recipe/execution/evidence operation surfaces exist below `文献管理` | Closed for minimum chain |
+| Literature-to-candidate import | No automatic extraction/import service is implemented | Follow-up |
+| Canonical asset synthesis from promotion | Promotion requires existing canonical refs and does not synthesize canonical DTOs | Follow-up |
+| First-class tuning workflow | `TuningSession/TuningProposal/TuningDecision/TuningTrial` are conceptually scoped but not implemented | Follow-up |
+| Full base-model/fine-tuning-dataset registries | Fine-tuning path is modeled through locks/task profile/result; full reusable registries are not implemented | Follow-up |
+| Dedicated recipe/materialization generation services | Desktop writes frozen payloads through registry; no generator service is implemented | Follow-up |
+| Dedicated paper-project bridge UI/API | Sidecar contracts and registry views exist; paper-project attachment workflow is not implemented | Follow-up |
+| Real cloud SDK/credential execution | Aliyun path is SDK-free and mockable; no real credentials/cloud submit path | Follow-up |
+| Live DB application and full DB smoke | Repo migrations and DB context exist; live DB migration application is out of scope | Follow-up |
+
+## Follow-up Validation Package
+- `T-090 experiment-foundation-capability-validation` is now the owner for deep function-by-function capability testing.
+- It should prove automation, external-boundary behavior, result/evidence creation, sidecar compatibility, desktop/API operation, and adjacent-flow robustness against the T-070~T-078 minimum chain.
+- It must not expand product semantics; defects found by validation may be fixed narrowly or split into explicit follow-up packages.
 
 ## Code Quality Review
 Quality signals:
@@ -56,7 +90,7 @@ Quality signals:
 - The current worktree has unrelated dirty files from other task lines; T-078 changes must be staged/reviewed separately.
 
 ## Functional Closure Result
-当前功能需求已完成最小后端 + 桌面操作闭环，但不是完整实验平台或完整论文桥接产品。
+当前功能需求已完成最小后端 + 桌面操作闭环，但不是完整实验平台、完整调参系统、完整候选抽取系统或完整论文桥接产品。
 
 已经闭环的是：实验基座设计审查吸收、任务包拆分、职责边界和执行顺序；T-070 dataset registry；T-071 benchmark/protocol/baseline；T-072 version-lock/recipe；T-073 materialization/adapter-boundary；T-074 result/evidence/sidecar；T-075 candidate promotion；T-076 persistence/API/readiness；T-077 execution adapters；T-078 desktop workbench。
 

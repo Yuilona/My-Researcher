@@ -527,7 +527,6 @@ export const EXPERIMENT_FOUNDATION_RECORD_KINDS = [
   'training_task_stage_event',
   'training_task_cancellation_request',
   'training_task_partial_result_ref',
-  'external_training_job',
   'experiment_result',
   'fine_tuning_result',
   'result_validation_report',
