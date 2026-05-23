@@ -17,6 +17,19 @@
 - The runner supports both existing sample-set replay and deterministic local sample-set creation for repeatable acceptance.
 - Implementation review fix: SearchPlan blueprint semantic checks now compare `TopicSelectionFunctionalRef` arrays by canonical identity rather than object key order, avoiding DB serialization drift.
 
+## 2026-05-23 Phase 4 Follow-up: N6 Mixed Debate Harness
+- Closed a debate-runtime gap where arbiter issue framing and final synthesis received only role-level summary refs but not the structured role-level summary payloads.
+- `TopicSelectionNeedDiscoveryDebateLoopService` now passes bounded `debate_payloads` into arbiter calls:
+  - issue framing receives `role_level_summaries`;
+  - final synthesis receives `issue_frame` plus `role_level_summaries`.
+- The payloads remain structured summaries and issue frames only; raw transcripts, hidden reasoning, provider logs, and authority objects are still excluded.
+- `.ai/scripts/topic-selection-v1a-harness-e2e.mjs` now supports `TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=multi_agent_debate` and explicit N6 debate slot execution modes for explorer, deep critic, issue framing, and final synthesis.
+- The E2E runner supports a mixed local/provider path where Codex supplies an explorer role response and provider LLMs execute deep critic plus arbiter stages.
+- Guardrails added to prevent ambiguous script configurations:
+  - final synthesis cannot be configured as `codex_assisted`;
+  - `codex_assisted` executor kind must match `codex_assisted` execution mode outside debate;
+  - multi-agent debate E2E currently requires OpenAI because debate slot provider selection still uses per-profile default model options, not per-slot provider override mapping.
+
 ## 2026-05-19 Joint Alignment
 - Locked D-01 and D-02 in `06-joint-decisions.md`.
 - Scope remains planning/runtime-boundary alignment only; no product implementation changes yet.

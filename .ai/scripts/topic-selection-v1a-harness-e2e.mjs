@@ -59,6 +59,28 @@ const GENERATE_NEED_CANDIDATE_EXECUTION_MODE = normalizeExecutionMode(
   process.env.TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE,
   DEFAULT_HARNESS_AGENT_EXECUTION_MODE,
 );
+const GENERATE_NEED_CANDIDATE_EXECUTOR_KIND = normalizeGenerateExecutorKind(
+  process.env.TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND,
+  GENERATE_NEED_CANDIDATE_EXECUTION_MODE === 'codex_assisted' ? 'codex_assisted' : 'single_agent',
+);
+const DEBATE_SLOT_EXECUTION_MODES = {
+  'explorer.round_1_discovery': normalizeExecutionMode(
+    process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_EXECUTION_MODE,
+    'codex_assisted',
+  ),
+  'deep_critic.round_1_discovery': normalizeExecutionMode(
+    process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_EXECUTION_MODE,
+    'provider_llm',
+  ),
+  'arbiter.issue_framing': normalizeExecutionMode(
+    process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_EXECUTION_MODE,
+    'provider_llm',
+  ),
+  'arbiter.final_synthesis': normalizeExecutionMode(
+    process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_EXECUTION_MODE,
+    'provider_llm',
+  ),
+};
 const NEED_ADJUDICATION_EXECUTION_MODE = normalizeExecutionMode(
   process.env.TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE,
   DEFAULT_HARNESS_AGENT_EXECUTION_MODE,
@@ -97,6 +119,40 @@ function normalizeExecutionMode(value, fallback) {
     return normalized;
   }
   throw new Error(`Unsupported v1a harness execution mode: ${value}`);
+}
+
+function normalizeGenerateExecutorKind(value, fallback) {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return fallback;
+  }
+  if (['single_agent', 'codex_assisted', 'multi_agent_debate'].includes(normalized)) {
+    return normalized;
+  }
+  throw new Error(`Unsupported v1a harness generate executor kind: ${value}`);
+}
+
+if (
+  GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+  && DEBATE_SLOT_EXECUTION_MODES['arbiter.final_synthesis'] === 'codex_assisted'
+) {
+  throw new Error('topic-selection v1a debate final synthesis must be provider_llm or mocked_llm; codex_assisted is not allowed.');
+}
+if (
+  GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'codex_assisted'
+  && GENERATE_NEED_CANDIDATE_EXECUTION_MODE !== 'codex_assisted'
+) {
+  throw new Error('generate executor kind codex_assisted requires generate execution mode codex_assisted.');
+}
+if (
+  GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'codex_assisted'
+  && GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate'
+  && GENERATE_NEED_CANDIDATE_EXECUTION_MODE === 'codex_assisted'
+) {
+  throw new Error('generate execution mode codex_assisted requires generate executor kind codex_assisted.');
+}
+if (GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate' && PROVIDER_ID !== 'openai') {
+  throw new Error('multi_agent_debate E2E currently requires openai because debate slots use per-profile default provider options.');
 }
 
 function ref(refType, refId, titleCardId, versionId = null) {
@@ -304,7 +360,9 @@ function makeSamplingLlmGateway() {
 }
 
 function makeHarnessLlmGateway() {
-  if ([GENERATE_NEED_CANDIDATE_EXECUTION_MODE, NEED_ADJUDICATION_EXECUTION_MODE].includes('provider_llm')) {
+  const debateNeedsProvider = GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+    && Object.values(DEBATE_SLOT_EXECUTION_MODES).includes('provider_llm');
+  if ([GENERATE_NEED_CANDIDATE_EXECUTION_MODE, NEED_ADJUDICATION_EXECUTION_MODE].includes('provider_llm') || debateNeedsProvider) {
     return new BackendLlmGateway({
       defaultTimeoutMs: LLM_TIMEOUT_MS,
       defaultMaxRetries: LLM_MAX_RETRIES,
@@ -826,6 +884,151 @@ function buildRankedCandidateDraftBatch(input) {
   };
 }
 
+function buildDebateExplorerNotes(input) {
+  return {
+    schema_version: 'v1',
+    debate_loop_id: input.debateLoopId,
+    round_index: 1,
+    role: 'explorer',
+    stage: 'round_1_discovery',
+    agent_instance_id: 'explorer_1',
+    candidate_angles: [
+      {
+        angle_id: `explorer_angle_decision_boundary_${RUN_ID}`,
+        summary:
+          'RAG, fine-tuning, and hybrid adaptation papers expose a decision-boundary need rather than a simple method ranking.',
+        candidate_need_hint:
+          'Frame the need as an auditable decision framework for choosing RAG, fine-tuning, or hybrid adaptation under evidence and risk constraints.',
+        evidence_refs: allEvidenceUnitRefs(input.evidenceMapRecords, input.titleCardId),
+      },
+    ],
+    evidence_refs: allEvidenceUnitRefs(input.evidenceMapRecords, input.titleCardId),
+    unresolved_questions: [
+      'Which risks should block a broad claim and which can be carried forward as accepted residual risk?',
+    ],
+    warnings: [],
+  };
+}
+
+function buildDebateDeepCriticNotes(input) {
+  return {
+    schema_version: 'v1',
+    debate_loop_id: input.debateLoopId,
+    round_index: 1,
+    role: 'deep_critic',
+    stage: 'round_1_discovery',
+    agent_instance_id: 'deep_critic_1',
+    critique_points: [
+      {
+        critique_id: `deep_critic_overclaim_${RUN_ID}`,
+        summary:
+          'A useful need candidate must retain poisoning, leakage, source-verification, and retrieval-conflict risks instead of converting them into support evidence.',
+        severity: 'high',
+        evidence_refs: evidenceUnitRefsByRole(input.evidenceMapRecords, 'challenge', input.titleCardId),
+      },
+    ],
+    failure_modes: [
+      'universal superiority framing',
+      'dropping challenge evidence after candidate generation',
+      'treating benchmark context as proof of deployment readiness',
+    ],
+    missing_evidence_questions: [
+      'Which benchmark or comparison evidence is strong enough to bound the proposed decision framework?',
+    ],
+    evidence_refs: [
+      ...evidenceUnitRefsByRole(input.evidenceMapRecords, 'challenge', input.titleCardId),
+      ...evidenceUnitRefsByRole(input.evidenceMapRecords, 'baseline', input.titleCardId),
+    ],
+    warnings: ['risk evidence must not be reclassified as support'],
+  };
+}
+
+function buildDebateMockedIssueFrame(input) {
+  return {
+    schema_version: 'v1',
+    debate_loop_id: input.debateLoopId,
+    round_index: 1,
+    role: 'arbiter',
+    stage: 'issue_framing',
+    frame_id: `issue_frame_${RUN_ID}`,
+    focused_questions: [
+      'Can the final candidate articulate a bounded decision framework while carrying support, challenge, baseline, and context evidence?',
+    ],
+    requested_roles: ['explorer', 'deep_critic'],
+    source_role_summary_refs: [
+      ref('artifact_ref', `mock_explorer_role_summary_${RUN_ID}`, input.titleCardId),
+      ref('artifact_ref', `mock_deep_critic_role_summary_${RUN_ID}`, input.titleCardId),
+    ],
+    stop_condition: null,
+  };
+}
+
+function buildDebateCodexResponses(input) {
+  if (GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate') {
+    return null;
+  }
+  const responses = {};
+  if (DEBATE_SLOT_EXECUTION_MODES['explorer.round_1_discovery'] === 'codex_assisted') {
+    responses.explorer = [{
+      operator_label: 'codex-v1a-harness-debate-explorer',
+      output: buildDebateExplorerNotes(input),
+    }];
+  }
+  if (DEBATE_SLOT_EXECUTION_MODES['deep_critic.round_1_discovery'] === 'codex_assisted') {
+    responses.deep_critic = [{
+      operator_label: 'codex-v1a-harness-debate-deep-critic',
+      output: buildDebateDeepCriticNotes(input),
+    }];
+  }
+  if (DEBATE_SLOT_EXECUTION_MODES['arbiter.issue_framing'] === 'codex_assisted') {
+    responses.arbiter_issue_frame = {
+      operator_label: 'codex-v1a-harness-debate-issue-frame',
+      output: buildDebateMockedIssueFrame(input),
+    };
+  }
+  return Object.keys(responses).length > 0 ? responses : null;
+}
+
+function buildDebateMockedOutputs(input) {
+  if (GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate') {
+    return null;
+  }
+  const allSlotsMocked = Object.values(DEBATE_SLOT_EXECUTION_MODES).every((mode) => mode === 'mocked_llm');
+  if (!allSlotsMocked) {
+    return null;
+  }
+  return {
+    explorer: [{
+      fixture_id: `v1a_harness_debate_explorer_${RUN_ID}`,
+      output: buildDebateExplorerNotes(input),
+    }],
+    deep_critic: [{
+      fixture_id: `v1a_harness_debate_deep_critic_${RUN_ID}`,
+      output: buildDebateDeepCriticNotes(input),
+    }],
+    arbiter_issue_frame: {
+      fixture_id: `v1a_harness_debate_issue_frame_${RUN_ID}`,
+      output: buildDebateMockedIssueFrame(input),
+    },
+    arbiter_final: {
+      fixture_id: `v1a_harness_debate_final_${RUN_ID}`,
+      output: input.rankedBatch,
+    },
+  };
+}
+
+function assertSupportedDebateSlotFixtures() {
+  if (GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate') {
+    return;
+  }
+  const mockedSlots = Object.entries(DEBATE_SLOT_EXECUTION_MODES)
+    .filter(([, mode]) => mode === 'mocked_llm')
+    .map(([slotId]) => slotId);
+  if (mockedSlots.length > 0 && mockedSlots.length < Object.keys(DEBATE_SLOT_EXECUTION_MODES).length) {
+    throw new Error(`Mixed mocked_llm debate slots are not supported by this E2E script: ${mockedSlots.join(', ')}`);
+  }
+}
+
 function buildGenerateExplorationPayload(input) {
   const roleCounts = ROLE_ORDER.reduce((counts, role) => {
     counts[role] = input.evidenceMapRecords.evidence_units.filter((unit) => unit.evidence_role === role).length;
@@ -917,6 +1120,9 @@ function buildGenerateArbiterPayload(input) {
 }
 
 function v1aGenerateModelOptionId() {
+  if (GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate') {
+    return null;
+  }
   if (GENERATE_NEED_CANDIDATE_EXECUTION_MODE !== 'provider_llm') {
     return null;
   }
@@ -935,8 +1141,10 @@ function needAdjudicationModelOptionId() {
 }
 
 async function runGenerateNeedCandidate(runtime, input) {
+  assertSupportedDebateSlotFixtures();
   const nodeAttemptId = `node_attempt_generate_need_candidate_${RUN_ID}`;
   const workflowRunId = `workflow_run_generate_need_candidate_${RUN_ID}`;
+  const debateLoopId = `debate_loop_generate_need_candidate_${RUN_ID}`;
   const evidenceMapRef = ref(
     'evidence_map',
     input.evidenceMapRecords.evidence_map.evidence_map_id,
@@ -952,6 +1160,14 @@ async function runGenerateNeedCandidate(runtime, input) {
     evidenceStrengthRef,
     conflictRef,
   });
+  const debateFixtureInput = {
+    debateLoopId,
+    titleCardId: input.titleCardId,
+    evidenceMapRecords: input.evidenceMapRecords,
+    rankedBatch,
+  };
+  const debateFinalUsesProvider = GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+    && DEBATE_SLOT_EXECUTION_MODES['arbiter.final_synthesis'] === 'provider_llm';
   const topicScopeRef = ref('topic_scope', TOPIC_ID, input.titleCardId);
   const resourceSampleSetRef = ref('resource_sample_set', input.resourceSampleSetId, input.titleCardId);
   const harnessInput = {
@@ -973,7 +1189,7 @@ async function runGenerateNeedCandidate(runtime, input) {
     profile_id: TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
     execution_mode: GENERATE_NEED_CANDIDATE_EXECUTION_MODE,
     run_mode: GENERATE_NEED_CANDIDATE_EXECUTION_MODE === 'provider_llm' ? 'product' : 'acceptance',
-    executor_kind: GENERATE_NEED_CANDIDATE_EXECUTION_MODE === 'codex_assisted' ? 'codex_assisted' : 'single_agent',
+    executor_kind: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND,
     exploration_payload: buildGenerateExplorationPayload({
       ...input,
       evidenceStrengthRef,
@@ -984,13 +1200,21 @@ async function runGenerateNeedCandidate(runtime, input) {
       evidenceStrengthRef,
       conflictRef,
     }),
-    mocked_output: GENERATE_NEED_CANDIDATE_EXECUTION_MODE === 'mocked_llm'
+    debate_loop_id: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate' ? debateLoopId : null,
+    debate_slot_execution_overrides: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+      ? DEBATE_SLOT_EXECUTION_MODES
+      : null,
+    debate_mocked_outputs: buildDebateMockedOutputs(debateFixtureInput),
+    debate_codex_responses: buildDebateCodexResponses(debateFixtureInput),
+    mocked_output: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate'
+      && GENERATE_NEED_CANDIDATE_EXECUTION_MODE === 'mocked_llm'
       ? {
         fixture_id: `v1a_harness_ranked_candidate_batch_${RUN_ID}`,
         output: rankedBatch,
       }
       : null,
-    codex_response: GENERATE_NEED_CANDIDATE_EXECUTION_MODE === 'codex_assisted'
+    codex_response: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate'
+      && GENERATE_NEED_CANDIDATE_EXECUTION_MODE === 'codex_assisted'
       ? {
         operator_label: 'codex-v1a-harness-e2e',
         output: rankedBatch,
@@ -1008,7 +1232,7 @@ async function runGenerateNeedCandidate(runtime, input) {
     expectations: {
       status: 'succeeded',
       routing_decision: 'finalize_with_admitted_batch',
-      ...(GENERATE_NEED_CANDIDATE_EXECUTION_MODE === 'provider_llm'
+      ...(GENERATE_NEED_CANDIDATE_EXECUTION_MODE === 'provider_llm' || debateFinalUsesProvider
         ? {
           min_admitted_draft_count: 1,
           max_admitted_draft_count: 5,
@@ -1302,6 +1526,10 @@ function compactGenerateNode(generateResult) {
     adapter_status: generateResult.result.adapter_result.status,
     routing_decision:
       generateResult.result.adapter_result.supplemental_round_routing_decision?.routing_decision ?? null,
+    debate_status: generateResult.result.adapter_result.debate_result?.status ?? null,
+    debate_loop_id: generateResult.result.adapter_result.debate_result?.debate_loop_id ?? null,
+    debate_role_invocation_count:
+      generateResult.result.adapter_result.debate_result?.role_invocation_results?.length ?? 0,
     persisted_candidate_refs:
       generateResult.result.adapter_result.persist_need_candidate_batch_result?.persisted_candidate_refs ?? [],
     candidate_pool_projection_ref:
@@ -1592,6 +1820,10 @@ try {
     resource_sampling_mode: USE_MOCK_RESOURCE_SAMPLING ? 'deterministic_mock' : 'provider',
     harness_agent_execution_mode: DEFAULT_HARNESS_AGENT_EXECUTION_MODE,
     harness_generate_execution_mode: GENERATE_NEED_CANDIDATE_EXECUTION_MODE,
+    harness_generate_executor_kind: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND,
+    debate_slot_execution_modes: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+      ? DEBATE_SLOT_EXECUTION_MODES
+      : null,
     harness_adjudication_execution_mode: NEED_ADJUDICATION_EXECUTION_MODE,
     resource_sample_source: EXISTING_RESOURCE_SAMPLE_SET_ID ? 'existing_sample_set' : 'created_in_run',
     resource_sample_set_id: resourceSample.sample_set.resource_sample_set_id,
@@ -1626,6 +1858,10 @@ try {
     model_id: MODEL_ID,
     harness_agent_execution_mode: DEFAULT_HARNESS_AGENT_EXECUTION_MODE,
     harness_generate_execution_mode: GENERATE_NEED_CANDIDATE_EXECUTION_MODE,
+    harness_generate_executor_kind: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND,
+    debate_slot_execution_modes: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+      ? DEBATE_SLOT_EXECUTION_MODES
+      : null,
     harness_adjudication_execution_mode: NEED_ADJUDICATION_EXECUTION_MODE,
     error: sanitizeError(error),
   };

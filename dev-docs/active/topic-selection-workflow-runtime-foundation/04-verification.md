@@ -648,3 +648,28 @@ Minimum close criteria:
 - Result: passed.
 - Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
 - Result: passed.
+
+## 2026-05-23 v1a Mixed Multi-Agent Debate E2E Verification
+- Update: N6 `generate-need-candidate` debate arbiter calls now receive structured role summary payloads in addition to artifact refs, and the v1a harness E2E runner can execute N6 as `multi_agent_debate`.
+- Command: `pnpm --dir apps/backend exec node --test --loader ts-node/esm src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 72 tests passed.
+- Command: `node --check .ai/scripts/topic-selection-v1a-harness-e2e.mjs`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-debate-mixed-20260523180445 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=multi_agent_debate TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_EXECUTION_MODE=codex_assisted TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; reused sample set `resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c`, executed all nine v1a nodes, ran N6 as mixed Codex/provider debate, persisted 3 NeedCandidates, and published `v1b_input_bundle_95471cc3-d8c3-4ce1-9e2b-187d73294c1f`.
+- Artifact dir: `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-debate-mixed-20260523180445`.
+- Audit checks:
+  - N6 debate status `succeeded`;
+  - explorer used `codex_assisted` with `source_kind=codex_response`;
+  - deep critic and arbiter issue framing used `provider_llm` with `source_kind=provider_response`;
+  - final synthesis produced `debate_final_synthesis`;
+  - hidden-reasoning key scan over the E2E artifact returned `0`.
+- Initial full backend command: `pnpm --filter @paper-engineering-assistant/backend test`
+- Result: failed only because the default test runner does not load `.env.local`, and T-054/T-067 Prisma smoke tests require `DATABASE_URL`.
+- Follow-up command with the real local DB env showed existing-data contamination in unrelated research-lifecycle integration tests, so it was stopped and replaced with an isolated schema run.
+- Isolated DB command: create temporary Postgres schema, run `pnpm exec prisma migrate deploy --schema prisma/schema.prisma`, then run `BACKEND_TEST_PRESERVE_REAL_ENV=1 pnpm --filter @paper-engineering-assistant/backend test` against that temporary schema.
+- Result: passed; 760 tests, 759 passed, 1 skipped, 0 failed. The temporary schema was dropped after the run.
+- Command: `git diff --check`
+- Result: passed.

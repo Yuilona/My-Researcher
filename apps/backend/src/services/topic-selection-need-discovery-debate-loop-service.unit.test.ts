@@ -94,6 +94,10 @@ function telemetryForRequest(request: LlmStructuredOutputRequest): LlmCallTeleme
   };
 }
 
+function lastUserPayload(request: LlmStructuredOutputRequest): Record<string, unknown> {
+  return JSON.parse(request.messages.at(-1)?.content ?? '{}') as Record<string, unknown>;
+}
+
 async function makeRuntime(options: {
   llmGateway?: ThrowingLlmGateway | ProviderDebateGateway;
   executionMode?: TopicSelectionAgentExecutionMode;
@@ -446,6 +450,23 @@ test('need-discovery debate loop uses contract defaults for provider role instan
     true,
   );
   assert.equal(llmGateway.calls.every((call) => Object.keys(call.providerOverrides ?? {}).length === 0), true);
+
+  const issueFramePayload = lastUserPayload(llmGateway.calls[3]);
+  assert.deepEqual(
+    (issueFramePayload.debate_payloads as { role_level_summaries?: Array<{ role: string }> }).role_level_summaries
+      ?.map((summary) => summary.role),
+    ['explorer', 'deep_critic'],
+  );
+  const finalPayload = lastUserPayload(llmGateway.calls[4]);
+  assert.equal(
+    (finalPayload.debate_payloads as { issue_frame?: { frame_id?: string } }).issue_frame?.frame_id,
+    'issue_frame_001',
+  );
+  assert.deepEqual(
+    (finalPayload.debate_payloads as { role_level_summaries?: Array<{ role: string }> }).role_level_summaries
+      ?.map((summary) => summary.role),
+    ['explorer', 'deep_critic'],
+  );
 });
 
 test('need-discovery debate loop supports slot-level Codex substitution while final synthesis stays provider-backed', async () => {

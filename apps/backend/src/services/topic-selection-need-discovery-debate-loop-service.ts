@@ -152,14 +152,11 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     const completedExplorerRecords = this.completedRecords(explorerRecords, 'explorer');
     const completedDeepCriticRecords = this.completedRecords(deepCriticRecords, 'deep_critic');
 
-    const explorerSummaryArtifact = await this.recordRoleLevelSummary(
-      input,
-      this.explorerSummary(debateLoopId, roundIndex, completedExplorerRecords),
-    );
-    const deepCriticSummaryArtifact = await this.recordRoleLevelSummary(
-      input,
-      this.deepCriticSummary(debateLoopId, roundIndex, completedDeepCriticRecords),
-    );
+    const explorerSummary = this.explorerSummary(debateLoopId, roundIndex, completedExplorerRecords);
+    const deepCriticSummary = this.deepCriticSummary(debateLoopId, roundIndex, completedDeepCriticRecords);
+    const roleLevelSummaries = [explorerSummary, deepCriticSummary];
+    const explorerSummaryArtifact = await this.recordRoleLevelSummary(input, explorerSummary);
+    const deepCriticSummaryArtifact = await this.recordRoleLevelSummary(input, deepCriticSummary);
     const summaryArtifacts = [explorerSummaryArtifact, deepCriticSummaryArtifact];
 
     const issueFrameRecord = await this.invokeIssueFrame({
@@ -168,6 +165,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
       debatePolicyId,
       roundIndex,
       roleLevelSummaryRefs: summaryArtifacts.map((artifact) => artifact.artifact_ref),
+      roleLevelSummaries,
       parentInvocationAttemptIds: allWorkerRecords.map((record) => record.invocation.provenance.invocation_attempt_id),
     });
     if (
@@ -193,7 +191,9 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
       debatePolicyId,
       roundIndex,
       issueFrameRef: issueFrameRecord.artifact.artifact_ref,
+      issueFrame: issueFrameRecord.invocation.structured_output,
       roleLevelSummaryRefs: summaryArtifacts.map((artifact) => artifact.artifact_ref),
+      roleLevelSummaries,
       parentInvocationAttemptIds: [
         ...allWorkerRecords.map((record) => record.invocation.provenance.invocation_attempt_id),
         issueFrameRecord.invocation.provenance.invocation_attempt_id,
@@ -338,6 +338,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     debatePolicyId: string;
     roundIndex: number;
     roleLevelSummaryRefs: TopicSelectionArtifactFunctionalRef[];
+    roleLevelSummaries: TopicSelectionNeedDiscoveryRoleLevelSummary[];
     parentInvocationAttemptIds: string[];
   }): Promise<RoleInvocationRecord<TopicSelectionNeedDiscoveryDebateIssueFrame>> {
     const executionMode = this.slotExecutionMode(input.input, ISSUE_FRAME_SLOT);
@@ -363,6 +364,8 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
       schema: topicSelectionNeedDiscoveryDebateIssueFrameSchema as unknown as Record<string, unknown>,
       messages: this.arbiterMessages(input.input, 'Frame the discussion points for final synthesis.', {
         role_level_summary_refs: input.roleLevelSummaryRefs,
+      }, {
+        role_level_summaries: input.roleLevelSummaries,
       }),
       mocked_output: this.mockedRoleOutput(executionMode, input.input.mocked_outputs?.arbiter_issue_frame, 'arbiter_issue_frame'),
       codex_response: this.codexRoleResponse(executionMode, input.input.codex_responses?.arbiter_issue_frame, 'arbiter_issue_frame'),
@@ -383,7 +386,9 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     debatePolicyId: string;
     roundIndex: number;
     issueFrameRef: TopicSelectionArtifactFunctionalRef;
+    issueFrame: TopicSelectionNeedDiscoveryDebateIssueFrame;
     roleLevelSummaryRefs: TopicSelectionArtifactFunctionalRef[];
+    roleLevelSummaries: TopicSelectionNeedDiscoveryRoleLevelSummary[];
     parentInvocationAttemptIds: string[];
   }): Promise<TopicSelectionAgentInvocationResult<TopicSelectionRankedCandidateDraftBatch>> {
     const executionMode = this.slotExecutionMode(input.input, FINAL_SYNTHESIS_SLOT);
@@ -413,6 +418,9 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
       messages: this.arbiterMessages(input.input, 'Synthesize final ranked candidate draft batch.', {
         issue_frame_ref: input.issueFrameRef,
         role_level_summary_refs: input.roleLevelSummaryRefs,
+      }, {
+        issue_frame: input.issueFrame,
+        role_level_summaries: input.roleLevelSummaries,
       }),
       mocked_output: this.mockedRoleOutput(executionMode, input.input.mocked_outputs?.arbiter_final, 'arbiter_final'),
       codex_response: this.codexRoleResponse(executionMode, input.input.codex_responses?.arbiter_final, 'arbiter_final'),
@@ -777,6 +785,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     input: TopicSelectionNeedDiscoveryDebateLoopInput,
     instruction: string,
     refs: Record<string, unknown>,
+    debatePayloads: Record<string, unknown> = {},
   ): Array<{ role: 'system' | 'user'; content: string }> {
     return [
       {
@@ -793,6 +802,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
           node_input: input.node_input,
           arbiter_context: input.arbiter_context_packet.payload,
           refs,
+          debate_payloads: debatePayloads,
         }),
       },
     ];
