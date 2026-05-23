@@ -264,7 +264,7 @@ test('LLM gateway maps DashScope chat completion JSON output and telemetry', asy
   assert.equal(response.telemetry.model_id, 'qwen3.6-plus');
   assert.equal(response.telemetry.input_tokens, 13);
   assert.equal(response.telemetry.output_tokens, 5);
-  assert.equal(calls[0]?.input, 'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions');
+  assert.equal(calls[0]?.input, 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions');
   assert.equal(calls[0]?.body.model, 'qwen3.6-plus');
   assert.deepEqual(calls[0]?.body.response_format, { type: 'json_object' });
   assert.deepEqual(calls[0]?.body.extra_body, { enable_thinking: false });

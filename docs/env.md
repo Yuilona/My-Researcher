@@ -2,7 +2,7 @@
 
 This document is generated from `env/contract.yaml`. Do not hand-edit.
 
-Generated at (UTC): `2026-05-16T23:18:18Z`
+Generated at (UTC): `2026-05-23T13:40:35Z`
 
 ## Environments
 - `dev`, `prod`, `staging`
@@ -17,6 +17,7 @@ Generated at (UTC): `2026-05-16T23:18:18Z`
 | `AUTO_PULL_SCHEDULER_ENABLED` | `active` | `enum` | no | no | `true` | `` | `*` | `` | `` | `` | Enable the auto-pull background scheduler. |
 | `DASHSCOPE_API_KEY` | `active` | `string` | no | yes | `` | `dashscope_api_key` | `dev` | `` | `` | `` | Local DashScope API key for backend LLM workflows. |
 | `DASHSCOPE_API_KEY_CODING` | `active` | `string` | no | yes | `` | `dashscope_api_key_coding` | `dev` | `` | `` | `` | Local DashScope API key reserved for coding-oriented LLM workflows. |
+| `DASHSCOPE_BASE_URL` | `active` | `url` | no | no | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `` | `dev` | `` | `` | `` | OpenAI-compatible DashScope base URL used by backend LLM workflows; may be overridden in .env.local for local provider experiments. |
 | `DATABASE_URL` | `active` | `url` | yes | yes | `` | `database_url` | `dev` | `` | `` | `` | Prisma database URL for the local development database. |
 | `DEEPSEEK_API_KEY` | `active` | `string` | no | yes | `` | `deepseek_api_key` | `dev` | `` | `` | `` | Local DeepSeek API key for future backend LLM provider integrations. |
 | `HOST` | `active` | `string` | no | no | `0.0.0.0` | `` | `*` | `` | `` | `` | Service listen host. |

@@ -23,7 +23,7 @@ providers:
       credential_ref: literature_content_processing.dashscope
       env_fallback_key: DASHSCOPE_API_KEY
     endpoints:
-      openai_compatible_base_url: https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+      openai_compatible_base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
     capabilities:
       - chat_completions
       - json_object

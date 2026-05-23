@@ -505,7 +505,7 @@ export class BackendLlmGateway {
 
   private resolveDashScopeBaseUrl(): string {
     const value = process.env.DASHSCOPE_BASE_URL?.trim()
-      || 'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1';
+      || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
     return value.replace(/\/+$/u, '');
   }
 

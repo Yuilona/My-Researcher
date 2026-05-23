@@ -4,7 +4,7 @@
     "prod",
     "staging"
   ],
-  "generated_at_utc": "2026-05-16T23:18:18Z",
+  "generated_at_utc": "2026-05-23T13:40:35Z",
   "ssot_mode": "repo-env-contract",
   "variables": {
     "APPLICATION_SETTINGS_REPOSITORY": {
@@ -112,6 +112,25 @@
       "secret_ref": "dashscope_api_key_coding",
       "state": "active",
       "type": "string"
+    },
+    "DASHSCOPE_BASE_URL": {
+      "default": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "deprecate_after": null,
+      "description": "OpenAI-compatible DashScope base URL used by backend LLM workflows; may be overridden in .env.local for local provider experiments.",
+      "legacy": {
+        "deprecated": false,
+        "replaced_by": null
+      },
+      "migration": null,
+      "replacement": null,
+      "required": false,
+      "scopes": [
+        "dev"
+      ],
+      "secret": false,
+      "secret_ref": null,
+      "state": "active",
+      "type": "url"
     },
     "DATABASE_URL": {
       "default": null,

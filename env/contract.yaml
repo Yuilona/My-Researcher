@@ -49,6 +49,12 @@ variables:
     secret_ref: dashscope_api_key_coding
     scopes: [dev]
     description: Local DashScope API key reserved for coding-oriented LLM workflows.
+  DASHSCOPE_BASE_URL:
+    type: url
+    required: false
+    default: https://dashscope.aliyuncs.com/compatible-mode/v1
+    scopes: [dev]
+    description: OpenAI-compatible DashScope base URL used by backend LLM workflows; may be overridden in .env.local for local provider experiments.
   DEEPSEEK_API_KEY:
     type: string
     required: false
