@@ -139,7 +139,7 @@ This document is a planning artifact. It does not introduce a new runtime contra
 - `validate-need-adjudication`, `human-confirm-need`, and `publish-v1b-input-bundle` are now split at the backend route/service boundary.
 - `POST /topic-selection/v1a/need-candidates/:needCandidateId/adjudications` writes only adjudication authority plus typed side-effect refs.
 - `POST /topic-selection/v1a/adjudications/:adjudicationResultId/human-confirmations` owns `HumanConfirmedDecision` and `ValidatedNeed`.
-- `POST /topic-selection/v1a/v1b-input-bundles` owns deterministic v1b handoff and is idempotent for existing bundles.
+- `runPublishV1bInputBundleScenario` owns the normalized automated v1b handoff; `POST /topic-selection/v1a/v1b-input-bundles` remains the compatibility service boundary and is idempotent for existing bundles.
 - The real E2E canary now uses the generate-need-candidate WorkflowHarness entrypoint for v1a candidate creation.
 - The remaining route-level wrapper gap in the D-25 table refers to a product/API node runner and full scenario-wrapper migration, not to the adjudication/human-confirm/v1b handoff split.
 

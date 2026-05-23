@@ -138,6 +138,9 @@ type RecordSearchRunInput = {
   title_card_id: string;
   search_plan_id: string;
   literature_resource_pool_snapshot_id?: string;
+  search_plan_ref?: TopicSelectionFunctionalRef;
+  literature_resource_pool_snapshot_ref?: TopicSelectionFunctionalRef;
+  expected_literature_snapshot_hash?: string;
   run_kind?: TopicSelectionSearchRunKind;
   run_status?: TopicSelectionSearchRunStatus;
   query_provenance?: Array<Record<string, unknown>>;
@@ -145,6 +148,7 @@ type RecordSearchRunInput = {
   source_health_summary: Record<string, unknown>;
   dedup_summary?: Record<string, unknown>;
   evidence_map_input_refs: TopicSelectionFunctionalRef[];
+  raw_log_artifact_ref?: TopicSelectionFunctionalRef | null;
   raw_log_artifact?: Record<string, unknown> | null;
   coverage_observations?: CoverageExecutionObservationInput[];
   evidence_bindings?: CoverageEvidenceBindingInput[];
@@ -183,6 +187,18 @@ type ResolveSearchPlanRecheckRequestResult = {
 };
 
 const CONSUMABLE_SEARCH_RUN_STATUSES = new Set<TopicSelectionSearchRunStatus>(['succeeded', 'partial']);
+const SEARCH_RUN_LOCATOR_PROVENANCE_REF_TYPES = new Set([
+  'literature_abstract',
+  'fulltext_document',
+  'fulltext_section',
+  'fulltext_paragraph',
+  'fulltext_anchor',
+  'manual_locator',
+]);
+const SEARCH_RUN_COVERAGE_RISK_REF_TYPES = new Set([
+  'accepted_risk',
+  'search_coverage_risk',
+]);
 
 export class TopicSelectionSearchResourceService {
   private readonly idFactory: IdFactory;
@@ -563,6 +579,7 @@ export class TopicSelectionSearchResourceService {
     if (searchPlan.literature_snapshot_ref.ref_id !== literatureSnapshot.literature_resource_pool_snapshot_id) {
       throw new AppError(409, 'VERSION_CONFLICT', 'SearchRun snapshot does not match SearchPlan snapshot.');
     }
+    this.assertRecordSearchRunRefGuards(input, searchPlan, literatureSnapshot);
     const coverageRowIntents = await this.repository.listCoverageRowIntentsBySearchPlanId(searchPlan.search_plan_id);
     this.assertCoverageRecordsBelongToSearchPlan(input, coverageRowIntents);
 
@@ -575,12 +592,17 @@ export class TopicSelectionSearchResourceService {
       input.title_card_id,
       literatureSnapshot.snapshot_version,
     );
-    const blockers = this.searchRunBlockers(input);
+    const blockers = this.searchRunBlockers(input, literatureSnapshot);
     const inputSnapshot = await this.controlPlane.compileInputSnapshot({
       workspace_id: input.workspace_id ?? null,
       title_card_id: input.title_card_id,
       target_ref: searchRunRef,
-      source_refs: [searchPlanRef, literatureSnapshotRef, ...input.evidence_map_input_refs],
+      source_refs: [
+        searchPlanRef,
+        literatureSnapshotRef,
+        ...input.evidence_map_input_refs,
+        ...(input.raw_log_artifact_ref ? [input.raw_log_artifact_ref] : []),
+      ],
       payload: {
         run_kind: input.run_kind ?? 'planned_search',
         run_status: input.run_status ?? 'succeeded',
@@ -631,12 +653,20 @@ export class TopicSelectionSearchResourceService {
       input_snapshot_id: inputSnapshot.input_snapshot_id,
       policy_version_id: input.policy_version_id ?? null,
       actor: { actor_type: input.created_by ?? 'system' },
-      state_write_intents: [this.stateWriteIntent(searchRunRef, 'execution', 'search_run', 'consumable')],
+      state_write_intents: [this.stateWriteIntent(
+        searchRunRef,
+        'execution',
+        'search_run',
+        this.isConsumableSearchRunStatus(input.run_status ?? 'succeeded') ? 'consumable' : 'audit_only',
+      )],
       created_authority_refs: [searchRunRef],
     });
-    this.assertTransitionPassed(transition.result, 'SearchRun');
+    this.assertTransitionPassed(transition.result, 'SearchRun', blockers);
 
-    const artifactRefs = workflow.artifact_refs.map((artifact) => this.ref('artifact_ref', artifact.artifact_ref_id, input.title_card_id));
+    const artifactRefs = [
+      ...workflow.artifact_refs.map((artifact) => this.ref('artifact_ref', artifact.artifact_ref_id, input.title_card_id)),
+      ...(input.raw_log_artifact_ref ? [input.raw_log_artifact_ref] : []),
+    ];
     const createdAt = this.now();
     const searchRun: TopicSelectionSearchRunRecord = {
       search_run_id: searchRunId,
@@ -825,22 +855,236 @@ export class TopicSelectionSearchResourceService {
     return blockers;
   }
 
-  private searchRunBlockers(input: RecordSearchRunInput): TopicSelectionGateIssue[] {
+  private searchRunBlockers(
+    input: RecordSearchRunInput,
+    literatureSnapshot: TopicSelectionLiteratureResourcePoolSnapshotRecord,
+  ): TopicSelectionGateIssue[] {
     const blockers: TopicSelectionGateIssue[] = [];
     if (!this.hasCompleteResultAccounting(input.result_accounting)) {
       blockers.push(this.blocker('SEARCH_RUN_RESULT_ACCOUNTING_REQUIRED', 'SearchRun requires complete result accounting.'));
     }
+    blockers.push(...this.searchRunAccountingBlockers(input));
     if (!input.source_health_summary || Object.keys(input.source_health_summary).length === 0) {
       blockers.push(this.blocker('SEARCH_RUN_SOURCE_HEALTH_REQUIRED', 'SearchRun requires source-health summary.'));
     }
     const status = input.run_status ?? 'succeeded';
-    if (CONSUMABLE_SEARCH_RUN_STATUSES.has(status) && input.evidence_map_input_refs.length === 0) {
+    if (this.isConsumableSearchRunStatus(status) && input.evidence_map_input_refs.length === 0) {
       blockers.push(this.blocker('SEARCH_RUN_STABLE_INPUT_REFS_REQUIRED', 'Consumable SearchRun requires stable EvidenceMap input refs.'));
     }
-    if (input.evidence_map_input_refs.some((ref) => ref.ref_type === 'artifact_ref' || ref.ref_type === 'raw_search_log')) {
-      blockers.push(this.blocker('RAW_SEARCH_LOG_NOT_AUTHORITY', 'Raw search logs cannot be EvidenceMap authority refs.'));
+    blockers.push(...this.searchRunAuthorityRefBlockers(input, literatureSnapshot));
+    blockers.push(...this.searchRunStatusSemanticsBlockers(input));
+    return blockers;
+  }
+
+  private searchRunAccountingBlockers(input: RecordSearchRunInput): TopicSelectionGateIssue[] {
+    const blockers: TopicSelectionGateIssue[] = [];
+    const accounting = input.result_accounting;
+    if (!accounting) {
+      return blockers;
+    }
+    const counts = [
+      accounting.total_result_count,
+      accounting.unique_literature_count,
+      accounting.duplicate_result_count,
+      accounting.failed_source_count,
+      accounting.skipped_source_count,
+    ];
+    if (counts.some((count) => !Number.isFinite(count) || count < 0)) {
+      blockers.push(this.blocker('SEARCH_RUN_RESULT_ACCOUNTING_INVALID', 'SearchRun result counts must be finite and non-negative.'));
+      return blockers;
+    }
+    if (accounting.total_result_count < accounting.unique_literature_count
+      || accounting.total_result_count < accounting.unique_literature_count + accounting.duplicate_result_count) {
+      blockers.push(this.blocker('SEARCH_RUN_RESULT_ACCOUNTING_INCONSISTENT', 'SearchRun result accounting must reconcile total, unique, and duplicate counts.'));
+    }
+    const distinctBindingLiteratureCount = new Set(
+      (input.evidence_bindings ?? []).map((binding) => binding.literature_ref.ref_id),
+    ).size;
+    if (distinctBindingLiteratureCount > accounting.unique_literature_count) {
+      blockers.push(this.blocker('SEARCH_RUN_BINDING_COUNT_EXCEEDS_UNIQUE_RESULTS', 'Evidence bindings exceed unique literature count.'));
     }
     return blockers;
+  }
+
+  private searchRunStatusSemanticsBlockers(input: RecordSearchRunInput): TopicSelectionGateIssue[] {
+    const blockers: TopicSelectionGateIssue[] = [];
+    const status = input.run_status ?? 'succeeded';
+    const accounting = input.result_accounting;
+    if (status === 'succeeded') {
+      if (accounting.failed_source_count > 0) {
+        blockers.push(this.blocker('SEARCH_RUN_SUCCEEDED_WITH_FAILED_SOURCES', 'Succeeded SearchRun cannot include failed sources.'));
+      }
+      if (accounting.total_result_count > 0
+        && (input.coverage_observations ?? []).length === 0
+        && (input.evidence_bindings ?? []).length === 0) {
+        blockers.push(this.blocker('SEARCH_RUN_SUCCEEDED_WITHOUT_COVERAGE_EVIDENCE', 'Non-empty succeeded SearchRun requires coverage observations or evidence bindings.'));
+      }
+    }
+    if (status === 'partial'
+      && (accounting.failed_source_count > 0 || accounting.skipped_source_count > 0)
+      && !this.sourceHealthHasDegradedCondition(input.source_health_summary)) {
+      blockers.push(this.blocker('SEARCH_RUN_PARTIAL_SOURCE_HEALTH_REQUIRED', 'Partial SearchRun requires source-health warning or error evidence.'));
+    }
+    if (status === 'failed' && !this.sourceHealthHasFailureSummary(input.source_health_summary)) {
+      blockers.push(this.blocker('SEARCH_RUN_FAILED_SOURCE_HEALTH_REQUIRED', 'Failed SearchRun requires source-health failure summary.'));
+    }
+    return blockers;
+  }
+
+  private searchRunAuthorityRefBlockers(
+    input: RecordSearchRunInput,
+    literatureSnapshot: TopicSelectionLiteratureResourcePoolSnapshotRecord,
+  ): TopicSelectionGateIssue[] {
+    const blockers: TopicSelectionGateIssue[] = [];
+    const literatureRefIds = new Set(literatureSnapshot.literature_refs.map((ref) => ref.ref_id));
+    const sourceRefIds = new Set(literatureSnapshot.content_source_refs.map((ref) => ref.ref_id));
+    const authorityRefs = [
+      ...input.evidence_map_input_refs,
+      ...(input.evidence_bindings ?? []).flatMap((binding) => [binding.literature_ref, ...(binding.source_refs ?? [])]),
+    ];
+    if (authorityRefs.some((ref) => this.isRawArtifactAuthorityRef(ref))) {
+      blockers.push(this.blocker('RAW_SEARCH_LOG_NOT_AUTHORITY', 'Raw search logs cannot be EvidenceMap authority refs.'));
+    }
+    if (input.raw_log_artifact_ref && !this.isRawArtifactAuthorityRef(input.raw_log_artifact_ref)) {
+      blockers.push(this.blocker('RAW_LOG_ARTIFACT_REF_INVALID', 'SearchRun raw_log_artifact_ref must be an audit-only artifact ref.'));
+    }
+    for (const ref of input.evidence_map_input_refs) {
+      if (ref.ref_type === 'literature_record' && !literatureRefIds.has(ref.ref_id)) {
+        blockers.push(this.blocker('SNAPSHOT_OUTSIDE_LITERATURE_REF', `Literature ref ${ref.ref_id} is outside the resolved snapshot.`));
+      } else if (ref.ref_type === 'literature_source' && !sourceRefIds.has(ref.ref_id)) {
+        blockers.push(this.blocker('SNAPSHOT_OUTSIDE_SOURCE_REF', `Source ref ${ref.ref_id} is outside the resolved snapshot.`));
+      } else if (ref.ref_type !== 'literature_record'
+        && ref.ref_type !== 'literature_source'
+        && !this.isSearchRunLocatorProvenanceRef(ref)) {
+        blockers.push(this.blocker('SEARCH_RUN_UNSUPPORTED_EVIDENCE_MAP_INPUT_REF', `Unsupported EvidenceMap input ref type: ${ref.ref_type}.`));
+      }
+    }
+    for (const binding of input.evidence_bindings ?? []) {
+      if (binding.literature_ref.ref_type !== 'literature_record' || !literatureRefIds.has(binding.literature_ref.ref_id)) {
+        blockers.push(this.blocker('SNAPSHOT_OUTSIDE_LITERATURE_REF', `Evidence binding literature ref ${binding.literature_ref.ref_id} is outside the resolved snapshot.`));
+      }
+      for (const sourceRef of binding.source_refs ?? []) {
+        if (sourceRef.ref_type === 'literature_source' && !sourceRefIds.has(sourceRef.ref_id)) {
+          blockers.push(this.blocker('SNAPSHOT_OUTSIDE_SOURCE_REF', `Evidence binding source ref ${sourceRef.ref_id} is outside the resolved snapshot.`));
+        } else if (sourceRef.ref_type !== 'literature_source' && !this.isSearchRunLocatorProvenanceRef(sourceRef)) {
+          blockers.push(this.blocker('SEARCH_RUN_UNSUPPORTED_EVIDENCE_BINDING_SOURCE_REF', `Unsupported evidence binding source ref type: ${sourceRef.ref_type}.`));
+        }
+      }
+    }
+    for (const riskAcceptance of input.coverage_risk_acceptances ?? []) {
+      if (!this.isSearchCoverageRiskRef(riskAcceptance.accepted_risk_ref)) {
+        blockers.push(this.blocker('SEARCH_COVERAGE_RISK_REF_REQUIRED', 'Coverage risk acceptances must cite search-coverage risk refs only.'));
+      }
+    }
+    return blockers;
+  }
+
+  private assertRecordSearchRunRefGuards(
+    input: RecordSearchRunInput,
+    searchPlan: TopicSelectionSearchPlanRecord,
+    literatureSnapshot: TopicSelectionLiteratureResourcePoolSnapshotRecord,
+  ): void {
+    if (input.search_plan_ref) {
+      this.assertConcreteRefMatches(input.search_plan_ref, {
+        refType: 'search_plan',
+        refId: searchPlan.search_plan_id,
+        titleCardId: input.title_card_id,
+        versionId: searchPlan.plan_version,
+        label: 'SearchRun search_plan_ref',
+      });
+    }
+    if (input.literature_resource_pool_snapshot_ref) {
+      this.assertConcreteRefMatches(input.literature_resource_pool_snapshot_ref, {
+        refType: 'literature_resource_pool_snapshot',
+        refId: literatureSnapshot.literature_resource_pool_snapshot_id,
+        titleCardId: input.title_card_id,
+        versionId: literatureSnapshot.snapshot_version,
+        label: 'SearchRun literature_resource_pool_snapshot_ref',
+      });
+    }
+    if (input.expected_literature_snapshot_hash !== undefined
+      && input.expected_literature_snapshot_hash !== literatureSnapshot.snapshot_hash) {
+      throw new AppError(409, 'VERSION_CONFLICT', 'SearchRun expected literature snapshot hash does not match resolved snapshot.');
+    }
+  }
+
+  private assertConcreteRefMatches(
+    ref: TopicSelectionFunctionalRef,
+    expected: {
+      refType: string;
+      refId: string;
+      titleCardId: string;
+      versionId: string;
+      label: string;
+    },
+  ): void {
+    if (ref.ref_type !== expected.refType
+      || ref.ref_id !== expected.refId
+      || ref.title_card_id !== expected.titleCardId
+      || ref.version_id !== expected.versionId) {
+      throw new AppError(409, 'VERSION_CONFLICT', `${expected.label} does not match the resolved authority.`);
+    }
+  }
+
+  private isConsumableSearchRunStatus(status: TopicSelectionSearchRunStatus): boolean {
+    return CONSUMABLE_SEARCH_RUN_STATUSES.has(status);
+  }
+
+  private isRawArtifactAuthorityRef(ref: TopicSelectionFunctionalRef): boolean {
+    return ref.ref_type === 'artifact_ref' || ref.ref_type === 'raw_search_log';
+  }
+
+  private isSearchRunLocatorProvenanceRef(ref: TopicSelectionFunctionalRef): boolean {
+    return SEARCH_RUN_LOCATOR_PROVENANCE_REF_TYPES.has(ref.ref_type);
+  }
+
+  private isSearchCoverageRiskRef(ref: TopicSelectionFunctionalRef): boolean {
+    return SEARCH_RUN_COVERAGE_RISK_REF_TYPES.has(ref.ref_type);
+  }
+
+  private sourceHealthHasDegradedCondition(sourceHealth: Record<string, unknown>): boolean {
+    return this.sourceHealthHasAnySignal(sourceHealth, [
+      'warning',
+      'warn',
+      'error',
+      'failed',
+      'failure',
+      'degraded',
+      'partial',
+      'skipped',
+    ]);
+  }
+
+  private sourceHealthHasFailureSummary(sourceHealth: Record<string, unknown>): boolean {
+    return this.sourceHealthHasAnySignal(sourceHealth, ['error', 'failed', 'failure']);
+  }
+
+  private sourceHealthHasAnySignal(sourceHealth: Record<string, unknown> | null | undefined, tokens: string[]): boolean {
+    if (!sourceHealth || Object.keys(sourceHealth).length === 0) {
+      return false;
+    }
+    const stack: Array<{ key: string; value: unknown }> = Object.entries(sourceHealth)
+      .map(([key, value]) => ({ key, value }));
+    while (stack.length > 0) {
+      const { key, value } = stack.pop()!;
+      const normalizedKey = key.toLowerCase();
+      if (typeof value === 'string') {
+        const normalized = value.toLowerCase();
+        if (tokens.some((token) => normalized.includes(token) || normalizedKey.includes(token))) {
+          return true;
+        }
+      } else if (typeof value === 'number'
+        && value > 0
+        && tokens.some((token) => normalizedKey.includes(token))) {
+        return true;
+      } else if (Array.isArray(value)) {
+        stack.push(...value.map((item) => ({ key, value: item })));
+      } else if (value && typeof value === 'object') {
+        stack.push(...Object.entries(value as Record<string, unknown>)
+          .map(([nestedKey, nestedValue]) => ({ key: `${key}.${nestedKey}`, value: nestedValue })));
+      }
+    }
+    return false;
   }
 
   private buildSearchRunCoverageRecords(

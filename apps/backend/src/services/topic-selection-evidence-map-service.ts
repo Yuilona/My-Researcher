@@ -57,7 +57,7 @@ type ServiceOptions = {
 
 type EvidenceRole = Exclude<TopicSelectionEvidenceRole, 'unknown'>;
 
-type EvidenceUnitInput = {
+export type TopicSelectionEvidenceMapEvidenceUnitInput = {
   client_unit_key?: string;
   coverage_row_intent_id?: string | null;
   evidence_role: EvidenceRole;
@@ -72,7 +72,7 @@ type EvidenceUnitInput = {
   review_status?: TopicSelectionEvidenceReviewStatus;
 };
 
-type EvidenceTypedLinkInput = {
+export type TopicSelectionEvidenceMapTypedLinkInput = {
   link_type: TopicSelectionEvidenceLinkType;
   source_unit_key: string;
   target_unit_key: string;
@@ -80,7 +80,7 @@ type EvidenceTypedLinkInput = {
   confidence?: number | null;
 };
 
-type EvidenceClusterInput = {
+export type TopicSelectionEvidenceMapClusterInput = {
   cluster_type: TopicSelectionEvidenceClusterType;
   cluster_key: string;
   unit_keys: string[];
@@ -89,7 +89,7 @@ type EvidenceClusterInput = {
   confidence?: number | null;
 };
 
-type EvidencePatternInput = {
+export type TopicSelectionEvidenceMapPatternInput = {
   pattern_type: TopicSelectionEvidencePatternType;
   evidence_role: EvidenceRole;
   unit_keys: string[];
@@ -97,7 +97,7 @@ type EvidencePatternInput = {
   confidence?: number | null;
 };
 
-type EvidenceConflictSetInput = {
+export type TopicSelectionEvidenceMapConflictSetInput = {
   conflict_type: TopicSelectionEvidenceConflictType;
   severity: TopicSelectionEvidenceConflictSeverity;
   support_unit_keys?: string[];
@@ -107,16 +107,16 @@ type EvidenceConflictSetInput = {
   issue_codes?: string[];
 };
 
-type CreateEvidenceMapFromSearchRunInput = {
+export type TopicSelectionCreateEvidenceMapFromSearchRunInput = {
   workspace_id?: string | null;
   title_card_id: string;
   search_run_id: string;
   evidence_map_version?: string;
-  evidence_units: EvidenceUnitInput[];
-  typed_links?: EvidenceTypedLinkInput[];
-  clusters?: EvidenceClusterInput[];
-  patterns?: EvidencePatternInput[];
-  conflict_sets?: EvidenceConflictSetInput[];
+  evidence_units: TopicSelectionEvidenceMapEvidenceUnitInput[];
+  typed_links?: TopicSelectionEvidenceMapTypedLinkInput[];
+  clusters?: TopicSelectionEvidenceMapClusterInput[];
+  patterns?: TopicSelectionEvidenceMapPatternInput[];
+  conflict_sets?: TopicSelectionEvidenceMapConflictSetInput[];
   digest_payload?: Record<string, unknown>;
   created_by?: TopicSelectionActorType;
   policy_version_id?: string | null;
@@ -170,7 +170,7 @@ export class TopicSelectionEvidenceMapService {
   }
 
   async createEvidenceMapFromSearchRun(
-    input: CreateEvidenceMapFromSearchRunInput,
+    input: TopicSelectionCreateEvidenceMapFromSearchRunInput,
   ): Promise<TopicSelectionEvidenceMapCreateRecords> {
     if (input.evidence_units.length === 0) {
       throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'EvidenceMap requires at least one claim-level EvidenceUnit.');
@@ -583,7 +583,7 @@ export class TopicSelectionEvidenceMapService {
   }
 
   private buildTypedLinks(
-    input: CreateEvidenceMapFromSearchRunInput,
+    input: TopicSelectionCreateEvidenceMapFromSearchRunInput,
     evidenceMapId: string,
     evidenceMapVersion: string,
     unitKeyToRef: Map<string, TopicSelectionFunctionalRef>,
@@ -605,7 +605,7 @@ export class TopicSelectionEvidenceMapService {
   }
 
   private buildClusters(
-    input: CreateEvidenceMapFromSearchRunInput,
+    input: TopicSelectionCreateEvidenceMapFromSearchRunInput,
     evidenceMapId: string,
     evidenceMapVersion: string,
     unitKeyToRef: Map<string, TopicSelectionFunctionalRef>,
@@ -628,7 +628,7 @@ export class TopicSelectionEvidenceMapService {
   }
 
   private buildPatterns(
-    input: CreateEvidenceMapFromSearchRunInput,
+    input: TopicSelectionCreateEvidenceMapFromSearchRunInput,
     evidenceMapId: string,
     evidenceMapVersion: string,
     unitKeyToRef: Map<string, TopicSelectionFunctionalRef>,
@@ -650,7 +650,7 @@ export class TopicSelectionEvidenceMapService {
   }
 
   private buildConflictSets(
-    input: CreateEvidenceMapFromSearchRunInput,
+    input: TopicSelectionCreateEvidenceMapFromSearchRunInput,
     evidenceMapId: string,
     evidenceMapVersion: string,
     unitKeyToRef: Map<string, TopicSelectionFunctionalRef>,
@@ -674,7 +674,7 @@ export class TopicSelectionEvidenceMapService {
   }
 
   private async validateEvidenceUnitInputs(
-    units: EvidenceUnitInput[],
+    units: TopicSelectionEvidenceMapEvidenceUnitInput[],
     coverageRows: TopicSelectionCoverageRowIntentRecord[],
     allowedRefs: Set<string>,
   ): Promise<void> {
@@ -732,7 +732,7 @@ export class TopicSelectionEvidenceMapService {
     return null;
   }
 
-  private evidenceUnitSourceRefs(unit: EvidenceUnitInput): TopicSelectionFunctionalRef[] {
+  private evidenceUnitSourceRefs(unit: TopicSelectionEvidenceMapEvidenceUnitInput): TopicSelectionFunctionalRef[] {
     return this.uniqueRefs([
       ...(unit.source_refs ?? []),
       unit.locator.source_ref,
@@ -745,7 +745,7 @@ export class TopicSelectionEvidenceMapService {
     ]);
   }
 
-  private async validateLiteratureLocator(unit: EvidenceUnitInput): Promise<void> {
+  private async validateLiteratureLocator(unit: TopicSelectionEvidenceMapEvidenceUnitInput): Promise<void> {
     const literature = await this.literature.findLiteratureById(unit.literature_ref.ref_id);
     if (!literature) {
       throw new AppError(404, 'NOT_FOUND', `Literature ${unit.literature_ref.ref_id} not found.`);

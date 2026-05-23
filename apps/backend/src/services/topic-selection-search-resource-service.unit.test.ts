@@ -391,6 +391,368 @@ test('raw search logs cannot be used as EvidenceMap authority refs', async () =>
   );
 });
 
+test('SearchRun raw_log_artifact_ref must stay audit-only', async () => {
+  const ctx = await createBasePlan();
+
+  await assert.rejects(
+    () => ctx.service.recordSearchRun({
+      title_card_id: ctx.titleCard.title_card_id,
+      search_plan_id: ctx.plan.search_plan.search_plan_id,
+      result_accounting: {
+        total_result_count: 1,
+        unique_literature_count: 1,
+        duplicate_result_count: 0,
+        failed_source_count: 0,
+        skipped_source_count: 0,
+      },
+      source_health_summary: {
+        source_count: 1,
+      },
+      evidence_map_input_refs: [ref('literature_record', 'lit_001', ctx.titleCard.title_card_id)],
+      raw_log_artifact_ref: ref('literature_record', 'lit_001', ctx.titleCard.title_card_id),
+      coverage_observations: [{
+        coverage_row_intent_id: ctx.plan.coverage_row_intents[0]!.coverage_row_intent_id,
+        status: 'succeeded',
+      }],
+      created_by: 'system',
+    }),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.statusCode === 409
+      && error.errorCode === 'GATE_CONSTRAINT_FAILED'
+      && Array.isArray((error.details as Record<string, unknown>)?.blocker_codes)
+      && ((error.details as Record<string, unknown>).blocker_codes as string[])
+        .includes('RAW_LOG_ARTIFACT_REF_INVALID'),
+  );
+});
+
+test('SearchRun concrete refs and snapshot hash must match resolved authorities', async () => {
+  const ctx = await createBasePlan();
+
+  await assert.rejects(
+    () => ctx.service.recordSearchRun({
+      title_card_id: ctx.titleCard.title_card_id,
+      search_plan_id: ctx.plan.search_plan.search_plan_id,
+      search_plan_ref: {
+        ref_type: 'search_plan',
+        ref_id: ctx.plan.search_plan.search_plan_id,
+        version_id: ctx.plan.search_plan.plan_version,
+        title_card_id: ctx.titleCard.title_card_id,
+      },
+      literature_resource_pool_snapshot_ref: {
+        ref_type: 'literature_resource_pool_snapshot',
+        ref_id: ctx.snapshot.literature_resource_pool_snapshot_id,
+        version_id: ctx.snapshot.snapshot_version,
+        title_card_id: ctx.titleCard.title_card_id,
+      },
+      expected_literature_snapshot_hash: 'stale-snapshot-hash',
+      result_accounting: {
+        total_result_count: 1,
+        unique_literature_count: 1,
+        duplicate_result_count: 0,
+        failed_source_count: 0,
+        skipped_source_count: 0,
+      },
+      source_health_summary: {
+        source_count: 1,
+      },
+      evidence_map_input_refs: [ref('literature_record', 'lit_001', ctx.titleCard.title_card_id)],
+      coverage_observations: [{
+        coverage_row_intent_id: ctx.plan.coverage_row_intents[0]!.coverage_row_intent_id,
+        status: 'succeeded',
+      }],
+      created_by: 'system',
+    }),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.statusCode === 409
+      && error.errorCode === 'VERSION_CONFLICT',
+  );
+});
+
+test('SearchRun blocks snapshot-outside literature refs in consumable input', async () => {
+  const ctx = await createBasePlan();
+
+  await assert.rejects(
+    () => ctx.service.recordSearchRun({
+      title_card_id: ctx.titleCard.title_card_id,
+      search_plan_id: ctx.plan.search_plan.search_plan_id,
+      result_accounting: {
+        total_result_count: 1,
+        unique_literature_count: 1,
+        duplicate_result_count: 0,
+        failed_source_count: 0,
+        skipped_source_count: 0,
+      },
+      source_health_summary: {
+        source_count: 1,
+      },
+      evidence_map_input_refs: [ref('literature_record', 'lit_outside_snapshot', ctx.titleCard.title_card_id)],
+      coverage_observations: [{
+        coverage_row_intent_id: ctx.plan.coverage_row_intents[0]!.coverage_row_intent_id,
+        status: 'succeeded',
+      }],
+      created_by: 'system',
+    }),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.statusCode === 409
+      && error.errorCode === 'GATE_CONSTRAINT_FAILED'
+      && Array.isArray((error.details as Record<string, unknown>)?.blocker_codes)
+      && ((error.details as Record<string, unknown>).blocker_codes as string[])
+        .includes('SNAPSHOT_OUTSIDE_LITERATURE_REF'),
+  );
+});
+
+test('SearchRun permits locator provenance refs without treating them as raw authority', async () => {
+  const ctx = await createBasePlan();
+
+  const result = await ctx.service.recordSearchRun({
+    title_card_id: ctx.titleCard.title_card_id,
+    search_plan_id: ctx.plan.search_plan.search_plan_id,
+    result_accounting: {
+      total_result_count: 1,
+      unique_literature_count: 1,
+      duplicate_result_count: 0,
+      failed_source_count: 0,
+      skipped_source_count: 0,
+    },
+    source_health_summary: {
+      source_count: 1,
+    },
+    evidence_map_input_refs: [
+      ref('literature_record', 'lit_001', ctx.titleCard.title_card_id),
+      ref('literature_source', 'source_001', ctx.titleCard.title_card_id),
+      ref('fulltext_section', 'section_001', ctx.titleCard.title_card_id),
+    ],
+    coverage_observations: [{
+      coverage_row_intent_id: ctx.plan.coverage_row_intents[0]!.coverage_row_intent_id,
+      status: 'succeeded',
+    }],
+    evidence_bindings: [{
+      coverage_row_intent_id: ctx.plan.coverage_row_intents[0]!.coverage_row_intent_id,
+      literature_ref: ref('literature_record', 'lit_001', ctx.titleCard.title_card_id),
+      source_refs: [
+        ref('literature_source', 'source_001', ctx.titleCard.title_card_id),
+        ref('fulltext_section', 'section_001', ctx.titleCard.title_card_id),
+      ],
+      binding_kind: 'retrieval_hit',
+    }],
+    created_by: 'system',
+  });
+
+  assert.equal(result.search_run.run_status, 'succeeded');
+  assert.ok(result.search_run.evidence_map_input_refs.some((inputRef) => inputRef.ref_type === 'fulltext_section'));
+});
+
+test('SearchRun rejects unsupported EvidenceMap authority ref types explicitly', async () => {
+  const ctx = await createBasePlan();
+
+  await assert.rejects(
+    () => ctx.service.recordSearchRun({
+      title_card_id: ctx.titleCard.title_card_id,
+      search_plan_id: ctx.plan.search_plan.search_plan_id,
+      result_accounting: {
+        total_result_count: 1,
+        unique_literature_count: 1,
+        duplicate_result_count: 0,
+        failed_source_count: 0,
+        skipped_source_count: 0,
+      },
+      source_health_summary: {
+        source_count: 1,
+      },
+      evidence_map_input_refs: [ref('search_plan', ctx.plan.search_plan.search_plan_id, ctx.titleCard.title_card_id)],
+      coverage_observations: [{
+        coverage_row_intent_id: ctx.plan.coverage_row_intents[0]!.coverage_row_intent_id,
+        status: 'succeeded',
+      }],
+      created_by: 'system',
+    }),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.statusCode === 409
+      && error.errorCode === 'GATE_CONSTRAINT_FAILED'
+      && Array.isArray((error.details as Record<string, unknown>)?.blocker_codes)
+      && ((error.details as Record<string, unknown>).blocker_codes as string[])
+        .includes('SEARCH_RUN_UNSUPPORTED_EVIDENCE_MAP_INPUT_REF'),
+  );
+});
+
+test('SearchRun coverage risk acceptances use explicit search-coverage risk refs', async () => {
+  const ctx = await createBasePlan();
+  const coverageRowId = ctx.plan.coverage_row_intents[0]!.coverage_row_intent_id;
+
+  await assert.rejects(
+    () => ctx.service.recordSearchRun({
+      title_card_id: ctx.titleCard.title_card_id,
+      search_plan_id: ctx.plan.search_plan.search_plan_id,
+      result_accounting: {
+        total_result_count: 1,
+        unique_literature_count: 1,
+        duplicate_result_count: 0,
+        failed_source_count: 0,
+        skipped_source_count: 0,
+      },
+      source_health_summary: {
+        source_count: 1,
+      },
+      evidence_map_input_refs: [ref('literature_record', 'lit_001', ctx.titleCard.title_card_id)],
+      coverage_observations: [{
+        coverage_row_intent_id: coverageRowId,
+        status: 'succeeded',
+      }],
+      coverage_risk_acceptances: [{
+        coverage_row_intent_id: coverageRowId,
+        accepted_risk_ref: ref('coverage_row_intent', coverageRowId, ctx.titleCard.title_card_id),
+        accepted_by: { actor_type: 'human', actor_id: 'reviewer_1' },
+        rationale: 'Invalid: a coverage row is not a search-coverage risk authority.',
+      }],
+      created_by: 'system',
+    }),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.statusCode === 409
+      && error.errorCode === 'GATE_CONSTRAINT_FAILED'
+      && Array.isArray((error.details as Record<string, unknown>)?.blocker_codes)
+      && ((error.details as Record<string, unknown>).blocker_codes as string[])
+        .includes('SEARCH_COVERAGE_RISK_REF_REQUIRED'),
+  );
+
+  const result = await ctx.service.recordSearchRun({
+    title_card_id: ctx.titleCard.title_card_id,
+    search_plan_id: ctx.plan.search_plan.search_plan_id,
+    result_accounting: {
+      total_result_count: 1,
+      unique_literature_count: 1,
+      duplicate_result_count: 0,
+      failed_source_count: 0,
+      skipped_source_count: 0,
+    },
+    source_health_summary: {
+      source_count: 1,
+    },
+    evidence_map_input_refs: [ref('literature_record', 'lit_001', ctx.titleCard.title_card_id)],
+    coverage_observations: [{
+      coverage_row_intent_id: coverageRowId,
+      status: 'succeeded',
+    }],
+    coverage_risk_acceptances: [{
+      coverage_row_intent_id: coverageRowId,
+      accepted_risk_ref: ref('accepted_risk', 'accepted_risk_search_coverage_001', ctx.titleCard.title_card_id),
+      accepted_by: { actor_type: 'human', actor_id: 'reviewer_1' },
+      rationale: 'Proceed with explicit search coverage risk acceptance.',
+    }],
+    created_by: 'system',
+  });
+
+  assert.equal(result.risk_acceptances.length, 1);
+  assert.equal(result.risk_acceptances[0]?.accepted_risk_ref.ref_type, 'accepted_risk');
+});
+
+test('SearchRun result accounting must reconcile unique and duplicate counts', async () => {
+  const ctx = await createBasePlan();
+
+  await assert.rejects(
+    () => ctx.service.recordSearchRun({
+      title_card_id: ctx.titleCard.title_card_id,
+      search_plan_id: ctx.plan.search_plan.search_plan_id,
+      result_accounting: {
+        total_result_count: 1,
+        unique_literature_count: 1,
+        duplicate_result_count: 1,
+        failed_source_count: 0,
+        skipped_source_count: 0,
+      },
+      source_health_summary: {
+        source_count: 1,
+      },
+      evidence_map_input_refs: [ref('literature_record', 'lit_001', ctx.titleCard.title_card_id)],
+      coverage_observations: [{
+        coverage_row_intent_id: ctx.plan.coverage_row_intents[0]!.coverage_row_intent_id,
+        status: 'succeeded',
+      }],
+      created_by: 'system',
+    }),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.statusCode === 409
+      && error.errorCode === 'GATE_CONSTRAINT_FAILED'
+      && Array.isArray((error.details as Record<string, unknown>)?.blocker_codes)
+      && ((error.details as Record<string, unknown>).blocker_codes as string[])
+        .includes('SEARCH_RUN_RESULT_ACCOUNTING_INCONSISTENT'),
+  );
+});
+
+test('partial SearchRun accepts structured source-health warning codes', async () => {
+  const ctx = await createBasePlan();
+
+  const result = await ctx.service.recordSearchRun({
+    title_card_id: ctx.titleCard.title_card_id,
+    search_plan_id: ctx.plan.search_plan.search_plan_id,
+    run_status: 'partial',
+    result_accounting: {
+      total_result_count: 1,
+      unique_literature_count: 1,
+      duplicate_result_count: 0,
+      failed_source_count: 0,
+      skipped_source_count: 1,
+    },
+    source_health_summary: {
+      source_count: 1,
+      warning_codes: ['LOW_SOURCE_COUNT'],
+    },
+    evidence_map_input_refs: [ref('literature_record', 'lit_001', ctx.titleCard.title_card_id)],
+    coverage_observations: [{
+      coverage_row_intent_id: ctx.plan.coverage_row_intents[0]!.coverage_row_intent_id,
+      status: 'partial',
+      result_count: 1,
+      source_count: 1,
+      missing_reason_codes: ['LOW_SOURCE_COUNT'],
+    }],
+    created_by: 'system',
+  });
+
+  assert.equal(result.search_run.run_status, 'partial');
+  assert.deepEqual(result.search_run.source_health_summary.warning_codes, ['LOW_SOURCE_COUNT']);
+});
+
+test('failed SearchRun persists as audit-only authority without EvidenceMap input refs', async () => {
+  const ctx = await createBasePlan();
+
+  const result = await ctx.service.recordSearchRun({
+    title_card_id: ctx.titleCard.title_card_id,
+    search_plan_id: ctx.plan.search_plan.search_plan_id,
+    run_status: 'failed',
+    result_accounting: {
+      total_result_count: 0,
+      unique_literature_count: 0,
+      duplicate_result_count: 0,
+      failed_source_count: 1,
+      skipped_source_count: 0,
+    },
+    source_health_summary: {
+      failed_source_count: 1,
+      error_codes: ['SEARCH_PROVIDER_FAILED'],
+      failure_summary: 'Search provider failed before returning usable literature.',
+    },
+    evidence_map_input_refs: [],
+    raw_log_artifact: {
+      error_code: 'SEARCH_PROVIDER_FAILED',
+    },
+    created_by: 'system',
+  });
+
+  assert.equal(result.search_run.run_status, 'failed');
+  assert.deepEqual(result.search_run.evidence_map_input_refs, []);
+  assert.equal(result.search_run.artifact_refs.length, 1);
+  const transition = await ctx.controlPlaneRepository.findChainTransitionAttemptById(
+    result.search_run.transition_attempt_id!,
+  );
+  assert.equal(transition?.result, 'passed');
+  assert.equal(transition?.state_write_intents[0]?.next_value, 'audit_only');
+});
+
 test('SearchRun coverage records must reference rows owned by the SearchPlan', async () => {
   const ctx = await createBasePlan();
 
@@ -516,17 +878,21 @@ test('SearchPlanRecheckRequest accepted, reject, accepted-risk, and materialized
       created_by: 'system',
     },
     follow_up_search_run: {
+      run_status: 'failed',
       result_accounting: {
-        total_result_count: 1,
-        unique_literature_count: 1,
+        total_result_count: 0,
+        unique_literature_count: 0,
         duplicate_result_count: 0,
-        failed_source_count: 0,
+        failed_source_count: 1,
         skipped_source_count: 0,
       },
       source_health_summary: {
         source_count: 1,
+        failed_source_count: 1,
+        error_codes: ['SEARCH_PROVIDER_FAILED'],
+        failure_summary: 'Recheck follow-up search provider failed before returning usable literature.',
       },
-      evidence_map_input_refs: [ref('literature_record', 'lit_001', ctx.titleCard.title_card_id)],
+      evidence_map_input_refs: [],
       created_by: 'system',
     },
   });
@@ -537,4 +903,5 @@ test('SearchPlanRecheckRequest accepted, reject, accepted-risk, and materialized
   assert.equal(materializedResult.revised_search_plan?.parent_search_plan_ref?.ref_id, ctx.plan.search_plan.search_plan_id);
   assert.equal(materializedResult.revised_search_plan?.recheck_request_ref?.ref_id, materialized.search_plan_recheck_request_id);
   assert.equal(materializedResult.follow_up_search_run?.run_kind, 'recheck_followup');
+  assert.equal(materializedResult.follow_up_search_run?.run_status, 'failed');
 });

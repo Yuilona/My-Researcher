@@ -36,6 +36,7 @@ import {
   TOPIC_SELECTION_NEED_MECHANISM_TYPES,
   TOPIC_SELECTION_NEED_PRIOR_ART_STATUSES,
   TOPIC_SELECTION_NEED_REJECTED_REASONS,
+  humanConfirmationInputSchema,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-need-validation-contracts';
 import {
   TOPIC_SELECTION_ACCEPTED_RISK_SOURCE_TYPES,
@@ -110,6 +111,61 @@ async function normalizeOptionalBody(request: FastifyRequest): Promise<void> {
 
 const actorType = { enum: [...TOPIC_SELECTION_ACTOR_TYPES] } as const;
 const nullableFunctionalRef = { anyOf: [topicSelectionFunctionalRefSchema, { type: 'null' }] } as const;
+const typedFunctionalRef = (refType: string, options: { requireVersion?: boolean } = {}) => ({
+  type: 'object',
+  additionalProperties: false,
+  required: options.requireVersion ? ['ref_type', 'ref_id', 'version_id'] : ['ref_type', 'ref_id'],
+  properties: {
+    ref_type: { const: refType },
+    ref_id: stringId,
+    version_id: options.requireVersion ? stringId : nullableStringId,
+    title_card_id: nullableStringId,
+    legacy_ref: { anyOf: [recordPayload, { type: 'null' }] },
+  },
+}) as const;
+const concreteSearchPlanRef = typedFunctionalRef('search_plan', { requireVersion: true });
+const concreteLiteratureSnapshotRef = typedFunctionalRef('literature_resource_pool_snapshot', { requireVersion: true });
+const searchRunLocatorProvenanceRef = {
+  anyOf: [
+    typedFunctionalRef('literature_abstract'),
+    typedFunctionalRef('fulltext_document'),
+    typedFunctionalRef('fulltext_section'),
+    typedFunctionalRef('fulltext_paragraph'),
+    typedFunctionalRef('fulltext_anchor'),
+    typedFunctionalRef('manual_locator'),
+  ],
+} as const;
+const searchRunEvidenceMapInputRef = {
+  anyOf: [
+    typedFunctionalRef('literature_record'),
+    typedFunctionalRef('literature_source'),
+    searchRunLocatorProvenanceRef,
+  ],
+} as const;
+const searchRunEvidenceMapInputRefs = { type: 'array', items: searchRunEvidenceMapInputRef } as const;
+const searchRunEvidenceBindingSourceRef = {
+  anyOf: [
+    typedFunctionalRef('literature_source'),
+    searchRunLocatorProvenanceRef,
+  ],
+} as const;
+const searchRunEvidenceBindingSourceRefs = {
+  type: 'array',
+  items: searchRunEvidenceBindingSourceRef,
+} as const;
+const nullableRawLogArtifactRef = {
+  anyOf: [
+    typedFunctionalRef('artifact_ref'),
+    typedFunctionalRef('raw_search_log'),
+    { type: 'null' },
+  ],
+} as const;
+const searchCoverageRiskRef = {
+  anyOf: [
+    typedFunctionalRef('accepted_risk'),
+    typedFunctionalRef('search_coverage_risk'),
+  ],
+} as const;
 
 const topicSeedBody = bodySchema(['title_card_id'], {
   workspace_id: nullableStringId,
@@ -193,8 +249,8 @@ const coverageBinding = {
   required: ['coverage_row_intent_id', 'literature_ref'],
   properties: {
     coverage_row_intent_id: stringId,
-    literature_ref: topicSelectionFunctionalRefSchema,
-    source_refs: functionalRefArray,
+    literature_ref: typedFunctionalRef('literature_record'),
+    source_refs: searchRunEvidenceBindingSourceRefs,
     binding_kind: { enum: [...TOPIC_SELECTION_COVERAGE_BINDING_KINDS] },
     result_rank: nullableNumber,
   },
@@ -219,7 +275,7 @@ const coverageRiskAcceptance = {
   required: ['coverage_row_intent_id', 'accepted_risk_ref', 'accepted_by', 'rationale'],
   properties: {
     coverage_row_intent_id: stringId,
-    accepted_risk_ref: topicSelectionFunctionalRefSchema,
+    accepted_risk_ref: searchCoverageRiskRef,
     accepted_by: topicSelectionActorRefSchema,
     rationale: stringId,
     expires_at: nullableStringId,
@@ -237,13 +293,17 @@ const searchRunBody = bodySchema([
   title_card_id: stringId,
   search_plan_id: stringId,
   literature_resource_pool_snapshot_id: stringId,
+  search_plan_ref: concreteSearchPlanRef,
+  literature_resource_pool_snapshot_ref: concreteLiteratureSnapshotRef,
+  expected_literature_snapshot_hash: stringId,
   run_kind: { enum: [...TOPIC_SELECTION_SEARCH_RUN_KINDS] },
   run_status: { enum: [...TOPIC_SELECTION_SEARCH_RUN_STATUSES] },
   query_provenance: recordArray,
   result_accounting: topicSelectionSearchRunResultAccountingSchema,
   source_health_summary: recordPayload,
   dedup_summary: recordPayload,
-  evidence_map_input_refs: functionalRefArray,
+  evidence_map_input_refs: searchRunEvidenceMapInputRefs,
+  raw_log_artifact_ref: nullableRawLogArtifactRef,
   raw_log_artifact: { anyOf: [recordPayload, { type: 'null' }] },
   coverage_observations: { type: 'array', items: coverageObservation },
   evidence_bindings: { type: 'array', items: coverageBinding },
@@ -484,12 +544,27 @@ const adjudicationBody = bodyAndParamsSchema(['support_packet_id', 'final_decisi
   policy_version_id: nullableStringId,
 }, { needCandidateId: stringId });
 
-const humanConfirmationBody = bodyAndParamsSchema(['human_actor', 'human_rationale'], {
-  workspace_id: nullableStringId,
-  human_actor: topicSelectionActorRefSchema,
-  human_rationale: stringId,
-  policy_version_id: nullableStringId,
-}, { adjudicationResultId: stringId });
+const humanConfirmationBody = {
+  body: {
+    type: 'object',
+    additionalProperties: true,
+    anyOf: [
+      { required: ['human_actor', 'human_rationale'] },
+      { required: ['confirmation_input'] },
+    ],
+    properties: {
+      workspace_id: nullableStringId,
+      human_actor: topicSelectionActorRefSchema,
+      human_rationale: stringId,
+      confirmation_input: humanConfirmationInputSchema,
+      semantic_review_context_packet_ref: nullableFunctionalRef,
+      semantic_review_ref: nullableFunctionalRef,
+      artifact_refs: functionalRefArray,
+      policy_version_id: nullableStringId,
+    },
+  },
+  ...paramsSchema({ adjudicationResultId: stringId }),
+} as const;
 
 const v1bInputBundleBody = bodySchema(['validated_need_id'], {
   validated_need_id: stringId,

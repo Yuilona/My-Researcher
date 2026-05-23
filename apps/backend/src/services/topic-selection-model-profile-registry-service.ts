@@ -85,6 +85,12 @@ const PROVIDER_REQUIRED_CAPABILITIES = [
 
 export const TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID =
   'topic-selection.generate-need-candidate.single-agent.v1' as const;
+export const TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID =
+  'topic-selection.evidence-map-extraction.single-agent.v1' as const;
+export const TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID =
+  'topic-selection.need-adjudication.single-agent.v1' as const;
+export const TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID =
+  'topic-selection.confirmation-semantic-review.single-agent.v1' as const;
 export const TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID =
   'topic-selection.need-discovery.explorer.v1' as const;
 export const TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID =
@@ -218,6 +224,29 @@ const DEFAULT_TOPIC_SELECTION_MODEL_PROFILE_REGISTRY: TopicSelectionModelProfile
   schema_version: TOPIC_SELECTION_MODEL_PROFILE_REGISTRY_SCHEMA_VERSION,
   profiles: [
     profileBase({
+      profile_id: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
+      profile_function: 'evidence_map_extraction_single_agent',
+      role_family: 'single_agent',
+      stage_family: 'evidence_map_extraction',
+      quality_objectives: [
+        'extract_source_grounded_evidence_units',
+        'preserve_search_run_and_snapshot_lineage',
+        'prepare_deterministic_evidence_map_materialization',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'provider_llm', 'codex_assisted'],
+      output_contract: 'TopicSelectionEvidenceMapExtractionDraft@v1',
+      model_options: providerOptions(TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID).map(
+        (option) => ({
+          ...option,
+          normalized_params: normalizedParams({
+            creativity: 'low',
+            reasoning_depth: 'high',
+            output_budget: 'large',
+          }),
+        }),
+      ),
+    }),
+    profileBase({
       profile_id: TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
       profile_function: 'generate_need_candidate_single_agent',
       role_family: 'single_agent',
@@ -229,6 +258,52 @@ const DEFAULT_TOPIC_SELECTION_MODEL_PROFILE_REGISTRY: TopicSelectionModelProfile
       ],
       allowed_execution_modes: ['mocked_llm', 'provider_llm', 'codex_assisted'],
       output_contract: 'RankedCandidateDraftBatch@v1',
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
+      profile_function: 'need_adjudication_single_agent',
+      role_family: 'single_agent',
+      stage_family: 'need_adjudication',
+      quality_objectives: [
+        'recommend_validate_need_adjudication_decision',
+        'preserve_support_packet_authority_boundary',
+        'avoid_orchestration_field_leakage',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'provider_llm', 'codex_assisted'],
+      output_contract: 'TopicSelectionNeedAdjudicationRecommendationPacket@v1',
+      model_options: providerOptions(TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID).map(
+        (option) => ({
+          ...option,
+          normalized_params: normalizedParams({
+            creativity: 'low',
+            reasoning_depth: 'high',
+            output_budget: 'medium',
+          }),
+        }),
+      ),
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
+      profile_function: 'human_confirmation_semantic_review_single_agent',
+      role_family: 'single_agent',
+      stage_family: 'human_confirmation',
+      quality_objectives: [
+        'parse_confirmation_alignment_without_readjudication',
+        'verify_required_check_and_risk_coverage',
+        'preserve_validated_need_materialization_boundary',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'provider_llm', 'codex_assisted'],
+      output_contract: 'HumanConfirmationSemanticReview@v1',
+      model_options: providerOptions(TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID).map(
+        (option) => ({
+          ...option,
+          normalized_params: normalizedParams({
+            creativity: 'low',
+            reasoning_depth: 'high',
+            output_budget: 'medium',
+          }),
+        }),
+      ),
     }),
     profileBase({
       profile_id: TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,

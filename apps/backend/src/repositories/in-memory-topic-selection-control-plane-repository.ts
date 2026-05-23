@@ -208,4 +208,15 @@ export class InMemoryTopicSelectionControlPlaneRepository implements TopicSelect
   ): Promise<TopicSelectionHumanConfirmedDecisionRecord | null> {
     return this.humanDecisions.get(humanConfirmedDecisionId) ?? null;
   }
+
+  async listHumanConfirmedDecisionsByTargetRef(
+    targetRef: { ref_type: string; ref_id: string },
+  ): Promise<TopicSelectionHumanConfirmedDecisionRecord[]> {
+    return [...this.humanDecisions.values()]
+      .filter((record) =>
+        record.target_ref.ref_type === targetRef.ref_type
+        && record.target_ref.ref_id === targetRef.ref_id,
+      )
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+  }
 }

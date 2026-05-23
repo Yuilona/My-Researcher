@@ -92,4 +92,7 @@ export interface TopicSelectionControlPlaneRepository {
   findHumanConfirmedDecisionById(
     humanConfirmedDecisionId: string,
   ): Promise<TopicSelectionHumanConfirmedDecisionRecord | null>;
+  listHumanConfirmedDecisionsByTargetRef(
+    targetRef: { ref_type: string; ref_id: string },
+  ): Promise<TopicSelectionHumanConfirmedDecisionRecord[]>;
 }

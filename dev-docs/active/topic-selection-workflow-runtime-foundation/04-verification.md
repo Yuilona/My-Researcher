@@ -6,6 +6,8 @@
 - Result: passed; 11 tests passed.
 - Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
 - Result: passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 722 tests total, 721 passed, 1 skipped, 0 failed.
 - Coverage:
   - `mocked_llm`, `codex_assisted`, and `provider_llm` return the same normalized result shape.
   - `provider_llm` calls only the existing `BackendLlmGateway`.
@@ -360,3 +362,234 @@
   - TopicSeed lineage mismatch blocks before authority creation;
   - Node 1 intent-preparation provenance is recorded in both TopicSeed source refs and input snapshot;
   - Node 2 resource-sample-set provenance is recorded without changing deterministic execution boundaries.
+
+## 2026-05-21 v1a Node 5 WorkflowHarness Implementation
+- Update: implemented `runBuildEvidenceMapScenario`, shared Node 5 draft/report/review/handoff schemas, model profile registration, deterministic materialization, and focused tests.
+- Command: `pnpm --filter @paper-engineering-assistant/shared test`
+- Result: passed; 146 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 37 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-evidence-map-service.unit.test.ts`
+- Result: passed; 8 tests passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 718 tests total, 717 passed, 1 skipped, 0 failed.
+- Coverage:
+  - direct draft path builds EvidenceMap authority through the existing EvidenceMap service and emits Node 6 handoff;
+  - `llm_inference` source attribution blocks materialization before authority creation;
+  - low-confidence or ambiguous extraction emits review package and no authority refs;
+  - mocked single-agent extraction goes through AgentOrchestrator, records audit artifact refs, and still materializes deterministically;
+  - shared schema rejects hidden reasoning drift in extraction drafts;
+  - backend typecheck confirms the runner, materializer, profile registry, and shared contracts compile together.
+
+## 2026-05-21 v1a Node 5 Quality Review Fix Verification
+- Update: fixed N5 review findings for warning propagation, lineage strictness, locator provenance precheck, and source-specific conflict coverage.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 36 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Coverage:
+  - materialization-only warnings are included in Node 6 handoff warning summary;
+  - locator provenance outside SearchRun handoff blocks before EvidenceMap authority creation;
+  - SearchPlan ref version drift blocks during materialization lineage validation;
+  - unrelated claim conflicts do not clear same-source support/challenge ambiguity.
+
+## 2026-05-21 N5 to N6 Handoff Consumption Guard Verification
+- Update: added `TopicSelectionEvidenceMapHandoff@v1` validation before Node 6 context compilation and blocked N5 review/raw/audit artifacts from Node 6 business input refs.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 39 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 725 tests total, 724 passed, 1 skipped, 0 failed.
+- Coverage:
+  - a real N5 `runBuildEvidenceMapScenario` handoff can drive `runGenerateNeedCandidateScenario`;
+  - Node 6 compiled context includes the workflow handoff as provenance;
+  - handoff EvidenceMap ref drift returns `VERSION_CONFLICT` before context compilation;
+  - EvidenceMap review-package refs in Node 6 business input return `INVALID_PAYLOAD`;
+  - NeedCandidate persistence remains explicit and is not triggered by handoff validation.
+
+## 2026-05-22 N7-D12 Planned Verification Matrix
+- Update: locked Implementation Readiness Review and test matrix for `topic-selection.v1a.validate-need-adjudication.v1`.
+- Current readiness at planning time: implementation may start; the later implementation verification records the matrix pass and callable runner.
+
+| ID | Layer | Scenario | Required Result |
+|---|---|---|---|
+| N7-C01 | shared contract | valid `TopicSelectionNeedAdjudicationRecommendationPacket@v1` | schema accepts whitelist recommendation fields only |
+| N7-C02 | shared contract | recommendation includes `route_outcome`, DB status, authority id, hidden reasoning, or workflow command | schema rejects |
+| N7-C03 | shared contract | valid `TopicSelectionValidateNeedAdjudicationNodeResult@v1` | schema accepts `ready`, `blocked`, and `require_human_review` only |
+| N7-P01 | profile registry | resolve `topic-selection.need-adjudication.single-agent.v1` | profile exists, structured JSON required, fallback disabled, low creativity/high reasoning |
+| N7-H01 | harness unit | fresh readiness/support plus low-risk `validate` recommendation | creates adjudication only, returns `ready + advance_to_human_confirmation`, no ValidatedNeed |
+| N7-H02 | harness unit | readiness returns non-ready recommendation | returns `blocked`, no support packet/adjudication authority |
+| N7-H03 | harness unit | readiness recommendation `reject` | treated as gate finding, not persisted reject adjudication |
+| N7-H04 | harness unit | explicit readiness/support packet lineage drift | blocks with `VERSION_CONFLICT` or `GATE_CONSTRAINT_FAILED` |
+| N7-H05 | harness unit | support packet created, upstream evidence/search/resource mutates | recommendation/adjudication still consumes frozen support packet or blocks; no live reread |
+| N7-H06 | harness unit | model recommends `reject`, `merge`, or `park` without human/hybrid acceptance | returns `require_human_review`, no adjudication authority |
+| N7-H07 | harness unit | human/hybrid accepts high-risk decision | may call adjudication service after deterministic validation |
+| N7-H08 | harness unit | model recommendation contains orchestration fields | returns `blocked` with malformed recommendation code |
+| N7-H09 | harness unit | `request_searchplan_recheck` recommendation | creates typed recheck request only, no SearchPlan mutation |
+| N7-H10 | harness unit | `return_to_candidate` without actionable actions | blocks before adjudication |
+| N7-H11 | harness unit | duplicate/pending adjudication | returns `blocked + DUPLICATE_OR_PENDING_ADJUDICATION`, no second result |
+| N7-H12 | harness unit | exact replay with same input hash and existing trace | returns prior node result, no authority writes |
+| N7-H13 | harness unit | replay input hash drift or missing trace | returns `blocked`, no authority writes |
+| N7-H14 | harness unit | provider/mocked/codex malformed output | one same-profile technical retry max, no provider/Codex/mock fallback |
+| N7-H15 | harness unit | readiness recommendation `merge_required` or `park` | treated as gate finding, returns `blocked` with review repair hint, no persisted merge/park authority |
+| N7-H16 | service + harness unit | direct adjudication with stale support-packet lineage | rejects with `VERSION_CONFLICT` or `GATE_CONSTRAINT_FAILED`, no adjudication authority |
+| N7-H17 | harness unit | exact replay storage lookup cannot recover prior node result or trace | returns `blocked`/pause path, no fresh attempt and no authority writes |
+| N7-I01 | route regression | existing readiness/support/adjudication REST happy path | current integration behavior remains passing |
+| N7-I02 | route regression | duplicate adjudication via REST | service rejects second adjudication |
+| N7-E01 | workflow scenario | N1->N7 happy path over fixture data | N7 handoff is machine-consumable by Node 8 |
+
+Minimum close criteria:
+- focused `topic-selection-workflow-harness-service.unit.test.ts` covers every N7-H row;
+- shared schema tests cover N7-C rows;
+- model profile registry tests cover N7-P01;
+- route integration regression covers N7-I rows;
+- backend typecheck passes;
+- governance lint passes;
+- no DB migration is introduced unless the DB SSOT pause condition is explicitly triggered.
+
+## 2026-05-22 N7 Implementation Verification
+- Update: implemented `runValidateNeedAdjudicationScenario`, shared contracts, profile registry entry, replay lookup, and service-level support-packet lineage guard.
+- Command: `cd packages/shared && node --test --loader ts-node/esm src/research-lifecycle/topic-selection-need-validation-contracts.schema.test.ts`
+- Result: passed; 4 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 51 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts src/services/topic-selection-need-validation-service.unit.test.ts`
+- Result: passed; 19 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck`
+- Result: passed.
+- Broad backend command note: running `pnpm --filter @paper-engineering-assistant/backend test -- topic-selection-workflow-harness-service.unit.test.ts` invoked the full backend suite and reached the N7 harness tests successfully, but the full suite failed at existing Prisma HTTP smoke tests because `DATABASE_URL` was not loaded in this shell. This is an environment precondition, not an N7 regression.
+- Coverage:
+  - recommendation schema accepts whitelist packets and rejects orchestration fields;
+  - node-result schema accepts only `ready`, `blocked`, and `require_human_review`;
+  - model profile resolves `topic-selection.need-adjudication.single-agent.v1`;
+  - low-risk `validate` returns `ready + advance_to_human_confirmation` and does not create `ValidatedNeed`;
+  - high-risk model-only reject returns `require_human_review` without authority writes;
+  - high-risk reject with explicit human acceptance creates only adjudication authority;
+  - `request_searchplan_recheck` creates a typed recheck route without mutating SearchPlan;
+  - `return_to_candidate` without actions blocks before adjudication;
+  - malformed recommendation packets with orchestration fields block before recommendation/adjudication artifacts;
+  - non-ready readiness, including `reject`, `merge_required`, and `park`, blocks as gate findings;
+  - frozen support packet remains the N7 SSOT after upstream evidence freshness changes;
+  - duplicate adjudication attempts block with existing adjudication refs;
+  - exact replay returns the prior result and replay drift blocks without additional authority writes;
+  - direct service adjudication rejects stale support-packet lineage before persistence.
+  - recommendation packet profile/policy/output-schema drift blocks before recommendation/adjudication artifacts;
+  - replayed attempts re-evaluate current scenario assertions instead of reusing stale assertion results.
+
+## 2026-05-22 N8 Reserved-Id Documentation Check
+- Update: synchronized N8 wording so the node materializes N7's reserved `output_validated_need_id` rather than minting a new `validated_need_id`.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Search check: no remaining N8 wording says it creates a new `TopicSelectionValidatedNeedRecord` id or treats the reserved id as existing authority.
+
+## 2026-05-22 N8 Human Delegated Documentation Check
+- Update: added `human_delegated` as a constrained confirmation mode for human-authorized Codex/provider execution.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Search check: no remaining N8 wording limits confirmation only to human/hybrid or describes model output as confirmation without `HumanConfirmationInput@v1` and fixed delegation policy.
+
+## 2026-05-22 N8-D04 Minimal Confirmation Input Documentation Check
+- Update: simplified N8 to a single `HumanConfirmationInput@v1` node-level value contract and removed the standalone delegation-contract direction.
+- Search check: removed old N8 standalone delegation-contract wording and replaced it with `HumanConfirmationInput@v1` plus fixed policy `n8-validate-only-delegation-v1`.
+
+## 2026-05-23 N8-D05 Bounded Semantic Review Documentation Check
+- Update: added `HumanConfirmationSemanticReview@v1` so N8 can parse N7 semantic rationale, support-packet checks, residual risks, confirmation rationale, and delegated executor output without re-adjudication.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Search check: N8 now records semantic review as a trace/audit artifact and keeps debate, final-decision changes, new risk generation, upstream mutation, and direct authority writes out of the semantic parser.
+
+## 2026-05-23 N8-D06 Semantic Review Invocation Documentation Check
+- Update: locked semantic-review profile, frozen context packet, structured output, retry, cache, and no-fallback failure policy.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Search check: `HumanConfirmationSemanticReviewContextPacket@v1`, `topic-selection.confirmation-semantic-review.single-agent.v1`, same-profile retry, exact-match cache, and forbidden fallback semantics are present in the node policy.
+
+## 2026-05-23 N8-D07 Node Result Documentation Check
+- Update: locked `TopicSelectionHumanConfirmNeedNodeResult@v1` as N8's only downstream automation handoff.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Search check: N8 ready results route only to `advance_to_publish_v1b_input_bundle`; blocked/review results do not auto-advance; v1b bundle publication remains Node 9-only.
+
+## 2026-05-23 N8-D08 Simple Retry Documentation Check
+- Update: simplified N8 retry/idempotency to exact replay, duplicate reserved-id block, append-only failed attempts, and explicit repair for partial confirmation writes.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Search check: `DUPLICATE_VALIDATED_NEED`, `PARTIAL_CONFIRMATION_WRITE`, new-attempt retry, and no idempotent-ready shortcut are recorded in policy and normalization docs.
+
+## 2026-05-23 N8-D09 Readiness Documentation Check
+- Update: recorded implementation readiness, runtime gaps, DB-storage check, and minimum N8 close matrix.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Search check: at D09 readiness-review time N8 was `implementation_ready` but not yet callable; the follow-up implementation verification below records the callable runtime closure.
+
+## 2026-05-23 N8 WorkflowHarness Implementation Verification
+- Update: implemented N8 contracts, profile, service/route normalization, duplicate/partial guards, semantic review artifacts, and `runHumanConfirmNeedScenario`.
+- Command: `cd packages/shared && node --test --loader ts-node/esm src/research-lifecycle/topic-selection-need-validation-contracts.schema.test.ts`
+- Result: passed; 10 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts src/services/topic-selection-need-validation-service.unit.test.ts`
+- Result: passed; 19 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 58 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/routes/topic-selection-v1a-routes.integration.test.ts`
+- Result: passed; 3 tests passed.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Coverage: human-confirm ready path materializes the reserved ValidatedNeed id, does not create v1b bundle, supports fixed-policy `human_delegated`, rejects non-delegated delegated executor payloads, blocks missing risk coverage, blocks semantic-review lineage drift before authority writes, exact-replays same attempt before duplicate guard, blocks duplicate materialized reserved id, and blocks partial HumanConfirmedDecision writes without automatic backfill.
+
+## 2026-05-23 N9 Implementation Readiness Documentation Check
+- Update: locked N9 deterministic terminal handoff, handoff input contract, traceability, replay/idempotency, stable failure semantics, and implementation readiness review.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Readiness result at that point: implementation could start; N9 remained `not_callable` until `runPublishV1bInputBundleScenario` landed.
+
+## 2026-05-23 N9 WorkflowHarness Implementation Verification
+- Update: implemented N9 shared contracts, service guard, `runPublishV1bInputBundleScenario`, and focused tests.
+- Command: `cd packages/shared && node --test --loader ts-node/esm src/research-lifecycle/topic-selection-need-validation-contracts.schema.test.ts`
+- Result: passed; 14 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 64 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-need-validation-service.unit.test.ts`
+- Result: passed; 16 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/routes/topic-selection-decision-chain-acceptance.test.ts`
+- Result: passed; 33 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/routes/topic-selection-v1a-routes.integration.test.ts`
+- Result: passed; 3 tests passed.
+- Command: `source ./.env.local && pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 758 tests, 757 passed, 1 skipped. Note: the same command without loading `.env.local` fails only the T-054/T-067 Prisma HTTP smoke precondition because `DATABASE_URL` is intentionally sourced from local env.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Coverage: happy publish, terminal node result without `next_node_id`, trace artifact with stable `created_by=system` default, exact replay, existing bundle reuse by expected version, same-attempt hash mismatch block, lineage drift block, missing expected version block, stable invalid-confirmation input rejection before missing-adjudication lookup, and service rejection of non-confirm human decision before bundle persistence.
+- Follow-up review fix: clarified that the WorkflowHarness runner owns normalized automation while the REST route remains a compatibility service boundary; removed malformed YAML indentation in the N9 policy block.

@@ -3,19 +3,37 @@ import test from 'node:test';
 import type {
   TopicSelectionFunctionalRef,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-control-plane-contracts';
-import type {
-  TopicSelectionArtifactFunctionalRef,
-  TopicSelectionNeedDiscoveryArbiterContextPayload,
-  TopicSelectionNeedDiscoveryDebateIssueFrame,
-  TopicSelectionNeedDiscoveryDeepCriticNotes,
-  TopicSelectionNeedDiscoveryExplorerNotes,
-  TopicSelectionNeedDiscoveryExplorationContextPayload,
-  TopicSelectionRankedCandidateDraftBatch,
+import {
+  TOPIC_SELECTION_HUMAN_CONFIRMATION_INPUT_SCHEMA_VERSION,
+  TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION,
+  TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION,
+  type HumanConfirmationSemanticReview,
+  type HumanConfirmationInput,
+  type TopicSelectionArtifactFunctionalRef,
+  type TopicSelectionNeedAdjudicationDecision,
+  type TopicSelectionNeedAdjudicationRecommendationPacket,
+  type TopicSelectionNeedDiscoveryArbiterContextPayload,
+  type TopicSelectionNeedDiscoveryDebateIssueFrame,
+  type TopicSelectionNeedDiscoveryDeepCriticNotes,
+  type TopicSelectionNeedDiscoveryExplorerNotes,
+  type TopicSelectionNeedDiscoveryExplorationContextPayload,
+  type TopicSelectionRankedCandidateDraftBatch,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-need-validation-contracts';
-import type {
-  TopicSelectionSearchPlanBlueprint,
+import {
+  TOPIC_SELECTION_SEARCH_RUN_RECORD_BUNDLE_SCHEMA_VERSION,
+  type TopicSelectionSearchPlanBlueprint,
+  type TopicSelectionSearchRunRecordBundle,
+  type TopicSelectionSearchRunHandoff,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-search-resource-contracts';
+import {
+  TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_CONTEXT_PACKET_SCHEMA_VERSION,
+  TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_DRAFT_SCHEMA_VERSION,
+  type TopicSelectionEvidenceMapExtractionContextPacket,
+  type TopicSelectionEvidenceMapExtractionDraft,
+  type TopicSelectionEvidenceSourceLocator,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-evidence-map-contracts';
 import { AppError } from '../errors/app-error.js';
+import { InMemoryTopicSelectionEvidenceMapRepository } from '../repositories/in-memory-topic-selection-evidence-map-repository.js';
 import { InMemoryLiteratureRepository } from '../repositories/in-memory-literature-repository.js';
 import { InMemoryTitleCardManagementRepository } from '../repositories/title-card-management.repository.js';
 import { InMemoryTopicSelectionControlPlaneRepository } from '../repositories/in-memory-topic-selection-control-plane-repository.js';
@@ -37,12 +55,25 @@ import { TopicSelectionRankedCandidateDraftBatchValidatorService } from './topic
 import { TopicSelectionSearchResourceService } from './topic-selection-search-resource-service.js';
 import {
   type TopicSelectionWorkflowHarnessCreateSearchPlanInput,
+  type TopicSelectionWorkflowHarnessBuildEvidenceMapInput,
+  type TopicSelectionWorkflowHarnessHumanConfirmNeedInput,
+  type TopicSelectionWorkflowHarnessPublishV1bInputBundleInput,
+  type TopicSelectionWorkflowHarnessValidateNeedAdjudicationInput,
   type TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolInput,
   type TopicSelectionWorkflowHarnessGenerateNeedCandidateInput,
   TopicSelectionWorkflowHarnessService,
 } from './topic-selection-workflow-harness-service.js';
 import {
+  type TopicSelectionEvidenceMapEvidenceUnitInput,
+  TopicSelectionEvidenceMapService,
+} from './topic-selection-evidence-map-service.js';
+import { TopicSelectionEvidenceMapMaterializationService } from './topic-selection-evidence-map-materialization-service.js';
+import { TopicSelectionNeedValidationService } from './topic-selection-need-validation-service.js';
+import {
+  TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID,
 } from './topic-selection-model-profile-registry-service.js';
 
@@ -83,11 +114,33 @@ async function makeRuntime() {
       now: () => '2026-05-19T00:00:00.000Z',
     },
   );
+  const evidenceRepository = new InMemoryTopicSelectionEvidenceMapRepository();
+  const evidenceMaps = new TopicSelectionEvidenceMapService(
+    evidenceRepository,
+    controlPlane,
+    searchResourceRepository,
+    literature,
+    {
+      idFactory: (prefix) => `${prefix}_${++sequence}`,
+      now: () => '2026-05-19T00:00:00.000Z',
+    },
+  );
+  const evidenceMapMaterializer = new TopicSelectionEvidenceMapMaterializationService();
   const artifactBoundary = new TopicSelectionNeedDiscoveryArtifactBoundaryService(controlPlane);
   const contextCompiler = new TopicSelectionNeedDiscoveryContextCompilerService(artifactBoundary, {
     now: () => '2026-05-19T00:00:00.000Z',
   });
   const needValidationRepository = new InMemoryTopicSelectionNeedValidationRepository();
+  const needService = new TopicSelectionNeedValidationService(
+    needValidationRepository,
+    controlPlane,
+    evidenceMaps,
+    searchResources,
+    {
+      idFactory: (prefix) => `${prefix}_${++sequence}`,
+      now: () => '2026-05-19T00:00:00.000Z',
+    },
+  );
   const needCandidateBatchPersistence = new TopicSelectionPersistNeedCandidateBatchService(
     needValidationRepository,
     { now: () => '2026-05-19T00:00:00.000Z' },
@@ -113,6 +166,11 @@ async function makeRuntime() {
     artifactBoundary,
     controlPlane,
     searchResources,
+    evidenceMaps,
+    evidenceMapMaterializer,
+    evidenceMapExtractionAgent: agentOrchestrator,
+    needValidation: needService,
+    needAdjudicationAgent: agentOrchestrator,
   }, {
     now: () => '2026-05-19T00:00:00.000Z',
   });
@@ -121,6 +179,10 @@ async function makeRuntime() {
     workflowHarness,
     controlPlaneRepository,
     literature,
+    evidenceRepository,
+    evidenceMaps,
+    evidenceMapMaterializer,
+    needService,
     needValidationRepository,
     searchResourceRepository,
     searchResources,
@@ -137,12 +199,37 @@ function ref(refType: string, refId: string): TopicSelectionFunctionalRef {
   };
 }
 
+function refForTitleCard(
+  refType: string,
+  refId: string,
+  titleCardId: string,
+  versionId?: string | null,
+): TopicSelectionFunctionalRef {
+  return {
+    ref_type: refType,
+    ref_id: refId,
+    title_card_id: titleCardId,
+    ...(versionId ? { version_id: versionId } : {}),
+  };
+}
+
 function artifactRef(refId: string): TopicSelectionArtifactFunctionalRef {
   return {
     ref_type: 'artifact_ref',
     ref_id: refId,
     title_card_id: 'title_card_001',
   };
+}
+
+function assertScenarioPassed(result: {
+  scenario_status: 'passed' | 'failed';
+  assertions: Array<{ passed: boolean }>;
+}): void {
+  assert.equal(
+    result.scenario_status,
+    'passed',
+    JSON.stringify(result.assertions.filter((assertion) => !assertion.passed), null, 2),
+  );
 }
 
 function telemetry(): LlmCallTelemetry {
@@ -540,6 +627,667 @@ function searchPlanScenarioInput(
   };
 }
 
+async function seedRecordSearchRunRuntime() {
+  const ctx = await seedSearchPlanRuntime();
+  const blueprint = searchPlanBlueprint({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_ref: ctx.topicSeedRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_snapshot_hash: ctx.snapshotHash,
+  });
+  const searchPlanResult = await ctx.workflowHarness.runCreateSearchPlanScenario(searchPlanScenarioInput(blueprint, {
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_record_search_plan',
+    node_attempt_id: 'node_attempt_record_search_plan',
+  }));
+  assert.equal(searchPlanResult.node_result.status, 'succeeded');
+  assert.ok(searchPlanResult.node_result.search_plan_ref);
+  assert.ok(searchPlanResult.node_result.coverage_row_intent_refs[0]);
+  return {
+    ...ctx,
+    searchPlan: searchPlanResult.node_result.search_plan!,
+    searchPlanRef: searchPlanResult.node_result.search_plan_ref!,
+    coverageRowIntentRefs: searchPlanResult.node_result.coverage_row_intent_refs,
+  };
+}
+
+function searchRunBundle(input: {
+  title_card_id: string;
+  search_plan_ref: TopicSelectionFunctionalRef;
+  literature_resource_pool_snapshot_ref: TopicSelectionFunctionalRef;
+  expected_literature_snapshot_hash: string;
+  coverage_row_intent_ref: TopicSelectionFunctionalRef;
+  literature_ref: TopicSelectionFunctionalRef;
+  source_ref: TopicSelectionFunctionalRef;
+  locator_ref?: TopicSelectionFunctionalRef | null;
+}, overrides: Partial<TopicSelectionSearchRunRecordBundle> = {}): TopicSelectionSearchRunRecordBundle {
+  return {
+    schema_version: TOPIC_SELECTION_SEARCH_RUN_RECORD_BUNDLE_SCHEMA_VERSION,
+    title_card_ref: {
+      ref_type: 'title_card',
+      ref_id: input.title_card_id,
+      title_card_id: input.title_card_id,
+    },
+    search_plan_ref: input.search_plan_ref,
+    literature_resource_pool_snapshot_ref: input.literature_resource_pool_snapshot_ref,
+    expected_literature_snapshot_hash: input.expected_literature_snapshot_hash,
+    run_kind: 'planned_search',
+    run_status: 'succeeded',
+    query_provenance: [{
+      query: 'risk-aware RAG fine-tuning evidence',
+      coverage_key: 'support-method',
+      source: 'workflow_scenario_fixture',
+    }],
+    result_accounting: {
+      total_result_count: 1,
+      unique_literature_count: 1,
+      duplicate_result_count: 0,
+      failed_source_count: 0,
+      skipped_source_count: 0,
+    },
+    source_health_summary: {
+      source_count: 1,
+      failed_source_count: 0,
+      warning_codes: [],
+    },
+    dedup_summary: {
+      duplicate_groups: 0,
+    },
+    evidence_map_input_refs: [
+      input.literature_ref,
+      input.source_ref,
+      ...(input.locator_ref ? [input.locator_ref] : []),
+    ],
+    coverage_observations: [{
+      coverage_row_intent_ref: input.coverage_row_intent_ref,
+      status: 'succeeded',
+      result_count: 1,
+      source_count: 1,
+      missing_reason_codes: [],
+      notes: 'Fixture search run found one relevant paper.',
+    }],
+    evidence_bindings: [{
+      coverage_row_intent_ref: input.coverage_row_intent_ref,
+      literature_ref: input.literature_ref,
+      source_refs: [input.source_ref],
+      binding_kind: 'retrieval_hit',
+      result_rank: 1,
+    }],
+    coverage_assessments: [{
+      coverage_row_intent_ref: input.coverage_row_intent_ref,
+      verdict: 'satisfied',
+      issue_codes: [],
+      confidence: 0.9,
+      assessed_by: 'system',
+    }],
+    coverage_risk_acceptances: [],
+    raw_log_artifact_ref: {
+      ref_type: 'artifact_ref',
+      ref_id: 'raw_search_log_fixture_001',
+      title_card_id: input.title_card_id,
+    },
+    raw_log_artifact_payload: {
+      provider: 'fixture-search',
+      result_ids: [input.literature_ref.ref_id],
+    },
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    ...overrides,
+  };
+}
+
+async function seedBuildEvidenceMapRuntime() {
+  const ctx = await seedRecordSearchRunRuntime();
+  const bundle = searchRunBundle({
+    title_card_id: ctx.titleCard.title_card_id,
+    search_plan_ref: ctx.searchPlanRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_literature_snapshot_hash: ctx.snapshotHash,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+    locator_ref: {
+      ref_type: 'literature_abstract',
+      ref_id: `${ctx.literatureSnapshot.literature_refs[0]!.ref_id}_abstract`,
+      title_card_id: ctx.titleCard.title_card_id,
+    },
+  });
+  const searchRunResult = await ctx.workflowHarness.runRecordSearchRunScenario({
+    scenario_id: 'topic-selection.real-e2e.canary.v1',
+    scenario_case_id: 'record-search-run-for-evidence-map',
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_build_evidence_map_search_run',
+    node_attempt_id: 'node_attempt_build_evidence_map_search_run',
+    bundle,
+    expectations: {
+      status: 'succeeded',
+      consumable_for_evidence_map: true,
+      downstream_handoff_present: true,
+    },
+  });
+  assert.equal(searchRunResult.node_result.status, 'succeeded');
+  assert.ok(searchRunResult.node_result.downstream_handoff);
+  return {
+    ...ctx,
+    searchRunHandoff: searchRunResult.node_result.downstream_handoff,
+  };
+}
+
+function evidenceMapExtractionDraft(input: {
+  title_card_id: string;
+  handoff: TopicSelectionSearchRunHandoff;
+  literature_ref: TopicSelectionFunctionalRef;
+  source_ref: TopicSelectionFunctionalRef;
+  coverage_row_intent_ref: TopicSelectionFunctionalRef;
+  input_refs_hash: string;
+}, overrides: Partial<TopicSelectionEvidenceMapExtractionDraft> = {}): TopicSelectionEvidenceMapExtractionDraft {
+  return {
+    schema_version: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_DRAFT_SCHEMA_VERSION,
+    title_card_ref: {
+      ref_type: 'title_card',
+      ref_id: input.title_card_id,
+      title_card_id: input.title_card_id,
+    },
+    search_run_ref: input.handoff.search_run_ref,
+    search_plan_ref: input.handoff.search_plan_ref,
+    literature_resource_pool_snapshot_ref: input.handoff.literature_resource_pool_snapshot_ref,
+    literature_snapshot_hash: input.handoff.literature_snapshot_hash,
+    producer_kind: 'fixture',
+    profile_id: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
+    input_refs_hash: input.input_refs_hash,
+    draft_units: [{
+      client_unit_key: 'unit_support_001',
+      coverage_row_intent_ref: input.coverage_row_intent_ref,
+      evidence_role: 'support',
+      literature_ref: input.literature_ref,
+      source_refs: [input.source_ref],
+      locator: {
+        locator_type: 'abstract',
+        locator_ref: {
+          ref_type: 'literature_abstract',
+          ref_id: `${input.literature_ref.ref_id}_abstract`,
+          title_card_id: input.title_card_id,
+        },
+        literature_ref: input.literature_ref,
+        source_ref: input.source_ref,
+      },
+      source_statement: 'The paper reports a source-grounded RAG fine-tuning evaluation workflow.',
+      source_attribution_kind: 'source_claim',
+      normalized_statement: null,
+      interpretation_payload: { role_hint: 'support' },
+      confidence: 0.84,
+      issue_codes: [],
+    }],
+    draft_links: [],
+    draft_clusters: [],
+    draft_patterns: [],
+    draft_conflicts: [],
+    warning_codes: [],
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    ...overrides,
+  };
+}
+
+function evidenceMapExtractionContextPacket(input: {
+  workflow_run_id: string;
+  node_attempt_id: string;
+  handoff: TopicSelectionSearchRunHandoff;
+  input_refs_hash: string;
+}): TopicSelectionEvidenceMapExtractionContextPacket {
+  return {
+    schema_version: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_CONTEXT_PACKET_SCHEMA_VERSION,
+    node_id: 'topic-selection.v1a.build-evidence-map.v1',
+    workflow_run_id: input.workflow_run_id,
+    node_attempt_id: input.node_attempt_id,
+    context_family: 'evidence_extraction_context',
+    input_refs: [
+      input.handoff.search_run_ref,
+      input.handoff.search_plan_ref,
+      input.handoff.literature_resource_pool_snapshot_ref,
+    ],
+    input_refs_hash: input.input_refs_hash,
+    search_run_handoff_hash: 'search-run-handoff-hash-001',
+    context_compiler_version: 'v1',
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    execution_mode: 'mocked_llm',
+    profile_id: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
+    cache_key: 'evidence-extraction-cache-key-001',
+    cache_hit: false,
+    redaction_policy: 'topic_selection_evidence_map_extraction_context_redaction_v1',
+    payload: {
+      allowed_evidence_map_input_refs: input.handoff.evidence_map_input_refs,
+      materialization_rules: ['source_claim_only', 'no_hidden_reasoning'],
+    },
+    created_at: '2026-05-19T00:00:00.000Z',
+  };
+}
+
+function buildEvidenceMapScenarioInput(
+  input: {
+    title_card_id: string;
+    handoff: TopicSelectionSearchRunHandoff;
+    draft: TopicSelectionEvidenceMapExtractionDraft;
+  },
+  overrides: Partial<TopicSelectionWorkflowHarnessBuildEvidenceMapInput> = {},
+): TopicSelectionWorkflowHarnessBuildEvidenceMapInput {
+  return {
+    scenario_id: 'topic-selection.real-e2e.canary.v1',
+    scenario_case_id: 'build-evidence-map',
+    title_card_id: input.title_card_id,
+    workflow_run_id: 'workflow_run_build_evidence_map_001',
+    node_attempt_id: 'node_attempt_build_evidence_map_001',
+    search_run_handoff: input.handoff,
+    extraction_draft: input.draft,
+    execution_mode: 'none',
+    profile_id: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    expectations: {
+      status: 'succeeded',
+      materialization_status: 'ready_with_warning',
+      evidence_unit_count: 1,
+      downstream_handoff_present: true,
+      warning_codes: ['ABSTRACT_ONLY_SUPPORT'],
+    },
+    ...overrides,
+  };
+}
+
+function validationManualLocator(input: {
+  title_card_id: string;
+  literature_ref: TopicSelectionFunctionalRef;
+  source_ref: TopicSelectionFunctionalRef;
+  manual_ref: TopicSelectionFunctionalRef;
+  manual_label: string;
+}): TopicSelectionEvidenceSourceLocator {
+  return {
+    locator_type: 'manual',
+    locator_ref: input.manual_ref,
+    literature_ref: input.literature_ref,
+    source_ref: input.source_ref,
+    content_ref: null,
+    document_ref: null,
+    section_ref: null,
+    paragraph_ref: null,
+    anchor_ref: null,
+    manual_label: input.manual_label,
+  };
+}
+
+async function seedValidateNeedAdjudicationRuntime(options: {
+  includeContext?: boolean;
+} = {}) {
+  const ctx = await seedRecordSearchRunRuntime();
+  const titleCardId = ctx.titleCard.title_card_id;
+  const literatureRef = ctx.literatureSnapshot.literature_refs[0]!;
+  const sourceRef = ctx.literatureSnapshot.content_source_refs[0]!;
+  const manualLocatorRef = refForTitleCard('manual_locator', 'manual_validate_need_001', titleCardId);
+  const bundle = searchRunBundle({
+    title_card_id: titleCardId,
+    search_plan_ref: ctx.searchPlanRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_literature_snapshot_hash: ctx.snapshotHash,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    literature_ref: literatureRef,
+    source_ref: sourceRef,
+    locator_ref: manualLocatorRef,
+  });
+  const searchRunResult = await ctx.workflowHarness.runRecordSearchRunScenario({
+    scenario_id: 'topic-selection.real-e2e.canary.v1',
+    scenario_case_id: 'record-search-run-for-validate-need',
+    title_card_id: titleCardId,
+    workflow_run_id: 'workflow_run_validate_need_search_run',
+    node_attempt_id: 'node_attempt_validate_need_search_run',
+    bundle,
+    expectations: {
+      status: 'succeeded',
+      consumable_for_evidence_map: true,
+      downstream_handoff_present: true,
+    },
+  });
+  assertScenarioPassed(searchRunResult);
+  assert.ok(searchRunResult.node_result.search_run_ref);
+  const supportLocator = validationManualLocator({
+    title_card_id: titleCardId,
+    literature_ref: literatureRef,
+    source_ref: sourceRef,
+    manual_ref: manualLocatorRef,
+    manual_label: 'manual support provenance for validation fixture',
+  });
+  const evidenceUnits: TopicSelectionEvidenceMapEvidenceUnitInput[] = [
+    {
+      client_unit_key: 'support_ready',
+      coverage_row_intent_id: ctx.coverageRowIntentRefs[0]?.ref_id,
+      evidence_role: 'support' as const,
+      literature_ref: literatureRef,
+      source_refs: [sourceRef],
+      locator: supportLocator,
+      source_statement: 'The paper reports a traceable evidence workflow gap for risk-aware RAG adaptation.',
+      normalized_statement: 'Risk-aware RAG adaptation lacks traceable validation workflows.',
+    },
+  ];
+  if (options.includeContext !== false) {
+    evidenceUnits.push({
+      client_unit_key: 'context_ready',
+      coverage_row_intent_id: null,
+      evidence_role: 'context' as const,
+      literature_ref: literatureRef,
+      source_refs: [sourceRef],
+      locator: validationManualLocator({
+        title_card_id: titleCardId,
+        literature_ref: literatureRef,
+        source_ref: sourceRef,
+        manual_ref: manualLocatorRef,
+        manual_label: 'manual context provenance for validation fixture',
+      }),
+      source_statement: 'The workflow setting is local-first paper engineering with reviewer-facing evidence.',
+      normalized_statement: 'The candidate is scoped to local-first reviewer-facing evidence workflows.',
+    });
+  }
+  const evidenceMapRecords = await ctx.evidenceMaps.createEvidenceMapFromSearchRun({
+    title_card_id: titleCardId,
+    search_run_id: searchRunResult.node_result.search_run_ref.ref_id,
+    evidence_units: evidenceUnits,
+    created_by: 'system',
+  });
+  const candidate = await ctx.needService.createNeedCandidateFromEvidenceMap({
+    title_card_id: titleCardId,
+    evidence_map_id: evidenceMapRecords.evidence_map.evidence_map_id,
+    candidate_need: 'Need traceable validation before promoting RAG adaptation topics.',
+    unmet_need_statement: 'Existing workflows do not preserve enough evidence lineage before topic promotion.',
+    mechanism_type: 'workflow_gap',
+    mechanism_summary: 'Validation lineage can be lost before v1b handoff.',
+    scope_notes: 'Topic-selection v1a validation only.',
+    prior_art_status: 'no_strong_solution_found',
+    created_by: 'system',
+  });
+  const readiness = await ctx.needService.assessCandidateReadiness({
+    need_candidate_id: candidate.need_candidate_id,
+    assessed_by: 'system',
+  });
+  const supportPacket = readiness.recommendation === 'ready_for_validation'
+    ? await ctx.needService.createValidationDecisionSupportPacket({
+        need_candidate_id: candidate.need_candidate_id,
+        readiness_assessment_id: readiness.readiness_assessment_id,
+        created_by: 'system',
+      })
+    : null;
+  return {
+    ...ctx,
+    searchRunResult,
+    evidenceMap: evidenceMapRecords.evidence_map,
+    evidenceUnits: evidenceMapRecords.evidence_units,
+    candidate,
+    readiness,
+    supportPacket,
+  };
+}
+
+type ValidateNeedAdjudicationSeed = Awaited<ReturnType<typeof seedValidateNeedAdjudicationRuntime>>;
+
+function needAdjudicationRecommendationPacket(
+  ctx: ValidateNeedAdjudicationSeed,
+  input: {
+    workflow_run_id?: string;
+    node_attempt_id?: string;
+    final_decision?: TopicSelectionNeedAdjudicationDecision;
+  } = {},
+  overrides: Partial<TopicSelectionNeedAdjudicationRecommendationPacket> = {},
+): TopicSelectionNeedAdjudicationRecommendationPacket {
+  assert.ok(ctx.supportPacket);
+  const workflowRunId = input.workflow_run_id ?? 'workflow_run_validate_need_001';
+  const nodeAttemptId = input.node_attempt_id ?? 'node_attempt_validate_need_001';
+  const finalDecision = input.final_decision ?? 'validate';
+  const titleCardId = ctx.titleCard.title_card_id;
+  return {
+    schema_version: TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION,
+    workflow_run_id: workflowRunId,
+    node_attempt_id: nodeAttemptId,
+    recommendation_packet_id: `${nodeAttemptId}_recommendation`,
+    need_candidate_ref: refForTitleCard('need_candidate', ctx.candidate.need_candidate_id, titleCardId, ctx.candidate.candidate_version),
+    validation_support_packet_ref: refForTitleCard(
+      'validation_decision_support_packet',
+      ctx.supportPacket.validation_support_packet_id,
+      titleCardId,
+    ),
+    readiness_assessment_ref: refForTitleCard('need_candidate_readiness', ctx.readiness.readiness_assessment_id, titleCardId),
+    execution_mode: 'mocked_llm',
+    profile_id: TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
+    final_decision: finalDecision,
+    rationale: 'The support packet is sufficient for the requested adjudication route.',
+    required_actions: finalDecision === 'return_to_candidate'
+      ? ['revise candidate scope before another validation attempt']
+      : ['route result according to deterministic node policy'],
+    gap_codes: [],
+    accepted_risk_refs: [],
+    residual_risk_refs: ctx.supportPacket.residual_risk_refs,
+    rejected_reason: finalDecision === 'reject' ? 'insufficient_evidence' : null,
+    merge_target_need_candidate_ref: null,
+    searchplan_recheck_reason: finalDecision === 'request_searchplan_recheck'
+      ? 'Counter-evidence coverage should be refreshed before validation.'
+      : null,
+    searchplan_recheck_gap_codes: finalDecision === 'request_searchplan_recheck'
+      ? ['COUNTER_EVIDENCE_COVERAGE_GAP']
+      : [],
+    source_refs: [
+      refForTitleCard('need_candidate', ctx.candidate.need_candidate_id, titleCardId, ctx.candidate.candidate_version),
+      refForTitleCard('need_candidate_readiness', ctx.readiness.readiness_assessment_id, titleCardId),
+      refForTitleCard('validation_decision_support_packet', ctx.supportPacket.validation_support_packet_id, titleCardId),
+    ],
+    recommendation_payload: { confidence: 0.82 },
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    ...overrides,
+  };
+}
+
+function validateNeedAdjudicationScenarioInput(
+  ctx: ValidateNeedAdjudicationSeed,
+  packet: TopicSelectionNeedAdjudicationRecommendationPacket | null,
+  overrides: Partial<TopicSelectionWorkflowHarnessValidateNeedAdjudicationInput> = {},
+): TopicSelectionWorkflowHarnessValidateNeedAdjudicationInput {
+  const titleCardId = ctx.titleCard.title_card_id;
+  return {
+    scenario_id: 'topic-selection.real-e2e.canary.v1',
+    scenario_case_id: 'validate-need-adjudication',
+    title_card_id: titleCardId,
+    workflow_run_id: packet?.workflow_run_id ?? 'workflow_run_validate_need_001',
+    node_attempt_id: packet?.node_attempt_id ?? 'node_attempt_validate_need_001',
+    need_candidate_ref: refForTitleCard('need_candidate', ctx.candidate.need_candidate_id, titleCardId, ctx.candidate.candidate_version),
+    evidence_map_ref: ctx.candidate.evidence_map_ref,
+    search_run_ref: ctx.candidate.search_run_ref,
+    search_plan_ref: ctx.candidate.search_plan_ref,
+    literature_snapshot_ref: ctx.candidate.literature_snapshot_ref,
+    readiness_assessment_ref: ctx.readiness
+      ? refForTitleCard('need_candidate_readiness', ctx.readiness.readiness_assessment_id, titleCardId)
+      : null,
+    validation_support_packet_ref: ctx.supportPacket
+      ? refForTitleCard('validation_decision_support_packet', ctx.supportPacket.validation_support_packet_id, titleCardId)
+      : null,
+    readiness_packet_mode: 'consume_explicit_ref',
+    support_packet_mode: ctx.supportPacket ? 'consume_explicit_ref' : 'create_fresh',
+    execution_mode: 'mocked_llm',
+    run_mode: 'acceptance',
+    profile_id: TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
+    mocked_output: packet
+      ? {
+          fixture_id: `${packet.recommendation_packet_id}_fixture`,
+          output: packet,
+        }
+      : null,
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    expectations: {
+      status: packet ? 'ready' : 'blocked',
+      route_outcome: packet ? 'advance_to_human_confirmation' : 'blocked',
+      final_decision: packet?.final_decision ?? null,
+      adjudication_created: Boolean(packet),
+    },
+    ...overrides,
+  };
+}
+
+function humanConfirmationInput(ctx: ValidateNeedAdjudicationSeed, overrides: Partial<HumanConfirmationInput> = {}): HumanConfirmationInput {
+  assert.ok(ctx.supportPacket);
+  const residualRiskRefs = ctx.supportPacket.residual_risk_refs;
+  return {
+    schema_version: TOPIC_SELECTION_HUMAN_CONFIRMATION_INPUT_SCHEMA_VERSION,
+    actor_mode: 'human',
+    accountable_human_ref: { actor_type: 'human', actor_id: 'reviewer_1' },
+    rationale: 'I reviewed the support packet, required checks, residual risks, and validate adjudication.',
+    accepted_risk_refs: residualRiskRefs,
+    required_check_results: ctx.supportPacket.required_human_checks.map((checkId) => ({
+      check_id: checkId,
+      result: 'accepted',
+    })),
+    delegated_executor: null,
+    ...overrides,
+  };
+}
+
+async function runValidateNeedForHumanConfirm(ctx: ValidateNeedAdjudicationSeed) {
+  const packet = needAdjudicationRecommendationPacket(ctx, {
+    workflow_run_id: 'workflow_run_human_confirm_prereq',
+    node_attempt_id: 'node_attempt_human_confirm_prereq',
+  });
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, packet),
+  );
+  assertScenarioPassed(result);
+  assert.ok(result.node_result.adjudication_result_ref);
+  assert.ok(result.node_result.reserved_validated_need_ref);
+  return result;
+}
+
+function humanConfirmNeedScenarioInput(
+  ctx: ValidateNeedAdjudicationSeed,
+  validateResult: Awaited<ReturnType<typeof runValidateNeedForHumanConfirm>>,
+  overrides: Partial<TopicSelectionWorkflowHarnessHumanConfirmNeedInput> = {},
+): TopicSelectionWorkflowHarnessHumanConfirmNeedInput {
+  assert.ok(ctx.supportPacket);
+  return {
+    scenario_id: 'topic-selection.real-e2e.canary.v1',
+    scenario_case_id: 'human-confirm-need',
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_human_confirm_need_001',
+    node_attempt_id: 'node_attempt_human_confirm_need_001',
+    adjudication_result_ref: validateResult.node_result.adjudication_result_ref!,
+    need_candidate_ref: refForTitleCard('need_candidate', ctx.candidate.need_candidate_id, ctx.titleCard.title_card_id, ctx.candidate.candidate_version),
+    validation_support_packet_ref: refForTitleCard(
+      'validation_decision_support_packet',
+      ctx.supportPacket.validation_support_packet_id,
+      ctx.titleCard.title_card_id,
+    ),
+    reserved_validated_need_ref: validateResult.node_result.reserved_validated_need_ref!,
+    confirmation_input: humanConfirmationInput(ctx),
+    execution_mode: 'deterministic_parser',
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    expectations: {
+      status: 'ready',
+      route_outcome: 'advance_to_publish_v1b_input_bundle',
+      validated_need_created: true,
+      v1b_bundle_created: false,
+    },
+    ...overrides,
+  };
+}
+
+type HumanConfirmNeedScenarioResult = Awaited<ReturnType<TopicSelectionWorkflowHarnessService['runHumanConfirmNeedScenario']>>;
+
+async function runHumanConfirmNeedForPublish(ctx: ValidateNeedAdjudicationSeed): Promise<HumanConfirmNeedScenarioResult> {
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const result = await ctx.workflowHarness.runHumanConfirmNeedScenario(
+    humanConfirmNeedScenarioInput(ctx, validateResult, {
+      workflow_run_id: 'workflow_run_publish_prereq',
+      node_attempt_id: 'node_attempt_publish_prereq',
+    }),
+  );
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'ready');
+  assert.ok(result.node_result.validated_need_ref);
+  assert.ok(result.node_result.human_decision_ref);
+  return result;
+}
+
+async function publishV1bInputBundleScenarioInput(
+  ctx: ValidateNeedAdjudicationSeed,
+  humanConfirmResult: HumanConfirmNeedScenarioResult,
+  overrides: Partial<TopicSelectionWorkflowHarnessPublishV1bInputBundleInput> = {},
+): Promise<TopicSelectionWorkflowHarnessPublishV1bInputBundleInput> {
+  assert.ok(ctx.supportPacket);
+  const titleCardId = ctx.titleCard.title_card_id;
+  const validatedNeedId = humanConfirmResult.node_result.validated_need_ref!.ref_id;
+  const validatedNeed = await ctx.needValidationRepository.findValidatedNeedById(validatedNeedId);
+  assert.ok(validatedNeed);
+  const memorySuggestions = await ctx.needValidationRepository.listCandidateDecisionMemorySuggestionsByNeedCandidateId(
+    ctx.candidate.need_candidate_id,
+  );
+  return {
+    scenario_id: 'topic-selection.real-e2e.canary.v1',
+    scenario_case_id: 'publish-v1b-input-bundle',
+    title_card_id: titleCardId,
+    workflow_run_id: 'workflow_run_publish_v1b_input_bundle_001',
+    node_attempt_id: 'node_attempt_publish_v1b_input_bundle_001',
+    validated_need_ref: humanConfirmResult.node_result.validated_need_ref!,
+    source_need_candidate_ref: refForTitleCard('need_candidate', ctx.candidate.need_candidate_id, titleCardId, ctx.candidate.candidate_version),
+    adjudication_result_ref: humanConfirmResult.node_result.adjudication_result_ref!,
+    support_packet_ref: humanConfirmResult.node_result.validation_support_packet_ref!,
+    human_decision_ref: humanConfirmResult.node_result.human_decision_ref!,
+    evidence_map_ref: validatedNeed.evidence_map_ref,
+    search_run_ref: validatedNeed.search_run_ref,
+    search_plan_ref: validatedNeed.search_plan_ref,
+    literature_snapshot_ref: validatedNeed.literature_snapshot_ref,
+    evidence_role_bundle: validatedNeed.evidence_role_bundle,
+    risk_refs: [...validatedNeed.residual_risk_refs, ...validatedNeed.accepted_risk_refs],
+    memory_suggestion_refs: memorySuggestions.map((suggestion) =>
+      refForTitleCard('candidate_decision_memory_suggestion', suggestion.memory_suggestion_id, suggestion.title_card_id)
+    ),
+    recheck_request_refs: ctx.candidate.open_recheck_request_refs,
+    expected_bundle_version: 'v1a-to-v1b-input-bundle-v1',
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    expectations: {
+      status: 'ready',
+      route_outcome: 'published_v1b_input_bundle',
+      idempotency_result: 'created_new_bundle',
+      bundle_published: true,
+    },
+    ...overrides,
+  };
+}
+
+function humanConfirmationSemanticReviewOutput(
+  ctx: ValidateNeedAdjudicationSeed,
+  input: TopicSelectionWorkflowHarnessHumanConfirmNeedInput,
+  overrides: Partial<HumanConfirmationSemanticReview> = {},
+): HumanConfirmationSemanticReview {
+  return {
+    schema_version: TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION,
+    workflow_run_id: input.workflow_run_id,
+    node_attempt_id: input.node_attempt_id,
+    review_id: `${input.node_attempt_id}_semantic_review`,
+    context_packet_ref: refForTitleCard('artifact_ref', 'semantic_context_fixture_001', ctx.titleCard.title_card_id),
+    execution_mode: input.execution_mode ?? 'codex_assisted',
+    profile_id: input.profile_id ?? TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
+    status: 'pass',
+    alignment_codes: ['validate_alignment_clear'],
+    risk_coverage: 'complete',
+    required_check_coverage: 'complete',
+    scope_violations: [],
+    rationale_summary: input.confirmation_input.rationale,
+    provenance_ref: refForTitleCard('artifact_ref', 'semantic_review_fixture_001', ctx.titleCard.title_card_id),
+    warning_codes: [],
+    blocker_codes: [],
+    review_reason_codes: [],
+    policy_version: input.policy_version,
+    output_schema_version: input.output_schema_version,
+    ...overrides,
+  };
+}
+
 function scenarioInput(
   overrides: Partial<TopicSelectionWorkflowHarnessGenerateNeedCandidateInput> = {},
 ): TopicSelectionWorkflowHarnessGenerateNeedCandidateInput {
@@ -615,7 +1363,7 @@ test('workflow harness runs create-topic-seed through the search resource author
     },
   });
 
-  assert.equal(result.scenario_status, 'passed');
+  assertScenarioPassed(result);
   assert.equal(result.node_id, 'topic-selection.v1a.create-topic-seed.v1');
   assert.equal(result.node_result.status, 'succeeded');
   assert.equal(result.node_result.topic_seed?.seed_kind, 'title_card');
@@ -659,7 +1407,7 @@ test('workflow harness returns a blocked create-topic-seed result without author
     },
   });
 
-  assert.equal(result.scenario_status, 'passed');
+  assertScenarioPassed(result);
   assert.equal(result.node_result.status, 'blocked');
   assert.equal(result.node_result.error_code, 'NOT_FOUND');
   assert.equal(result.node_result.authority_refs.length, 0);
@@ -691,7 +1439,7 @@ test('workflow harness snapshots literature resource pool through the search res
     },
   }));
 
-  assert.equal(result.scenario_status, 'passed');
+  assertScenarioPassed(result);
   assert.equal(result.node_id, 'topic-selection.v1a.snapshot-literature-resource-pool.v1');
   assert.equal(result.node_result.status, 'succeeded');
   assert.equal(result.node_result.literature_resource_pool_snapshot?.topic_seed_ref.ref_id, ctx.topicSeed.topic_seed_id);
@@ -749,7 +1497,7 @@ test('workflow harness blocks unsupported resource-pool source scopes before aut
     },
   }));
 
-  assert.equal(result.scenario_status, 'passed');
+  assertScenarioPassed(result);
   assert.equal(result.node_result.status, 'blocked');
   assert.equal(result.node_result.error_code, 'UNSUPPORTED_SOURCE_SCOPE_FOR_NORMALIZED_V1A');
   assert.deepEqual(result.node_result.blocker_codes, ['UNSUPPORTED_SOURCE_SCOPE_FOR_NORMALIZED_V1A']);
@@ -777,7 +1525,7 @@ test('workflow harness preserves missing literature blocker codes without snapsh
     },
   }));
 
-  assert.equal(result.scenario_status, 'passed');
+  assertScenarioPassed(result);
   assert.equal(result.node_result.status, 'blocked');
   assert.equal(result.node_result.error_code, 'GATE_CONSTRAINT_FAILED');
   assert.deepEqual(result.node_result.blocker_codes, ['MISSING_LITERATURE_RECORD']);
@@ -877,7 +1625,7 @@ test('workflow harness creates SearchPlan from a strict blueprint without fallba
     title_card_id: ctx.titleCard.title_card_id,
   }));
 
-  assert.equal(result.scenario_status, 'passed');
+  assertScenarioPassed(result);
   assert.equal(result.node_id, 'topic-selection.v1a.create-search-plan.v1');
   assert.equal(result.node_result.status, 'succeeded');
   assert.equal(result.node_result.search_plan_ref?.version_id, 'v1');
@@ -929,7 +1677,7 @@ test('workflow harness blocks missing SearchPlan blueprint without SearchPlan au
     },
   }));
 
-  assert.equal(result.scenario_status, 'passed');
+  assertScenarioPassed(result);
   assert.equal(result.node_result.status, 'blocked');
   assert.equal(result.node_result.search_plan, null);
   assert.equal(result.node_result.authority_refs.length, 0);
@@ -962,7 +1710,7 @@ test('workflow harness blocks malformed SearchPlan blueprint schema version', as
     },
   }));
 
-  assert.equal(result.scenario_status, 'passed');
+  assertScenarioPassed(result);
   assert.equal(result.node_result.status, 'blocked');
   assert.equal(result.node_result.authority_refs.length, 0);
   assert.equal((await ctx.searchResourceRepository.listSearchPlansByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
@@ -1122,6 +1870,1559 @@ test('workflow harness blocks SearchPlan lineage mismatch before authority creat
   assert.equal(result.node_result.status, 'blocked');
   assert.deepEqual(result.node_result.blocker_codes, ['TOPIC_SEED_LINEAGE_MISMATCH']);
   assert.equal((await ctx.searchResourceRepository.listSearchPlansByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
+});
+
+test('workflow harness records SearchRun and emits a Node 5 handoff for consumable output', async () => {
+  const ctx = await seedRecordSearchRunRuntime();
+  const bundle = searchRunBundle({
+    title_card_id: ctx.titleCard.title_card_id,
+    search_plan_ref: ctx.searchPlanRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_literature_snapshot_hash: ctx.snapshotHash,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+  });
+
+  const result = await ctx.workflowHarness.runRecordSearchRunScenario({
+    scenario_id: 'topic-selection.real-e2e.canary.v1',
+    scenario_case_id: 'record-search-run-handoff',
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_record_search_run_001',
+    node_attempt_id: 'node_attempt_record_search_run_001',
+    bundle,
+    expectations: {
+      status: 'succeeded',
+      consumable_for_evidence_map: true,
+      downstream_handoff_present: true,
+      loopback_signal_present: false,
+    },
+  });
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_id, 'topic-selection.v1a.record-search-run.v1');
+  assert.equal(result.node_result.status, 'succeeded');
+  assert.equal(result.node_result.search_run?.run_status, 'succeeded');
+  assert.equal(result.node_result.consumable_for_evidence_map, true);
+  assert.equal(result.node_result.downstream_handoff?.search_run_ref.ref_id, result.node_result.search_run_ref?.ref_id);
+  assert.equal(result.node_result.downstream_handoff?.literature_snapshot_hash, ctx.snapshotHash);
+  assert.equal(result.node_result.loopback_signal, null);
+  assert.equal(result.node_result.coverage_matrix_summary?.satisfied_count, 1);
+  assert.equal(result.node_result.evidence_binding_refs.length, 1);
+  assert.equal(result.node_result.coverage_assessment_refs.length, 1);
+  assert.equal(result.node_result.authority_refs.some((ref) => ref.ref_type === 'search_run'), true);
+  assert.equal(result.node_result.audit_refs.some((ref) => ref.ref_type === 'workflow_run'), true);
+  assert.equal(result.harness_trace_snapshot.payload_schema, 'WorkflowHarnessRecordSearchRunScenarioTrace@v1');
+
+  const persisted = await ctx.searchResourceRepository.findSearchRunById(result.node_result.search_run!.search_run_id);
+  assert.equal(persisted?.literature_snapshot_ref.ref_id, ctx.literatureSnapshot.literature_resource_pool_snapshot_id);
+  const inputSnapshot = await ctx.controlPlaneRepository.findInputSnapshotById(
+    result.node_result.search_run!.input_snapshot_id!,
+  );
+  assert.equal(inputSnapshot?.source_refs.some((sourceRef) => sourceRef.ref_id === 'raw_search_log_fixture_001'), true);
+});
+
+test('workflow harness records failed SearchRun as audit-only loopback signal', async () => {
+  const ctx = await seedRecordSearchRunRuntime();
+  const bundle = searchRunBundle({
+    title_card_id: ctx.titleCard.title_card_id,
+    search_plan_ref: ctx.searchPlanRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_literature_snapshot_hash: ctx.snapshotHash,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+  }, {
+    run_status: 'failed',
+    result_accounting: {
+      total_result_count: 0,
+      unique_literature_count: 0,
+      duplicate_result_count: 0,
+      failed_source_count: 1,
+      skipped_source_count: 0,
+    },
+    source_health_summary: {
+      failure_summary: 'Search provider failed before returning usable results.',
+      failed_source_count: 1,
+      warning_codes: ['SEARCH_PROVIDER_FAILED'],
+    },
+    evidence_map_input_refs: [],
+    coverage_observations: [{
+      coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+      status: 'failed',
+      result_count: 0,
+      source_count: 1,
+      missing_reason_codes: ['SEARCH_PROVIDER_FAILED'],
+      notes: 'Fixture search provider failure.',
+    }],
+    evidence_bindings: [],
+    coverage_assessments: [{
+      coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+      verdict: 'missing',
+      issue_codes: ['SEARCH_PROVIDER_FAILED'],
+      confidence: 0.1,
+      assessed_by: 'system',
+    }],
+  });
+
+  const result = await ctx.workflowHarness.runRecordSearchRunScenario({
+    scenario_id: 'topic-selection.real-e2e.canary.v1',
+    scenario_case_id: 'record-search-run-failed-loopback',
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_record_search_run_failed',
+    node_attempt_id: 'node_attempt_record_search_run_failed',
+    bundle,
+    expectations: {
+      status: 'succeeded',
+      consumable_for_evidence_map: false,
+      downstream_handoff_present: false,
+      loopback_signal_present: true,
+    },
+  });
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'succeeded');
+  assert.equal(result.node_result.search_run?.run_status, 'failed');
+  assert.equal(result.node_result.consumable_for_evidence_map, false);
+  assert.equal(result.node_result.downstream_handoff, null);
+  assert.ok(result.node_result.loopback_signal?.reason_codes.includes('SEARCH_RUN_FAILED'));
+  assert.ok(result.node_result.loopback_signal?.target_actions.includes('upstream_search_execution_or_input_preparation'));
+  assert.ok(result.node_result.warning_codes.includes('NON_CONSUMABLE_SEARCH_RUN'));
+  assert.equal(result.node_result.authority_refs.some((ref) => ref.ref_type === 'search_run'), true);
+});
+
+test('workflow harness blocks SearchRun snapshot hash drift before authority creation', async () => {
+  const ctx = await seedRecordSearchRunRuntime();
+  const bundle = searchRunBundle({
+    title_card_id: ctx.titleCard.title_card_id,
+    search_plan_ref: ctx.searchPlanRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_literature_snapshot_hash: 'wrong-snapshot-hash',
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+  });
+
+  const result = await ctx.workflowHarness.runRecordSearchRunScenario({
+    scenario_id: 'topic-selection.real-e2e.canary.v1',
+    scenario_case_id: 'record-search-run-hash-drift',
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_record_search_run_hash_drift',
+    node_attempt_id: 'node_attempt_record_search_run_hash_drift',
+    bundle,
+    expectations: {
+      status: 'blocked',
+      error_code: 'VERSION_CONFLICT',
+      consumable_for_evidence_map: false,
+      downstream_handoff_present: false,
+      loopback_signal_present: false,
+    },
+  });
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(result.node_result.search_run, null);
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.equal(result.node_result.error_code, 'VERSION_CONFLICT');
+  assert.equal((await ctx.searchResourceRepository.listCoverageEvidenceBindingsBySearchPlanId(ctx.searchPlan.search_plan_id)).length, 0);
+});
+
+test('workflow harness blocks unsupported SearchRun authority refs before service persistence', async () => {
+  const ctx = await seedRecordSearchRunRuntime();
+  const unsupportedRef: TopicSelectionFunctionalRef = {
+    ref_type: 'search_plan',
+    ref_id: ctx.searchPlan.search_plan_id,
+    version_id: ctx.searchPlan.plan_version,
+    title_card_id: ctx.titleCard.title_card_id,
+  };
+  const bundle = searchRunBundle({
+    title_card_id: ctx.titleCard.title_card_id,
+    search_plan_ref: ctx.searchPlanRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_literature_snapshot_hash: ctx.snapshotHash,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+  }, {
+    evidence_map_input_refs: [unsupportedRef],
+  });
+
+  const result = await ctx.workflowHarness.runRecordSearchRunScenario({
+    scenario_id: 'topic-selection.real-e2e.canary.v1',
+    scenario_case_id: 'record-search-run-unsupported-authority-ref',
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_record_search_run_unsupported_ref',
+    node_attempt_id: 'node_attempt_record_search_run_unsupported_ref',
+    bundle,
+    expectations: {
+      status: 'blocked',
+      error_code: 'INVALID_PAYLOAD',
+      blocker_codes: ['MALFORMED_SEARCH_RUN_RECORD_BUNDLE'],
+      consumable_for_evidence_map: false,
+      downstream_handoff_present: false,
+      loopback_signal_present: false,
+    },
+  });
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'blocked');
+  assert.deepEqual(result.node_result.blocker_codes, ['MALFORMED_SEARCH_RUN_RECORD_BUNDLE']);
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.equal((await ctx.searchResourceRepository.listCoverageEvidenceBindingsBySearchPlanId(ctx.searchPlan.search_plan_id)).length, 0);
+});
+
+test('workflow harness blocks SearchRun refs outside the resolved literature snapshot', async () => {
+  const ctx = await seedRecordSearchRunRuntime();
+  const outsideLiteratureRef: TopicSelectionFunctionalRef = {
+    ref_type: 'literature_record',
+    ref_id: 'lit_outside',
+    title_card_id: ctx.titleCard.title_card_id,
+  };
+  const bundle = searchRunBundle({
+    title_card_id: ctx.titleCard.title_card_id,
+    search_plan_ref: ctx.searchPlanRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_literature_snapshot_hash: ctx.snapshotHash,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    literature_ref: outsideLiteratureRef,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+  });
+
+  const result = await ctx.workflowHarness.runRecordSearchRunScenario({
+    scenario_id: 'topic-selection.real-e2e.canary.v1',
+    scenario_case_id: 'record-search-run-outside-snapshot',
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_record_search_run_outside_snapshot',
+    node_attempt_id: 'node_attempt_record_search_run_outside_snapshot',
+    bundle,
+    expectations: {
+      status: 'blocked',
+      error_code: 'GATE_CONSTRAINT_FAILED',
+      blocker_codes: ['SNAPSHOT_OUTSIDE_LITERATURE_REF'],
+      consumable_for_evidence_map: false,
+      downstream_handoff_present: false,
+      loopback_signal_present: false,
+    },
+  });
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'blocked');
+  assert.deepEqual(result.node_result.blocker_codes, ['SNAPSHOT_OUTSIDE_LITERATURE_REF']);
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.equal((await ctx.searchResourceRepository.listCoverageEvidenceBindingsBySearchPlanId(ctx.searchPlan.search_plan_id)).length, 0);
+});
+
+test('workflow harness builds EvidenceMap from a normalized extraction draft and emits Node 6 handoff', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(ctx.searchRunHandoff);
+  const draft = evidenceMapExtractionDraft({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    input_refs_hash: inputRefsHash,
+  });
+
+  const result = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    draft,
+  }));
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_id, 'topic-selection.v1a.build-evidence-map.v1');
+  assert.equal(result.node_result.status, 'succeeded');
+  assert.equal(result.node_result.materialization_report.status, 'ready_with_warning');
+  assert.ok(result.node_result.warning_codes.includes('ABSTRACT_ONLY_SUPPORT'));
+  assert.equal(result.node_result.evidence_map_ref?.ref_type, 'evidence_map');
+  assert.equal(result.node_result.evidence_unit_refs.length, 1);
+  assert.equal(result.node_result.downstream_handoff?.evidence_map_ref.ref_id, result.node_result.evidence_map_ref?.ref_id);
+  assert.equal(result.node_result.downstream_handoff?.role_counts.support, 1);
+  assert.equal(result.node_result.downstream_handoff?.abstract_only_support_count, 1);
+  assert.equal(result.harness_trace_snapshot.payload_schema, 'WorkflowHarnessBuildEvidenceMapScenarioTrace@v1');
+  assert.equal(result.node_result.authority_refs.some((ref) => ref.ref_type === 'evidence_map'), true);
+  assert.equal(result.node_result.audit_refs.some((ref) => ref.ref_type === 'workflow_run'), true);
+
+  const persisted = await ctx.evidenceRepository.findEvidenceMapById(result.node_result.evidence_map_ref!.ref_id);
+  assert.equal(persisted?.search_run_ref.ref_id, ctx.searchRunHandoff.search_run_ref.ref_id);
+  const units = await ctx.evidenceRepository.listEvidenceUnitsByEvidenceMapId(result.node_result.evidence_map_ref!.ref_id);
+  assert.equal(units.length, 1);
+  assert.equal(units[0]?.issue_codes.includes('ABSTRACT_ONLY_SUPPORT'), true);
+  const artifacts = await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId('workflow_run_build_evidence_map_001');
+  assert.equal(
+    artifacts.some((artifact) => artifact.payload?.payload_schema === 'WorkflowHarnessBuildEvidenceMapScenarioTrace@v1'),
+    true,
+  );
+});
+
+test('workflow harness blocks EvidenceMap materialization when draft uses llm_inference authority', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(ctx.searchRunHandoff);
+  const baseDraft = evidenceMapExtractionDraft({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    input_refs_hash: inputRefsHash,
+  });
+  const draft: TopicSelectionEvidenceMapExtractionDraft = {
+    ...baseDraft,
+    draft_units: [{
+      ...baseDraft.draft_units[0]!,
+      source_attribution_kind: 'llm_inference',
+    }],
+  };
+
+  const result = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    draft,
+  }, {
+    workflow_run_id: 'workflow_run_build_evidence_map_blocked',
+    node_attempt_id: 'node_attempt_build_evidence_map_blocked',
+    expectations: {
+      status: 'blocked',
+      materialization_status: 'blocked',
+      blocker_codes: ['LLM_INFERENCE_NOT_SOURCE_CLAIM'],
+      evidence_unit_count: 0,
+      downstream_handoff_present: false,
+    },
+  }));
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(result.node_result.materialization_report.status, 'blocked');
+  assert.ok(result.node_result.blocker_codes.includes('LLM_INFERENCE_NOT_SOURCE_CLAIM'));
+  assert.equal(result.node_result.evidence_map_ref, null);
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.equal(result.node_result.downstream_handoff, null);
+  assert.equal((await ctx.evidenceRepository.listEvidenceMapsByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
+});
+
+test('workflow harness carries materialization-only warnings into EvidenceMap handoff', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(ctx.searchRunHandoff);
+  const baseDraft = evidenceMapExtractionDraft({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    input_refs_hash: inputRefsHash,
+  });
+  const draft: TopicSelectionEvidenceMapExtractionDraft = {
+    ...baseDraft,
+    draft_units: [{
+      ...baseDraft.draft_units[0]!,
+      coverage_row_intent_ref: null,
+    }],
+  };
+
+  const result = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    draft,
+  }, {
+    workflow_run_id: 'workflow_run_build_evidence_map_missing_coverage_warning',
+    node_attempt_id: 'node_attempt_build_evidence_map_missing_coverage_warning',
+    expectations: {
+      status: 'succeeded',
+      materialization_status: 'ready_with_warning',
+      warning_codes: ['COVERAGE_ROW_INTENT_REF_MISSING'],
+      evidence_unit_count: 1,
+      downstream_handoff_present: true,
+    },
+  }));
+
+  assertScenarioPassed(result);
+  assert.ok(result.node_result.warning_codes.includes('COVERAGE_ROW_INTENT_REF_MISSING'));
+  const warningSummary = result.node_result.downstream_handoff?.warning_summary as { warning_codes?: unknown } | undefined;
+  const handoffWarningCodes = warningSummary?.warning_codes;
+  assert.ok(Array.isArray(handoffWarningCodes));
+  assert.ok(
+    (handoffWarningCodes as string[])
+      .includes('COVERAGE_ROW_INTENT_REF_MISSING'),
+  );
+});
+
+test('workflow harness blocks EvidenceMap draft with locator provenance outside SearchRun handoff', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(ctx.searchRunHandoff);
+  const baseDraft = evidenceMapExtractionDraft({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    input_refs_hash: inputRefsHash,
+  });
+  const draft: TopicSelectionEvidenceMapExtractionDraft = {
+    ...baseDraft,
+    draft_units: [{
+      ...baseDraft.draft_units[0]!,
+      locator: {
+        ...baseDraft.draft_units[0]!.locator,
+        locator_type: 'section',
+        locator_ref: {
+          ref_type: 'fulltext_section',
+          ref_id: 'section_outside_handoff',
+          title_card_id: ctx.titleCard.title_card_id,
+        },
+      },
+    }],
+  };
+
+  const result = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    draft,
+  }, {
+    workflow_run_id: 'workflow_run_build_evidence_map_locator_blocked',
+    node_attempt_id: 'node_attempt_build_evidence_map_locator_blocked',
+    expectations: {
+      status: 'blocked',
+      materialization_status: 'blocked',
+      blocker_codes: ['LOCATOR_PROVENANCE_REF_OUTSIDE_HANDOFF'],
+      evidence_unit_count: 0,
+      downstream_handoff_present: false,
+    },
+  }));
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.evidence_map_ref, null);
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.equal((await ctx.evidenceRepository.listEvidenceMapsByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
+});
+
+test('workflow harness blocks EvidenceMap draft lineage when ref version drifts', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(ctx.searchRunHandoff);
+  const draft = evidenceMapExtractionDraft({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    input_refs_hash: inputRefsHash,
+  }, {
+    search_plan_ref: {
+      ...ctx.searchRunHandoff.search_plan_ref,
+      version_id: 'drifted-plan-version',
+    },
+  });
+
+  const result = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    draft,
+  }, {
+    workflow_run_id: 'workflow_run_build_evidence_map_lineage_blocked',
+    node_attempt_id: 'node_attempt_build_evidence_map_lineage_blocked',
+    expectations: {
+      status: 'blocked',
+      materialization_status: 'blocked',
+      blocker_codes: ['EVIDENCE_MAP_EXTRACTION_LINEAGE_MISMATCH'],
+      evidence_unit_count: 0,
+      downstream_handoff_present: false,
+    },
+  }));
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.evidence_map_ref, null);
+  assert.equal(result.node_result.authority_refs.length, 0);
+});
+
+test('workflow harness emits review package without authority on review-required EvidenceMap draft', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(ctx.searchRunHandoff);
+  const baseDraft = evidenceMapExtractionDraft({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    input_refs_hash: inputRefsHash,
+  });
+  const draft: TopicSelectionEvidenceMapExtractionDraft = {
+    ...baseDraft,
+    draft_units: [{
+      ...baseDraft.draft_units[0]!,
+      confidence: 0.32,
+    }],
+  };
+
+  const result = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    draft,
+  }, {
+    workflow_run_id: 'workflow_run_build_evidence_map_review',
+    node_attempt_id: 'node_attempt_build_evidence_map_review',
+    expectations: {
+      status: 'review_required',
+      materialization_status: 'review_required',
+      evidence_unit_count: 0,
+      downstream_handoff_present: false,
+    },
+  }));
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'review_required');
+  assert.equal(result.node_result.materialization_report.status, 'review_required');
+  assert.ok(result.node_result.materialization_report.review_codes.includes('LOW_CONFIDENCE_CORE_SUPPORT'));
+  assert.equal(result.node_result.review_package?.schema_version, 'EvidenceMapExtractionReviewPackage@v1');
+  assert.deepEqual(result.node_result.review_package?.allowed_revision_producers, [
+    'human',
+    'codex_assisted',
+    'provider_llm',
+  ]);
+  assert.equal(result.node_result.evidence_map_ref, null);
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.equal(result.node_result.downstream_handoff, null);
+  assert.equal((await ctx.evidenceRepository.listEvidenceMapsByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
+});
+
+test('workflow harness requires source-specific support/challenge conflict coverage', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const extraSourceRef: TopicSelectionFunctionalRef = {
+    ref_type: 'literature_source',
+    ref_id: 'source_other_review_only',
+    title_card_id: ctx.titleCard.title_card_id,
+  };
+  const handoff: TopicSelectionSearchRunHandoff = {
+    ...ctx.searchRunHandoff,
+    evidence_map_input_refs: [
+      ...ctx.searchRunHandoff.evidence_map_input_refs,
+      extraSourceRef,
+    ],
+  };
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(handoff);
+  const baseDraft = evidenceMapExtractionDraft({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    input_refs_hash: inputRefsHash,
+  });
+  const supportUnit = baseDraft.draft_units[0]!;
+  const sameSourceChallenge = {
+    ...supportUnit,
+    client_unit_key: 'unit_challenge_same_source_001',
+    evidence_role: 'challenge' as const,
+    source_statement: 'The same paper also reports a failure mode for this approach.',
+    interpretation_payload: { role_hint: 'challenge' },
+  };
+  const otherSourceChallenge = {
+    ...supportUnit,
+    client_unit_key: 'unit_challenge_other_source_001',
+    evidence_role: 'challenge' as const,
+    source_refs: [extraSourceRef],
+    locator: {
+      ...supportUnit.locator,
+      source_ref: extraSourceRef,
+    },
+    source_statement: 'Another source challenges the approach.',
+    interpretation_payload: { role_hint: 'challenge_other_source' },
+  };
+  const draft: TopicSelectionEvidenceMapExtractionDraft = {
+    ...baseDraft,
+    draft_units: [supportUnit, sameSourceChallenge, otherSourceChallenge],
+    draft_conflicts: [{
+      conflict_type: 'claim_conflict',
+      severity: 'moderate',
+      support_unit_keys: [supportUnit.client_unit_key],
+      challenge_unit_keys: [otherSourceChallenge.client_unit_key],
+      baseline_unit_keys: [],
+      context_unit_keys: [],
+      issue_codes: [],
+    }],
+  };
+
+  const result = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff,
+    draft,
+  }, {
+    workflow_run_id: 'workflow_run_build_evidence_map_source_conflict_review',
+    node_attempt_id: 'node_attempt_build_evidence_map_source_conflict_review',
+    expectations: {
+      status: 'review_required',
+      materialization_status: 'review_required',
+      evidence_unit_count: 0,
+      downstream_handoff_present: false,
+    },
+  }));
+
+  assertScenarioPassed(result);
+  assert.ok(result.node_result.materialization_report.review_codes.includes('SUPPORT_CHALLENGE_POLARITY_AMBIGUOUS'));
+  assert.deepEqual(
+    result.node_result.materialization_report.rejection_reasons_by_client_unit_key.unit_challenge_same_source_001,
+    ['SUPPORT_CHALLENGE_POLARITY_AMBIGUOUS'],
+  );
+  assert.equal(result.node_result.evidence_map_ref, null);
+  assert.equal(result.node_result.authority_refs.length, 0);
+});
+
+test('workflow harness runs mocked single-agent EvidenceMap extraction before materialization', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(ctx.searchRunHandoff);
+  const workflowRunId = 'workflow_run_build_evidence_map_mocked';
+  const nodeAttemptId = 'node_attempt_build_evidence_map_mocked';
+  const draft = evidenceMapExtractionDraft({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    input_refs_hash: inputRefsHash,
+  }, {
+    producer_kind: 'mocked_llm',
+  });
+  const contextPacket = evidenceMapExtractionContextPacket({
+    workflow_run_id: workflowRunId,
+    node_attempt_id: nodeAttemptId,
+    handoff: ctx.searchRunHandoff,
+    input_refs_hash: inputRefsHash,
+  });
+
+  const result = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    draft,
+  }, {
+    workflow_run_id: workflowRunId,
+    node_attempt_id: nodeAttemptId,
+    extraction_draft: null,
+    execution_mode: 'mocked_llm',
+    extraction_context_packet: contextPacket,
+    extraction_context_packet_ref: {
+      ref_type: 'artifact_ref',
+      ref_id: 'context_packet_mocked_001',
+      title_card_id: ctx.titleCard.title_card_id,
+    },
+    mocked_output: {
+      fixture_id: 'fixture_evidence_map_extraction_happy_path',
+      output: draft,
+    },
+    expectations: {
+      status: 'succeeded',
+      materialization_status: 'ready_with_warning',
+      evidence_unit_count: 1,
+      downstream_handoff_present: true,
+      warning_codes: ['ABSTRACT_ONLY_SUPPORT'],
+    },
+  }));
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'succeeded');
+  assert.equal(result.node_result.materialization_report.status, 'ready_with_warning');
+  assert.equal(result.node_input.execution_mode, 'mocked_llm');
+  assert.equal(ctx.llmGateway.calls.length, 0);
+  assert.equal(result.node_result.agent_invocation_status, 'succeeded');
+  assert.equal(result.node_result.agent_invocation_audit_ref?.ref_type, 'artifact_ref');
+  assert.ok(result.node_result.artifact_refs.some(
+    (artifactRefEntry) => artifactRefEntry.ref_id === result.node_result.agent_invocation_audit_ref?.ref_id,
+  ));
+  assert.ok(result.node_result.audit_refs.some(
+    (auditRefEntry) => auditRefEntry.ref_id === result.node_result.agent_invocation_audit_ref?.ref_id,
+  ));
+  assert.equal(result.node_result.downstream_handoff?.evidence_unit_count, 1);
+});
+
+test('workflow harness carries a valid EvidenceMap handoff into generate-need-candidate input refs', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(ctx.searchRunHandoff);
+  const evidenceMapResult = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    draft: evidenceMapExtractionDraft({
+      title_card_id: ctx.titleCard.title_card_id,
+      handoff: ctx.searchRunHandoff,
+      literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+      source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+      coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+      input_refs_hash: inputRefsHash,
+    }),
+  }, {
+    workflow_run_id: 'workflow_run_build_evidence_map_for_need',
+    node_attempt_id: 'node_attempt_build_evidence_map_for_need',
+  }));
+  assertScenarioPassed(evidenceMapResult);
+  const handoff = evidenceMapResult.node_result.downstream_handoff;
+  assert.ok(handoff);
+  const supportRef = evidenceMapResult.node_result.evidence_unit_refs[0]!;
+  const strengthRef = refForTitleCard(
+    'evidence_strength_assessment',
+    'strength_from_handoff_001',
+    ctx.titleCard.title_card_id,
+  );
+  const nodeAttemptId = 'node_attempt_need_from_evidence_map_handoff';
+  const batch = rankedBatch(nodeAttemptId);
+  batch.drafts[0] = {
+    ...batch.drafts[0]!,
+    evidence_role_bundle: {
+      support_unit_refs: [supportRef],
+      challenge_unit_refs: [],
+      baseline_unit_refs: [],
+      context_unit_refs: [],
+    },
+    conflict_refs: [],
+    strength_assessment_refs: [strengthRef],
+  };
+  const arbiterContext = {
+    ...arbiterPayload(),
+    node_policy_ref: refForTitleCard('node_policy', 'generate_need_candidate_v1', ctx.titleCard.title_card_id),
+    output_schema_ref: refForTitleCard('schema', 'ranked_candidate_draft_batch_v1', ctx.titleCard.title_card_id),
+    evidence_ref_table: [
+      { evidence_ref: supportRef, role: 'support' },
+      { evidence_ref: strengthRef, role: 'strength' },
+    ],
+  };
+  const explorationContext = {
+    ...explorationPayload(),
+    topic_scope: {
+      title_card_id: ctx.titleCard.title_card_id,
+      domain: 'RAG fine-tuning safety',
+    },
+    evidence_signal_digest: {
+      support_count: 1,
+      challenge_count: 0,
+    },
+  };
+
+  const result = await ctx.workflowHarness.runGenerateNeedCandidateScenario(scenarioInput({
+    scenario_case_id: 'mocked-need-from-evidence-map-handoff',
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_need_from_evidence_map_handoff',
+    input_snapshot_id: null,
+    node_attempt_id: nodeAttemptId,
+    topic_scope_ref: ctx.topicSeedRef,
+    evidence_map_ref: handoff.evidence_map_ref,
+    evidence_strength_ref: strengthRef,
+    resource_sample_set_ref: null,
+    candidate_pool_projection_ref: null,
+    evidence_map_handoff: handoff,
+    search_snapshot_refs: [handoff.search_run_ref],
+    resource_snapshot_refs: [handoff.literature_resource_pool_snapshot_ref],
+    exploration_payload: explorationContext,
+    arbiter_payload: arbiterContext,
+    mocked_output: {
+      fixture_id: 'fixture_need_from_evidence_map_handoff',
+      output: batch,
+    },
+    persist_admitted_candidates: false,
+    persistence_context: null,
+    expectations: {
+      status: 'succeeded',
+      routing_decision: 'finalize_with_admitted_batch',
+      admitted_draft_count: 1,
+      persisted_candidate_count: 0,
+      persistence: 'forbidden',
+    },
+  }));
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_input.evidence_map_ref.ref_id, handoff.evidence_map_ref.ref_id);
+  assert.equal(result.node_input.search_snapshot_refs[0]?.ref_id, handoff.search_run_ref.ref_id);
+  assert.equal(result.node_input.resource_snapshot_refs[0]?.ref_id, handoff.literature_resource_pool_snapshot_ref.ref_id);
+  assert.equal(result.adapter_result.candidate_draft_admission_report?.draft_results[0]?.decision, 'admit');
+  assert.ok(result.compiled_context.exploration_context_packet.input_refs.some(
+    (inputRef) => inputRef.ref_type === 'workflow_handoff' && inputRef.ref_id === handoff.handoff_ref.ref_id,
+  ));
+});
+
+test('workflow harness rejects generate-need-candidate when EvidenceMap handoff refs drift', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(ctx.searchRunHandoff);
+  const evidenceMapResult = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    draft: evidenceMapExtractionDraft({
+      title_card_id: ctx.titleCard.title_card_id,
+      handoff: ctx.searchRunHandoff,
+      literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+      source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+      coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+      input_refs_hash: inputRefsHash,
+    }),
+  }, {
+    workflow_run_id: 'workflow_run_build_evidence_map_handoff_drift',
+    node_attempt_id: 'node_attempt_build_evidence_map_handoff_drift',
+  }));
+  assertScenarioPassed(evidenceMapResult);
+  const handoff = evidenceMapResult.node_result.downstream_handoff;
+  assert.ok(handoff);
+
+  await assert.rejects(
+    () => ctx.workflowHarness.runGenerateNeedCandidateScenario(scenarioInput({
+      scenario_case_id: 'mocked-need-handoff-drift',
+      title_card_id: ctx.titleCard.title_card_id,
+      evidence_map_handoff: handoff,
+      evidence_map_ref: {
+        ...handoff.evidence_map_ref,
+        ref_id: 'evidence_map_drifted',
+      },
+      search_snapshot_refs: [handoff.search_run_ref],
+      resource_snapshot_refs: [handoff.literature_resource_pool_snapshot_ref],
+    })),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'VERSION_CONFLICT',
+  );
+});
+
+test('workflow harness rejects generate-need-candidate context refs that reuse EvidenceMap review artifacts', async () => {
+  const reviewRef = refForTitleCard('evidence_map_review_package', 'review_package_001', 'title_card_001');
+
+  await assert.rejects(
+    async () => {
+      const { workflowHarness } = await makeRuntime();
+      await workflowHarness.runGenerateNeedCandidateScenario(scenarioInput({
+        scenario_case_id: 'mocked-review-package-as-need-input',
+        context_input_refs: [
+          ref('topic_scope', 'topic_scope_001'),
+          ref('evidence_map', 'evidence_map_001'),
+          reviewRef,
+        ],
+      }));
+    },
+    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
+});
+
+test('workflow harness runs validate-need-adjudication to a Node 8 human-confirmation handoff', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const packet = needAdjudicationRecommendationPacket(ctx);
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, packet),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_id, 'topic-selection.v1a.validate-need-adjudication.v1');
+  assert.equal(result.node_result.status, 'ready');
+  assert.equal(result.node_result.route_outcome, 'advance_to_human_confirmation');
+  assert.equal(result.node_result.final_decision, 'validate');
+  assert.equal(result.node_result.next_node_id, 'topic-selection.v1a.human-confirm-need.v1');
+  assert.ok(result.node_result.adjudication_result_ref);
+  assert.equal(result.node_result.reserved_validated_need_ref?.ref_type, 'validated_need');
+  assert.ok(result.node_result.recommendation_packet_ref);
+  assert.equal(result.node_result.replay_provenance, null);
+  assert.equal(ctx.llmGateway.calls.length, 0);
+
+  const adjudications = await ctx.needValidationRepository.listAdjudicationResultsByNeedCandidateId(
+    ctx.candidate.need_candidate_id,
+  );
+  assert.equal(adjudications.length, 1);
+  assert.equal(adjudications[0]?.final_decision, 'validate');
+  assert.equal(result.node_result.reserved_validated_need_ref?.ref_id, adjudications[0]?.output_validated_need_id);
+  const artifacts = await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId('workflow_run_validate_need_001');
+  assert.equal(
+    artifacts.some((artifact) => artifact.payload?.payload_schema === 'WorkflowHarnessValidateNeedAdjudicationScenarioTrace@v1'),
+    true,
+  );
+});
+
+test('workflow harness runs human-confirm-need and materializes reserved ValidatedNeed without v1b bundle', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const result = await ctx.workflowHarness.runHumanConfirmNeedScenario(
+    humanConfirmNeedScenarioInput(ctx, validateResult),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_id, 'topic-selection.v1a.human-confirm-need.v1');
+  assert.equal(result.node_result.status, 'ready');
+  assert.equal(result.node_result.route_outcome, 'advance_to_publish_v1b_input_bundle');
+  assert.equal(result.node_result.next_node_id, 'topic-selection.v1a.publish-v1b-input-bundle.v1');
+  assert.equal(result.node_result.validated_need_ref?.ref_id, validateResult.node_result.reserved_validated_need_ref?.ref_id);
+  assert.ok(result.node_result.human_decision_ref);
+  assert.ok(result.node_result.semantic_review_context_packet_ref);
+  assert.ok(result.node_result.semantic_review_ref);
+  assert.equal(result.node_input.run_mode, 'acceptance');
+  assert.equal(result.node_input.executor_kind, 'single_agent');
+  assert.equal(result.node_input.model_option_id, null);
+  const bundles = await ctx.needValidationRepository.listV1aToV1bInputBundlesByValidatedNeedId(
+    result.node_result.validated_need_ref!.ref_id,
+  );
+  assert.equal(bundles.length, 0);
+});
+
+test('workflow harness publishes v1b input bundle as terminal v1a handoff', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const humanConfirmResult = await runHumanConfirmNeedForPublish(ctx);
+  const input = await publishV1bInputBundleScenarioInput(ctx, humanConfirmResult);
+  const result = await ctx.workflowHarness.runPublishV1bInputBundleScenario(input);
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_id, 'topic-selection.v1a.publish-v1b-input-bundle.v1');
+  assert.equal(result.node_result.status, 'ready');
+  assert.equal(result.node_result.route_outcome, 'published_v1b_input_bundle');
+  assert.equal(result.node_result.idempotency_result, 'created_new_bundle');
+  assert.equal(result.node_result.bundle_version, 'v1a-to-v1b-input-bundle-v1');
+  assert.ok(result.node_result.v1b_input_bundle_ref);
+  assert.equal(result.node_input.created_by, 'system');
+  assert.equal('next_node_id' in (result.node_result as unknown as Record<string, unknown>), false);
+  const bundles = await ctx.needValidationRepository.listV1aToV1bInputBundlesByValidatedNeedId(
+    humanConfirmResult.node_result.validated_need_ref!.ref_id,
+  );
+  assert.equal(bundles.length, 1);
+  assert.equal(bundles[0]?.v1b_input_bundle_id, result.node_result.v1b_input_bundle_ref?.ref_id);
+  const artifacts = await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(input.workflow_run_id);
+  assert.equal(
+    artifacts.some((artifact) => artifact.payload?.payload_schema === 'WorkflowHarnessPublishV1bInputBundleScenarioTrace@v1'),
+    true,
+  );
+});
+
+test('workflow harness reuses existing v1b input bundle for same expected version', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const humanConfirmResult = await runHumanConfirmNeedForPublish(ctx);
+  const firstInput = await publishV1bInputBundleScenarioInput(ctx, humanConfirmResult, {
+    workflow_run_id: 'workflow_run_publish_reuse',
+    node_attempt_id: 'node_attempt_publish_reuse_first',
+  });
+  const first = await ctx.workflowHarness.runPublishV1bInputBundleScenario(firstInput);
+  const secondInput = await publishV1bInputBundleScenarioInput(ctx, humanConfirmResult, {
+    workflow_run_id: 'workflow_run_publish_reuse',
+    node_attempt_id: 'node_attempt_publish_reuse_second',
+    expectations: {
+      status: 'ready',
+      route_outcome: 'published_v1b_input_bundle',
+      idempotency_result: 'reused_existing_bundle',
+      bundle_published: true,
+    },
+  });
+  const second = await ctx.workflowHarness.runPublishV1bInputBundleScenario(secondInput);
+
+  assertScenarioPassed(first);
+  assertScenarioPassed(second);
+  assert.equal(second.node_result.idempotency_result, 'reused_existing_bundle');
+  assert.equal(second.node_result.v1b_input_bundle_ref?.ref_id, first.node_result.v1b_input_bundle_ref?.ref_id);
+  const bundles = await ctx.needValidationRepository.listV1aToV1bInputBundlesByValidatedNeedId(
+    humanConfirmResult.node_result.validated_need_ref!.ref_id,
+  );
+  assert.equal(bundles.length, 1);
+});
+
+test('workflow harness replays identical publish-v1b-input-bundle attempt', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const humanConfirmResult = await runHumanConfirmNeedForPublish(ctx);
+  const input = await publishV1bInputBundleScenarioInput(ctx, humanConfirmResult, {
+    workflow_run_id: 'workflow_run_publish_replay',
+    node_attempt_id: 'node_attempt_publish_replay',
+  });
+  const first = await ctx.workflowHarness.runPublishV1bInputBundleScenario(input);
+  const replay = await ctx.workflowHarness.runPublishV1bInputBundleScenario(input);
+
+  assertScenarioPassed(first);
+  assertScenarioPassed(replay);
+  assert.equal(replay.node_result.replay_provenance?.replayed, true);
+  assert.equal(replay.node_result.v1b_input_bundle_ref?.ref_id, first.node_result.v1b_input_bundle_ref?.ref_id);
+  const bundles = await ctx.needValidationRepository.listV1aToV1bInputBundlesByValidatedNeedId(
+    humanConfirmResult.node_result.validated_need_ref!.ref_id,
+  );
+  assert.equal(bundles.length, 1);
+});
+
+test('workflow harness blocks changed publish attempt input for same node_attempt_id', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const humanConfirmResult = await runHumanConfirmNeedForPublish(ctx);
+  const input = await publishV1bInputBundleScenarioInput(ctx, humanConfirmResult, {
+    workflow_run_id: 'workflow_run_publish_hash_mismatch',
+    node_attempt_id: 'node_attempt_publish_hash_mismatch',
+  });
+  const first = await ctx.workflowHarness.runPublishV1bInputBundleScenario(input);
+  const mismatch = await ctx.workflowHarness.runPublishV1bInputBundleScenario({
+    ...input,
+    expected_bundle_version: 'v1a-to-v1b-input-bundle-v2',
+    expectations: {
+      status: 'blocked',
+      route_outcome: 'blocked',
+      error_code: 'VERSION_CONFLICT',
+      blocker_codes: ['REPLAY_INPUT_HASH_MISMATCH'],
+      idempotency_result: 'not_applicable',
+      bundle_published: false,
+    },
+  });
+
+  assertScenarioPassed(first);
+  assertScenarioPassed(mismatch);
+  assert.equal(mismatch.node_result.error_code, 'VERSION_CONFLICT');
+  const bundles = await ctx.needValidationRepository.listV1aToV1bInputBundlesByValidatedNeedId(
+    humanConfirmResult.node_result.validated_need_ref!.ref_id,
+  );
+  assert.equal(bundles.length, 1);
+});
+
+test('workflow harness blocks publish-v1b-input-bundle lineage drift without creating bundle', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const humanConfirmResult = await runHumanConfirmNeedForPublish(ctx);
+  const input = await publishV1bInputBundleScenarioInput(ctx, humanConfirmResult, {
+    workflow_run_id: 'workflow_run_publish_lineage_drift',
+    node_attempt_id: 'node_attempt_publish_lineage_drift',
+    source_need_candidate_ref: refForTitleCard(
+      'need_candidate',
+      ctx.candidate.need_candidate_id,
+      ctx.titleCard.title_card_id,
+      'stale-candidate-version',
+    ),
+    expectations: {
+      status: 'blocked',
+      route_outcome: 'blocked',
+      error_code: 'VERSION_CONFLICT',
+      blocker_codes: ['VERSION_CONFLICT'],
+      idempotency_result: 'not_applicable',
+      bundle_published: false,
+    },
+  });
+  const result = await ctx.workflowHarness.runPublishV1bInputBundleScenario(input);
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.v1b_input_bundle_ref, null);
+  const bundles = await ctx.needValidationRepository.listV1aToV1bInputBundlesByValidatedNeedId(
+    humanConfirmResult.node_result.validated_need_ref!.ref_id,
+  );
+  assert.equal(bundles.length, 0);
+});
+
+test('workflow harness blocks publish-v1b-input-bundle without expected bundle version', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const humanConfirmResult = await runHumanConfirmNeedForPublish(ctx);
+  const result = await ctx.workflowHarness.runPublishV1bInputBundleScenario(
+    await publishV1bInputBundleScenarioInput(ctx, humanConfirmResult, {
+      workflow_run_id: 'workflow_run_publish_missing_version',
+      node_attempt_id: 'node_attempt_publish_missing_version',
+      expected_bundle_version: '',
+      expectations: {
+        status: 'blocked',
+        route_outcome: 'blocked',
+        error_code: 'INVALID_PAYLOAD',
+        blocker_codes: ['INVALID_PAYLOAD'],
+        idempotency_result: 'not_applicable',
+        bundle_published: false,
+      },
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.v1b_input_bundle_ref, null);
+});
+
+test('workflow harness accepts human_delegated confirmation only with fixed policy provenance', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const result = await ctx.workflowHarness.runHumanConfirmNeedScenario(
+    humanConfirmNeedScenarioInput(ctx, validateResult, {
+      confirmation_input: humanConfirmationInput(ctx, {
+        actor_mode: 'human_delegated',
+        delegated_executor: {
+          executor_type: 'codex',
+          provenance_ref: refForTitleCard('artifact_ref', 'codex_confirmation_review_001', ctx.titleCard.title_card_id),
+          policy_id: 'n8-validate-only-delegation-v1',
+        },
+      }),
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'ready');
+});
+
+test('workflow harness blocks human confirmation when required residual risk is not accepted', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  assert.ok(ctx.supportPacket);
+  ctx.supportPacket.residual_risk_refs = [
+    refForTitleCard('accepted_risk', 'risk_missing_acceptance_001', ctx.titleCard.title_card_id),
+  ];
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const result = await ctx.workflowHarness.runHumanConfirmNeedScenario(
+    humanConfirmNeedScenarioInput(ctx, validateResult, {
+      workflow_run_id: 'workflow_run_human_confirm_missing_risk',
+      node_attempt_id: 'node_attempt_human_confirm_missing_risk',
+      confirmation_input: humanConfirmationInput(ctx, {
+        accepted_risk_refs: [],
+      }),
+      expectations: {
+        status: 'blocked',
+        route_outcome: 'blocked',
+        error_code: 'GATE_CONSTRAINT_FAILED',
+        blocker_codes: ['MISSING_ACCEPTED_RISK_COVERAGE'],
+        validated_need_created: false,
+        v1b_bundle_created: false,
+      },
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.validated_need_ref, null);
+});
+
+test('workflow harness blocks human-confirm semantic review lineage drift before authority writes', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const input = humanConfirmNeedScenarioInput(ctx, validateResult, {
+    workflow_run_id: 'workflow_run_human_confirm_review_drift',
+    node_attempt_id: 'node_attempt_human_confirm_review_drift',
+    execution_mode: 'mocked_llm',
+    mocked_output: null,
+    expectations: {
+      status: 'blocked',
+      route_outcome: 'blocked',
+      error_code: 'VERSION_CONFLICT',
+      blocker_codes: ['SEMANTIC_REVIEW_LINEAGE_MISMATCH'],
+      validated_need_created: false,
+      v1b_bundle_created: false,
+    },
+  });
+  input.mocked_output = {
+    fixture_id: 'fixture_human_confirm_review_profile_drift',
+    output: humanConfirmationSemanticReviewOutput(ctx, input, {
+      profile_id: 'topic-selection.confirmation-semantic-review.legacy-profile.v0',
+      execution_mode: 'mocked_llm',
+    }),
+  };
+
+  const result = await ctx.workflowHarness.runHumanConfirmNeedScenario(input);
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.validated_need_ref, null);
+  assert.equal(result.node_result.human_decision_ref, null);
+  const validatedNeeds = await ctx.needValidationRepository.listValidatedNeedsByTitleCardId(ctx.titleCard.title_card_id);
+  assert.equal(validatedNeeds.length, 0);
+});
+
+test('workflow harness replays identical human-confirm-need attempt before duplicate guard', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const input = humanConfirmNeedScenarioInput(ctx, validateResult, {
+    workflow_run_id: 'workflow_run_human_confirm_replay',
+    node_attempt_id: 'node_attempt_human_confirm_replay',
+  });
+  const first = await ctx.workflowHarness.runHumanConfirmNeedScenario(input);
+  const replay = await ctx.workflowHarness.runHumanConfirmNeedScenario(input);
+
+  assertScenarioPassed(first);
+  assertScenarioPassed(replay);
+  assert.equal(replay.node_result.replay_provenance?.replayed, true);
+  assert.equal(replay.node_result.validated_need_ref?.ref_id, first.node_result.validated_need_ref?.ref_id);
+  const validatedNeeds = await ctx.needValidationRepository.listValidatedNeedsByTitleCardId(ctx.titleCard.title_card_id);
+  assert.equal(validatedNeeds.length, 1);
+});
+
+test('workflow harness blocks new human-confirm-need attempt when reserved id is already materialized', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const first = await ctx.workflowHarness.runHumanConfirmNeedScenario(
+    humanConfirmNeedScenarioInput(ctx, validateResult, {
+      workflow_run_id: 'workflow_run_human_confirm_duplicate',
+      node_attempt_id: 'node_attempt_human_confirm_duplicate_first',
+    }),
+  );
+  const duplicate = await ctx.workflowHarness.runHumanConfirmNeedScenario(
+    humanConfirmNeedScenarioInput(ctx, validateResult, {
+      workflow_run_id: 'workflow_run_human_confirm_duplicate',
+      node_attempt_id: 'node_attempt_human_confirm_duplicate_second',
+      expectations: {
+        status: 'blocked',
+        route_outcome: 'blocked',
+        error_code: 'GATE_CONSTRAINT_FAILED',
+        blocker_codes: ['DUPLICATE_VALIDATED_NEED'],
+        validated_need_created: false,
+        v1b_bundle_created: false,
+      },
+    }),
+  );
+
+  assertScenarioPassed(first);
+  assertScenarioPassed(duplicate);
+  assert.equal(duplicate.node_result.validated_need_ref, null);
+});
+
+test('workflow harness blocks partial human confirmation write without automatic backfill', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  await ctx.controlPlaneRepository.createHumanConfirmedDecision({
+    human_confirmed_decision_id: 'human_decision_partial_001',
+    workspace_id: null,
+    title_card_id: ctx.titleCard.title_card_id,
+    target_ref: validateResult.node_result.reserved_validated_need_ref!,
+    decision_type: 'confirm',
+    actor: { actor_type: 'human', actor_id: 'reviewer_1' },
+    rationale: 'Partial write fixture.',
+    artifact_refs: [],
+    policy_version_id: 'v1',
+    resulting_authority_refs: [validateResult.node_result.reserved_validated_need_ref!],
+    created_at: '2026-05-19T00:00:00.000Z',
+  });
+  const result = await ctx.workflowHarness.runHumanConfirmNeedScenario(
+    humanConfirmNeedScenarioInput(ctx, validateResult, {
+      workflow_run_id: 'workflow_run_human_confirm_partial',
+      node_attempt_id: 'node_attempt_human_confirm_partial',
+      expectations: {
+        status: 'blocked',
+        route_outcome: 'blocked',
+        error_code: 'GATE_CONSTRAINT_FAILED',
+        blocker_codes: ['PARTIAL_CONFIRMATION_WRITE'],
+        validated_need_created: false,
+        v1b_bundle_created: false,
+      },
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.validated_need_ref, null);
+});
+
+test('workflow harness routes high-risk model-only adjudication to human review without authority writes', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const packet = needAdjudicationRecommendationPacket(ctx, { final_decision: 'reject' });
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, packet, {
+      workflow_run_id: packet.workflow_run_id,
+      node_attempt_id: packet.node_attempt_id,
+      expectations: {
+        status: 'require_human_review',
+        route_outcome: 'require_human_review',
+        final_decision: 'reject',
+        review_reason_codes: ['HIGH_RISK_DECISION_REQUIRES_HUMAN_ACCEPTANCE'],
+        adjudication_created: false,
+      },
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'require_human_review');
+  assert.equal(result.node_result.adjudication_result_ref, null);
+  assert.deepEqual(result.node_result.review_reason_codes, ['HIGH_RISK_DECISION_REQUIRES_HUMAN_ACCEPTANCE']);
+  const adjudications = await ctx.needValidationRepository.listAdjudicationResultsByNeedCandidateId(
+    ctx.candidate.need_candidate_id,
+  );
+  assert.equal(adjudications.length, 0);
+});
+
+test('workflow harness persists high-risk adjudication only with explicit human acceptance', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const packet = needAdjudicationRecommendationPacket(ctx, { final_decision: 'reject' });
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, packet, {
+      adjudication_actor: { actor_type: 'human', actor_id: 'reviewer_1' },
+      expectations: {
+        status: 'ready',
+        route_outcome: 'stop_rejected',
+        final_decision: 'reject',
+        adjudication_created: true,
+      },
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'ready');
+  assert.equal(result.node_result.route_outcome, 'stop_rejected');
+  assert.equal(result.node_result.reserved_validated_need_ref, null);
+  const adjudications = await ctx.needValidationRepository.listAdjudicationResultsByNeedCandidateId(
+    ctx.candidate.need_candidate_id,
+  );
+  assert.equal(adjudications.length, 1);
+  assert.equal(adjudications[0]?.final_decision, 'reject');
+});
+
+test('workflow harness creates typed SearchPlan recheck route without mutating SearchPlan', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const packet = needAdjudicationRecommendationPacket(ctx, { final_decision: 'request_searchplan_recheck' });
+  const planBefore = await ctx.searchResourceRepository.findSearchPlanById(ctx.candidate.search_plan_ref.ref_id);
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, packet, {
+      expectations: {
+        status: 'ready',
+        route_outcome: 'repair_search_plan',
+        final_decision: 'request_searchplan_recheck',
+        adjudication_created: true,
+      },
+    }),
+  );
+  const planAfter = await ctx.searchResourceRepository.findSearchPlanById(ctx.candidate.search_plan_ref.ref_id);
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.repair_target, 'search_plan');
+  assert.equal(result.node_result.recheck_request_ref?.ref_type, 'search_plan_recheck_request');
+  assert.deepEqual(planAfter, planBefore);
+});
+
+test('workflow harness blocks return-to-candidate recommendation without actionable repair actions', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const packet = needAdjudicationRecommendationPacket(ctx, { final_decision: 'return_to_candidate' }, {
+    required_actions: [],
+  });
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, packet, {
+      expectations: {
+        status: 'blocked',
+        route_outcome: 'blocked',
+        final_decision: 'return_to_candidate',
+        error_code: 'GATE_CONSTRAINT_FAILED',
+        blocker_codes: ['REQUIRED_ACTIONS_MISSING'],
+        adjudication_created: false,
+      },
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.adjudication_result_ref, null);
+});
+
+test('workflow harness blocks recommendation packets that try to carry orchestration fields', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const packet = needAdjudicationRecommendationPacket(ctx);
+  const malformedPacket = {
+    ...packet,
+    route_outcome: 'advance_to_human_confirmation',
+    next_node_id: 'topic-selection.v1a.human-confirm-need.v1',
+  } as unknown as TopicSelectionNeedAdjudicationRecommendationPacket;
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, malformedPacket, {
+      expectations: {
+        status: 'blocked',
+        route_outcome: 'blocked',
+        final_decision: null,
+        error_code: 'GATE_CONSTRAINT_FAILED',
+        blocker_codes: ['GATE_CONSTRAINT_FAILED'],
+        adjudication_created: false,
+      },
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.recommendation_packet_ref, null);
+  assert.equal(result.node_result.adjudication_result_ref, null);
+});
+
+test('workflow harness blocks recommendation profile and policy drift before authority writes', async () => {
+  for (const [caseId, overrides] of [
+    ['profile', { profile_id: 'topic-selection.need-adjudication.drifted.v1' }],
+    ['policy', { policy_version: 'drifted-policy' }],
+    ['output-schema', { output_schema_version: 'drifted-schema' }],
+  ] as const) {
+    const ctx = await seedValidateNeedAdjudicationRuntime();
+    const packet = needAdjudicationRecommendationPacket(ctx, {
+      workflow_run_id: `workflow_run_validate_need_${caseId}_drift`,
+      node_attempt_id: `node_attempt_validate_need_${caseId}_drift`,
+    }, overrides);
+    const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+      validateNeedAdjudicationScenarioInput(ctx, packet, {
+        expectations: {
+          status: 'blocked',
+          route_outcome: 'blocked',
+          final_decision: null,
+          error_code: 'VERSION_CONFLICT',
+          blocker_codes: ['VERSION_CONFLICT'],
+          adjudication_created: false,
+        },
+      }),
+    );
+
+    assertScenarioPassed(result);
+    assert.equal(result.node_result.recommendation_packet_ref, null);
+    assert.equal(result.node_result.adjudication_result_ref, null);
+    const adjudications = await ctx.needValidationRepository.listAdjudicationResultsByNeedCandidateId(
+      ctx.candidate.need_candidate_id,
+    );
+    assert.equal(adjudications.length, 0);
+  }
+});
+
+test('workflow harness blocks validate-need-adjudication before support packet creation when readiness is not ready', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime({ includeContext: false });
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, null, {
+      workflow_run_id: 'workflow_run_validate_need_readiness_blocked',
+      node_attempt_id: 'node_attempt_validate_need_readiness_blocked',
+      validation_support_packet_ref: null,
+      support_packet_mode: 'create_fresh',
+      expectations: {
+        status: 'blocked',
+        route_outcome: 'blocked',
+        final_decision: null,
+        error_code: 'GATE_CONSTRAINT_FAILED',
+        blocker_codes: ['READINESS_EVIDENCE_GAP'],
+        adjudication_created: false,
+      },
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.validation_support_packet_ref, null);
+  assert.deepEqual(result.node_result.blocker_codes, ['READINESS_EVIDENCE_GAP']);
+  const adjudications = await ctx.needValidationRepository.listAdjudicationResultsByNeedCandidateId(
+    ctx.candidate.need_candidate_id,
+  );
+  assert.equal(adjudications.length, 0);
+});
+
+test('workflow harness treats readiness reject, merge-required, and park as gate findings only', async () => {
+  for (const [recommendation, blockerCode] of [
+    ['reject', 'READINESS_REJECT'],
+    ['merge_required', 'READINESS_MERGE_REQUIRED'],
+    ['park', 'READINESS_PARK'],
+  ] as const) {
+    const ctx = await seedValidateNeedAdjudicationRuntime();
+    ctx.readiness.recommendation = recommendation;
+    const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+      validateNeedAdjudicationScenarioInput(ctx, null, {
+        workflow_run_id: `workflow_run_validate_need_readiness_${recommendation}`,
+        node_attempt_id: `node_attempt_validate_need_readiness_${recommendation}`,
+        validation_support_packet_ref: ctx.supportPacket
+          ? refForTitleCard(
+              'validation_decision_support_packet',
+              ctx.supportPacket.validation_support_packet_id,
+              ctx.titleCard.title_card_id,
+            )
+          : null,
+        expectations: {
+          status: 'blocked',
+          route_outcome: 'blocked',
+          final_decision: null,
+          error_code: 'GATE_CONSTRAINT_FAILED',
+          blocker_codes: [blockerCode],
+          adjudication_created: false,
+        },
+      }),
+    );
+
+    assertScenarioPassed(result);
+    assert.equal(result.node_result.adjudication_result_ref, null);
+    const adjudications = await ctx.needValidationRepository.listAdjudicationResultsByNeedCandidateId(
+      ctx.candidate.need_candidate_id,
+    );
+    assert.equal(adjudications.length, 0);
+  }
+});
+
+test('workflow harness consumes frozen support packet after upstream evidence freshness changes', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  await ctx.evidenceMaps.markEvidenceMapStale({
+    evidence_map_id: ctx.evidenceMap.evidence_map_id,
+    stale_reason_codes: ['UPSTREAM_SEARCH_REFRESHED_AFTER_SUPPORT_PACKET'],
+  });
+  const packet = needAdjudicationRecommendationPacket(ctx);
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, packet, {
+      workflow_run_id: 'workflow_run_validate_need_frozen_support',
+      node_attempt_id: 'node_attempt_validate_need_frozen_support',
+      mocked_output: {
+        fixture_id: 'fixture_frozen_support_after_upstream_mutation',
+        output: {
+          ...packet,
+          workflow_run_id: 'workflow_run_validate_need_frozen_support',
+          node_attempt_id: 'node_attempt_validate_need_frozen_support',
+          recommendation_packet_id: 'node_attempt_validate_need_frozen_support_recommendation',
+        },
+      },
+      expectations: {
+        status: 'ready',
+        route_outcome: 'advance_to_human_confirmation',
+        final_decision: 'validate',
+        adjudication_created: true,
+      },
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'ready');
+});
+
+test('workflow harness blocks duplicate adjudication attempts with existing adjudication ref', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const firstPacket = needAdjudicationRecommendationPacket(ctx, {
+    workflow_run_id: 'workflow_run_validate_need_duplicate',
+    node_attempt_id: 'node_attempt_validate_need_duplicate_first',
+  });
+  const first = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, firstPacket),
+  );
+  const secondPacket = needAdjudicationRecommendationPacket(ctx, {
+    workflow_run_id: 'workflow_run_validate_need_duplicate',
+    node_attempt_id: 'node_attempt_validate_need_duplicate_second',
+  });
+  const second = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, secondPacket, {
+      expectations: {
+        status: 'blocked',
+        route_outcome: 'blocked',
+        final_decision: null,
+        error_code: 'GATE_CONSTRAINT_FAILED',
+        blocker_codes: ['DUPLICATE_OR_PENDING_ADJUDICATION'],
+        adjudication_created: false,
+      },
+    }),
+  );
+
+  assertScenarioPassed(first);
+  assertScenarioPassed(second);
+  assert.equal(second.node_result.duplicate_adjudication_ref?.ref_id, first.node_result.adjudication_result_ref?.ref_id);
+  assert.equal(second.node_result.reserved_validated_need_ref?.ref_id, first.node_result.reserved_validated_need_ref?.ref_id);
+  const adjudications = await ctx.needValidationRepository.listAdjudicationResultsByNeedCandidateId(
+    ctx.candidate.need_candidate_id,
+  );
+  assert.equal(adjudications.length, 1);
+});
+
+test('workflow harness replays identical validate-need-adjudication attempt and blocks changed attempt input', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const packet = needAdjudicationRecommendationPacket(ctx, {
+    workflow_run_id: 'workflow_run_validate_need_replay',
+    node_attempt_id: 'node_attempt_validate_need_replay',
+  });
+  const input = validateNeedAdjudicationScenarioInput(ctx, packet);
+  const first = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(input);
+  const replay = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(input);
+  const replayWithChangedExpectations = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, packet, {
+      expectations: {
+        status: 'blocked',
+        route_outcome: 'blocked',
+        final_decision: null,
+        adjudication_created: false,
+      },
+    }),
+  );
+  const changedPacket = needAdjudicationRecommendationPacket(ctx, {
+    workflow_run_id: packet.workflow_run_id,
+    node_attempt_id: packet.node_attempt_id,
+    final_decision: 'return_to_candidate',
+  });
+  const mismatch = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, changedPacket, {
+      expectations: {
+        status: 'blocked',
+        route_outcome: 'blocked',
+        final_decision: null,
+        error_code: 'VERSION_CONFLICT',
+        blocker_codes: ['REPLAY_INPUT_HASH_MISMATCH'],
+        adjudication_created: false,
+      },
+    }),
+  );
+
+  assertScenarioPassed(first);
+  assert.equal(replay.node_result.replay_provenance?.replayed, true);
+  assert.equal(replay.node_result.adjudication_result_ref?.ref_id, first.node_result.adjudication_result_ref?.ref_id);
+  assert.equal(replay.node_result.reserved_validated_need_ref?.ref_id, first.node_result.reserved_validated_need_ref?.ref_id);
+  assert.equal(replayWithChangedExpectations.node_result.replay_provenance?.replayed, true);
+  assert.equal(replayWithChangedExpectations.scenario_status, 'failed');
+  assert.equal(
+    replayWithChangedExpectations.assertions.some((assertion) =>
+      assertion.assertion_id === 'expected_node_status' && assertion.passed === false,
+    ),
+    true,
+  );
+  assertScenarioPassed(mismatch);
+  assert.equal(mismatch.node_result.status, 'blocked');
+  assert.deepEqual(mismatch.node_result.blocker_codes, ['REPLAY_INPUT_HASH_MISMATCH']);
+  const adjudications = await ctx.needValidationRepository.listAdjudicationResultsByNeedCandidateId(
+    ctx.candidate.need_candidate_id,
+  );
+  assert.equal(adjudications.length, 1);
 });
 
 test('workflow harness runs generate-need-candidate finalize scenario through persistence boundary', async () => {

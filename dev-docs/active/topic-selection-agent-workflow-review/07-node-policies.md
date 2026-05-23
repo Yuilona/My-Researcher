@@ -109,12 +109,12 @@ This snapshot prevents `policy_status=implementation_ready` from being mistaken 
 | `topic-selection.v1a.create-topic-seed.v1` | `implementation_ready` | `callable` | `runCreateTopicSeedScenario` exists with stable success/blocked result and trace artifact. |
 | `topic-selection.v1a.snapshot-literature-resource-pool.v1` | `implementation_ready` | `callable` | `runSnapshotLiteratureResourcePoolScenario` exists with stable success/blocked result and trace artifact. |
 | `topic-selection.v1a.create-search-plan.v1` | `implementation_ready` | `callable` | `runCreateSearchPlanScenario` exists with strict blueprint validation, success/blocked result, and trace artifact. |
-| `topic-selection.v1a.record-search-run.v1` | `draft` | `not_callable` | route/service exists, but result accounting and evidence binding assembly remain script-owned. |
-| `topic-selection.v1a.build-evidence-map.v1` | `implementation_ready` | `partially_callable` | business policy is clear, but no normalized harness runner exists yet. |
+| `topic-selection.v1a.record-search-run.v1` | `implementation_ready` | `callable` | `runRecordSearchRunScenario` exists with normalized bundle validation, success/blocked result, handoff/loopback routing, and trace artifact. |
+| `topic-selection.v1a.build-evidence-map.v1` | `implementation_ready` | `callable` | `runBuildEvidenceMapScenario` exists with stable success/blocked/review-required result and trace artifact. |
 | `topic-selection.v1a.generate-need-candidate.v1` | `implementation_ready` | `callable` | `runGenerateNeedCandidateScenario` exists and is used by the real E2E canary. |
-| `topic-selection.v1a.validate-need-adjudication.v1` | `implementation_ready` | `not_callable` | route/service sequence exists, but readiness/support/adjudication are not wrapped as one normalized node runner. |
-| `topic-selection.v1a.human-confirm-need.v1` | `implementation_ready` | `not_callable` | route/service exists, but fixture-safe human-review runner is not implemented. |
-| `topic-selection.v1a.publish-v1b-input-bundle.v1` | `implementation_ready` | `not_callable` | route/service exists, but deterministic handoff runner is not implemented. |
+| `topic-selection.v1a.validate-need-adjudication.v1` | `implementation_ready` | `callable` | `runValidateNeedAdjudicationScenario` exists with strict readiness/support lineage, recommendation gate, replay/duplicate handling, and trace artifact. |
+| `topic-selection.v1a.human-confirm-need.v1` | `implementation_ready` | `callable` | `runHumanConfirmNeedScenario` exists with stable success/blocked/review result, semantic review artifacts, exact replay, duplicate/partial-write guards, and trace artifact. |
+| `topic-selection.v1a.publish-v1b-input-bundle.v1` | `implementation_ready` | `callable` | `runPublishV1bInputBundleScenario` exists with explicit handoff refs, exact replay, version reuse idempotency, lineage guards, and trace artifact. |
 
 ## Stub Policy Template
 ```yaml
@@ -1014,7 +1014,7 @@ failure_semantics:
 
 ### `topic-selection.v1a.record-search-run.v1`
 ```yaml
-policy_status: draft
+policy_status: implementation_ready
 node_id: topic-selection.v1a.record-search-run.v1
 authority_object: TopicSelectionSearchRun
 preconditions:
@@ -1022,29 +1022,337 @@ preconditions:
   - SearchPlan resolves to its LiteratureResourcePoolSnapshot.
   - coverage observations, evidence bindings, assessments, and risk acceptances refer only to rows under the SearchPlan.
   - evidence_map_input_refs are non-empty when the run is intended to feed EvidenceMap.
+semantic_boundary:
+  - record-search-run records an already-produced search/import/manual-result fact.
+  - record-search-run is not the search execution node and does not call search providers.
+  - search execution failure is a valid SearchRun fact when the record contract is valid.
+  - Node 4 blocked means the SearchRun record contract is invalid or unsafe to persist.
+  - failed SearchRun records are audit facts only and MUST NOT produce a consumable Node 5 EvidenceMap handoff.
+normalized_input_contract:
+  contract_name: TopicSelectionSearchRunRecordBundle@v1
+  contract_kind: module_level_value_contract
+  persistence_kind: non_authority_input_bundle
+  dual_track_rule:
+    - The bundle is the normalized harness input for Node 4.
+    - The bundle must map losslessly to the existing RecordSearchRunInput service call.
+    - The existing TopicSelectionSearchResourceService.recordSearchRun remains the only SearchRun authority writer.
+    - Route payload compatibility may remain only when it uses the same fields and semantics; it must not become a second product contract.
+  required_fields:
+    - schema_version.
+    - title_card_ref.
+    - search_plan_ref.
+    - literature_resource_pool_snapshot_ref.
+    - expected_literature_snapshot_hash.
+    - run_kind.
+    - run_status.
+    - query_provenance.
+    - result_accounting.
+    - source_health_summary.
+    - dedup_summary.
+    - evidence_map_input_refs.
+    - coverage_observations.
+    - evidence_bindings.
+    - coverage_assessments.
+    - coverage_risk_acceptances.
+    - raw_log_artifact_ref_or_payload.
+    - policy_version.
+    - output_schema_version.
+  forbidden_fields:
+    - evidence_units.
+    - selected_need_candidate.
+    - TopicQuestionContract.
+    - topic_value_assessment.
+    - hidden_reasoning.
+    - provider_secret.
+  version_guard_rule:
+    - SearchPlan version is asserted only by search_plan_ref.version_id; no duplicate expected_search_plan_version field is allowed.
+    - LiteratureResourcePoolSnapshot version is asserted only by literature_resource_pool_snapshot_ref.version_id.
+    - expected_literature_snapshot_hash is a replay/currentness guard over the resolved LiteratureResourcePoolSnapshot contents, not a replacement for the concrete snapshot ref.
+  minimum_validation_rules:
+    - title_card_ref.ref_type must be title_card and title_card_ref.ref_id must equal title_card_id.
+    - search_plan_ref.ref_type must be search_plan and search_plan_ref.version_id must be non-empty.
+    - literature_resource_pool_snapshot_ref.ref_type must be literature_resource_pool_snapshot and version_id must be non-empty.
+    - resolved SearchPlan title_card_id and plan_version must match title_card_ref and search_plan_ref.version_id.
+    - resolved SearchPlan.literature_snapshot_ref must match literature_resource_pool_snapshot_ref.
+    - resolved LiteratureResourcePoolSnapshot snapshot_version and snapshot_hash must match literature_resource_pool_snapshot_ref.version_id and expected_literature_snapshot_hash.
+    - all coverage_observations, evidence_bindings, coverage_assessments, and coverage_risk_acceptances must reference coverage rows owned by the resolved SearchPlan.
+    - evidence_map_input_refs must use only SearchRun-supported authority/provenance refs: literature_record, literature_source, literature_abstract, fulltext_document, fulltext_section, fulltext_paragraph, fulltext_anchor, or manual_locator.
+    - evidence_bindings[].literature_ref must be literature_record.
+    - evidence_bindings[].source_refs must be literature_source or locator-provenance refs only.
+    - run_status succeeded or partial requires non-empty evidence_map_input_refs and may emit a Node 5 handoff when all lineage checks pass.
+    - run_status failed may use empty evidence_map_input_refs, must set consumable_for_evidence_map=false, and must not emit a Node 5 handoff.
+    - raw search logs may be stored only as redacted artifact/audit payload or artifact_ref/raw_search_log refs and must not appear in evidence_map_input_refs.
+    - coverage_risk_acceptances[].accepted_risk_ref must be accepted_risk or search_coverage_risk, not a generic coverage row/ref.
+  result_accounting_rules:
+    - result accounting is an audit-fact integrity check, not a topic-value judgment.
+    - total_result_count must be >= unique_literature_count and both must be >= 0.
+    - total_result_count must be >= duplicate_result_count + unique_literature_count.
+    - failed_source_count and skipped_source_count must be >= 0.
+    - distinct literature_ref.ref_id count from evidence_bindings must be <= unique_literature_count.
+    - run_status succeeded requires failed_source_count=0.
+    - run_status succeeded with total_result_count > 0 requires at least one coverage observation or evidence binding.
+    - run_status partial allows failed or skipped sources, but source_health_summary must expose warning/error evidence for the partial condition.
+    - run_status failed may use unique_literature_count=0 and empty evidence bindings, but source_health_summary must expose an error or failure summary.
+  controlled_semantic_metadata:
+    allowed_scope: search_coverage_provenance_semantics
+    allowed_fields:
+      - query_provenance.
+      - source_health_summary.
+      - dedup_summary.
+      - coverage_observations[].missing_reason_codes.
+      - coverage_observations[].notes.
+      - coverage_assessments[].verdict.
+      - coverage_assessments[].issue_codes.
+      - coverage_risk_acceptances for search coverage risk only.
+    forbidden_fields:
+      - evidence_role.
+      - evidence_polarity.
+      - evidence_strength.
+      - need_candidate_ref.
+      - validated_need_ref.
+      - topic_question_contract_ref.
+      - topic_value_score.
+      - claim_support_verdict.
+      - claim_risk_acceptance.
+    semantic_boundary:
+      - Node 4 may record lightweight coverage/search provenance semantics needed to audit retrieval execution.
+      - Node 4 must not perform research-evidence interpretation, topic-value assessment, NeedCandidate support, or claim judgment.
+  optional_bundle_draft_review_layer:
+    status: allowed_pre_node_input_preparation
+    node_execution_unchanged: deterministic_none
+    profile_pattern: follows_node3_blueprint_draft_review_pattern
+    candidate_profiles:
+      - topic-selection.search-run-record-bundle.draft.v1
+      - topic-selection.search-run-record-bundle.review.v1
+    default_execution_mode: codex_assisted
+    provider_execution: explicit_upgrade_or_provider_quality_scenario_only
+    mocked_llm: test_acceptance_only
+    output_contract: TopicSelectionSearchRunRecordBundle@v1
+    hard_rules:
+      - Model-like execution may draft or review the bundle only before Node 4 invocation.
+      - Model-like output must pass the bundle schema and Node 4 deterministic validators before SearchRun authority creation.
+      - Model-like execution must not create SearchRun, coverage records, EvidenceMap, EvidenceUnit, NeedCandidate, or topic-value authority.
+      - Automatic provider fallback is disabled; manual rerun or explicit model-option override is required.
+      - LLM failure must not silently downgrade to keyword/default coverage semantics.
+  snapshot_membership_rule:
+    decision_id: N4-D07
+    normalized_rule: snapshot_only_consumable_search_run
+    node_capability_boundary:
+      - Node 4 does not retrieve, acquire, or create LiteratureRecord authority.
+      - Node 4 does not refresh the resource pool or mutate the TitleCard evidence basket.
+      - Node 4 records and validates the already-produced SearchRun bundle only.
+    consumable_handoff_rule:
+      - evidence_bindings[].literature_ref must be a member of the resolved LiteratureResourcePoolSnapshot.literature_refs.
+      - evidence_map_input_refs literature refs must be members of the resolved LiteratureResourcePoolSnapshot.literature_refs.
+      - snapshot-outside literature refs must not enter Node 5 handoff.
+    anomaly_rule:
+      - snapshot-outside refs are blocked by default in normalized execution.
+      - A future explicit audit-only anomaly field may record snapshot-outside discovered refs, but those refs cannot be evidence_map_input_refs or CoverageEvidenceBinding literature refs.
+      - Raw or unresolved search results remain raw-log artifacts only.
+    loopback_rule:
+      - If upstream search execution discovers new literature that matters, the workflow must route through literature acquisition/resource refresh, evidence basket update, Node 2 snapshot refresh, and any needed Node 3 plan update before a consumable Node 4 run.
+  raw_artifact_boundary:
+    decision_id: N4-D08
+    semantic_split:
+      raw_log_artifact:
+        meaning: proves search execution process and provider/import/manual result details.
+        authority_kind: audit_only
+      literature_and_source_refs:
+        meaning: prove literature/source identity, repository ownership, and snapshot membership.
+        authority_kind: evidence_authority_basis_for_node5
+      locator_provenance_refs:
+        meaning: prove fulltext/abstract/manual locator positions for later EvidenceUnit extraction.
+        authority_kind: locator_provenance_only
+      coverage_semantic_metadata:
+        meaning: explains how this SearchRun covered SearchPlan rows.
+        authority_kind: coverage_audit_metadata_only
+    allowed:
+      - redacted raw_log_artifact_payload may be stored as a workflow/control-plane artifact.
+      - raw_log_artifact_ref may appear in audit/artifact refs only when ref_type is artifact_ref or raw_search_log.
+      - coverage_assessments[].verdict may describe coverage-row retrieval status only.
+    forbidden:
+      - raw_log_artifact_ref in evidence_map_input_refs.
+      - raw_log_artifact_ref as evidence_bindings[].literature_ref.
+      - raw_log_artifact_ref as evidence_bindings[].source_refs.
+      - raw_log_artifact_ref in Node 5 handoff authority refs.
+      - using fulltext/abstract/manual locator refs as substitutes for snapshot-member Literature/Source authority.
+      - interpreting coverage_assessments[].verdict as evidence strength, topic value, or claim support.
+    node5_consumption_rule:
+      - Node 5 evidence authority is snapshot-member literature refs and legal source refs, plus coverage row lineage.
+      - Fulltext/abstract/manual locator refs may be carried only as EvidenceUnit locator provenance.
+      - A raw result must first be resolved to snapshot-member Literature/Source authority plus optional locator provenance before it can support EvidenceMap construction.
+  output_handoff_policy:
+    decision_id: N4-D09
+    fields:
+      - consumable_for_evidence_map.
+      - downstream_handoff.
+      - loopback_signal.
+    downstream_handoff:
+      contract_name: TopicSelectionSearchRunHandoff@v1
+      consumer: topic-selection.v1a.build-evidence-map.v1
+      present_when: consumable_for_evidence_map=true
+      null_when:
+        - run_status failed.
+        - record contract failed.
+        - lineage, snapshot, coverage, accounting, raw-artifact, or snapshot-membership checks fail.
+      minimum_fields:
+        - search_run_ref.
+        - search_plan_ref.
+        - literature_resource_pool_snapshot_ref.
+        - literature_snapshot_hash.
+        - coverage_row_intent_refs.
+        - evidence_map_input_refs.
+        - coverage_binding_refs.
+        - coverage_assessment_refs.
+        - coverage_summary.
+        - source_health_summary.
+        - result_accounting.
+        - raw_log_artifact_refs as audit-only.
+        - policy_version.
+        - output_schema_version.
+      forbidden_fields:
+        - raw result payload.
+        - hidden reasoning.
+        - LLM notes.
+        - EvidenceUnit draft.
+        - evidence_role.
+        - evidence_polarity.
+        - evidence_strength.
+        - need/value/claim semantics.
+    loopback_signal:
+      contract_name: TopicSelectionSearchRunLoopbackSignal@v1
+      consumer: orchestrator_or_control_plane
+      authority_kind: non_authority_routing_signal
+      present_when:
+        - SearchRun is not consumable but can be repaired by upstream action.
+        - coverage is missing or insufficient.
+        - source health records partial/degraded execution.
+        - snapshot-outside refs were detected.
+        - result accounting or coverage completeness requires rerun/review.
+      allowed_targets:
+        - topic-selection.v1a.create-search-plan.v1
+        - topic-selection.v1a.snapshot-literature-resource-pool.v1
+        - upstream_search_execution_or_input_preparation
+        - human_review_search_coverage_acceptance
+      not_authority: true
+      not_node5_input: true
+    coexistence_rule:
+      - In v1, downstream_handoff and loopback_signal MUST NOT both be present.
+      - Consumable result uses downstream_handoff and loopback_signal=null.
+      - Repairable non-consumable result uses downstream_handoff=null and loopback_signal.
+      - Blocked record-contract failure uses downstream_handoff=null; blocker_codes carry the failure, and trace-level loopback hints may be recorded but are not normal loopback_signal.
+  implementation_readiness_review:
+    decision_id: N4-D10
+    decision: implementation_ready
+    automation_callability_after_review: callable
+    repo_state_findings:
+      - Shared contracts now define TopicSelectionSearchRunRecordBundle@v1, TopicSelectionSearchRunHandoff@v1, and TopicSelectionSearchRunLoopbackSignal@v1.
+      - TopicSelectionSearchResourceService.recordSearchRun is already the single SearchRun authority writer and already creates coverage child records in one repository call.
+      - Service validation now checks SearchPlan/Snapshot title-card lineage, coverage-row ownership, snapshot hash, concrete functional-ref version checks, snapshot-member Literature/Source authority refs, locator-provenance legality, full accounting invariants, and failed-run audit-only state intent.
+      - Existing route payload is a compatibility surface over recordSearchRun; normalized automation must use the bundle and a mapper, not a second route/product contract.
+      - runRecordSearchRunScenario now emits handoff/loopback output while keeping blocked contract failures out of SearchRun authority creation.
+    semantic_drift_risk_review:
+      dual_track_input_contract:
+        risk: service-local RecordSearchRunInput could drift from the shared normalized bundle.
+        control: define bundle/handoff/loopback in shared contracts and make WorkflowHarness map bundle to the service input losslessly.
+      route_compatibility:
+        risk: POST /topic-selection/v1a/search-runs could become a looser product contract than normalized Node 4.
+        control: keep the route as compatibility/manual surface; normalized scenarios must reject omitted schema/version/hash semantics before service authority creation.
+      evidence_vs_coverage_semantics:
+        risk: coverage_assessments verdicts or coverage_risk_acceptances could be reused as evidence strength, topic value, claim support, or claim-risk acceptance.
+        control: validators must limit Node 4 semantics to retrieval coverage provenance and search-coverage risk only.
+      raw_artifact_refs:
+        risk: raw_log_artifact or artifact_ref could bypass Literature/Source authority and feed Node 5.
+        control: block raw refs in evidence_map_input_refs, evidence_bindings literature/source refs, and downstream_handoff authority refs.
+      snapshot_membership:
+        risk: upstream search execution may discover valid new literature and accidentally attach it to SearchRun without refreshing Node 2.
+        control: block snapshot-outside refs in consumable output and emit loopback_signal to acquisition/resource refresh plus Node 2/Node 3 rerun.
+      failed_run_consumability:
+        risk: failed SearchRuns may be persisted with consumable transition semantics.
+        control: failed runs may persist only as audit facts with consumable_for_evidence_map=false and no downstream_handoff.
+    complexity_assessment:
+      level: moderate_bounded
+      no_db_migration_expected: true
+      reasons:
+        - Existing SearchRun, coverage observation, evidence binding, assessment, risk acceptance, control-plane, and artifact persistence can hold required authority and audit evidence.
+        - Handoff and loopback are node result/trace contracts, not new persisted authorities.
+        - No provider, Codex, AgentOrchestrator, or debate runtime is introduced into Node 4 execution.
+        - Main work is deterministic validation plus a normalized WorkflowHarness runner.
+      complexity_controls:
+        - Implement shared DTO/schema first.
+        - Add a single bundle-to-recordSearchRun mapper.
+        - Harden recordSearchRun validators before adding the runner.
+        - Keep route compatibility tests separate from normalized harness tests.
+        - Do not add persistence fields unless a validator cannot be implemented with existing authority records and trace artifacts.
+    required_implementation_slices:
+      contracts:
+        - Done: TopicSelectionSearchRunRecordBundle@v1, TopicSelectionSearchRunHandoff@v1, TopicSelectionSearchRunLoopbackSignal@v1, schemas, and schema smoke tests.
+      service_hardening:
+        - Done: validate concrete SearchPlan and Snapshot refs, version_id, expected_literature_snapshot_hash, accounting invariants, source-health failure summaries, snapshot membership, source refs, raw artifact boundary, and search-coverage-only risk acceptance.
+        - Done: SearchRun control-plane transition/state-write intent derives audit-only vs consumable state from run_status.
+      workflow_harness:
+        - Done: runRecordSearchRunScenario with one stable result shape for succeeded, blocked, non-consumable repairable, and failed-audit paths.
+        - Done: WorkflowHarnessRecordSearchRunScenarioTrace@v1.
+      tests:
+        - Covered in focused schema, service, and harness tests; route compatibility remains a separate API-surface test concern and must not relax normalized harness semantics.
 blocking_conditions:
   - missing SearchPlan or LiteratureResourcePoolSnapshot returns NOT_FOUND.
   - SearchPlan/Snapshot/title-card lineage mismatch returns VERSION_CONFLICT.
   - coverage record outside SearchPlan rows returns VERSION_CONFLICT.
-  - run_status failed blocks downstream EvidenceMap construction.
+  - snapshot-outside literature refs in consumable evidence bindings or evidence_map_input_refs return VERSION_CONFLICT or GATE_CONSTRAINT_FAILED before SearchRun authority creation.
+  - raw log artifact refs in evidence authority slots return GATE_CONSTRAINT_FAILED before SearchRun authority creation.
+  - malformed payload, missing source-health summary, missing result accounting, or raw log as authority ref blocks before SearchRun authority creation.
+  - run_status failed blocks downstream EvidenceMap construction but does not by itself block SearchRun authority creation when the record contract is valid.
   - deterministic gate or transition failure blocks before repository persistence.
 deterministic_validators:
   - record-search-run is deterministic and MUST NOT call AgentOrchestrator, BackendLlmGateway, Codex, or debate runtime.
+  - record-search-run is a factual contract and lineage gate, not a topic-value judgment gate.
+  - stricter topic-level quality control must be handled by layered v1a/v1b/v1c gates and bounded loopback, not by adding multi-agent debate to this node.
   - result accounting must be explicit for total, unique, duplicate, failed, and skipped counts.
+  - result accounting counts must be internally consistent and reconcile with evidence binding uniqueness.
+  - SearchPlan and LiteratureResourcePoolSnapshot version checks must use only concrete ref version_id fields.
+  - expected_literature_snapshot_hash must match the resolved snapshot hash.
   - evidence bindings must cite coverage row ids under the SearchPlan.
+  - evidence bindings and consumable evidence_map_input_refs must cite only literature refs from the resolved LiteratureResourcePoolSnapshot.
+  - controlled semantic metadata must stay within search coverage provenance semantics.
+  - raw artifacts must remain audit-only and must not bypass Literature/Source authority.
   - evidence_map_input_refs must include all refs needed by later EvidenceMap units.
   - source health warnings must remain visible in the SearchRun result and harness trace.
 allowed_execution_modes: [none]
 default_execution_mode: none
 debate_trigger_policy: not_allowed
+multi_agent_policy:
+  debate_allowed: false
+  rationale:
+    - Node 4 records and validates already-produced search evidence; it does not broaden or deepen topic thinking.
+    - Multi-agent debate at this layer would blur search-result recording with evidence interpretation, need discovery, or topic-value assessment.
+    - If agent-assisted search-result organization is needed later, it must be modeled as an upstream input-preparation or search-execution node whose output is then deterministically checked by Node 4.
+topic_quality_guardrail_placement:
+  principle: strict_topic_selection_guarding_is_layered_not_node4_debate
+  node4_responsibility:
+    - traceability and lineage integrity.
+    - complete result accounting.
+    - coverage-row binding integrity.
+    - raw-log versus authority-ref separation.
+    - SearchRun consumability handoff for Node 5.
+  upstream_or_downstream_responsibility:
+    - need exploration and candidate generation belongs to v1a generate-need-candidate.
+    - candidate validation and human confirmation belong to v1a adjudication/human-confirm nodes.
+    - topic value, reviewer relevance, risk, and boundary quality belong to v1b assessment and package gates.
+    - final promotion conservatism belongs to v1c promotion gates and human decision.
+  loopback_rule:
+    - Later loopback may request a new SearchPlan or SearchRun when evidence is insufficient, but Node 4 must not use loopback as permission to relax record-level validation.
 profile_escalation_policy_ref: not_applicable
 input_contract_refs:
+  - TopicSelectionSearchRunRecordBundle@v1
   - RecordSearchRunInput
   - TopicSelectionSearchPlanRecord
   - TopicSelectionLiteratureResourcePoolSnapshotRecord
   - TopicSelectionCoverageRowIntentRecord
 output_contract_refs:
   - TopicSelectionSearchRunRecord
+  - TopicSelectionSearchRunHandoff@v1
+  - TopicSelectionSearchRunLoopbackSignal@v1
   - TopicSelectionCoverageExecutionObservationRecord
   - TopicSelectionCoverageEvidenceBindingRecord
   - TopicSelectionCoverageAssessmentRecord
@@ -1080,7 +1388,8 @@ failure_semantics:
   missing_upstream_ref: return NOT_FOUND.
   lineage_conflict: return VERSION_CONFLICT.
   coverage_record_conflict: return VERSION_CONFLICT before repository persistence.
-  failed_run: persist failed SearchRun only when current service policy allows it, but block downstream EvidenceMap scenario.
+  failed_run: persist a failed SearchRun as an audit fact when the record contract is valid; mark it non-consumable and do not emit Node 5 handoff.
+  record_contract_failed: block before SearchRun authority creation when accounting, source health, authority refs, or lineage are invalid.
   gate_or_transition_failed: block before repository persistence.
   repository_failure: fail the node attempt without partial SearchRun/CoverageRecord authority semantics.
 ```
@@ -1090,6 +1399,456 @@ failure_semantics:
 policy_status: implementation_ready
 node_id: topic-selection.v1a.build-evidence-map.v1
 authority_object: TopicSelectionEvidenceMap
+agent_policy:
+  decision_id: N5-D00
+  summary: single_agent_semantic_extraction_allowed_no_debate
+  node_can_perform_semantic_extraction: true
+  allowed_model_like_participation:
+    - codex_assisted
+    - provider_llm
+    - mocked_llm_test_only
+  default_local_mode: codex_assisted
+  execution_mode_none_allowed: true
+  debate_trigger_policy: not_allowed
+  multi_agent_roles: []
+  hard_boundary:
+    - model-like execution may extract or draft EvidenceUnit source statements, locator candidates, role suggestions, typed-link suggestions, clusters, patterns, and conflict hints.
+    - model-like execution MUST output a structured draft/review artifact only.
+    - deterministic validators MUST convert only accepted draft fields into EvidenceMap service input.
+    - model-like execution MUST NOT write EvidenceMap, EvidenceUnit, typed-link, cluster, pattern, conflict, NeedCandidate, value, or claim authority.
+    - hidden reasoning, raw provider logs, and raw debate transcripts MUST NOT be persisted.
+extraction_draft_contract:
+  decision_id: N5-D01
+  contract_name: TopicSelectionEvidenceMapExtractionDraft@v1
+  contract_level: module_value_contract
+  owner_module: topic-selection-evidence-map
+  authority_kind: non_authority_input_draft
+  node_wrapper_contract: TopicSelectionBuildEvidenceMapNodeInput@v1
+  node_wrapper_level: node_workflow_contract
+  no_harness_private_shape: true
+  allowed_producers:
+    - codex_assisted
+    - provider_llm
+    - mocked_llm
+    - human
+    - fixture
+  consumer:
+    - topic-selection.v1a.build-evidence-map.v1
+  execution_mode_none_rule:
+    - execution_mode=none means a ready TopicSelectionEvidenceMapExtractionDraft@v1 is already supplied by a human, fixture, or caller.
+    - execution_mode=none MUST NOT create a second service-input path.
+  materialization_rule:
+    - deterministic validators map accepted draft fields into CreateEvidenceMapFromSearchRunInput.
+    - TopicSelectionEvidenceMapService.createEvidenceMapFromSearchRun remains the sole EvidenceMap authority writer.
+    - draft artifacts may be hashed or persisted for audit, but they are not EvidenceMap authority.
+  minimum_fields:
+    - schema_version
+    - title_card_ref
+    - search_run_ref
+    - search_plan_ref
+    - literature_resource_pool_snapshot_ref
+    - literature_snapshot_hash
+    - producer_kind
+    - profile_id
+    - input_refs_hash
+    - draft_units
+    - draft_links
+    - draft_clusters
+    - draft_patterns
+    - draft_conflicts
+    - warning_codes
+    - policy_version
+    - output_schema_version
+  draft_unit_minimum_fields:
+    - client_unit_key
+    - evidence_role
+    - literature_ref
+    - source_refs
+    - locator
+    - source_statement
+    - source_attribution_kind
+    - coverage_row_intent_ref_nullable
+    - confidence
+    - issue_codes
+  forbidden_fields:
+    - evidence_map_id
+    - evidence_unit_id
+    - created_authority_refs
+    - gate_result_id
+    - transition_attempt_id
+    - need_candidate_ref
+    - topic_value_score
+    - claim_support_verdict
+    - evidence_strength
+    - hidden_reasoning
+    - raw_provider_response
+    - raw_fulltext_dump
+    - raw_search_log_authority_refs
+materialization_validator:
+  decision_id: N5-D02
+  report_contract: EvidenceMapMaterializationReport@v1
+  validation_layers:
+    - schema
+    - lineage
+    - materialization
+  status_policy:
+    ready:
+      create_authority: true
+      handling: call TopicSelectionEvidenceMapService.createEvidenceMapFromSearchRun.
+    ready_with_warning:
+      create_authority: true
+      handling: create EvidenceMap and persist warning/issue codes in report, harness trace, and accepted EvidenceUnit issue codes when applicable.
+    review_required:
+      create_authority: false
+      handling: return review package with ambiguous units, review codes, and revised-draft expectations.
+    blocked:
+      create_authority: false
+      handling: return stable blocked result with blocker codes, failed layer, rejected draft refs, and repair target.
+  warning_examples:
+    - coverage_row_intent_ref missing while literature/source/locator refs remain legal.
+    - abstract-only support with ABSTRACT_ONLY_SUPPORT issue code.
+    - uneven role distribution that does not break authority safety.
+    - some draft units rejected while enough accepted units remain for a valid EvidenceMap.
+    - high context-unit share that should constrain downstream NeedCandidate sufficiency.
+  blocker_examples:
+    - malformed TopicSelectionBuildEvidenceMapNodeInput@v1 or TopicSelectionEvidenceMapExtractionDraft@v1.
+    - title-card, SearchRun, SearchPlan, snapshot, or input_refs_hash mismatch.
+    - literature/source/locator ref outside Node 4 handoff authority refs.
+    - empty source_statement or missing locator.
+    - source_attribution_kind=llm_inference used as source authority.
+    - typed link, cluster, pattern, or conflict ref points to unknown client_unit_key.
+    - no accepted EvidenceUnit remains after validation.
+  review_required_examples:
+    - same source is drafted as both support and challenge without conflict structure.
+    - source_statement is over-summarized or locator granularity is too weak.
+    - low-confidence unit is proposed as core support.
+    - context units dominate and downstream evidence sufficiency is unclear.
+  automatic_routing:
+    - SCHEMA_MALFORMED may retry the same execution profile once; no automatic provider fallback.
+    - LINEAGE_MISMATCH routes to Node 4 or upstream handoff repair; Node 5 must not repair it.
+    - REF_OUTSIDE_HANDOFF routes to Node 4 SearchRun/evidence-binding repair.
+    - INSUFFICIENT_VALID_UNITS may rerun extraction or route to human evidence completion.
+    - SOURCE_AUTHORITY_INVALID routes to human review or re-extraction; it must not be downgraded into source_claim.
+  allowed_normalization:
+    - stable ordering.
+    - duplicate structure removal.
+    - stable client key generation when the draft supplies deterministic source refs.
+  forbidden_auto_repair:
+    - rewrite evidence_role.
+    - invent source_statement.
+    - replace literature_ref or source_ref.
+    - re-read live resource pools or mutable DB state to patch stale input.
+    - downgrade llm_inference into source_claim or human_judgment.
+  report_fields:
+    - status.
+    - accepted_unit_count.
+    - rejected_unit_count.
+    - rejection_reasons_by_client_unit_key.
+    - warning_codes.
+    - review_codes.
+    - blocker_codes.
+    - failed_validation_layer.
+    - repair_target.
+    - normalized_role_counts.
+    - materialization_input_hash.
+    - mapped_CreateEvidenceMapFromSearchRunInput_when_ready.
+extraction_execution_profile:
+  decision_id: N5-D03
+  profile_id: topic-selection.evidence-map-extraction.single-agent.v1
+  profile_registry_owned: true
+  profile_function: evidence_map_extraction_single_agent
+  default_execution_mode: codex_assisted
+  allowed_execution_modes:
+    - none
+    - codex_assisted
+    - provider_llm
+    - mocked_llm
+  mode_policy:
+    none:
+      model_invocation: false
+      requirement: caller supplies valid TopicSelectionEvidenceMapExtractionDraft@v1.
+    codex_assisted:
+      model_invocation: true
+      role: default local cost-control extraction/review producer.
+      provenance: non_provider_codex_assisted.
+    provider_llm:
+      model_invocation: true
+      role: explicit operator quality upgrade or provider-quality scenario.
+      provenance: provider_backed_with_profile_resolved_model_option.
+    mocked_llm:
+      model_invocation: true
+      role: acceptance and unit tests only.
+      provenance: test_only_mocked_llm.
+  profile_registry_rule:
+    - Concrete provider, model option, normalized parameters, request policy, retry policy, audit policy, and budget policy are resolved by the profile registry.
+    - Node 5 policy may reference profile_id and execution_mode but must not branch business behavior on provider or model ids.
+    - Profile output contract must be TopicSelectionEvidenceMapExtractionDraft@v1.
+  context_packet_contract:
+    contract_name: TopicSelectionEvidenceMapExtractionContextPacket@v1
+    context_family: evidence_extraction_context
+    compiler_owner: WorkflowHarness or caller-owned context compiler before model invocation.
+    input_sources:
+      - TopicSelectionSearchRunHandoff@v1.
+      - SearchRun evidence bindings and evidence_map_input_refs.
+      - SearchPlan ref, coverage row intent table, and search-plan blueprint summary when available.
+      - LiteratureResourcePoolSnapshot ref/hash and selected literature/source locator tables.
+      - expected role counts or role minimums.
+      - source-attribution rules, forbidden output rules, and materialization validator checklist.
+    envelope_fields:
+      - node_id.
+      - workflow_run_id.
+      - node_attempt_id.
+      - context_family.
+      - input_refs.
+      - input_refs_hash.
+      - context_compiler_version.
+      - policy_version.
+      - output_schema_version.
+      - execution_mode.
+      - profile_id.
+      - cache_key.
+      - cache_hit.
+      - redaction_policy.
+      - created_at.
+    forbidden_context:
+      - live DB reads during model invocation.
+      - mutable resource-pool reads after context packet compilation.
+      - raw provider logs or raw search logs as authority.
+      - Node 6 exploration_context.
+      - Node 6 arbiter_context.
+      - debate transcripts or NeedCandidate discovery memory.
+  retry_policy:
+    transient_or_malformed_output_retry: same profile and execution mode at most once.
+    automatic_provider_fallback: false
+    automatic_codex_fallback: false
+    automatic_mock_fallback: false
+    keyword_extraction_fallback: false
+  output_contract:
+    - TopicSelectionEvidenceMapExtractionDraft@v1 only.
+cache_reuse_audit_policy:
+  decision_id: N5-D04
+  purpose: prevent context pollution and cached response masquerading while allowing reproducible local cost control.
+  context_packet_cache:
+    allowed: true
+    cache_family: evidence_extraction_context
+    exact_match_required: true
+    required_match_fields:
+      - node_id
+      - search_run_handoff_hash
+      - search_plan_ref
+      - search_plan_version
+      - literature_resource_pool_snapshot_ref
+      - literature_resource_pool_snapshot_hash
+      - context_compiler_version
+      - policy_version
+      - schema_version
+      - output_schema_version
+      - execution_mode
+      - profile_id
+      - context_family
+    mismatch_behavior: cache_miss_or_block_before_model_invocation
+  extraction_draft_response_reuse:
+    allowed_for_codex_assisted: true
+    codex_assisted_provenance:
+      response_source: cached_exact_invocation
+      non_provider: true
+      requires_source_attempt_ref: true
+      requires_context_packet_hash_match: true
+    provider_llm_reuse_allowed: false
+    provider_llm_cache_hit_behavior: miss_or_block; never provider-backed provenance.
+    mocked_llm_reuse_allowed: test_only
+  validator_requirement:
+    - cached or reused drafts MUST pass N5-D02 materialization validation.
+    - cached or reused drafts MUST NOT bypass EvidenceMapMaterializationReport@v1.
+    - cached or reused drafts MUST NOT call TopicSelectionEvidenceMapService.createEvidenceMapFromSearchRun unless report status is ready or ready_with_warning.
+  context_pollution_guards:
+    - evidence_extraction_context cache entries must not satisfy Node 6 exploration_context or arbiter_context requests.
+    - Node 6 exploration_context or arbiter_context cache entries must not satisfy Node 5 evidence_extraction_context requests.
+    - debate transcripts, NeedCandidate discovery memory, and arbiter summaries are forbidden in Node 5 context packet cache.
+    - mutable DB/live resource reads cannot be used to patch a cached context packet.
+  audit_provenance_must_record:
+    - context_packet_ref.
+    - context_packet_hash.
+    - context_compiler_version.
+    - profile_id.
+    - execution_mode.
+    - model_option_id when provider-backed.
+    - cache_key.
+    - cache_hit_or_miss.
+    - response_source.
+    - source_attempt_ref when reused.
+    - draft_hash.
+    - redacted_structured_draft_artifact_ref.
+    - materialization_report_ref.
+    - materialization_report_hash.
+    - accepted_unit_count.
+    - rejected_unit_count.
+    - role_counts.
+    - warning_codes.
+    - blocker_codes.
+    - review_codes.
+  audit_must_not_record:
+    - hidden_reasoning.
+    - raw_provider_logs.
+    - raw_fulltext_dumps.
+    - raw_search_logs_as_authority.
+    - Node 6 exploration_context packet payloads.
+    - Node 6 arbiter_context packet payloads.
+    - debate transcripts.
+review_required_revision_policy:
+  decision_id: N5-D05
+  review_result_contract: EvidenceMapExtractionReviewPackage@v1
+  review_required_semantics:
+    creates_evidence_map_authority: false
+    terminal_for_current_attempt: true
+    next_step: explicit revised TopicSelectionEvidenceMapExtractionDraft@v1.
+  review_package_fields:
+    - schema_version.
+    - workflow_run_id.
+    - node_attempt_id.
+    - review_package_ref.
+    - materialization_report_ref.
+    - materialization_report_hash.
+    - extraction_context_packet_ref.
+    - extraction_context_packet_hash.
+    - draft_ref.
+    - draft_hash.
+    - ambiguous_unit_keys.
+    - review_codes.
+    - accepted_draft_ref_summary.
+    - rejected_draft_ref_summary.
+    - required_revision_actions.
+    - allowed_revision_producers.
+    - policy_version.
+    - schema_version.
+    - output_schema_version.
+    - execution_mode.
+    - profile_id.
+  allowed_revision_producers:
+    - human
+    - codex_assisted
+    - provider_llm
+  revision_output_rule:
+    - revised output MUST be a full TopicSelectionEvidenceMapExtractionDraft@v1.
+    - patch DTOs, partial-update DTOs, reviewer-only DTOs, and direct service-input patches are forbidden.
+    - revised draft must pass N5-D02 materialization validation from scratch.
+  append_only_attempt_rule:
+    - every revision creates a new node_attempt_id.
+    - every revision records revision_of_attempt_ref.
+    - every revision records review_package_ref.
+    - prior draft, context packet, materialization report, and review package artifacts must not be overwritten.
+  context_reuse_rule:
+    reuse_original_context_packet_allowed_when_all_match:
+      - SearchRun handoff hash.
+      - SearchPlan ref/version.
+      - LiteratureResourcePoolSnapshot ref/hash.
+      - context compiler version.
+      - policy version.
+      - schema version.
+      - output schema version.
+      - execution mode.
+      - profile id.
+      - context_family.
+    recompile_required_when_any_upstream_ref_or_hash_changes: true
+    live_db_repair_during_revision: forbidden
+  retry_loop_rule:
+    automatic_same_profile_retry_limit: 1
+    further_revision_requires: explicit operator-triggered workflow attempt.
+    unbounded_autonomous_loop: forbidden
+  review_package_must_not_record:
+    - hidden_reasoning.
+    - raw_provider_logs.
+    - raw_fulltext_dumps.
+    - raw_search_logs_as_authority.
+    - Node 6 exploration_context payloads.
+    - Node 6 arbiter_context payloads.
+    - debate transcripts.
+evidence_map_handoff_policy:
+  decision_id: N5-D06
+  handoff_contract: TopicSelectionEvidenceMapHandoff@v1
+  handoff_kind: non_authority_workflow_output
+  only_downstream_consumer: topic-selection.v1a.generate-need-candidate.v1
+  produced_when_materialization_status:
+    - ready
+    - ready_with_warning
+  not_produced_when_materialization_status:
+    - review_required
+    - blocked
+  handoff_fields:
+    - schema_version.
+    - workflow_run_id.
+    - node_attempt_id.
+    - handoff_ref.
+    - title_card_ref.
+    - evidence_map_ref.
+    - search_run_ref.
+    - search_plan_ref.
+    - literature_resource_pool_snapshot_ref.
+    - materialization_report_ref.
+    - materialization_report_hash.
+    - need_validation_evidence_bundle_ref when available as read projection.
+    - evidence_unit_count.
+    - role_counts.
+    - abstract_only_support_count.
+    - warning_summary.
+    - issue_summary.
+    - source_refs_hash.
+    - policy_version.
+    - schema_version.
+    - output_schema_version.
+  forbidden_handoff_payloads:
+    - extraction_draft_payload.
+    - extraction_draft_ref_as_downstream_evidence.
+    - review_package_ref_as_downstream_evidence.
+    - raw_model_output.
+    - hidden_reasoning.
+    - raw_provider_logs.
+    - raw_fulltext_dumps.
+    - raw_search_logs_as_authority.
+    - v1b ResearchSlice refs.
+    - TopicQuestionContract refs.
+    - topic value assessment refs.
+    - claim or bridge refs.
+  non_handoff_outputs:
+    - EvidenceMapExtractionReviewPackage@v1 for review_required.
+    - blocker and repair routing data for blocked.
+    - UI/read-only EvidenceMap projections.
+    - audit and verification script reads.
+  node6_consumption_rule:
+    - Node 6 consumes evidence_map_ref and read projections such as TopicSelectionNeedValidationEvidenceBundle.
+    - Node 6 MUST NOT consume extraction draft, review package, raw model output, cache artifact, or audit artifact as evidence facts.
+    - ready_with_warning handoff may proceed, but warnings and issue summaries become downstream sufficiency constraints rather than strong evidence.
+    - WorkflowHarness may pass TopicSelectionEvidenceMapHandoff@v1 into Node 6 as transition provenance; Node 6 must validate matching EvidenceMap/SearchRun/LiteratureSnapshot refs before context compilation.
+    - Node 6 business input refs must reject EvidenceMap extraction drafts, review packages, materialization reports, raw model/provider outputs, raw search logs, hidden reasoning, and debate transcripts.
+implementation_readiness_review:
+  decision_id: N5-D07
+  implementation_readiness: implementation_ready
+  automation_callability: callable
+  review_conclusion:
+    - product semantics, authority ownership, execution modes, failure states, and downstream handoff rules are concrete enough to automate.
+    - normalized runner and tests have landed; remaining work is future node expansion rather than N5 policy ambiguity.
+  initial_persistence_scope:
+    db_migration_required: false
+    reason: extraction context, draft, materialization report, review package, and harness trace are non-authority artifacts/control-plane/audit refs.
+    authority_writer: TopicSelectionEvidenceMapService.createEvidenceMapFromSearchRun
+  locked_implementation_order:
+    - shared contracts and JSON schemas.
+    - topic-selection.evidence-map-extraction.single-agent.v1 profile registry entry.
+    - deterministic materialization validator and mapper into CreateEvidenceMapFromSearchRunInput.
+    - context/adapter path for model-like execution through the existing AgentOrchestrator.
+    - WorkflowHarness runBuildEvidenceMapScenario runner.
+    - focused schema, materialization, and harness tests.
+  compatibility_boundary:
+    - POST /topic-selection/v1a/evidence-maps remains compatibility/manual direct service behavior.
+    - normalized automation MUST use runBuildEvidenceMapScenario and shared Node 5 contracts.
+    - direct route compatibility MUST NOT become a second automated semantics track.
+  implementation_must_prove:
+    - shared Node 5 contracts validate normalized input, draft, materialization report, review package, and handoff.
+    - profile registry resolves topic-selection.evidence-map-extraction.single-agent.v1.
+    - ready and ready_with_warning are the only materialization statuses that call EvidenceMap authority creation.
+    - review_required emits EvidenceMapExtractionReviewPackage@v1 and creates no EvidenceMap authority.
+    - blocked creates no EvidenceMap authority and no Node 6 handoff.
+    - successful output exposes TopicSelectionEvidenceMapHandoff@v1 without leaking draft/model/cache/audit-only artifacts to Node 6.
 preconditions:
   - request payload validates against POST /topic-selection/v1a/evidence-maps schema.
   - title_card_id is non-empty and matches the resolved SearchRun.
@@ -1105,6 +1864,11 @@ preconditions:
   - each coverage_row_intent_id, when present, resolves under the SearchPlan coverage rows.
   - each non-abstract locator resolves against available literature source/fulltext records.
   - typed_links, clusters, patterns, and conflict_sets refer only to client_unit_key values in the same request.
+  - normalized WorkflowHarness execution validates TopicSelectionBuildEvidenceMapNodeInput@v1 and TopicSelectionEvidenceMapExtractionDraft@v1 before service input materialization.
+  - model-like execution, when used, receives TopicSelectionEvidenceMapExtractionContextPacket@v1 with matching context family, input hash, profile id, execution mode, policy version, and schema version.
+  - any context packet cache hit or response reuse has exact-match provenance and cannot cross context families.
+  - review-required revisions, when used, carry revision_of_attempt_ref and review_package_ref and submit a full replacement extraction draft.
+  - Node 6 handoff is requested only after materialization status ready or ready_with_warning.
 blocking_conditions:
   - malformed payload returns INVALID_PAYLOAD before service execution.
   - evidence_units empty blocks with GATE_CONSTRAINT_FAILED before authority creation.
@@ -1126,7 +1890,20 @@ blocking_conditions:
   - deterministic gate topic-selection.evidence-map-ready fails blocks before repository persistence.
   - transition search-run-to-evidence-map fails blocks before repository persistence.
 deterministic_validators:
-  - build-evidence-map is deterministic and MUST NOT call AgentOrchestrator, BackendLlmGateway, Codex, or debate runtime.
+  - EvidenceMap authority materialization is deterministic even when a pre-materialization semantic extraction draft was produced by Codex or an LLM.
+  - build-evidence-map MUST NOT call or route through multi-agent debate runtime.
+  - AgentOrchestrator/BackendLlmGateway/Codex MAY be used only for single-agent semantic extraction or review before authority persistence.
+  - model-like extraction output MUST pass the EvidenceMap extraction draft schema and deterministic ref validators before it can become service input.
+  - WorkflowHarness MUST NOT accept a private or alternate evidence draft shape.
+  - model-like extraction MUST use the profile-registry-resolved profile and frozen context packet; it must not query live DB or mutable resource state during invocation.
+  - cached or reused extraction drafts MUST still pass materialization validation and MUST NOT bypass EvidenceMapMaterializationReport@v1.
+  - cached responses MUST NOT satisfy provider_llm provenance requirements.
+  - review_required MUST emit EvidenceMapExtractionReviewPackage@v1 and MUST NOT create authority for the current attempt.
+  - revised drafts MUST create new attempts and MUST NOT mutate prior attempt artifacts.
+  - Node 6 handoff MUST be emitted only for ready or ready_with_warning materialization reports.
+  - Node 6 handoff MUST NOT include extraction drafts, review packages, raw model output, cache artifacts, or audit-only artifacts as evidence facts.
+  - warning statuses may create authority only when the materialization report status is ready_with_warning.
+  - review_required and blocked statuses MUST NOT call the EvidenceMap service writer.
   - source_attribution_kind may be source_claim, counter_evidence, or human_judgment; llm_inference MUST NOT become EvidenceUnit source authority.
   - EvidenceUnit authority fields must be copied from request payload and validated refs; the service MUST NOT invent source refs.
   - all authority EvidenceUnit refs must trace to SearchRun evidence_map_input_refs or SearchRun coverage evidence bindings.
@@ -1142,12 +1919,18 @@ deterministic_validators:
   - transition key must remain search-run-to-evidence-map.
   - successful persistence writes EvidenceMap and child EvidenceUnit/link/cluster/pattern/conflict records through TopicSelectionEvidenceMapRepository.createEvidenceMapWithRecords.
   - getNeedValidationEvidenceBundle is a read projection over the EvidenceMap and MUST NOT create new authority records.
-allowed_execution_modes: [none]
-default_execution_mode: none
+allowed_execution_modes: [none, codex_assisted, provider_llm, mocked_llm]
+default_execution_mode: codex_assisted
 debate_trigger_policy: not_allowed
-profile_escalation_policy_ref: not_applicable
+profile_escalation_policy_ref: topic-selection.evidence-map-extraction.single-agent.v1
 input_contract_refs:
+  - TopicSelectionBuildEvidenceMapNodeInput@v1
+  - TopicSelectionSearchRunHandoff@v1
+  - TopicSelectionEvidenceMapExtractionContextPacket@v1
+  - cached_exact_invocation provenance when response reuse is used
+  - EvidenceMapExtractionReviewPackage@v1 when revising a review-required attempt
   - CreateEvidenceMapFromSearchRunInput
+  - TopicSelectionEvidenceMapExtractionDraft@v1
   - TopicSelectionSearchRunRecord
   - TopicSelectionSearchPlanRecord
   - TopicSelectionLiteratureResourcePoolSnapshotRecord
@@ -1156,6 +1939,9 @@ input_contract_refs:
   - TopicSelectionEvidenceUnitRecord input shape
   - TopicSelectionEvidenceSourceLocator
 output_contract_refs:
+  - EvidenceMapMaterializationReport@v1
+  - EvidenceMapExtractionReviewPackage@v1
+  - TopicSelectionEvidenceMapHandoff@v1
   - TopicSelectionEvidenceMapRecord
   - TopicSelectionEvidenceUnitRecord
   - TopicSelectionEvidenceTypedLinkRecord
@@ -1382,6 +2168,7 @@ profile_escalation_policy_ref:
     - codex_assisted is allowed only when the node or slot permits it and remains non-provider provenance.
 input_contract_refs:
   - GenerateNeedCandidateNodeInput
+  - TopicSelectionEvidenceMapHandoff@v1 as optional transition provenance
   - TopicSelectionEvidenceMap
   - EvidenceStrengthAssessment
   - TopicSelectionResourceSampleSet
@@ -1456,7 +2243,560 @@ failure_semantics:
 policy_status: implementation_ready
 node_id: topic-selection.v1a.validate-need-adjudication.v1
 authority_object: ValidateNeedAdjudicationResult
+locked_decisions:
+  N7-D01:
+    summary: adjudication_result_only_split_from_human_confirmation
+    rules:
+      - Node 7 persists TopicSelectionValidateNeedAdjudicationResultRecord only.
+      - Node 7 MUST NOT create ValidatedNeed, HumanConfirmedDecision, V1bInputBundle, TopicQuestionContract, SearchPlan mutations, NeedCandidateSet, or PaperProject/Bridge authority.
+      - final_decision=validate means pending human confirmation; Node 8 is the only ValidatedNeed materialization path.
+  N7-D02:
+    summary: single_agent_recommendation_allowed_no_debate
+    rules:
+      - Node 7 may use single-agent model-like execution to generate an adjudication recommendation packet.
+      - Allowed modes are codex_assisted, provider_llm, and mocked_llm.
+      - Default local mode is codex_assisted; provider_llm is explicit quality upgrade; mocked_llm is test/acceptance-only.
+      - Node 7 is not debate-eligible because debate belongs to Node 6 need discovery, while Node 7 adjudicates and routes an already selected candidate.
+      - Model-like output cannot directly create authority or satisfy human confirmation.
+      - TopicSelectionNeedValidationService.adjudicateNeed remains the only adjudication authority writer.
+  N7-D03:
+    summary: semantic_recommendation_provenance_with_whitelist_authority_mapping
+    rules:
+      - Semantic content is allowed only as recommendation/provenance, such as TopicSelectionNeedAdjudicationRecommendationPacket@v1.
+      - Recommendation packets are not authority and cannot override the ValidationDecisionSupportPacket.
+      - Support packet, readiness assessment, NeedCandidate, and repository-resolved evidence/risk refs are the semantic SSOT for adjudication.
+      - Node 7 MUST NOT re-derive evidence roles, risk refs, merge targets, or recheck refs from natural-language rationale.
+      - Authority fields are whitelist-mapped and ref-grounded only.
+      - Allowed mapped authority fields are final_decision, rationale, required_actions, rejected_reason, gap_codes, accepted_risk_refs, residual_risk_refs, merge_target_need_candidate_ref, and search-plan recheck reason/gap fields.
+      - If a recommendation conflicts with the support packet or cannot be mapped deterministically, the runner must block or require human review instead of silently rewriting semantic content.
+  N7-D04:
+    summary: final_decision_enum_and_route_semantics
+    values:
+      validate:
+        meaning: Candidate may proceed to Node 8 human confirmation.
+        requirements:
+          - support packet is ready.
+          - unresolved blockers are absent or explicitly accepted as risk refs.
+        forbidden:
+          - create ValidatedNeed in Node 7.
+          - publish v1b input bundle.
+      return_to_candidate:
+        meaning: Candidate remains revisable and returns to NeedCandidate-level repair.
+        requirements:
+          - actionable rationale or required_actions.
+      request_searchplan_recheck:
+        meaning: Evidence/search coverage needs repair before adjudication can advance.
+        requirements:
+          - searchplan_recheck_reason or gap_codes.
+        route: SearchPlan recheck request.
+      reject:
+        meaning: Candidate is not viable and should close as rejected.
+        requirements:
+          - rejected_reason or equivalent rationale.
+      park:
+        meaning: Candidate remains a non-advancing hypothesis.
+        requirements:
+          - park rationale or required_actions.
+        forbidden:
+          - enter Node 8.
+      merge:
+        meaning: Candidate is duplicate or should be represented by another NeedCandidate.
+        requirements:
+          - merge_target_need_candidate_ref.
+          - merge target belongs to the same title-card scope.
+          - merge target is not the selected candidate.
+        forbidden:
+          - auto-merge authority content.
+      require_human_review:
+        meaning: not a final_decision; node status/routing outcome only when N7 cannot safely persist adjudication.
+  N7-D05:
+    summary: validate_adjudication_requires_node8_human_confirmation
+    rules:
+      - final_decision=validate produces a confirmable adjudication only.
+      - Node 7 MUST reserve output_validated_need_id as a stable target id for validate adjudication; only Node 8 may materialize that id as TopicSelectionValidatedNeedRecord authority.
+      - After a validate adjudication, NeedCandidate remains pending confirmation with decision_status=ready_for_validation and review_status=needs_human_review.
+      - Node 8 MUST consume the validate adjudication and explicit human, hybrid, or human_delegated confirmation before writing HumanConfirmedDecision and materializing ValidatedNeed.
+      - Only Node 8 may move the candidate to decision_status=resulted_in_validated_need, review_status=human_confirmed, and lifecycle_status=closed.
+      - v1b publication MUST consume ValidatedNeed from Node 8, not Node 7 adjudication output.
+      - Node 7 has no automatic-confirm mode; Codex/provider recommendations can route to Node 8 but cannot satisfy confirmation.
+  N7-D06:
+    summary: state_compression_boundary
+    layers:
+      model_visible:
+        allowed:
+          - final_decision.
+          - rationale.
+          - required_actions.
+          - gap_codes.
+          - accepted_risk_refs.
+          - residual_risk_refs.
+          - rejected_reason.
+          - merge_target_need_candidate_ref.
+          - searchplan_recheck_reason.
+        forbidden:
+          - decision_status.
+          - review_status.
+          - lifecycle_status.
+          - freshness_status.
+          - loopback_target.
+          - result_validated_need_id.
+          - open_recheck_request_refs.
+      workflow_harness:
+        route_outcomes:
+          validate: advance_to_human_confirmation
+          return_to_candidate: repair_need_candidate
+          request_searchplan_recheck: repair_search_plan
+          reject: stop_rejected
+          park: hold_candidate
+          merge: stop_merged
+          blocked: blocked
+          require_human_review: require_human_review
+        rule: route_outcome is the only orchestration-level state that automated callers should consume.
+      domain_service:
+        rule: candidate persistence statuses are deterministic derived state and cannot be supplied by caller/model/harness.
+        mappings:
+          validate:
+            decision_status: ready_for_validation
+            lifecycle_status: preserve_current
+            review_status: needs_human_review
+            freshness_status: preserve_current
+          return_to_candidate:
+            decision_status: returned_for_revision
+            lifecycle_status: hypothesis
+            review_status: human_reviewed
+            freshness_status: preserve_current
+          request_searchplan_recheck:
+            decision_status: searchplan_recheck_requested
+            lifecycle_status: hypothesis
+            review_status: human_reviewed
+            freshness_status: recheck_required
+          reject:
+            decision_status: rejected
+            lifecycle_status: closed
+            review_status: human_reviewed
+            freshness_status: preserve_current
+          park:
+            decision_status: parked
+            lifecycle_status: hypothesis
+            review_status: human_reviewed
+            freshness_status: preserve_current
+          merge:
+            decision_status: merged
+            lifecycle_status: closed
+            review_status: human_reviewed
+            freshness_status: preserve_current
+    rules:
+      - final_decision is the only business judgment input.
+      - route_outcome is the only orchestration output.
+      - DB status fields are domain-service derived state.
+      - park is a hold state, not a closed terminal state.
+      - validate routes to Node 8 and is not final approval.
+  N7-D07:
+    summary: recommendation_to_authority_gate
+    authority_sources:
+      human_or_hybrid_adjudication_packet:
+        may_materialize_final_decisions:
+          - validate
+          - return_to_candidate
+          - request_searchplan_recheck
+          - reject
+          - park
+          - merge
+        requirements:
+          - deterministic validation passes.
+          - actor/provenance identifies human or hybrid acceptance.
+      fixture_human_decision:
+        may_materialize_final_decisions:
+          - validate
+          - return_to_candidate
+          - request_searchplan_recheck
+          - reject
+          - park
+          - merge
+        requirements:
+          - test_or_acceptance_only.
+          - explicit fixture provenance.
+      codex_assisted_or_provider_llm_recommendation:
+        materialization_allowed_without_extra_human_acceptance:
+          - validate
+          - request_searchplan_recheck
+          - return_to_candidate
+        materialization_requires_human_or_hybrid_acceptance:
+          - reject
+          - merge
+          - park
+        low_risk_requirements:
+          validate:
+            - creates pending Node 8 handoff only.
+            - does not create ValidatedNeed or human confirmation.
+          request_searchplan_recheck:
+            - creates typed SearchPlanRecheckRequest only after validation.
+            - does not mutate SearchPlan.
+          return_to_candidate:
+            - includes actionable required_actions.
+      mocked_llm:
+        rule: test_or_acceptance_only; no product decision authority.
+    rules:
+      - model-like recommendation packets cannot directly create ValidateNeedAdjudicationResult.
+      - only the WorkflowHarness runner may convert an accepted recommendation into domain-service input after deterministic validation.
+      - high-risk model recommendations without human/hybrid acceptance return require_human_review and write no adjudication authority.
+  N7-D08:
+    summary: readiness_support_packet_freeze_boundary
+    runner_sequence:
+      - resolve selected NeedCandidate.
+      - create or consume explicit NeedCandidateReadinessAssessment.
+      - block unless readiness recommendation is ready_for_validation.
+      - create or consume explicit ValidationDecisionSupportPacket.
+      - freeze support packet refs as recommendation/adjudication truth.
+      - run optional recommendation packet through D07 gate.
+      - call TopicSelectionNeedValidationService.adjudicateNeed only after deterministic validation passes.
+      - return compressed route_outcome from adjudication result.
+    packet_modes:
+      default: create_fresh
+      allowed:
+        - create_fresh
+        - consume_explicit_ref
+      forbidden:
+        - auto_find_latest
+        - implicit_reuse_by_candidate
+        - implicit_reuse_by_timestamp
+    explicit_ref_validation:
+      readiness_assessment:
+        - belongs to selected NeedCandidate.
+        - belongs to current title-card scope.
+        - recommendation is ready_for_validation.
+        - policy/schema/version expectations match runner input.
+        - freshness expectations are still satisfied.
+      validation_support_packet:
+        - belongs to selected NeedCandidate.
+        - status is ready.
+        - readiness_assessment_ref matches explicit or freshly-created readiness when present.
+        - evidence_map_ref, search_run_ref, search_plan_ref, and literature_snapshot_ref match selected candidate lineage.
+        - evidence_role_bundle, conflict refs, strength assessment refs, residual risk refs, and required_human_checks are present.
+    blocked_readiness_handling:
+      rule: readiness recommendations other than ready_for_validation block before support packet or adjudication authority creation.
+      recommendations:
+        searchplan_recheck:
+          repair_hint: repair_search_plan
+        needs_scope_revision:
+          repair_hint: repair_need_candidate
+        evidence_gap:
+          repair_hint: repair_need_candidate
+        reject:
+          repair_hint: require_human_review
+          rule: readiness reject is a gate finding, not final_decision=reject.
+        merge_required:
+          repair_hint: require_human_review
+          rule: readiness merge_required is a gate finding, not final_decision=merge.
+        park:
+          repair_hint: require_human_review
+          rule: readiness park is a gate finding, not final_decision=park.
+    support_packet_freeze:
+      rule: support packet is the frozen evidence/risk/human-check boundary for recommendation and adjudication.
+      forbidden_after_freeze:
+        - re-read live EvidenceMap as business truth.
+        - re-read live SearchPlan as business truth.
+        - re-read live SearchRun as business truth.
+        - re-read live LiteratureResourcePoolSnapshot or evidence basket as business truth.
+        - repair stale refs in place.
+      upstream_change_rule: if upstream evidence/search/resource state changes, create a new readiness assessment and support packet before adjudication.
+    complexity_guard:
+      - N7 runner orchestrates existing services; it does not introduce a new reasoning layer.
+      - readiness and support packet are frozen gates, not alternative adjudication authorities.
+  N7-D09:
+    summary: recommendation_packet_and_automation_handoff_split
+    recommendation_packet_contract:
+      contract_ref: TopicSelectionNeedAdjudicationRecommendationPacket@v1
+      artifact_only: true
+      authority: false
+      downstream_automation_handoff: false
+      allowed_inputs:
+        - frozen ValidationDecisionSupportPacket.
+        - readiness summary.
+        - selected NeedCandidate snapshot.
+        - sibling candidate summary.
+        - accepted policy instructions.
+        - ref-grounded evidence/risk summaries from support packet.
+      forbidden_inputs:
+        - live DB reads after support packet freeze.
+        - mutable EvidenceMap/SearchPlan/SearchRun/resource data.
+        - evidence basket live state.
+        - hidden reasoning.
+        - raw provider logs.
+        - debate transcripts.
+      allowed_outputs:
+        - final_decision.
+        - rationale.
+        - required_actions.
+        - gap_codes.
+        - accepted_risk_refs.
+        - residual_risk_refs.
+        - rejected_reason.
+        - merge_target_need_candidate_ref.
+        - searchplan_recheck_reason.
+      forbidden_outputs:
+        - route_outcome.
+        - next_node_id.
+        - repair_target.
+        - decision_status.
+        - review_status.
+        - lifecycle_status.
+        - freshness_status.
+        - authority ids to create.
+        - direct workflow commands.
+    model_profile:
+      profile_id: topic-selection.need-adjudication.single-agent.v1
+      default_execution_mode: codex_assisted
+      provider_llm: explicit_quality_upgrade
+      mocked_llm: test_or_acceptance_only
+      structured_output_required: true
+      output_format: json_schema
+      normalized_parameters:
+        creativity: low
+        reasoning_depth: high
+        output_budget: medium
+      fallback: disabled
+      failure_handling:
+        malformed_output: blocked_or_require_human_review
+        provider_failure: blocked
+        policy_conflict: require_human_review
+    node_result_contract:
+      contract_ref: TopicSelectionValidateNeedAdjudicationNodeResult@v1
+      automation_handoff: true
+      consumed_by_downstream_automation: true
+      must_include:
+        - node_id.
+        - status.
+        - route_outcome.
+        - need_candidate_ref.
+        - readiness_assessment_ref when created.
+        - validation_support_packet_ref when created.
+        - adjudication_result_ref when created.
+        - next_node_id when applicable.
+        - repair_target when applicable.
+        - required_actions.
+        - blocker_codes.
+        - warning_codes.
+        - accepted_risk_refs.
+        - residual_risk_refs.
+        - recheck_request_ref when created.
+        - merge_target_need_candidate_ref when present.
+        - recommendation_packet_ref when created.
+        - harness_trace_artifact_ref.
+      route_outcome_actions:
+        advance_to_human_confirmation: call topic-selection.v1a.human-confirm-need.v1.
+        repair_need_candidate: route to candidate repair/generation loop.
+        repair_search_plan: route to SearchPlan recheck.
+        stop_rejected: stop current candidate as rejected.
+        hold_candidate: pause current candidate without Node 8 or v1b publication.
+        stop_merged: stop current candidate and point to merge target.
+        blocked: stop automation and expose blockers/repair hints.
+        require_human_review: wait for human or hybrid acceptance.
+    rules:
+      - downstream automation must consume TopicSelectionValidateNeedAdjudicationNodeResult@v1, not TopicSelectionNeedAdjudicationRecommendationPacket@v1.
+      - validate handoffs must carry reserved_validated_need_ref as the N8 materialization target; the ref is an automation anchor, not authority.
+      - LLM/Codex/provider/mock must not output route_outcome, next_node_id, repair_target, or direct workflow commands.
+      - runner derives route_outcome and next automation handoff after D07 gate and domain-service result.
+  N7-D10:
+    summary: retry_idempotency_and_duplicate_adjudication_protection
+    attempt_identity:
+      required:
+        - workflow_run_id.
+        - node_attempt_id.
+      bound_outputs:
+        - TopicSelectionValidateNeedAdjudicationNodeResult@v1.
+        - TopicSelectionNeedAdjudicationRecommendationPacket@v1 when present.
+        - readiness_assessment_ref when created.
+        - validation_support_packet_ref when created.
+        - adjudication_result_ref when created.
+        - harness_trace_artifact_ref.
+      input_hash_includes:
+        - node_id.
+        - node_attempt_id.
+        - selected NeedCandidate ref/version.
+        - packet mode and explicit readiness/support refs when supplied.
+        - policy/schema/profile versions.
+        - execution mode.
+        - recommendation/adjudication request payload.
+        - support packet hash or support packet ref once frozen.
+    replay_policy:
+      same_node_attempt_id:
+        meaning: exact replay request.
+        success:
+          - input hash matches existing attempt.
+          - prior node result and trace artifact are available.
+          - return existing node result with replay provenance.
+          - perform no authority writes.
+        blocked:
+          - input hash differs from existing attempt.
+          - prior node result or trace artifact is missing.
+          - requested replay would require creating authority.
+    new_attempt_policy:
+      before_adjudication:
+        - append-only fresh readiness/support packet creation is allowed under create_fresh.
+        - explicit packet refs remain allowed only through D08 validation.
+      after_adjudication_exists:
+        - second adjudication authority creation is forbidden.
+        - return blocked duplicate result with existing adjudication ref when resolvable.
+        - include existing N7 node result/handoff ref when available.
+        - automation may consume existing handoff or require explicit repair/human-supervised flow.
+    model_retry_policy:
+      allowed:
+        - at most one same-profile technical retry for transient transport failure.
+        - at most one same-profile retry for malformed structured output before authority write.
+      forbidden:
+        - automatic provider fallback.
+        - automatic Codex fallback.
+        - automatic mocked fallback.
+        - keyword/rule-only adjudication fallback.
+        - changing final_decision during retry without new recommendation provenance.
+        - retry after high-risk recommendation has already routed to require_human_review.
+    partial_artifact_policy:
+      - readiness/support packets created before later model/gate failure remain append-only audit facts.
+      - blocked node result must reference created readiness/support packet refs when available.
+      - later attempts must not implicitly reuse these packets as latest; explicit refs are required.
+  N7-D11:
+    summary: node_result_status_and_blocker_taxonomy
+    allowed_statuses:
+      ready:
+        meaning: node result is immediately consumable by downstream automation.
+        requirements:
+          - route_outcome is not blocked.
+          - route_outcome is not require_human_review.
+          - required authority/provenance refs for the route are present.
+        notes:
+          - may represent fresh authority creation.
+          - may represent exact replay of an existing ready node result.
+      blocked:
+        meaning: current attempt cannot auto-advance.
+        requirements:
+          - route_outcome is blocked.
+          - blocker_codes are non-empty.
+          - repair hints or existing refs are included when available.
+        use_for:
+          - malformed input.
+          - non-ready readiness.
+          - stale or mismatched refs.
+          - replay drift or missing replay evidence.
+          - duplicate or pending adjudication.
+          - provider/model failure.
+          - malformed recommendation that cannot be mapped.
+      require_human_review:
+        meaning: current attempt needs human or hybrid acceptance before materialization or advancement.
+        requirements:
+          - route_outcome is require_human_review.
+          - review_reason_codes are non-empty.
+          - recommendation/support refs are included when available.
+        use_for:
+          - high-risk model recommendation without human/hybrid acceptance.
+          - semantic conflict that cannot be deterministically mapped.
+          - policy conflict requiring operator judgment.
+    forbidden_statuses:
+      - ready_with_warning.
+      - duplicate.
+      - replayed.
+      - pending.
+      - route_specific_statuses.
+    code_and_provenance_rules:
+      - warnings are represented only by warning_codes and trace/audit refs.
+      - duplicate/pending adjudication is status=blocked with blocker_code DUPLICATE_OR_PENDING_ADJUDICATION plus existing refs.
+      - replay is represented by replay_provenance and keeps the original status.
+      - replay drift or missing replay evidence is status=blocked.
+      - human review is a status only when the current attempt must stop for human/hybrid acceptance; Node 8 human confirmation is reached through status=ready plus route_outcome=advance_to_human_confirmation.
+  N7-D12:
+    summary: implementation_readiness_review_and_test_matrix
+    decision:
+      policy_status: implementation_ready
+      automation_callability: callable
+      implementation_may_start: true
+    current_repo_support:
+      - readiness, support-packet, adjudication, human-confirmation, and v1b publication routes already exist.
+      - TopicSelectionNeedValidationService owns readiness/support/adjudication authority.
+      - duplicate adjudication is already guarded through result_adjudication_id.
+      - TopicSelectionAgentOrchestratorService and TopicSelectionModelProfileRegistryService exist.
+      - WorkflowHarness trace artifact pattern exists for prior v1a nodes.
+    required_implementation_gaps:
+      - add TopicSelectionNeedAdjudicationRecommendationPacket@v1 shared contract/schema.
+      - add TopicSelectionValidateNeedAdjudicationNodeResult@v1 shared contract/schema.
+      - register topic-selection.need-adjudication.single-agent.v1.
+      - add needValidation dependency to TopicSelectionWorkflowHarnessService.
+      - implement runValidateNeedAdjudicationScenario.
+      - implement D08 explicit packet validation without latest lookup.
+      - harden TopicSelectionNeedValidationService.adjudicateNeed with support-packet lineage validation so direct REST adjudication cannot bypass harness semantics.
+      - implement D09 recommendation invocation and handoff split.
+      - implement D10 replay/duplicate handling.
+      - implement D11 status/code taxonomy.
+    db_migration_expectation:
+      initial_expectation: not_required
+      rationale:
+        - authority objects already exist.
+        - recommendation packet and node result can be artifact/control-plane scoped.
+        - trace snapshot and artifact refs already exist.
+      pause_condition:
+        - exact replay cannot be implemented through existing workflow/artifact/trace lookup.
+        - implementation requires a durable node-result index not already represented in the repo schema.
+      action_if_pause_condition_hits: use DB SSOT workflow before adding storage.
+    implementation_order:
+      - shared contracts and schema tests.
+      - model profile registry entry and registry tests.
+      - harness input/result/trace types.
+      - readiness/support orchestration.
+      - recommendation invocation and D07 gate.
+      - adjudication write and node result handoff mapping.
+      - replay and duplicate handling.
+      - focused unit tests and route regression tests.
+    implementation_risks:
+      - explicit readiness/support packet validation accidentally reuses latest-by-candidate compatibility behavior.
+      - shared readiness enum values merge_required or park are not handled by the runner.
+      - support-packet freeze is weakened by live evidence/search/resource rereads.
+      - direct REST adjudication bypasses harness lineage checks and accepts a stale support packet.
+      - replay lookup cannot reliably find prior node result and trace.
+      - replay storage gaps are hidden by starting a fresh attempt or adding ad hoc local storage.
+      - high-risk model recommendations create authority without human/hybrid acceptance.
+      - validate is misclassified as require_human_review instead of ready handoff to Node 8.
+      - duplicate adjudication creates a second result instead of blocked duplicate handoff.
+    risk_amendments:
+      N7-D12-AM01:
+        summary: full_readiness_enum_coverage
+        rule: every shared readiness recommendation value must be handled explicitly by the runner.
+        non_ready_values:
+          - needs_scope_revision.
+          - evidence_gap.
+          - searchplan_recheck.
+          - merge_required.
+          - reject.
+          - park.
+        handling:
+          - block before support packet creation and adjudication authority.
+          - return repair or review hints in the node result.
+          - do not map readiness merge_required to final_decision merge.
+          - do not map readiness park to final_decision park.
+          - high-risk persisted decisions still require D07 human or hybrid acceptance.
+      N7-D12-AM02:
+        summary: service_level_support_packet_lineage_guard
+        rule: lineage validation must exist in both WorkflowHarness and TopicSelectionNeedValidationService.adjudicateNeed.
+        validate_refs:
+          - need_candidate_ref.
+          - readiness_assessment_ref.
+          - evidence_map_ref.
+          - search_run_ref.
+          - search_plan_ref.
+          - literature_snapshot_ref.
+          - policy_version.
+          - schema_version.
+        failure_result: VERSION_CONFLICT or GATE_CONSTRAINT_FAILED before adjudication authority write.
+        purpose: prevent direct REST route compatibility from becoming a second semantic track.
+      N7-D12-AM03:
+        summary: replay_storage_preflight
+        rule: exact replay must prove stable node-result and trace lookup before runner is callable.
+        lookup_key:
+          - workflow_run_id.
+          - node_attempt_id.
+        pass_condition: prior node result, trace artifact, and input hash are all recoverable.
+        pause_condition: existing storage cannot guarantee exact replay lookup.
+        action_if_pause_condition_hits: use DB SSOT workflow for durable node-result indexing before implementation continues.
 preconditions:
+  - workflow_run_id and node_attempt_id are present.
   - selected NeedCandidate exists and belongs to the current title_card_id/topic scope.
   - selected NeedCandidate decision_status is ready_for_validation.
   - selected NeedCandidate lifecycle_status is not closed.
@@ -1466,13 +2806,21 @@ preconditions:
   - support packet evidence_map_ref, search_run_ref, search_plan_ref, literature_snapshot_ref, evidence_role_bundle, conflict_refs, strength_assessment_refs, residual_risk_refs, and required_human_checks are available.
   - sibling NeedCandidate refs for the title card are available as candidate-pool context when duplicate/merge/park/reject decisions are possible.
   - readiness assessment exists with recommendation ready_for_validation when supplied.
+  - if readiness/support refs are supplied, they are explicit refs and not latest-by-candidate lookup results.
+  - support packet lineage matches candidate, readiness, evidence map, search run, search plan, literature snapshot, policy version, and schema version.
   - evidence map freshness is current or accepted risk/recheck refs explicitly explain the residual risk.
   - execution packet includes final-decision recommendation context, but human confirmation remains outside this node.
+  - validate decisions may prepare a human-confirmation recommendation package, but this is handoff material only and cannot satisfy human confirmation.
+  - model-like recommendation requests include profile topic-selection.need-adjudication.single-agent.v1 or an explicit compatible registry override.
 blocking_conditions:
   - malformed payload returns INVALID_PAYLOAD before authority creation.
+  - missing workflow_run_id or node_attempt_id returns INVALID_PAYLOAD before authority creation.
+  - node_attempt_id replay with input hash drift blocks with VERSION_CONFLICT.
+  - node_attempt_id with an existing trace and changed input hash blocks with VERSION_CONFLICT; a first-time attempt without prior trace may proceed as a fresh attempt.
   - NeedCandidate not found returns NOT_FOUND.
   - support packet not found returns NOT_FOUND.
   - support packet belongs to a different NeedCandidate blocks with VERSION_CONFLICT.
+  - support packet lineage differs from selected candidate/readiness/evidence/search/literature refs blocks with VERSION_CONFLICT or GATE_CONSTRAINT_FAILED.
   - selected NeedCandidate already produced a ValidatedNeed blocks with GATE_CONSTRAINT_FAILED.
   - selected NeedCandidate already has a pending adjudication blocks with GATE_CONSTRAINT_FAILED.
   - selected NeedCandidate lifecycle_status closed blocks with GATE_CONSTRAINT_FAILED.
@@ -1481,9 +2829,14 @@ blocking_conditions:
   - support packet refs cannot resolve blocks with NOT_FOUND or VERSION_CONFLICT.
   - readiness assessment belongs to a different NeedCandidate blocks with VERSION_CONFLICT.
   - readiness assessment recommendation other than ready_for_validation blocks with GATE_CONSTRAINT_FAILED.
+  - readiness recommendation merge_required or park blocks as a gate finding and must not be persisted as final_decision merge or park.
+  - implicit latest readiness/support packet lookup blocks with GATE_CONSTRAINT_FAILED.
+  - explicit readiness/support packet lineage or freshness mismatch blocks with VERSION_CONFLICT or GATE_CONSTRAINT_FAILED.
   - final_decision merge without merge_target_need_candidate_ref returns INVALID_PAYLOAD.
   - final_decision request_searchplan_recheck without actionable reason/gap context blocks with GATE_CONSTRAINT_FAILED.
   - agent/model output malformed after allowed low-level technical retry blocks with MALFORMED_ADJUDICATION_OUTPUT.
+  - recommendation packet that contains route_outcome, next_node_id, repair_target, DB status fields, authority ids to create, or direct workflow commands blocks with MALFORMED_ADJUDICATION_OUTPUT.
+  - new attempt after existing adjudication result blocks duplicate authority creation and returns existing refs when available.
   - adjudication result attempts to create ValidatedNeed, V1bInputBundle, TopicQuestionContract, SearchPlan mutation, or direct memory materialization blocks before authority write.
 deterministic_validators:
   - validate-need-adjudication is not debate-eligible.
@@ -1492,7 +2845,45 @@ deterministic_validators:
   - provider_llm may produce a recommendation only through a registry-owned profile; provider/model ids must not branch business behavior.
   - mocked_llm is test/acceptance-only and cannot satisfy product authority decisions.
   - output final_decision must be one of validate, return_to_candidate, request_searchplan_recheck, reject, park, or merge.
-  - final_decision validate produces only a ValidateNeedAdjudicationResult recommendation; ValidatedNeed authority is created only by human-confirm-need.
+  - model-like recommendation packets must not include decision_status, review_status, lifecycle_status, freshness_status, loopback_target, result_validated_need_id, or open_recheck_request_refs.
+  - WorkflowHarness derives route_outcome from final_decision and exposes route_outcome to automated orchestration.
+  - automated orchestration must consume route_outcome rather than candidate persistence status fields.
+  - candidate persistence statuses must be derived by TopicSelectionNeedValidationService from final_decision and validated side effects only.
+  - recommendation-to-authority conversion is allowed only inside the WorkflowHarness runner gate before TopicSelectionNeedValidationService.adjudicateNeed is called.
+  - human or hybrid adjudication packets may materialize any final_decision after deterministic validation.
+  - fixture human decisions may materialize any final_decision only in test/acceptance scenarios with explicit provenance.
+  - codex_assisted and provider_llm recommendations may materialize without extra human acceptance only for validate, request_searchplan_recheck, and return_to_candidate.
+  - codex_assisted and provider_llm recommendations for reject, merge, or park require human or hybrid acceptance before authority persistence.
+  - mocked_llm remains test/acceptance-only and must not establish product decision authority.
+  - WorkflowHarness defaults to fresh readiness assessment and fresh validation support packet creation.
+  - existing readiness/support packet consumption requires explicit refs and deterministic lineage/freshness validation.
+  - readiness recommendation other than ready_for_validation blocks before support packet or adjudication authority creation.
+  - readiness recommendation reject must not be treated as final_decision reject without human/hybrid acceptance.
+  - readiness recommendations merge_required and park must not be treated as final_decision merge or park without human/hybrid acceptance.
+  - all shared readiness recommendation enum values must have explicit runner behavior.
+  - recommendation and adjudication must consume the frozen ValidationDecisionSupportPacket and must not re-read live upstream evidence/search/resource state as business truth.
+  - support packet lineage must be validated by both WorkflowHarness and TopicSelectionNeedValidationService.adjudicateNeed before adjudication authority writes.
+  - model-like recommendation input must be compiled from frozen support packet/readiness/candidate/sibling summaries only.
+  - TopicSelectionNeedAdjudicationRecommendationPacket@v1 is artifact/provenance only and is not a downstream automation handoff.
+  - TopicSelectionValidateNeedAdjudicationNodeResult@v1 is the only N7 downstream automation handoff.
+  - downstream automation must consume runner-derived status, route_outcome, refs, blockers, warnings, risk refs, next_node_id, and repair_target from the node result.
+  - recommendation packet must not contain route_outcome, next_node_id, repair_target, DB status fields, authority ids to create, or direct workflow commands.
+  - node_attempt_id reuse must be treated as exact replay and must not create authority.
+  - exact replay requires matching input hash plus existing node result and trace.
+  - exact replay requires proven storage lookup by workflow_run_id and node_attempt_id before the runner can become callable.
+  - replay storage gaps must pause implementation for DB SSOT handling and must not fall back to a fresh run or local artifact workaround.
+  - fresh attempts before adjudication are append-only and may create fresh readiness/support packets.
+  - fresh attempts after adjudication exists must not create a second ValidateNeedAdjudicationResult.
+  - duplicate adjudication blocks must expose existing adjudication refs when resolvable and existing handoff refs when available.
+  - model retry is limited to same-profile technical retry and must not cross provider/Codex/mock boundaries.
+  - blocked attempts after readiness/support creation must retain those refs as audit facts and must not silently reuse them in later attempts.
+  - Node result status must be one of ready, blocked, or require_human_review.
+  - ready status must not use route_outcome blocked or require_human_review.
+  - blocked status must carry non-empty blocker_codes.
+  - require_human_review status must carry non-empty review_reason_codes.
+  - warnings, duplicate handling, and replay handling must not introduce extra status values.
+  - implementation readiness is callable through runValidateNeedAdjudicationScenario after D12 matrix tests landed.
+  - final_decision validate produces only a ValidateNeedAdjudicationResult authority record; ValidatedNeed authority is created only by human-confirm-need.
   - final_decision return_to_candidate maps loopback_target to need_candidate.
   - final_decision request_searchplan_recheck maps loopback_target to search_plan and may output a typed recheck request ref only after deterministic validation.
   - final_decision reject requires rejected_reason or equivalent rationale.
@@ -1500,6 +2891,9 @@ deterministic_validators:
   - final_decision park must preserve candidate as hypothesis and record required_actions or rationale.
   - accepted_risk_refs and residual_risk_refs must be explicit refs; risk prose alone is not sufficient.
   - support packet required_human_checks remain handoff requirements, not proof of human confirmation.
+  - any Codex/provider wording for a future human confirmation must be recorded as recommendation or draft provenance only, not as a human decision.
+  - semantic recommendation content is provenance; support packet and repository-resolved refs remain the adjudication semantic SSOT.
+  - natural-language rationale may explain mapped decisions but must not create new evidence, risk, merge, or recheck refs.
   - sibling candidate context is used only for duplicate/merge/park reasoning and must not overwrite selected candidate content.
   - adjudication result may output required_actions, loopback_target, rejected_reason, merge target, recheck suggestion/ref, memory suggestion ref, risk refs, gap_codes, and rationale.
   - adjudication result must not create ValidatedNeed, V1bInputBundle, TopicQuestionContract, or PaperProjectBridge.
@@ -1525,9 +2919,12 @@ input_contract_refs:
   - TopicSelectionNeedValidationEvidenceBundle
   - TopicSelectionEvidenceStrengthAssessmentRecord
   - sibling TopicSelectionNeedCandidateRecord list projection
+  - TopicSelectionNeedAdjudicationRecommendationPacket@v1 when model-like recommendation is used
   - accepted risk refs
   - open search-plan recheck refs
 output_contract_refs:
+  - TopicSelectionValidateNeedAdjudicationNodeResult@v1
+  - TopicSelectionNeedAdjudicationRecommendationPacket@v1 when model-like recommendation is used
   - TopicSelectionValidateNeedAdjudicationResultRecord
   - optional SearchPlanRecheckRequest ref
   - optional CandidateDecisionMemorySuggestion ref
@@ -1581,9 +2978,18 @@ failure_semantics:
   invalid_payload: return INVALID_PAYLOAD before authority creation.
   missing_candidate_or_packet: return NOT_FOUND.
   stale_or_mismatched_refs: return VERSION_CONFLICT or GATE_CONSTRAINT_FAILED before authority creation.
+  replay_input_hash_drift: return VERSION_CONFLICT with no authority writes.
+  replay_trace_missing: return GATE_CONSTRAINT_FAILED with no authority writes.
+  non_ready_readiness: return blocked with readiness recommendation, blocker codes, and repair hints; write no support packet or adjudication authority.
+  implicit_latest_packet_lookup: return GATE_CONSTRAINT_FAILED.
   agent_failure: return blocked with no adjudication authority write.
   malformed_recommendation: return blocked or require_human_review; do not invent a final decision.
-  validate_without_human_confirmation: return require_human_review and hand off to human-confirm-need.
+  recommendation_attempts_to_drive_workflow: return blocked with MALFORMED_ADJUDICATION_OUTPUT and no adjudication authority write.
+  high_risk_model_recommendation_without_human_acceptance: return require_human_review with no adjudication authority write.
+  duplicate_or_pending_adjudication: return blocked duplicate result with existing adjudication ref when available; no second adjudication authority write.
+  warning_present: keep original status and attach warning_codes.
+  human_review_required: return require_human_review with review_reason_codes and no direct workflow command.
+  validate_pending_human_confirmation: return ready with route_outcome advance_to_human_confirmation; Node 8 handles human confirmation.
   merge_without_target: return INVALID_PAYLOAD.
   unresolved_recheck_or_risk: return request_searchplan_recheck or require_human_review, not validate.
   composite_route_risk: retired; adjudication no longer writes HumanConfirmedDecision, ValidatedNeed, or V1bInputBundle.
@@ -1593,52 +2999,353 @@ failure_semantics:
 ```yaml
 policy_status: implementation_ready
 node_id: topic-selection.v1a.human-confirm-need.v1
-authority_object: ValidatedNeed
+authority_object: ValidatedNeed materialization
 preconditions:
   - ValidateNeedAdjudicationResult exists for the selected NeedCandidate.
   - adjudication final_decision is validate.
+  - adjudication output_validated_need_id exists as a reserved target id.
+  - reserved output_validated_need_id is not treated as ValidatedNeed authority until TopicSelectionValidatedNeedRecord exists.
   - adjudication output_validated_need_id is not already materialized as an existing ValidatedNeed.
   - ValidationDecisionSupportPacket exists and belongs to the selected NeedCandidate.
   - NeedCandidate has not already produced a ValidatedNeed.
-  - human_actor exists and actor_type is human or hybrid.
-  - human rationale is present.
-  - required_human_checks from the support packet have been presented to the human confirmer.
+  - HumanConfirmationInput@v1 exists.
+  - HumanConfirmationInput@v1 actor_mode is human, hybrid, or human_delegated.
+  - HumanConfirmationInput@v1 accountable_human_ref exists.
+  - hybrid means a human remains accountable while Codex or another assistant may draft auditable rationale/checklist text after human review.
+  - human_delegated means the accountable human authorizes Codex or a provider LLM to execute confirmation under fixed policy n8-validate-only-delegation-v1.
+  - human_delegated input includes delegated_executor with executor_type, provenance_ref, and policy_id=n8-validate-only-delegation-v1.
+  - rationale is present.
+  - required_check_results are explicit.
+  - Codex-assisted rationale or checklist text, when used, has provenance and has been reviewed/accepted by the human or hybrid actor before submission.
+  - Delegated Codex/provider confirmation, when used, has executor provenance and satisfies fixed policy n8-validate-only-delegation-v1 before submission.
+  - required_human_checks from the support packet are represented by required_check_results.
   - accepted risk refs required by adjudication/support packet are explicit.
+  - HumanConfirmationSemanticReview@v1 exists before materialization.
+  - HumanConfirmationSemanticReview@v1 status is pass or warning before materialization.
+confirmation_input_contract:
+  contract_id: HumanConfirmationInput@v1
+  contract_scope: node_level_value_contract
+  persistence: stored with HumanConfirmedDecision input snapshot and trace/audit artifacts; not a standalone DB authority.
+  fields:
+    actor_mode: human | hybrid | human_delegated
+    accountable_human_ref: TopicSelectionFunctionalRef
+    rationale: string
+    accepted_risk_refs: TopicSelectionFunctionalRef[]
+    required_check_results:
+      - check_id: string
+        result: accepted | not_applicable
+    delegated_executor:
+      required_when: actor_mode=human_delegated
+      fields:
+        executor_type: codex | provider_llm
+        provenance_ref: TopicSelectionFunctionalRef
+        policy_id: n8-validate-only-delegation-v1
+  fixed_delegation_policy:
+    policy_id: n8-validate-only-delegation-v1
+    allows:
+      - confirm an N7 adjudication whose final_decision is validate.
+      - materialize only the adjudication output_validated_need_id.
+      - use delegated executor output only after N8 deterministic validation.
+    forbids:
+      - caller-defined delegation scopes.
+      - separate delegation authority.
+      - accepting newly introduced risk.
+      - overriding required human checks.
+      - resolving reject, merge, or park decisions.
+      - mutating evidence, search, candidate, support-packet, or adjudication content.
+semantic_review_contract:
+  contract_id: HumanConfirmationSemanticReview@v1
+  contract_scope: node_level_audit_artifact
+  persistence: stored in trace/audit artifacts with the confirmation attempt; not a DB authority.
+  purpose: parse N7 semantic content and confirmation rationale for alignment without re-adjudicating the NeedCandidate.
+  input_sources:
+    - N7 adjudication final_decision and rationale.
+    - validation support packet required_human_checks and residual risk refs.
+    - NeedCandidate snapshot summary and authority refs.
+    - HumanConfirmationInput@v1 rationale, required_check_results, accepted_risk_refs, and delegated_executor provenance when present.
+  fields:
+    status: pass | warning | blocked
+    alignment_codes: string[]
+    risk_coverage: complete | missing_required_acceptance
+    required_check_coverage: complete | incomplete
+    scope_violations: string[]
+    rationale_summary: string
+    provenance_ref: TopicSelectionFunctionalRef
+  may_parse:
+    - whether N7 rationale expresses validate rather than hidden reject, merge, or park semantics.
+    - whether confirmation rationale aligns with the selected NeedCandidate, support packet, and validate adjudication.
+    - whether accepted_risk_refs cover existing required residual risks.
+    - whether required_check_results correspond to support-packet required_human_checks.
+    - whether delegated executor output stays inside fixed policy n8-validate-only-delegation-v1.
+  must_not:
+    - re-evaluate NeedCandidate value.
+    - re-read EvidenceMap to infer new evidence roles or evidence strength.
+    - change N7 final_decision.
+    - generate new accepted risk refs.
+    - mutate evidence, search, candidate, support-packet, or adjudication content.
+    - run debate.
+semantic_review_invocation_policy:
+  profile_id: topic-selection.confirmation-semantic-review.single-agent.v1
+  default_mode: codex_assisted
+  allowed_modes:
+    - deterministic_parser
+    - codex_assisted
+    - provider_llm
+    - mocked_llm
+  mode_rules:
+    deterministic_parser: allowed only for trivial fully structured checks; if rationale alignment is non-trivial, use codex_assisted or provider_llm.
+    codex_assisted: default local/personal mode and cost-control path.
+    provider_llm: explicit quality upgrade only; never required by default.
+    mocked_llm: test/acceptance-only and never mixed with real decision persistence.
+  context_packet:
+    contract_id: HumanConfirmationSemanticReviewContextPacket@v1
+    persistence: trace/audit artifact only; not DB authority.
+    must_freeze:
+      - adjudication ref, final_decision, rationale, output_validated_need_id, and version.
+      - support packet ref, required_human_checks, residual risk refs, and version.
+      - NeedCandidate ref, stable summary, and version.
+      - HumanConfirmationInput@v1 snapshot.
+      - delegated executor provenance snapshot when actor_mode=human_delegated.
+      - policy ids, schema versions, and expected output schema.
+    must_not_include:
+      - hidden reasoning.
+      - raw provider logs.
+      - mutable live DB readers.
+      - raw fulltext dumps.
+      - debate transcripts.
+  output_schema: HumanConfirmationSemanticReview@v1 structured JSON only.
+  retry_policy:
+    transient_or_malformed_output: retry same profile and same mode at most once.
+    forbidden_fallbacks:
+      - provider-to-provider fallback.
+      - provider-to-codex fallback.
+      - codex-to-provider fallback.
+      - fallback to mocked_llm.
+      - fallback to keyword/default acceptance.
+  cache_policy:
+    exact_match_reuse_allowed: true
+    required_match_fields:
+      - context_packet_hash
+      - profile_id
+      - execution_mode
+      - run_mode
+      - executor_kind
+      - model_option_id when provider-backed or explicitly provided
+      - policy_version
+      - output_schema_version
+    provider_quality_runs_must_not_use_cached_non_provider_response: true
+  failure_policy:
+    context_packet_build_failure: blocked.
+    semantic_review_model_failure: require_human_review or blocked; never materialize by bypassing review.
+    semantic_review_malformed_after_retry: require_human_review.
+    semantic_review_blocked_output: blocked.
+    semantic_review_ambiguous_alignment: require_human_review.
+node_result_contract:
+  contract_ref: TopicSelectionHumanConfirmNeedNodeResult@v1
+  automation_handoff: true
+  consumed_by_downstream_automation: true
+  status_values:
+    - ready
+    - blocked
+    - require_human_review
+  ready_route_outcome: advance_to_publish_v1b_input_bundle
+  ready_next_node_id: topic-selection.v1a.publish-v1b-input-bundle.v1
+  must_include:
+    - node_id.
+    - status.
+    - route_outcome.
+    - adjudication_result_ref.
+    - need_candidate_ref.
+    - validation_support_packet_ref.
+    - human_decision_ref when created.
+    - validated_need_ref when materialized.
+    - semantic_review_context_packet_ref.
+    - semantic_review_ref.
+    - confirmation_input_ref_or_hash.
+    - accepted_risk_refs.
+    - residual_risk_refs.
+    - required_check_results_snapshot.
+    - blocker_codes.
+    - warning_codes.
+    - review_reason_codes.
+    - next_node_id when ready.
+    - harness_trace_artifact_ref.
+  route_outcome_actions:
+    advance_to_publish_v1b_input_bundle: call topic-selection.v1a.publish-v1b-input-bundle.v1.
+    blocked: stop automation and expose blockers, failed layer, and repair hints.
+    require_human_review: stop automation and expose review reason codes plus confirmation/semantic-review refs when available.
+  ready_requirements:
+    - HumanConfirmedDecision has been written.
+    - TopicSelectionValidatedNeedRecord has been materialized with adjudication output_validated_need_id.
+    - HumanConfirmationSemanticReview@v1 status is pass or warning.
+    - route_outcome is advance_to_publish_v1b_input_bundle.
+    - next_node_id is topic-selection.v1a.publish-v1b-input-bundle.v1.
+  blocked_requirements:
+    - route_outcome is blocked.
+    - blocker_codes are non-empty.
+    - no v1b bundle authority is created.
+    - validated_need_ref is absent.
+  require_human_review_requirements:
+    - route_outcome is require_human_review.
+    - review_reason_codes are non-empty.
+    - no ValidatedNeed materialization occurs for the current attempt.
+    - no v1b bundle authority is created.
+  forbidden:
+    - ready_with_warning status.
+    - duplicate status.
+    - replayed status.
+    - route-specific statuses.
+    - direct v1b bundle creation.
+    - route_outcome values other than advance_to_publish_v1b_input_bundle, blocked, or require_human_review.
+retry_idempotency_policy:
+  exact_replay:
+    condition: same node_attempt_id and same input_hash.
+    result: return existing TopicSelectionHumanConfirmNeedNodeResult@v1.
+    writes: no authority writes and no new semantic review invocation.
+  materialized_reserved_id:
+    condition: adjudication output_validated_need_id already exists as TopicSelectionValidatedNeedRecord.
+    result: blocked with blocker_code DUPLICATE_VALIDATED_NEED.
+    rule: do not compare confirmation input hashes, semantic review hashes, or adjudication hashes to produce idempotent ready.
+    writes: no HumanConfirmedDecision, no ValidatedNeed, and no v1b bundle writes.
+  failed_attempts:
+    blocked: append-only trace/audit evidence only.
+    require_human_review: append-only trace/audit evidence only.
+    retry_rule: later retry must use a new node_attempt_id.
+    forbidden: do not auto-promote failed attempts to latest reusable state.
+  partial_confirmation_write:
+    condition: HumanConfirmedDecision exists for the attempt but TopicSelectionValidatedNeedRecord was not materialized.
+    result: blocked with blocker_code PARTIAL_CONFIRMATION_WRITE.
+    repair_rule: explicit human/operator repair only; no automatic backfill and no direct materialization retry under the same attempt.
+implementation_readiness_review:
+  decision:
+    policy_status: implementation_ready
+    automation_callability: callable
+    implementation_may_start: completed
+  current_repo_support:
+    - human confirmation REST route and domain-service path exist.
+    - TopicSelectionNeedValidationService.confirmValidatedNeed owns HumanConfirmedDecision and ValidatedNeed authority writes.
+    - N7 runner already emits reserved_validated_need_ref for validate handoff.
+    - WorkflowHarness trace artifact pattern and exact replay lookup pattern exist for earlier v1a nodes.
+    - AgentOrchestrator and model profile registry exist for single-agent semantic review.
+  required_implementation_gaps:
+    - none open for WorkflowHarness callability.
+  implementation_result:
+    - shared contract/schema added for HumanConfirmationInput@v1, HumanConfirmationSemanticReviewContextPacket@v1, HumanConfirmationSemanticReview@v1, and TopicSelectionHumanConfirmNeedNodeResult@v1.
+    - model profile topic-selection.confirmation-semantic-review.single-agent.v1 added.
+    - REST/service confirmation input accepts legacy human_actor/human_rationale and normalized HumanConfirmationInput@v1.
+    - human_delegated requires delegated_executor provenance and fixed policy n8-validate-only-delegation-v1.
+    - duplicate reserved-id and partial HumanConfirmedDecision write guards landed without DB migration.
+    - runHumanConfirmNeedScenario landed with semantic-review context/review artifacts, exact replay, ready/blocked/review result shape, and Node 9 handoff.
+    - existing HumanConfirmedDecision artifact refs, input snapshots, and trace artifacts are sufficient for N8 input/review refs; no DB SSOT migration was required.
+  minimum_test_matrix:
+    contracts:
+      - HumanConfirmationInput@v1 accepts human, hybrid, and human_delegated.
+      - human_delegated requires delegated_executor and fixed policy id.
+      - HumanConfirmationSemanticReview@v1 accepts only pass, warning, or blocked.
+      - TopicSelectionHumanConfirmNeedNodeResult@v1 accepts only ready, blocked, or require_human_review.
+    harness_happy_path:
+      - N7 validate adjudication plus human confirmation materializes reserved ValidatedNeed.
+      - ready result uses route_outcome advance_to_publish_v1b_input_bundle and next_node_id topic-selection.v1a.publish-v1b-input-bundle.v1.
+      - no TopicSelectionV1aToV1bInputBundleRecord is created by N8.
+    delegated_path:
+      - human_delegated with codex provenance and fixed policy passes.
+      - wrong policy id, missing provenance, or newly introduced risk blocks.
+    semantic_review_negative:
+      - hidden reject, merge, or park alignment blocks or requires human review.
+      - missing required check coverage blocks.
+      - missing accepted risk coverage blocks.
+      - ambiguous rationale returns require_human_review.
+      - malformed semantic review after retry returns require_human_review.
+    retry_and_duplicate:
+      - same node_attempt_id and input_hash returns exact replay with no writes.
+      - materialized reserved id returns blocked with DUPLICATE_VALIDATED_NEED.
+      - partial confirmation write returns blocked with PARTIAL_CONFIRMATION_WRITE.
+    boundary:
+      - no EvidenceMap reread for new evidence roles.
+      - no N7 adjudication mutation.
+      - no v1b bundle creation.
+      - no debate execution.
+id_policy:
+  reserved_by: topic-selection.v1a.validate-need-adjudication.v1
+  source_field: TopicSelectionValidateNeedAdjudicationResultRecord.output_validated_need_id
+  materialized_by: topic-selection.v1a.human-confirm-need.v1
+  materialized_field: TopicSelectionValidatedNeedRecord.validated_need_id
+  n8_mints_id: false
+  rule: N8 persists the ValidatedNeed record using the reserved id; N8 does not allocate, replace, or reinterpret the id.
 blocking_conditions:
   - malformed payload returns INVALID_PAYLOAD before authority creation.
   - adjudication result not found returns NOT_FOUND.
   - support packet not found returns NOT_FOUND.
   - NeedCandidate not found returns NOT_FOUND.
   - adjudication final_decision other than validate blocks with GATE_CONSTRAINT_FAILED.
+  - missing adjudication output_validated_need_id blocks with GATE_CONSTRAINT_FAILED.
+  - adjudication output_validated_need_id already materialized blocks with DUPLICATE_VALIDATED_NEED.
   - NeedCandidate already has result_validated_need_id blocks with GATE_CONSTRAINT_FAILED.
-  - human_actor actor_type other than human or hybrid returns INVALID_PAYLOAD.
-  - missing human rationale returns INVALID_PAYLOAD.
+  - partial confirmation write detected blocks with PARTIAL_CONFIRMATION_WRITE.
+  - HumanConfirmationInput@v1 actor_mode other than human, hybrid, or human_delegated returns INVALID_PAYLOAD.
+  - missing accountable_human_ref, rationale, accepted_risk_refs, or required_check_results returns INVALID_PAYLOAD.
+  - human_delegated without delegated_executor.executor_type, delegated_executor.provenance_ref, or delegated_executor.policy_id=n8-validate-only-delegation-v1 returns INVALID_PAYLOAD.
+  - human_delegated fixed-policy violation blocks with GATE_CONSTRAINT_FAILED.
+  - human_delegated attempt with new unaccepted residual risk, unsatisfied required human checks, or unresolved conflict refs blocks with GATE_CONSTRAINT_FAILED.
+  - HumanConfirmationSemanticReview@v1 status blocked blocks materialization.
+  - semantic review scope violation blocks with GATE_CONSTRAINT_FAILED.
+  - semantic review missing required risk/check coverage blocks with GATE_CONSTRAINT_FAILED.
+  - semantic review ambiguous rationale alignment returns require_human_review.
   - adjudication/support packet/candidate refs mismatch blocks with VERSION_CONFLICT.
   - residual risk requires acceptance but accepted_risk_refs are missing blocks with GATE_CONSTRAINT_FAILED.
   - transition to ValidatedNeed fails blocks before repository persistence.
 deterministic_validators:
-  - human-confirm-need is human_review and MUST NOT call AgentOrchestrator, BackendLlmGateway, Codex, or debate runtime.
-  - ValidatedNeed may be created only from a validate adjudication plus an explicit human decision record.
-  - human confirmation cannot be inferred from provider, Codex, mock, or cached model output.
+  - human-confirm-need is human_review and MUST NOT let AgentOrchestrator, BackendLlmGateway, Codex, or debate runtime write authority directly.
+  - N8 MAY call a bounded semantic parser/reviewer to produce HumanConfirmationSemanticReview@v1.
+  - Semantic review MUST consume a frozen HumanConfirmationSemanticReviewContextPacket@v1 and MUST NOT read mutable DB state after packet construction.
+  - semantic review may use deterministic parsing, codex_assisted, or provider_llm execution; mocked_llm is test/acceptance-only.
+  - provider_llm semantic review is an explicit quality upgrade, not required for local default execution.
+  - codex_assisted semantic review is the default local/personal mode.
+  - semantic review may retry once only under the same profile and same mode for transient or malformed structured-output failures.
+  - semantic review MUST NOT automatically fall back across provider, Codex, mocked, keyword, or deterministic acceptance modes.
+  - semantic review output is audit/provenance only; deterministic validators decide whether materialization is allowed.
+  - semantic review MUST NOT create or modify HumanConfirmationInput@v1, final_decision, accepted risk refs, required check results, or ValidatedNeed fields.
+  - downstream automation MUST consume TopicSelectionHumanConfirmNeedNodeResult@v1, not HumanConfirmationInput@v1, HumanConfirmationSemanticReview@v1, or HumanConfirmedDecision directly.
+  - ready results MUST route only to topic-selection.v1a.publish-v1b-input-bundle.v1 through route_outcome=advance_to_publish_v1b_input_bundle.
+  - blocked and require_human_review results MUST NOT carry a next_node_id or direct workflow command.
+  - N8 MUST NOT create TopicSelectionV1aToV1bInputBundleRecord; Node 9 is the only v1b input bundle publisher.
+  - exact replay returns the existing node result for the same node_attempt_id and input_hash without any authority writes.
+  - if the reserved ValidatedNeed id is already materialized, N8 MUST return blocked with DUPLICATE_VALIDATED_NEED instead of attempting idempotent ready.
+  - blocked and require_human_review attempts are append-only audit evidence; retries require a new node_attempt_id.
+  - partial HumanConfirmedDecision without ValidatedNeed materialization blocks with PARTIAL_CONFIRMATION_WRITE and requires explicit repair.
+  - Codex-assisted confirmation drafting may occur before this node or inside a future harness wrapper, but the persisted confirmation actor must remain human, hybrid, or human_delegated.
+  - human_delegated execution may use Codex or a provider LLM only as an authorized executor under fixed policy n8-validate-only-delegation-v1; the authority source is HumanConfirmationInput@v1 plus deterministic N8 validation, not the model output by itself.
+  - ValidatedNeed may be materialized only from a validate adjudication plus an explicit human decision record.
+  - N8 must use the adjudication output_validated_need_id as the ValidatedNeed id and must not generate, allocate, or accept an alternate id.
+  - output_validated_need_id is a reserved automation anchor, not authority; existence checks must query TopicSelectionValidatedNeedRecord.
+  - human confirmation cannot be inferred from provider, Codex, mock, or cached model output without an explicit human or human_delegated confirmation payload.
+  - Codex/provider/cached text may be used only as reviewed rationale/checklist content or delegated executor output with provenance; it cannot replace actor_mode/accountable_human_ref and cannot create HumanConfirmedDecision without explicit human, hybrid, or human_delegated submission.
+  - human_delegated confirmation must be limited to validate confirmation; it cannot accept newly introduced risk, override required human checks, resolve merge/reject/park choices, or mutate upstream evidence/search/candidate content.
   - ValidatedNeed fields must derive from NeedCandidate, support packet, adjudication, and human decision refs.
   - ValidatedNeed must preserve evidence_map_ref, search_run_ref, search_plan_ref, literature_snapshot_ref, support_packet_ref, adjudication_result_ref, human_decision_ref, evidence_role_bundle, strength_assessment_refs, conflict_refs, residual_risk_refs, accepted_risk_refs, and trace_refs.
   - ValidatedNeed must not mutate NeedCandidate content, SearchPlan, EvidenceMap, ResourceSampleSet, or V1b bundle state.
   - support packet required_human_checks must remain auditable in the confirmation payload or trace.
   - accepted risk refs must be carried forward without converting risk prose into authority refs.
   - domain authority write must be all-or-nothing for the ValidatedNeed and candidate status patch; pre-write control-plane audit and human decision records may remain as failed-attempt evidence if the final domain write fails.
-allowed_execution_modes: [none]
-default_execution_mode: none
+allowed_execution_modes:
+  authority_gate: [human_review]
+  semantic_review: [deterministic_parser, codex_assisted, provider_llm, mocked_llm]
+default_execution_mode:
+  authority_gate: human_review
+  semantic_review: codex_assisted
 debate_trigger_policy: not_allowed
-profile_escalation_policy_ref: not_applicable
+profile_escalation_policy_ref: topic-selection.confirmation-semantic-review.single-agent.v1
 input_contract_refs:
   - TopicSelectionValidateNeedAdjudicationResultRecord
   - TopicSelectionNeedCandidateRecord
   - TopicSelectionValidationDecisionSupportPacketRecord
-  - HumanConfirmedDecision input
-  - accepted risk refs
+  - HumanConfirmationInput@v1
 output_contract_refs:
   - TopicSelectionValidatedNeedRecord
   - HumanConfirmedDecision
+  - TopicSelectionHumanConfirmNeedNodeResult@v1 trace/audit artifact
+  - HumanConfirmationSemanticReviewContextPacket@v1 trace/audit artifact
+  - HumanConfirmationSemanticReview@v1 trace/audit artifact
 authority_write_boundary:
   target_boundary:
     route: POST /topic-selection/v1a/adjudications/:adjudicationResultId/human-confirmations
@@ -1655,7 +3362,8 @@ authority_write_boundary:
     route: POST /topic-selection/v1a/adjudications/:adjudicationResultId/human-confirmations
     method: TopicSelectionNeedValidationService.confirmValidatedNeed
     status: split_authority_route
-    constraint: Non-human actors are rejected before persistence; duplicate ValidatedNeed materialization returns GATE_CONSTRAINT_FAILED.
+    constraint: Actors outside human, hybrid, or human_delegated are rejected before persistence; duplicate ValidatedNeed materialization returns GATE_CONSTRAINT_FAILED.
+    current_gap: none for N8 WorkflowHarness callability; remaining downstream automation work belongs to Node 9 publish-v1b-input-bundle.
   agent_orchestrator_direct_write: false
   debate_executor_direct_write: false
 audit_artifact_policy:
@@ -1663,7 +3371,12 @@ audit_artifact_policy:
     - adjudication result ref.
     - support packet ref.
     - source NeedCandidate ref and candidate version.
-    - human decision ref, actor, rationale, and policy version.
+    - human decision ref, HumanConfirmationInput@v1, actor mode, accountable human ref, rationale, and policy version.
+    - TopicSelectionHumanConfirmNeedNodeResult@v1 status, route outcome, next node, blockers, warnings, and review reasons.
+    - HumanConfirmationSemanticReviewContextPacket@v1 hash, profile id, execution mode, policy version, and output schema version.
+    - HumanConfirmationSemanticReview@v1 status, alignment codes, risk coverage, required-check coverage, scope violations, summary, and provenance.
+    - Codex-assisted confirmation draft/review refs when used, marked as reviewed input rather than confirming actor.
+    - human_delegated delegated_executor executor type, fixed policy id, profile/model refs, normalized parameters, response provenance, and fixed-policy validation result when used.
     - accepted/residual risk refs.
     - trace refs inherited from candidate/support/adjudication.
   must_not_record:
@@ -1671,14 +3384,26 @@ audit_artifact_policy:
     - provider secrets.
     - raw provider logs.
     - raw debate transcripts.
-    - model output as human confirmation.
+    - unauthenticated model output as human confirmation.
+    - unauthenticated Codex output as confirming actor.
 failure_semantics:
   invalid_payload: return INVALID_PAYLOAD before authority creation.
   missing_required_ref: return NOT_FOUND.
   ref_mismatch: return VERSION_CONFLICT before authority creation.
   not_validate_decision: return GATE_CONSTRAINT_FAILED.
+  missing_reserved_validated_need_id: return GATE_CONSTRAINT_FAILED.
   duplicate_validated_need: return GATE_CONSTRAINT_FAILED and do not create a second ValidatedNeed.
   missing_human_confirmation: return require_human_review.
+  invalid_delegated_executor_payload: return INVALID_PAYLOAD before authority creation.
+  delegated_policy_violation: return GATE_CONSTRAINT_FAILED before authority creation.
+  semantic_review_scope_violation: return GATE_CONSTRAINT_FAILED before authority creation.
+  semantic_review_missing_required_coverage: return GATE_CONSTRAINT_FAILED before authority creation.
+  semantic_review_ambiguous_alignment: return require_human_review and do not materialize ValidatedNeed.
+  semantic_review_model_failure: return require_human_review or blocked; never silently bypass semantic review for materialization.
+  semantic_review_malformed_after_retry: return require_human_review and do not materialize ValidatedNeed.
+  semantic_review_context_build_failure: return blocked and do not invoke model execution.
+  duplicate_validated_need: return blocked with DUPLICATE_VALIDATED_NEED and do not write confirmation or v1b authority.
+  partial_confirmation_write: return blocked with PARTIAL_CONFIRMATION_WRITE and require explicit repair.
   repository_failure: fail without partial ValidatedNeed semantics.
   partial_control_plane_audit_after_failure: allowed only as failed-attempt evidence; it must not be treated as a materialized ValidatedNeed.
 ```
@@ -1687,9 +3412,16 @@ failure_semantics:
 ```yaml
 policy_status: implementation_ready
 node_id: topic-selection.v1a.publish-v1b-input-bundle.v1
-authority_object: TopicSelectionV1bInputBundle
+authority_object: TopicSelectionV1aToV1bInputBundleRecord
+chain_boundary:
+  deterministic_node: true
+  v1a_main_chain_terminal_forward_node: true
+  v1a_domain_result_terminal_node: topic-selection.v1a.human-confirm-need.v1
+  v1a_to_v1b_handoff_terminal_node: topic-selection.v1a.publish-v1b-input-bundle.v1
+  boundary_statement: N8 materializes the domain result `ValidatedNeed`; N9 publishes the stable v1b input boundary and does not perform new domain judgment.
 preconditions:
   - ValidatedNeed exists.
+  - PublishV1bInputBundleNodeInput@v1 declares the expected v1a handoff refs; N9 must not infer missing refs from DB live reads.
   - source NeedCandidate exists.
   - ValidationDecisionSupportPacket exists.
   - ValidateNeedAdjudicationResult exists.
@@ -1698,6 +3430,7 @@ preconditions:
   - no active v1b input bundle already exists for the same ValidatedNeed and bundle_version unless replay/idempotency is explicitly supported.
 blocking_conditions:
   - malformed payload returns INVALID_PAYLOAD before authority creation.
+  - missing expected_bundle_version in WorkflowHarness automation returns INVALID_PAYLOAD before authority creation.
   - ValidatedNeed not found returns NOT_FOUND.
   - source NeedCandidate not found returns NOT_FOUND.
   - support packet not found returns NOT_FOUND.
@@ -1706,9 +3439,15 @@ blocking_conditions:
   - missing human_decision_ref blocks with GATE_CONSTRAINT_FAILED.
   - ValidatedNeed without evidence role bundle blocks with GATE_CONSTRAINT_FAILED.
   - unresolved high-priority recheck without accepted carry-forward risk blocks with GATE_CONSTRAINT_FAILED.
-  - duplicate bundle for the same ValidatedNeed and bundle_version blocks or returns idempotent existing bundle according to repository policy.
+  - same node_attempt_id with changed input hash blocks with REPLAY_INPUT_HASH_MISMATCH.
+  - duplicate bundle for the same ValidatedNeed and expected_bundle_version returns idempotent existing bundle; semantically duplicate bundle creation is forbidden.
+  - semantic duplicate detection across different bundle versions is out of scope for v1; only exact version reuse is handled.
 deterministic_validators:
   - publish-v1b-input-bundle is deterministic and MUST NOT call AgentOrchestrator, BackendLlmGateway, Codex, or debate runtime.
+  - publish-v1b-input-bundle is the final forward node of the v1a main chain; any later work belongs to v1b or to v1a side-channel governance/repair flows.
+  - N9 must not re-evaluate topic value, reinterpret N8 human confirmation, or perform semantic adjudication.
+  - N9 node input must act as a handoff contract: it declares v1a refs explicitly and DB reads are used only to verify and materialize the bundle.
+  - N9 must preserve traceability across business lineage and automation execution trace.
   - handoff payload must derive only from ValidatedNeed, source NeedCandidate, support packet, adjudication result, memory suggestion refs, and recheck request refs.
   - bundle must preserve validated_need_ref, source_need_candidate_ref, adjudication_result_ref, support_packet_ref, human_decision_ref, evidence_map_ref, search_run_ref, search_plan_ref, literature_snapshot_ref, evidence_role_bundle, trace_refs, risk_refs, gap_codes, memory_suggestion_refs, and recheck_request_refs.
   - risk_refs must be the union of residual_risk_refs and accepted_risk_refs from ValidatedNeed/adjudication, not free-text risk notes.
@@ -1716,11 +3455,32 @@ deterministic_validators:
   - recheck_request_refs are carried as refs only; SearchPlan mutation is not part of this node.
   - v1b input bundle must not include raw debate transcripts, hidden reasoning, raw ranked draft batches, raw rejected framings, or provider logs.
   - v1b input bundle must not create ResearchSlice, TopicQuestionContract, TopicPackageDraft, PromotionDecision, or PaperProjectBridge.
+retry_idempotency_policy:
+  exact_replay:
+    condition: same node_attempt_id and same input_hash.
+    result: return existing PublishV1bInputBundle node result.
+    writes: no bundle writes.
+  existing_bundle_reuse:
+    condition: same validated_need_ref and same expected_bundle_version already has a TopicSelectionV1aToV1bInputBundleRecord.
+    result: ready with idempotency_result reused_existing_bundle.
+    writes: no new bundle writes.
+  missing_expected_bundle_version:
+    condition: WorkflowHarness input omits expected_bundle_version.
+    result: blocked with INVALID_PAYLOAD.
+    reason: automation must not rely on service default-version minting.
+  replay_input_hash_mismatch:
+    condition: same node_attempt_id but changed input_hash.
+    result: blocked with REPLAY_INPUT_HASH_MISMATCH.
+    writes: no bundle writes.
+  explicit_new_version:
+    condition: caller supplies a new expected_bundle_version for the same ValidatedNeed.
+    result: allowed only if lineage and payload-hash validation pass.
 allowed_execution_modes: [none]
 default_execution_mode: none
 debate_trigger_policy: not_allowed
 profile_escalation_policy_ref: not_applicable
 input_contract_refs:
+  - PublishV1bInputBundleNodeInput@v1
   - TopicSelectionValidatedNeedRecord
   - TopicSelectionNeedCandidateRecord
   - TopicSelectionValidationDecisionSupportPacketRecord
@@ -1728,6 +3488,7 @@ input_contract_refs:
   - CandidateDecisionMemorySuggestion refs
   - SearchPlanRecheckRequest refs
 output_contract_refs:
+  - TopicSelectionPublishV1bInputBundleNodeResult@v1
   - TopicSelectionV1aToV1bInputBundleRecord
 authority_write_boundary:
   route: POST /topic-selection/v1a/v1b-input-bundles
@@ -1745,12 +3506,20 @@ authority_write_boundary:
   implemented_backend_route:
     route: POST /topic-selection/v1a/v1b-input-bundles
     method: TopicSelectionNeedValidationService.publishV1bInputBundle
-    status: deterministic_handoff_route
+    status: compatibility_service_boundary
     idempotency: returns an existing bundle for the same ValidatedNeed and requested bundle_version; without bundle_version, returns the newest existing bundle before creating a new default-version bundle.
+  implemented_workflow_harness_runner:
+    method: runPublishV1bInputBundleScenario
+    status: callable_normalized_automation_path
+    idempotency: exact replay by node_attempt_id plus input_hash; existing bundle reuse by validated_need_ref plus expected_bundle_version.
   agent_orchestrator_direct_write: false
   debate_executor_direct_write: false
 audit_artifact_policy:
   must_record:
+    - PublishV1bInputBundleNodeInput@v1 snapshot.
+    - input hash.
+    - bundle payload hash.
+    - idempotency result.
     - validated need ref.
     - source need candidate ref.
     - adjudication result ref.
@@ -1762,20 +3531,43 @@ audit_artifact_policy:
     - memory suggestion refs.
     - recheck request refs.
     - bundle version.
+    - harness trace artifact ref.
   must_not_record:
     - hidden reasoning.
     - provider secrets.
     - raw provider logs.
     - raw debate transcripts.
     - raw ranked candidate drafts.
+    - new semantic explanation.
 failure_semantics:
   invalid_payload: return INVALID_PAYLOAD before authority creation.
   missing_required_ref: return NOT_FOUND.
   ref_mismatch: return VERSION_CONFLICT before authority creation.
   missing_human_decision: return GATE_CONSTRAINT_FAILED.
   unresolved_recheck_or_risk: block unless explicit accepted risk/recheck carry-forward refs exist.
-  duplicate_bundle: block or return idempotent existing bundle according to repository policy; never create semantically duplicate v1b bundles.
+  replay_input_hash_mismatch: return VERSION_CONFLICT with blocker_code REPLAY_INPUT_HASH_MISMATCH.
+  duplicate_bundle: return ready with idempotency_result reused_existing_bundle only when expected_bundle_version matches.
+  semantic_duplicate_across_versions: out_of_scope_v1; do not add a separate error code.
   repository_failure: fail without partial handoff semantics.
+implementation_readiness_review:
+  decision:
+    policy_status: implementation_ready
+    automation_callability: callable
+    implementation_may_start: true
+  complexity: controlled
+  db_migration_required: false
+  required_contracts:
+    - PublishV1bInputBundleNodeInput@v1
+    - TopicSelectionPublishV1bInputBundleNodeResult@v1
+  service_harness_boundary:
+    route_service_api: keep compatible validated_need_id plus bundle_version plus created_by shape.
+    harness_contract: enforce explicit handoff refs, expected_bundle_version, input hash, replay, and trace.
+    service_guard: add minimal lineage and human-decision guards from existing records without requiring full harness input on public route.
+    no_dual_persistence_path: Harness must call TopicSelectionNeedValidationService.publishV1bInputBundle; it must not write bundles directly.
+  implementation_notes:
+    - Node result must expose v1b_input_bundle_ref, bundle_version, bundle_payload_hash, idempotency_result, carried refs, blockers, warnings, replay provenance, and harness_trace_artifact_ref.
+    - Node result must not hard-code the first v1b node until v1b node policies are normalized.
+    - No DB migration is required because existing bundle records and trace artifacts can carry the needed lineage.
 ```
 
 ### `topic-selection.v1b.build-intake-constraint-profile.v1`

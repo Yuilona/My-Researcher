@@ -565,6 +565,33 @@ test('support packet creation rejects readiness assessment from a different Need
   assert.equal(firstPacket.readiness_assessment_id, firstReadiness.readiness_assessment_id);
 });
 
+test('adjudication rejects stale support packet lineage before persistence', async () => {
+  const ctx = await createReadyPacketFixture();
+  const packet = await ctx.needValidationRepository.findValidationDecisionSupportPacketById(
+    ctx.packet.validation_support_packet_id,
+  );
+  assert.ok(packet);
+  packet.evidence_map_ref = ref('evidence_map', 'evidence_map_stale', ctx.titleCard.title_card_id);
+
+  await assert.rejects(
+    () => ctx.needService.adjudicateNeed({
+      need_candidate_id: ctx.candidate.need_candidate_id,
+      support_packet_id: ctx.packet.validation_support_packet_id,
+      final_decision: 'validate',
+      rationale: 'Stale support packet lineage must not create an adjudication authority.',
+      adjudicated_by: { actor_type: 'human', actor_id: 'reviewer_1' },
+    }),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.statusCode === 409
+      && error.errorCode === 'VERSION_CONFLICT',
+  );
+  const results = await ctx.needValidationRepository.listAdjudicationResultsByNeedCandidateId(
+    ctx.candidate.need_candidate_id,
+  );
+  assert.equal(results.length, 0);
+});
+
 test('non-validate adjudication persists result with null output_validated_need_id', async () => {
   const ctx = await createReadyPacketFixture();
   const result = await ctx.needService.adjudicateNeed({
@@ -629,6 +656,42 @@ test('validate adjudication requires explicit human confirmation before Validate
   assert.equal(humanDecision?.decision_type, 'confirm');
 });
 
+test('v1b input bundle publication rejects non-confirm human decision before persistence', async () => {
+  const ctx = await createReadyPacketFixture();
+  const adjudication = await ctx.needService.adjudicateNeed({
+    need_candidate_id: ctx.candidate.need_candidate_id,
+    support_packet_id: ctx.packet.validation_support_packet_id,
+    final_decision: 'validate',
+    rationale: 'Reviewer routes the validated need toward v1b after confirmation.',
+    adjudicated_by: { actor_type: 'human', actor_id: 'reviewer_1' },
+  });
+  const confirmation = await ctx.needService.confirmValidatedNeed({
+    adjudication_result_id: adjudication.adjudication_result.adjudication_result_id,
+    human_actor: { actor_type: 'human', actor_id: 'reviewer_1' },
+    human_rationale: 'Validated after reviewing support, prior art, and scope.',
+  });
+  const humanDecision = await ctx.controlPlaneRepository.findHumanConfirmedDecisionById(
+    confirmation.validated_need.human_decision_id,
+  );
+  assert.ok(humanDecision);
+  humanDecision.decision_type = 'reject';
+
+  await assert.rejects(
+    () => ctx.needService.publishV1bInputBundle({
+      validated_need_id: confirmation.validated_need.validated_need_id,
+      created_by: 'system',
+    }),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.statusCode === 409
+      && error.errorCode === 'GATE_CONSTRAINT_FAILED',
+  );
+  const bundles = await ctx.needValidationRepository.listV1aToV1bInputBundlesByValidatedNeedId(
+    confirmation.validated_need.validated_need_id,
+  );
+  assert.equal(bundles.length, 0);
+});
+
 test('validate adjudication rejects non-human confirmation actor before persistence', async () => {
   const ctx = await createReadyPacketFixture();
   const adjudication = await ctx.needService.adjudicateNeed({
@@ -656,6 +719,22 @@ test('validate adjudication rejects non-human confirmation actor before persiste
   const results = await ctx.needValidationRepository.listAdjudicationResultsByNeedCandidateId(ctx.candidate.need_candidate_id);
   assert.equal(results.length, 1);
   assert.equal(validatedNeed, null);
+});
+
+test('validate confirmation rejects invalid legacy actor before missing adjudication lookup', async () => {
+  const ctx = await createReadyPacketFixture();
+
+  await assert.rejects(
+    () => ctx.needService.confirmValidatedNeed({
+      adjudication_result_id: 'missing-adjudication',
+      human_actor: { actor_type: 'system' },
+      human_rationale: 'Invalid actor should fail before lookup.',
+    }),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.statusCode === 400
+      && error.errorCode === 'INVALID_PAYLOAD',
+  );
 });
 
 test('validated candidate cannot be re-adjudicated or produce duplicate ValidatedNeed', async () => {

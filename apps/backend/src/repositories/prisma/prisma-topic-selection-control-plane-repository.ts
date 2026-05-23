@@ -994,4 +994,17 @@ export class PrismaTopicSelectionControlPlaneRepository implements TopicSelectio
     });
     return row ? toHumanDecisionRecord(row) : null;
   }
+
+  async listHumanConfirmedDecisionsByTargetRef(
+    targetRef: { ref_type: string; ref_id: string },
+  ): Promise<TopicSelectionHumanConfirmedDecisionRecord[]> {
+    const rows = await this.prisma.topicSelectionHumanConfirmedDecision.findMany({
+      where: {
+        targetRefType: targetRef.ref_type,
+        targetRefId: targetRef.ref_id,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toHumanDecisionRecord);
+  }
 }

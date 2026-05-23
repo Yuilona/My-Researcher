@@ -34,6 +34,21 @@ export type TopicSelectionSearchPlanBlueprintOrigin =
   (typeof TOPIC_SELECTION_SEARCH_PLAN_BLUEPRINT_ORIGINS)[number];
 export const TOPIC_SELECTION_SEARCH_PLAN_BLUEPRINT_SCHEMA_VERSION =
   'TopicSelectionSearchPlanBlueprint@v1' as const;
+export const TOPIC_SELECTION_SEARCH_RUN_RECORD_BUNDLE_SCHEMA_VERSION =
+  'TopicSelectionSearchRunRecordBundle@v1' as const;
+export const TOPIC_SELECTION_SEARCH_RUN_HANDOFF_SCHEMA_VERSION =
+  'TopicSelectionSearchRunHandoff@v1' as const;
+export const TOPIC_SELECTION_SEARCH_RUN_LOOPBACK_SIGNAL_SCHEMA_VERSION =
+  'TopicSelectionSearchRunLoopbackSignal@v1' as const;
+
+export const TOPIC_SELECTION_SEARCH_RUN_LOOPBACK_TARGETS = [
+  'topic-selection.v1a.create-search-plan.v1',
+  'topic-selection.v1a.snapshot-literature-resource-pool.v1',
+  'upstream_search_execution_or_input_preparation',
+  'human_review_search_coverage_acceptance',
+] as const;
+export type TopicSelectionSearchRunLoopbackTarget =
+  (typeof TOPIC_SELECTION_SEARCH_RUN_LOOPBACK_TARGETS)[number];
 
 export const TOPIC_SELECTION_COVERAGE_INTENT_TYPES = [
   'support',
@@ -309,6 +324,92 @@ export interface TopicSelectionSearchRunRecord {
   created_at: string;
 }
 
+export interface TopicSelectionSearchRunRecordBundleCoverageObservation {
+  coverage_row_intent_ref: TopicSelectionFunctionalRef;
+  status: TopicSelectionCoverageExecutionStatus;
+  result_count: number;
+  source_count: number;
+  missing_reason_codes: string[];
+  notes?: string | null;
+}
+
+export interface TopicSelectionSearchRunRecordBundleEvidenceBinding {
+  coverage_row_intent_ref: TopicSelectionFunctionalRef;
+  literature_ref: TopicSelectionFunctionalRef;
+  source_refs: TopicSelectionFunctionalRef[];
+  binding_kind: TopicSelectionCoverageBindingKind;
+  result_rank?: number | null;
+}
+
+export interface TopicSelectionSearchRunRecordBundleCoverageAssessment {
+  coverage_row_intent_ref: TopicSelectionFunctionalRef;
+  verdict: TopicSelectionCoverageAssessmentVerdict;
+  issue_codes: string[];
+  confidence?: number | null;
+  assessed_by: TopicSelectionActorType;
+}
+
+export interface TopicSelectionSearchRunRecordBundleCoverageRiskAcceptance {
+  coverage_row_intent_ref: TopicSelectionFunctionalRef;
+  accepted_risk_ref: TopicSelectionFunctionalRef;
+  accepted_by: TopicSelectionActorRef;
+  rationale: string;
+  expires_at?: string | null;
+}
+
+export interface TopicSelectionSearchRunRecordBundle {
+  schema_version: typeof TOPIC_SELECTION_SEARCH_RUN_RECORD_BUNDLE_SCHEMA_VERSION;
+  title_card_ref: TopicSelectionFunctionalRef;
+  search_plan_ref: TopicSelectionFunctionalRef;
+  literature_resource_pool_snapshot_ref: TopicSelectionFunctionalRef;
+  expected_literature_snapshot_hash: string;
+  run_kind: TopicSelectionSearchRunKind;
+  run_status: TopicSelectionSearchRunStatus;
+  query_provenance: Array<Record<string, unknown>>;
+  result_accounting: TopicSelectionSearchRunResultAccounting;
+  source_health_summary: Record<string, unknown>;
+  dedup_summary: Record<string, unknown>;
+  evidence_map_input_refs: TopicSelectionFunctionalRef[];
+  coverage_observations: TopicSelectionSearchRunRecordBundleCoverageObservation[];
+  evidence_bindings: TopicSelectionSearchRunRecordBundleEvidenceBinding[];
+  coverage_assessments: TopicSelectionSearchRunRecordBundleCoverageAssessment[];
+  coverage_risk_acceptances: TopicSelectionSearchRunRecordBundleCoverageRiskAcceptance[];
+  raw_log_artifact_ref: TopicSelectionFunctionalRef | null;
+  raw_log_artifact_payload: Record<string, unknown> | null;
+  policy_version: string;
+  output_schema_version: string;
+}
+
+export interface TopicSelectionSearchRunHandoff {
+  schema_version: typeof TOPIC_SELECTION_SEARCH_RUN_HANDOFF_SCHEMA_VERSION;
+  search_run_ref: TopicSelectionFunctionalRef;
+  search_plan_ref: TopicSelectionFunctionalRef;
+  literature_resource_pool_snapshot_ref: TopicSelectionFunctionalRef;
+  literature_snapshot_hash: string;
+  coverage_row_intent_refs: TopicSelectionFunctionalRef[];
+  evidence_map_input_refs: TopicSelectionFunctionalRef[];
+  coverage_binding_refs: TopicSelectionFunctionalRef[];
+  coverage_assessment_refs: TopicSelectionFunctionalRef[];
+  coverage_summary: Record<string, unknown>;
+  source_health_summary: Record<string, unknown>;
+  result_accounting: TopicSelectionSearchRunResultAccounting;
+  raw_log_artifact_refs: TopicSelectionFunctionalRef[];
+  policy_version: string;
+  output_schema_version: string;
+}
+
+export interface TopicSelectionSearchRunLoopbackSignal {
+  schema_version: typeof TOPIC_SELECTION_SEARCH_RUN_LOOPBACK_SIGNAL_SCHEMA_VERSION;
+  search_run_ref: TopicSelectionFunctionalRef | null;
+  search_plan_ref: TopicSelectionFunctionalRef;
+  literature_resource_pool_snapshot_ref: TopicSelectionFunctionalRef;
+  reason_codes: string[];
+  target_actions: TopicSelectionSearchRunLoopbackTarget[];
+  repair_summary: string;
+  policy_version: string;
+  output_schema_version: string;
+}
+
 export interface TopicSelectionSearchPlanRecheckRequestRecord {
   search_plan_recheck_request_id: string;
   workspace_id?: string | null;
@@ -361,6 +462,66 @@ const nonEmptyStringArray = { type: 'array', minItems: 1, items: stringId } as c
 const objectPayload = { type: 'object', additionalProperties: true } as const;
 const functionalRefArray = { type: 'array', items: topicSelectionFunctionalRefSchema } as const;
 const recordArray = { type: 'array', items: objectPayload } as const;
+const typedFunctionalRefSchema = (refType: string, options: { requireVersion?: boolean } = {}) => ({
+  type: 'object',
+  additionalProperties: false,
+  required: options.requireVersion ? ['ref_type', 'ref_id', 'version_id'] : ['ref_type', 'ref_id'],
+  properties: {
+    ref_type: { const: refType },
+    ref_id: stringId,
+    version_id: options.requireVersion ? stringId : nullableStringId,
+    title_card_id: nullableStringId,
+    legacy_ref: { anyOf: [objectPayload, { type: 'null' }] },
+  },
+}) as const;
+const titleCardRefSchema = typedFunctionalRefSchema('title_card');
+const concreteSearchPlanRefSchema = typedFunctionalRefSchema('search_plan', { requireVersion: true });
+const concreteLiteratureSnapshotRefSchema = typedFunctionalRefSchema('literature_resource_pool_snapshot', { requireVersion: true });
+const coverageRowIntentRefSchema = typedFunctionalRefSchema('coverage_row_intent');
+const searchRunLocatorProvenanceRefSchema = {
+  anyOf: [
+    typedFunctionalRefSchema('literature_abstract'),
+    typedFunctionalRefSchema('fulltext_document'),
+    typedFunctionalRefSchema('fulltext_section'),
+    typedFunctionalRefSchema('fulltext_paragraph'),
+    typedFunctionalRefSchema('fulltext_anchor'),
+    typedFunctionalRefSchema('manual_locator'),
+  ],
+} as const;
+const searchRunEvidenceMapInputRefSchema = {
+  anyOf: [
+    typedFunctionalRefSchema('literature_record'),
+    typedFunctionalRefSchema('literature_source'),
+    searchRunLocatorProvenanceRefSchema,
+  ],
+} as const;
+const searchRunEvidenceMapInputRefArraySchema = {
+  type: 'array',
+  items: searchRunEvidenceMapInputRefSchema,
+} as const;
+const searchRunEvidenceBindingSourceRefSchema = {
+  anyOf: [
+    typedFunctionalRefSchema('literature_source'),
+    searchRunLocatorProvenanceRefSchema,
+  ],
+} as const;
+const searchRunEvidenceBindingSourceRefArraySchema = {
+  type: 'array',
+  items: searchRunEvidenceBindingSourceRefSchema,
+} as const;
+const nullableRawSearchLogArtifactRefSchema = {
+  anyOf: [
+    typedFunctionalRefSchema('artifact_ref'),
+    typedFunctionalRefSchema('raw_search_log'),
+    { type: 'null' },
+  ],
+} as const;
+const searchCoverageRiskRefSchema = {
+  anyOf: [
+    typedFunctionalRefSchema('accepted_risk'),
+    typedFunctionalRefSchema('search_coverage_risk'),
+  ],
+} as const;
 
 export const topicSelectionSearchPlanBlueprintCoverageIntentSchema = {
   type: 'object',
@@ -778,6 +939,210 @@ export const topicSelectionSearchRunRecordSchema = {
     finished_at: nullableStringId,
     created_by: { enum: ['human', 'llm', 'system', 'hybrid'] },
     created_at: stringId,
+  },
+} as const;
+
+export const topicSelectionSearchRunRecordBundleCoverageObservationSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'coverage_row_intent_ref',
+    'status',
+    'result_count',
+    'source_count',
+    'missing_reason_codes',
+  ],
+  properties: {
+    coverage_row_intent_ref: coverageRowIntentRefSchema,
+    status: { enum: [...TOPIC_SELECTION_COVERAGE_EXECUTION_STATUSES] },
+    result_count: numberValue,
+    source_count: numberValue,
+    missing_reason_codes: stringArray,
+    notes: nullableStringId,
+  },
+} as const;
+
+export const topicSelectionSearchRunRecordBundleEvidenceBindingSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'coverage_row_intent_ref',
+    'literature_ref',
+    'source_refs',
+    'binding_kind',
+  ],
+  properties: {
+    coverage_row_intent_ref: coverageRowIntentRefSchema,
+    literature_ref: typedFunctionalRefSchema('literature_record'),
+    source_refs: searchRunEvidenceBindingSourceRefArraySchema,
+    binding_kind: { enum: [...TOPIC_SELECTION_COVERAGE_BINDING_KINDS] },
+    result_rank: nullableNumber,
+  },
+} as const;
+
+export const topicSelectionSearchRunRecordBundleCoverageAssessmentSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'coverage_row_intent_ref',
+    'verdict',
+    'issue_codes',
+    'assessed_by',
+  ],
+  properties: {
+    coverage_row_intent_ref: coverageRowIntentRefSchema,
+    verdict: { enum: [...TOPIC_SELECTION_COVERAGE_ASSESSMENT_VERDICTS] },
+    issue_codes: stringArray,
+    confidence: nullableNumber,
+    assessed_by: { enum: ['human', 'llm', 'system', 'hybrid'] },
+  },
+} as const;
+
+export const topicSelectionSearchRunRecordBundleCoverageRiskAcceptanceSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'coverage_row_intent_ref',
+    'accepted_risk_ref',
+    'accepted_by',
+    'rationale',
+  ],
+  properties: {
+    coverage_row_intent_ref: coverageRowIntentRefSchema,
+    accepted_risk_ref: searchCoverageRiskRefSchema,
+    accepted_by: topicSelectionActorRefSchema,
+    rationale: stringId,
+    expires_at: nullableStringId,
+  },
+} as const;
+
+export const topicSelectionSearchRunRecordBundleSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'title_card_ref',
+    'search_plan_ref',
+    'literature_resource_pool_snapshot_ref',
+    'expected_literature_snapshot_hash',
+    'run_kind',
+    'run_status',
+    'query_provenance',
+    'result_accounting',
+    'source_health_summary',
+    'dedup_summary',
+    'evidence_map_input_refs',
+    'coverage_observations',
+    'evidence_bindings',
+    'coverage_assessments',
+    'coverage_risk_acceptances',
+    'raw_log_artifact_ref',
+    'raw_log_artifact_payload',
+    'policy_version',
+    'output_schema_version',
+  ],
+  properties: {
+    schema_version: { const: TOPIC_SELECTION_SEARCH_RUN_RECORD_BUNDLE_SCHEMA_VERSION },
+    title_card_ref: titleCardRefSchema,
+    search_plan_ref: concreteSearchPlanRefSchema,
+    literature_resource_pool_snapshot_ref: concreteLiteratureSnapshotRefSchema,
+    expected_literature_snapshot_hash: stringId,
+    run_kind: { enum: [...TOPIC_SELECTION_SEARCH_RUN_KINDS] },
+    run_status: { enum: [...TOPIC_SELECTION_SEARCH_RUN_STATUSES] },
+    query_provenance: recordArray,
+    result_accounting: topicSelectionSearchRunResultAccountingSchema,
+    source_health_summary: objectPayload,
+    dedup_summary: objectPayload,
+    evidence_map_input_refs: searchRunEvidenceMapInputRefArraySchema,
+    coverage_observations: {
+      type: 'array',
+      items: topicSelectionSearchRunRecordBundleCoverageObservationSchema,
+    },
+    evidence_bindings: {
+      type: 'array',
+      items: topicSelectionSearchRunRecordBundleEvidenceBindingSchema,
+    },
+    coverage_assessments: {
+      type: 'array',
+      items: topicSelectionSearchRunRecordBundleCoverageAssessmentSchema,
+    },
+    coverage_risk_acceptances: {
+      type: 'array',
+      items: topicSelectionSearchRunRecordBundleCoverageRiskAcceptanceSchema,
+    },
+    raw_log_artifact_ref: nullableRawSearchLogArtifactRefSchema,
+    raw_log_artifact_payload: { anyOf: [objectPayload, { type: 'null' }] },
+    policy_version: stringId,
+    output_schema_version: stringId,
+  },
+} as const;
+
+export const topicSelectionSearchRunHandoffSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'search_run_ref',
+    'search_plan_ref',
+    'literature_resource_pool_snapshot_ref',
+    'literature_snapshot_hash',
+    'coverage_row_intent_refs',
+    'evidence_map_input_refs',
+    'coverage_binding_refs',
+    'coverage_assessment_refs',
+    'coverage_summary',
+    'source_health_summary',
+    'result_accounting',
+    'raw_log_artifact_refs',
+    'policy_version',
+    'output_schema_version',
+  ],
+  properties: {
+    schema_version: { const: TOPIC_SELECTION_SEARCH_RUN_HANDOFF_SCHEMA_VERSION },
+    search_run_ref: topicSelectionFunctionalRefSchema,
+    search_plan_ref: topicSelectionFunctionalRefSchema,
+    literature_resource_pool_snapshot_ref: topicSelectionFunctionalRefSchema,
+    literature_snapshot_hash: stringId,
+    coverage_row_intent_refs: functionalRefArray,
+    evidence_map_input_refs: functionalRefArray,
+    coverage_binding_refs: functionalRefArray,
+    coverage_assessment_refs: functionalRefArray,
+    coverage_summary: objectPayload,
+    source_health_summary: objectPayload,
+    result_accounting: topicSelectionSearchRunResultAccountingSchema,
+    raw_log_artifact_refs: functionalRefArray,
+    policy_version: stringId,
+    output_schema_version: stringId,
+  },
+} as const;
+
+export const topicSelectionSearchRunLoopbackSignalSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'search_run_ref',
+    'search_plan_ref',
+    'literature_resource_pool_snapshot_ref',
+    'reason_codes',
+    'target_actions',
+    'repair_summary',
+    'policy_version',
+    'output_schema_version',
+  ],
+  properties: {
+    schema_version: { const: TOPIC_SELECTION_SEARCH_RUN_LOOPBACK_SIGNAL_SCHEMA_VERSION },
+    search_run_ref: { anyOf: [topicSelectionFunctionalRefSchema, { type: 'null' }] },
+    search_plan_ref: topicSelectionFunctionalRefSchema,
+    literature_resource_pool_snapshot_ref: topicSelectionFunctionalRefSchema,
+    reason_codes: stringArray,
+    target_actions: {
+      type: 'array',
+      items: { enum: [...TOPIC_SELECTION_SEARCH_RUN_LOOPBACK_TARGETS] },
+    },
+    repair_summary: stringId,
+    policy_version: stringId,
+    output_schema_version: stringId,
   },
 } as const;
 

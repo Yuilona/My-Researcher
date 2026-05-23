@@ -229,39 +229,59 @@ async function createSearchRunFixture(runStatus: 'succeeded' | 'partial' | 'fail
     ref('fulltext_paragraph', 'paragraph_001', titleCardId),
     ref('fulltext_anchor', 'anchor_001', titleCardId),
   ];
+  const isFailedRun = runStatus === 'failed';
   const searchRun = await ctx.searchService.recordSearchRun({
     title_card_id: titleCardId,
     search_plan_id: plan.search_plan.search_plan_id,
     run_status: runStatus,
-    result_accounting: {
-      total_result_count: 4,
-      unique_literature_count: 1,
-      duplicate_result_count: 0,
-      failed_source_count: 0,
-      skipped_source_count: 0,
-    },
-    source_health_summary: {
-      source_count: 1,
-      warning_codes: [],
-    },
+    result_accounting: isFailedRun
+      ? {
+          total_result_count: 0,
+          unique_literature_count: 0,
+          duplicate_result_count: 0,
+          failed_source_count: 1,
+          skipped_source_count: 0,
+        }
+      : {
+          total_result_count: 4,
+          unique_literature_count: 1,
+          duplicate_result_count: 0,
+          failed_source_count: 0,
+          skipped_source_count: 0,
+        },
+    source_health_summary: isFailedRun
+      ? {
+          source_count: 1,
+          failed_source_count: 1,
+          error_codes: ['SEARCH_PROVIDER_FAILED'],
+          failure_summary: 'Fixture search provider failed before returning usable literature.',
+        }
+      : {
+          source_count: 1,
+          warning_codes: [],
+        },
     dedup_summary: {
       canonical_work_refs: [ref('literature_record', 'lit_001', titleCardId)],
     },
-    evidence_map_input_refs: [
-      ref('literature_record', 'lit_001', titleCardId),
-      ref('literature_source', 'source_001', titleCardId),
-      ...contentRefs,
-    ],
-    evidence_bindings: plan.coverage_row_intents.map((intent) => ({
-      coverage_row_intent_id: intent.coverage_row_intent_id,
-      literature_ref: ref('literature_record', 'lit_001', titleCardId),
-      source_refs: [
-        ref('literature_source', 'source_001', titleCardId),
-        ...contentRefs,
-      ],
-      binding_kind: 'retrieval_hit' as const,
-      result_rank: 1,
-    })),
+    evidence_map_input_refs: isFailedRun
+      ? []
+      : [
+          ref('literature_record', 'lit_001', titleCardId),
+          ref('literature_source', 'source_001', titleCardId),
+          ...contentRefs,
+        ],
+    evidence_bindings: isFailedRun
+      ? []
+      : plan.coverage_row_intents.map((intent) => ({
+          coverage_row_intent_id: intent.coverage_row_intent_id,
+          literature_ref: ref('literature_record', 'lit_001', titleCardId),
+          source_refs: [
+            ref('literature_source', 'source_001', titleCardId),
+            ...contentRefs,
+          ],
+          binding_kind: 'retrieval_hit' as const,
+          result_rank: 1,
+        })),
     created_by: 'system',
   });
 

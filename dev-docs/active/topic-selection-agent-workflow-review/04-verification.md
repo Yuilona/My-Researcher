@@ -577,6 +577,8 @@
 - Result: passed; 35 tests passed.
 - Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
 - Result: passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 722 tests total, 721 passed, 1 skipped, 0 failed.
 - Coverage:
   - harness compiles context packets and passes only context refs into the node input;
   - mocked finalize path persists admitted NeedCandidates only through the adapter/persistence service boundary;
@@ -896,3 +898,213 @@
   - wrong blueprint schema version, missing blueprint, snapshot hash mismatch, omitted coverage intents, fallback-derived coverage semantics, non-object coverage entries, and lineage mismatch all block without authority refs;
   - successful SearchPlan creation records SearchPlan/CoverageRow refs, control-plane audit refs, trace artifact, and complete blueprint input snapshot;
   - Node 1/2 provenance amendments are verified through input snapshots without introducing provider, Codex, or debate execution.
+
+## 2026-05-21 v1a Node 5 Callable Runner Verification
+- Update: implemented Node 5 callable runner for `topic-selection.v1a.build-evidence-map.v1`.
+- Command: `pnpm --filter @paper-engineering-assistant/shared test`
+- Result: passed; 146 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 37 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-evidence-map-service.unit.test.ts`
+- Result: passed; 8 tests passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 718 tests total, 717 passed, 1 skipped, 0 failed.
+- Coverage:
+  - Node 5 remains single-agent-or-none and does not invoke multi-agent debate;
+  - `mocked_llm` exercises the AgentOrchestrator path without provider calls;
+  - agent invocation audit refs are included in Node 5 audit/artifact refs;
+  - deterministic materialization blocks unsafe source attribution and preserves no-authority behavior for blocked/review-required results;
+  - successful runs emit only one downstream workflow handoff: `TopicSelectionEvidenceMapHandoff@v1` for Node 6.
+
+## 2026-05-21 v1a Node 5 Quality Review Fix Verification
+- Update: fixed N5 quality review issues without adding a second workflow path.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 36 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Coverage:
+  - materialization-only warnings survive into downstream handoff;
+  - locator provenance drift blocks before authority creation;
+  - full functional-ref lineage drift blocks before authority creation;
+  - same-source support/challenge ambiguity requires source-specific conflict coverage.
+
+## 2026-05-21 N5 to N6 Handoff Consumption Guard Verification
+- Update: verified Node 6 consumes N5 handoff only as transition provenance and rejects N5 draft/review/raw artifacts as business inputs.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 39 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 725 tests total, 724 passed, 1 skipped, 0 failed.
+- Coverage:
+  - legal EvidenceMap handoff from N5 drives a mocked Node 6 candidate generation run;
+  - handoff drift blocks before context compilation;
+  - EvidenceMap review package refs cannot be smuggled into Node 6 context input refs;
+  - existing mocked debate and single-agent Node 6 paths still pass.
+
+## 2026-05-22 N7-D12 Planned Verification Matrix
+- Update: recorded Node 7 implementation readiness and minimum test matrix.
+- Decision: implementation may start; this section was the pre-implementation matrix. The later N7 runner verification promotes `topic-selection.v1a.validate-need-adjudication.v1` to `callable`.
+
+| ID | Layer | Scenario | Required Result |
+|---|---|---|---|
+| N7-C01 | shared contract | recommendation packet whitelist | valid packet accepted |
+| N7-C02 | shared contract | recommendation contains orchestration/status/authority fields | schema rejects |
+| N7-C03 | shared contract | node result status values | only `ready`, `blocked`, `require_human_review` accepted |
+| N7-P01 | profile registry | adjudication single-agent profile | profile resolves with structured output and fallback disabled |
+| N7-H01 | harness unit | fresh ready path with `validate` | ready handoff to Node 8, no ValidatedNeed |
+| N7-H02 | harness unit | non-ready readiness | blocked before support/adjudication authority |
+| N7-H03 | harness unit | readiness `reject` | gate finding only, not final reject authority |
+| N7-H04 | harness unit | explicit packet drift | conflict/gate block |
+| N7-H05 | harness unit | support freeze followed by upstream mutation | no live reread as business truth |
+| N7-H06 | harness unit | high-risk model recommendation without human acceptance | require human review, no authority write |
+| N7-H07 | harness unit | human/hybrid high-risk acceptance | authority write allowed after validation |
+| N7-H08 | harness unit | malformed recommendation | blocked, no fallback |
+| N7-H09 | harness unit | SearchPlan recheck | typed recheck request only |
+| N7-H10 | harness unit | return-to-candidate lacks actions | blocked |
+| N7-H11 | harness unit | duplicate/pending adjudication | blocked duplicate with existing refs |
+| N7-H12 | harness unit | exact replay | prior node result returned, no writes |
+| N7-H13 | harness unit | replay drift/missing trace | blocked |
+| N7-H14 | harness unit | model failure/malformed structured output | same-profile retry max once, no provider/Codex/mock fallback |
+| N7-H15 | harness unit | readiness `merge_required` or `park` | `blocked` with review repair hint, no merge/park authority |
+| N7-H16 | service + harness unit | direct REST adjudication with stale support-packet lineage | conflict/gate block, no authority write |
+| N7-H17 | harness unit | replay storage lookup cannot recover node result or trace | blocked/pause path, no fresh attempt |
+| N7-I01 | integration | existing REST v1a readiness/support/adjudication happy path | remains passing |
+| N7-I02 | integration | duplicate REST adjudication | second write rejected |
+| N7-E01 | scenario | N1->N7 fixture workflow | N7 node result is consumable by Node 8 automation |
+
+Close criteria:
+- shared, backend harness, model profile, and route regression tests cover the rows above;
+- backend typecheck passes;
+- governance lint passes;
+- D12 status may move to `callable` only after the runner emits `TopicSelectionValidateNeedAdjudicationNodeResult@v1` and the matrix passes.
+
+## 2026-05-22 N7 Runner Policy Verification
+- Update: T-088 implementation landed and was checked against the T-089 N7 policy matrix.
+- Command: `cd packages/shared && node --test --loader ts-node/esm src/research-lifecycle/topic-selection-need-validation-contracts.schema.test.ts`
+- Result: passed; 4 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 51 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts src/services/topic-selection-need-validation-service.unit.test.ts`
+- Result: passed; 19 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck`
+- Result: passed.
+- Policy coverage:
+  - N7 is still not debate-eligible and uses only the single-agent recommendation profile.
+  - `TopicSelectionNeedAdjudicationRecommendationPacket@v1` remains artifact/provenance only and is schema-rejected when it carries orchestration fields.
+  - `TopicSelectionValidateNeedAdjudicationNodeResult@v1` is the runner handoff and uses only `ready`, `blocked`, and `require_human_review`.
+  - D07 high-risk recommendations require human/hybrid acceptance before authority write.
+  - D08 support-packet freeze is enforced by explicit refs and by service-level lineage checks.
+  - D10 duplicate/replay semantics produce no second adjudication.
+  - Recommendation profile/policy/output-schema drift blocks before authority writes.
+  - Exact replay re-evaluates current scenario assertions while preserving no-write replay semantics.
+  - Node 7 can be marked `automation_callability=callable` for WorkflowHarness execution.
+
+## 2026-05-22 N8 Reserved-Id Documentation Check
+- Update: synchronized N8 wording so the node materializes N7's reserved `output_validated_need_id` rather than minting a new `validated_need_id`.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Search check: no remaining N8 wording says it creates a new `TopicSelectionValidatedNeedRecord` id or treats the reserved id as existing authority.
+
+## 2026-05-22 N8 Human Delegated Documentation Check
+- Update: added `human_delegated` as a constrained confirmation mode for human-authorized Codex/provider execution.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Search check: no remaining N8 wording limits confirmation only to human/hybrid or describes model output as confirmation without `HumanConfirmationInput@v1` and fixed delegation policy.
+
+## 2026-05-22 N8-D04 Minimal Confirmation Input Documentation Check
+- Update: simplified N8 to a single `HumanConfirmationInput@v1` node-level value contract and removed the standalone delegation-contract direction.
+- Search check: removed old N8 standalone delegation-contract wording and replaced it with `HumanConfirmationInput@v1` plus fixed policy `n8-validate-only-delegation-v1`.
+
+## 2026-05-23 N8-D05 Bounded Semantic Review Documentation Check
+- Update: added `HumanConfirmationSemanticReview@v1` so N8 can parse N7 semantic rationale, support-packet checks, residual risks, confirmation rationale, and delegated executor output without re-adjudication.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Search check: N8 now records semantic review as a trace/audit artifact and keeps debate, final-decision changes, new risk generation, upstream mutation, and direct authority writes out of the semantic parser.
+
+## 2026-05-23 N8-D06 Semantic Review Invocation Documentation Check
+- Update: locked semantic-review profile, frozen context packet, structured output, retry, cache, and no-fallback failure policy.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Search check: `HumanConfirmationSemanticReviewContextPacket@v1`, `topic-selection.confirmation-semantic-review.single-agent.v1`, same-profile retry, exact-match cache, and forbidden fallback semantics are present in the node policy.
+
+## 2026-05-23 N8-D07 Node Result Documentation Check
+- Update: locked `TopicSelectionHumanConfirmNeedNodeResult@v1` as N8's only downstream automation handoff.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Search check: N8 ready results route only to `advance_to_publish_v1b_input_bundle`; blocked/review results do not auto-advance; v1b bundle publication remains Node 9-only.
+
+## 2026-05-23 N8-D08 Simple Retry Documentation Check
+- Update: simplified N8 retry/idempotency to exact replay, duplicate reserved-id block, append-only failed attempts, and explicit repair for partial confirmation writes.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Search check: `DUPLICATE_VALIDATED_NEED`, `PARTIAL_CONFIRMATION_WRITE`, new-attempt retry, and no idempotent-ready shortcut are recorded in policy and normalization docs.
+
+## 2026-05-23 N8 WorkflowHarness Implementation Verification
+- Update: implemented N8 contracts, profile, service/route normalization, duplicate/partial guards, semantic review artifacts, and `runHumanConfirmNeedScenario`.
+- Command: `cd packages/shared && node --test --loader ts-node/esm src/research-lifecycle/topic-selection-need-validation-contracts.schema.test.ts`
+- Result: passed; 10 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts src/services/topic-selection-need-validation-service.unit.test.ts`
+- Result: passed; 19 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 58 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/routes/topic-selection-v1a-routes.integration.test.ts`
+- Result: passed; 3 tests passed.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Coverage: human-confirm ready path materializes the reserved ValidatedNeed id, does not create v1b bundle, supports fixed-policy `human_delegated`, rejects non-delegated delegated executor payloads, blocks missing risk coverage, blocks semantic-review lineage drift before authority writes, exact-replays same attempt before duplicate guard, blocks duplicate materialized reserved id, and blocks partial HumanConfirmedDecision writes without automatic backfill.
+
+## 2026-05-23 N9 Implementation Readiness Documentation Check
+- Update: locked N9 deterministic terminal handoff, handoff input contract, traceability, replay/idempotency, stable failure semantics, and implementation readiness review.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Readiness result at that point: implementation could start; N9 remained `not_callable` until `runPublishV1bInputBundleScenario` landed.
+
+## 2026-05-23 N9 WorkflowHarness Implementation Verification
+- Update: N9 is callable through `runPublishV1bInputBundleScenario` and remains a deterministic terminal handoff.
+- Command: `cd packages/shared && node --test --loader ts-node/esm src/research-lifecycle/topic-selection-need-validation-contracts.schema.test.ts`
+- Result: passed; 14 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 64 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-need-validation-service.unit.test.ts`
+- Result: passed; 16 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/routes/topic-selection-decision-chain-acceptance.test.ts`
+- Result: passed; 33 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/routes/topic-selection-v1a-routes.integration.test.ts`
+- Result: passed; 3 tests passed.
+- Command: `source ./.env.local && pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 758 tests, 757 passed, 1 skipped. Note: the same command without loading `.env.local` fails only the T-054/T-067 Prisma HTTP smoke precondition because `DATABASE_URL` is intentionally sourced from local env.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Coverage: explicit handoff input, bundle publication, stable `created_by=system` default in the trace input, no hard-coded v1b next node, exact replay, expected-version reuse, changed hash block, lineage drift block, missing expected version block, stable invalid-confirmation input rejection before missing-adjudication lookup, and service-level non-confirm human-decision block.
+- Follow-up review fix: clarified that `runPublishV1bInputBundleScenario` is the normalized automation path while `POST /topic-selection/v1a/v1b-input-bundles` remains the compatibility service boundary; removed malformed YAML indentation in the N9 policy block.

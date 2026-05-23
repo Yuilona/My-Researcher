@@ -774,3 +774,459 @@
 - Preserved route/service compatibility fallback for manual/API callers while forbidding fallback-derived coverage rows in normalized WorkflowHarness execution.
 - Full blueprint payload is frozen in the service input snapshot and harness trace, so future Node 4/EvidenceMap consumers can audit the exact plan semantics without re-reading mutable resource state.
 - Node 1 and Node 2 provenance amendments are reflected in runtime inputs: intent-preparation refs and resource-sample-set provenance refs are auditable but do not introduce LLM execution into either node.
+
+## 2026-05-21 v1a Node 4 Alignment: No Debate Baseline
+- Locked N4-D00 for `topic-selection.v1a.record-search-run.v1`.
+- Node 4 is a deterministic factual contract and lineage gate for SearchRun recording, result accounting, coverage-row binding integrity, raw-log separation, and EvidenceMap handoff consumability.
+- Multi-agent debate is explicitly rejected for Node 4 because the node does not broaden topic thinking, discover value, or interpret evidence roles.
+- Strict topic-selection guarding remains required, but it is handled by layered v1a/v1b/v1c gates and bounded loopback rather than by adding debate to this record node.
+- Future agent-assisted search-result organization, if needed, must be modeled as a separate upstream input-preparation or search-execution node; Node 4 only validates and records its output.
+
+## 2026-05-21 v1a Node 4 Alignment: SearchRun Authority Boundary
+- Locked N4-D01 for `topic-selection.v1a.record-search-run.v1`.
+- Node 4 is not a search execution node; it records already-produced search, import, or manual-result facts.
+- A failed search execution may still be persisted as `TopicSelectionSearchRun` when the SearchRun record contract is valid.
+- Failed SearchRuns are audit facts only: they are non-consumable for Node 5 and must not emit an EvidenceMap handoff.
+- Node 4 blocked means the record contract is invalid or unsafe to persist, including malformed input, missing result accounting/source-health summary, SearchPlan/Snapshot lineage mismatch, coverage-row conflict, or raw log being used as an authority ref.
+
+## 2026-05-21 v1a Node 4 Alignment: Normalized Input Bundle
+- Locked N4-D02 for `topic-selection.v1a.record-search-run.v1`.
+- Node 4 needs a module-level value contract `TopicSelectionSearchRunRecordBundle@v1` as its normalized harness input.
+- The bundle is not a new persistence authority and must not create a second route/product contract.
+- The bundle must map losslessly to the existing `RecordSearchRunInput`; `TopicSelectionSearchResourceService.recordSearchRun` remains the only SearchRun authority writer.
+- Route compatibility may remain only if it shares the same fields and semantics, so normalized harness execution and API callers do not drift into parallel SearchRun input models.
+- To avoid duplicate version truth, SearchPlan version is asserted only through `search_plan_ref.version_id`; the rejected `expected_search_plan_version` field is not part of the bundle.
+- Snapshot version is asserted through `literature_resource_pool_snapshot_ref.version_id`; `expected_literature_snapshot_hash` remains only as a replay/currentness guard.
+
+## 2026-05-21 v1a Node 4 Alignment: Bundle Minimum Contract
+- Locked N4-D03 for `topic-selection.v1a.record-search-run.v1`.
+- Minimum bundle fields are `schema_version`, `title_card_ref`, concrete `search_plan_ref`, concrete `literature_resource_pool_snapshot_ref`, `expected_literature_snapshot_hash`, run fact fields, accounting summaries, evidence binding records, audit/raw-log payload or ref, policy version, and output schema version.
+- SearchPlan and snapshot versions must be asserted only through functional-ref `version_id` values.
+- `expected_literature_snapshot_hash` must match the resolved LiteratureResourcePoolSnapshot hash before SearchRun authority creation.
+- `succeeded` and `partial` SearchRuns require non-empty `evidence_map_input_refs` before Node 5 handoff can be emitted.
+- `failed` SearchRuns may have empty evidence refs but must be non-consumable and emit no Node 5 handoff.
+- Raw search logs are audit artifacts only and must never become EvidenceMap authority refs.
+
+## 2026-05-21 v1a Node 4 Alignment: Result Accounting Integrity
+- Locked N4-D04 for `topic-selection.v1a.record-search-run.v1`.
+- Result accounting validation is an audit-fact integrity check, not a topic-value judgment.
+- Counts must be internally consistent: total results cover unique plus duplicate results, unique counts are non-negative, and failed/skipped source counts are non-negative.
+- Distinct literature refs in evidence bindings must not exceed `unique_literature_count`.
+- `succeeded` runs require `failed_source_count=0` and must include at least one coverage observation or evidence binding when total results are non-zero.
+- `partial` runs may include failed or skipped sources only when source health records the partial condition.
+- `failed` runs may have no evidence bindings, but source health must include an error/failure summary so the failure is not an empty opaque record.
+
+## 2026-05-21 v1a Node 4 Alignment: Controlled Coverage Semantics
+- Locked N4-D05 for `topic-selection.v1a.record-search-run.v1`.
+- Node 4 may store controlled lightweight search/coverage semantics for provenance and audit: query provenance, source health, dedup summary, coverage missing reasons/notes, coverage assessment verdicts/issues, and search-coverage risk acceptances.
+- Node 4 must not store research-evidence semantics such as evidence role, evidence polarity, evidence strength, NeedCandidate refs, TopicQuestionContract refs, topic value scores, claim support verdicts, or claim-risk acceptance.
+- This keeps Node 4 explainable without moving EvidenceMap, NeedCandidate, ValueAssessment, or claim semantics into the SearchRun recording layer.
+
+## 2026-05-21 v1a Node 4 Alignment: Bundle Draft/Review Execution Layer
+- Locked N4-D06 for `topic-selection.v1a.record-search-run.v1`.
+- Optional LLM/Codex execution may draft or review `TopicSelectionSearchRunRecordBundle@v1` before Node 4 invocation, following the Node 3 SearchPlanBlueprint draft/review pattern.
+- Node 4 itself remains deterministic with `execution_mode=none`; model-like output cannot write SearchRun or coverage authorities directly.
+- Suggested profiles are `topic-selection.search-run-record-bundle.draft.v1` and `topic-selection.search-run-record-bundle.review.v1`.
+- Codex-assisted is the default local low-cost path; provider execution is explicit upgrade/provider-quality only; mocked LLM is test/acceptance-only.
+- Automatic provider fallback is disabled, and model failure must not silently create keyword/default coverage semantics.
+
+## 2026-05-21 v1a Node 4 Alignment: Snapshot Membership Boundary
+- Locked N4-D07 for `topic-selection.v1a.record-search-run.v1`.
+- Node 4 has no retrieval, acquisition, resource-pool refresh, evidence-basket mutation, or LiteratureRecord creation capability.
+- A consumable normalized SearchRun may bind only literature refs that belong to the resolved LiteratureResourcePoolSnapshot.
+- Snapshot-outside literature refs are blocked by default and must not become `evidence_map_input_refs`, coverage evidence bindings, or Node 5 handoff refs.
+- If upstream search execution discovers important new literature, the workflow must route through literature acquisition/resource refresh, evidence basket update, Node 2 snapshot refresh, and any required Node 3 plan update before Node 4 can produce a consumable run.
+
+## 2026-05-21 v1a Node 4 Alignment: Raw Artifact Boundary
+- Locked N4-D08 for `topic-selection.v1a.record-search-run.v1`.
+- Raw logs/artifacts, Literature/Source refs, and coverage semantic metadata are separate layers.
+- Raw logs are audit-only artifacts proving search execution details. They must not enter `evidence_map_input_refs`, coverage evidence binding literature/source refs, or Node 5 handoff authority refs.
+- Node 5 evidence authority is snapshot-member Literature refs, legal Source refs, and coverage row lineage. Fulltext/abstract/manual locator refs may be carried only as EvidenceUnit locator provenance.
+- `coverage_assessments[].verdict` describes coverage-row retrieval status only and must not be interpreted as evidence strength, topic value, or claim support.
+- This prevents raw artifacts from bypassing N4-D05 controlled coverage semantics and N4-D07 snapshot membership.
+
+## 2026-05-21 v1a Node 4 Alignment: Handoff And Loopback Output
+- Locked N4-D09 for `topic-selection.v1a.record-search-run.v1`.
+- Node 4 result exposes `consumable_for_evidence_map`, `downstream_handoff`, and `loopback_signal`.
+- `downstream_handoff` uses `TopicSelectionSearchRunHandoff@v1` and is only for Node 5 `build-evidence-map`.
+- `loopback_signal` uses `TopicSelectionSearchRunLoopbackSignal@v1`, is not authority, and is consumed by the orchestrator/control-plane for repair routing.
+- Allowed loopback targets are Node 3 SearchPlan revision, Node 2 snapshot refresh, upstream search execution/input preparation, or human search-coverage acceptance.
+- In v1, handoff and loopback signal are mutually exclusive: consumable results move forward, repairable non-consumable results route back, and blocked record-contract failures rely on blocker codes plus trace evidence.
+
+## 2026-05-21 v1a Node 4 Readiness Review
+- Locked N4-D10 for `topic-selection.v1a.record-search-run.v1`.
+- Decision: `implementation_ready`; automation has since moved to `callable` after `runRecordSearchRunScenario` landed in the runtime foundation task.
+- Contract drift review found no unresolved product decision gap, but found implementation risks that must be controlled: service-local `RecordSearchRunInput`, route compatibility looseness, generic accepted-risk refs, raw artifact refs, snapshot-outside literature refs, and failed SearchRuns being treated as consumable.
+- Complexity is moderate and bounded because no DB migration is expected; existing SearchRun/coverage/control-plane/artifact records are sufficient if handoff and loopback remain node-result/trace contracts rather than new authorities.
+- Required implementation order is contracts, service hardening, WorkflowHarness runner, then focused tests.
+
+## 2026-05-21 v1a Node 4 Runtime Landing Note
+- Node 4 is now callable through `TopicSelectionWorkflowHarnessService.runRecordSearchRunScenario`.
+- The agent policy remains unchanged: Node 4 has no debate, no provider LLM, and no Codex execution inside the node. Optional model-like bundle drafting/review stays upstream of the deterministic node boundary.
+- `TopicSelectionSearchRunRecordBundle@v1` remains a normalized value contract mapped into `TopicSelectionSearchResourceService.recordSearchRun`; it is not a second SearchRun product path.
+- Failed SearchRuns persist only as audit facts with no Node 5 handoff; consumable SearchRuns emit `TopicSelectionSearchRunHandoff@v1`; repairable non-consumable runs emit `TopicSelectionSearchRunLoopbackSignal@v1`.
+- No DB migration was introduced for Node 4. Existing SearchRun, coverage, control-plane, and artifact records carry the authority and audit evidence.
+- Compatibility regressions found by the full backend suite were fixed by preserving locator provenance as separate from Literature/Source authority and by updating old failed-run fixtures to legal audit-only SearchRuns.
+
+## 2026-05-21 v1a Node 4 Dual-Track Closure
+- Closed the remaining Node 4 dual-track risk where shared bundle schema and route validation were looser than WorkflowHarness/service behavior.
+- `TopicSelectionSearchRunRecordBundle@v1`, route validation, WorkflowHarness pre-service validation, and `recordSearchRun` now agree on explicit SearchRun authority refs.
+- EvidenceMap input refs are limited to `literature_record`, `literature_source`, and locator-provenance refs; evidence binding literature refs are `literature_record` only; binding source refs are `literature_source` or locator-provenance only.
+- Raw search logs stay audit-only through `artifact_ref` or `raw_search_log` refs and cannot become EvidenceMap authority or Node 5 handoff refs.
+- Search coverage risk acceptances must cite `accepted_risk` or `search_coverage_risk`; generic coverage refs are rejected.
+- The policy meaning is now aligned with the implementation: permissive compatibility cannot silently create a second SearchRun semantic path.
+
+## 2026-05-21 v1a Node 5 Alignment: Single-Agent Semantic Extraction
+- Locked N5-D00 for `topic-selection.v1a.build-evidence-map.v1`.
+- Node 5 may perform partial semantic extraction because EvidenceMap construction naturally needs source-statement extraction, locator selection, role suggestion, typed-link hints, clustering/pattern hints, and conflict hints.
+- Codex-assisted and provider-LLM execution are allowed as single-agent extraction/review layers. `mocked_llm` remains test-only, and `execution_mode=none` remains valid when a caller-supplied extraction draft is available.
+- Multi-agent debate is not allowed for Node 5. Debate would add complexity without matching the node purpose; broader exploration belongs to NeedCandidate generation.
+- The authority boundary remains deterministic: model-like output is a structured draft/review artifact only, then deterministic validators decide what can enter `TopicSelectionEvidenceMapService.createEvidenceMapFromSearchRun`.
+- Model-like execution must not write EvidenceMap, EvidenceUnit, NeedCandidate, value, package, bridge, PaperProject, or claim authority.
+- This replaces the older pure-deterministic wording without creating a dual track: there is one EvidenceMap writer and one deterministic materialization gate, with optional single-agent drafting before it.
+
+## 2026-05-21 v1a Node 5 Alignment: Extraction Draft Contract
+- Locked N5-D01 for `topic-selection.v1a.build-evidence-map.v1`.
+- `TopicSelectionEvidenceMapExtractionDraft@v1` is the module-level EvidenceMap value contract for semantic extraction drafts. It is not a WorkflowHarness-private DTO and not an authority object.
+- `TopicSelectionBuildEvidenceMapNodeInput@v1` is the node-level wrapper. It references Node 4 `TopicSelectionSearchRunHandoff@v1`, workflow metadata, execution mode/profile, and the extraction draft.
+- Codex-assisted, provider-LLM, mocked-LLM, human, and fixture producers must all emit the same extraction draft shape.
+- `execution_mode=none` means a ready extraction draft was already supplied by the caller; it does not create a second service-input path.
+- Deterministic validators map accepted draft fields into `CreateEvidenceMapFromSearchRunInput`; `TopicSelectionEvidenceMapService.createEvidenceMapFromSearchRun` remains the sole EvidenceMap authority writer.
+- The draft may be hashed or persisted as audit evidence, but it must not contain hidden reasoning, raw provider responses, raw fulltext dumps, raw search logs as authority refs, or downstream authority ids/verdicts.
+
+## 2026-05-21 v1a Node 5 Alignment: Materialization Status Handling
+- Locked N5-D02 for `topic-selection.v1a.build-evidence-map.v1`.
+- The deterministic materialization validator is the authority gate between `TopicSelectionEvidenceMapExtractionDraft@v1` and `CreateEvidenceMapFromSearchRunInput`.
+- `ready` and `ready_with_warning` may create EvidenceMap authority; `review_required` and `blocked` must not call `TopicSelectionEvidenceMapService.createEvidenceMapFromSearchRun`.
+- Warnings are traceable quality or coverage risks, not authority-safety failures. They must be persisted in `EvidenceMapMaterializationReport@v1`, harness trace, and accepted EvidenceUnit issue codes when applicable.
+- Blockers are contract, lineage, ref, source-authority, or structural failures. They return a stable blocked result with blocker codes, failed validation layer, rejected draft refs, and repair target.
+- `review_required` emits a review package for semantically ambiguous drafts and waits for a revised draft.
+- The validator may normalize ordering, deduplicate identical draft structures, and generate stable keys, but must not rewrite roles, invent source statements, swap refs, re-read live resource pools for repair, or downgrade `llm_inference`.
+
+## 2026-05-21 v1a Node 5 Alignment: Extraction Execution Profile
+- Locked N5-D03 for `topic-selection.v1a.build-evidence-map.v1`.
+- Model-like extraction uses profile `topic-selection.evidence-map-extraction.single-agent.v1`, resolved through the model profile registry. Node 5 must not hard-code provider, model, or normalized parameter choices.
+- Default local mode is `codex_assisted`; `provider_llm` is an explicit quality upgrade; `mocked_llm` remains test-only; `execution_mode=none` skips model invocation and requires a caller-supplied extraction draft.
+- Model invocation receives only frozen `TopicSelectionEvidenceMapExtractionContextPacket@v1`, compiled before invocation from Node 4 handoff, SearchRun evidence refs/bindings, SearchPlan coverage rows, snapshot refs/hash, selected literature/source locator tables, role targets, and materialization rules.
+- The extraction context family is `evidence_extraction_context`; it must not reuse Node 6 exploration/arbiter context, debate transcripts, or NeedCandidate discovery memory.
+- Provider/Codex failures may retry the same profile once for transient or malformed-output issues. Automatic provider fallback, Codex fallback, mock fallback, and keyword extraction fallback are forbidden.
+- After context packet compilation, model-like execution must not re-read live DB or mutable resource-pool state.
+
+## 2026-05-21 v1a Node 5 Alignment: Cache Reuse And Audit Provenance
+- Locked N5-D04 for `topic-selection.v1a.build-evidence-map.v1`.
+- Context packet cache is exact-match only and must include node id, SearchRun handoff hash, SearchPlan version, snapshot hash, context compiler version, policy/schema/output versions, execution mode, profile id, and `context_family=evidence_extraction_context`.
+- Cached context or response reuse must not cross context families. Node 5 evidence extraction cannot consume Node 6 exploration/arbiter context, debate transcripts, or NeedCandidate discovery memory.
+- `codex_assisted` may reuse an exact-match local response for cost control only when provenance records `response_source=cached_exact_invocation`, source attempt ref, context hash match, and `non_provider=true`.
+- `provider_llm` quality scenarios require real provider execution; cached response reuse is a miss or policy block and must never be recorded as provider-backed provenance.
+- Cached or reused drafts must still pass `EvidenceMapMaterializationReport@v1` validation before any EvidenceMap authority write.
+- Audit records context packet hash, profile id, execution mode, cache hit/miss or reuse source, draft hash, materialization report, accepted/rejected counts, role counts, and warning/blocker/review codes; it must not store hidden reasoning, raw provider logs, raw fulltext dumps, or raw search logs as authority.
+
+## 2026-05-21 v1a Node 5 Alignment: Review-Required Revision Loop
+- Locked N5-D05 for `topic-selection.v1a.build-evidence-map.v1`.
+- `review_required` creates no EvidenceMap authority and is terminal for the current attempt.
+- The runner emits `EvidenceMapExtractionReviewPackage@v1` with materialization report ref/hash, context packet ref/hash, draft ref/hash, ambiguous unit keys, review codes, accepted/rejected summaries, required revision actions, allowed revision producers, and policy/schema/profile provenance.
+- Human, Codex, and provider revisions must all produce a full `TopicSelectionEvidenceMapExtractionDraft@v1`; patch DTOs, partial-update DTOs, reviewer-only DTOs, and direct service-input patches are forbidden.
+- Each revision creates a new `node_attempt_id` and records `revision_of_attempt_ref` plus `review_package_ref`; prior draft, context packet, materialization report, and review package artifacts are append-only.
+- The original context packet may be reused only when all upstream refs/hashes and policy/schema/profile fields match exactly. Any upstream change requires context recompilation.
+- Automated same-profile retry is limited to one attempt; further revision requires explicit operator-triggered workflow work, preventing an unbounded autonomous loop.
+
+## 2026-05-21 v1a Node 5 Alignment: EvidenceMap Handoff
+- Locked N5-D06 for `topic-selection.v1a.build-evidence-map.v1`.
+- Node 5 has exactly one downstream workflow handoff in v1: `TopicSelectionEvidenceMapHandoff@v1` to `topic-selection.v1a.generate-need-candidate.v1`.
+- The handoff is emitted only for `ready` or `ready_with_warning`; `review_required` and `blocked` emit review/repair routing only and no Node 6 handoff.
+- The handoff carries EvidenceMap authority refs, SearchRun/SearchPlan/Snapshot lineage refs, materialization report ref/hash, optional `TopicSelectionNeedValidationEvidenceBundle` read projection ref, role counts, abstract-only count, warning/issue summary, source refs hash, and version provenance.
+- Node 6 consumes `evidence_map_ref` and read projections. It must not consume extraction drafts, review packages, raw model output, cache artifacts, or audit artifacts as evidence facts.
+- `ready_with_warning` may proceed to Node 6, but warnings and issue summaries become downstream sufficiency constraints rather than strong evidence.
+- UI reads, audit reads, verification scripts, review packages, and repair targets are not workflow handoffs and must not bypass Node 6 or v1a gates.
+
+## 2026-05-21 v1a Node 5 Implementation Readiness Review
+- Locked N5-D07 for `topic-selection.v1a.build-evidence-map.v1`.
+- Implementation readiness is accepted as `implementation_ready`; after this implementation slice, automation callability is `callable` through the normalized `runBuildEvidenceMapScenario` runner and tests.
+- The initial implementation can avoid DB migration by storing extraction context, draft, materialization report, review package, and harness trace as non-authority artifacts/control-plane/audit refs.
+- EvidenceMap authority continues to flow through `TopicSelectionEvidenceMapService.createEvidenceMapFromSearchRun`; the existing direct API route remains compatibility/manual behavior, not the normalized automated path.
+- The locked implementation order is shared contracts/schema, model profile registry, deterministic materialization validator/mapper, context/adapter path, WorkflowHarness runner, and focused tests.
+
+## 2026-05-21 v1a Node 5 WorkflowHarness Implementation
+- Landed Node 5 as a single-agent-or-none workflow node, not a debate node.
+- Shared draft and handoff contracts now define the automation surface: model-like producers emit `TopicSelectionEvidenceMapExtractionDraft@v1`; deterministic materialization emits `EvidenceMapMaterializationReport@v1`; successful authority creation emits `TopicSelectionEvidenceMapHandoff@v1`.
+- The runner supports `execution_mode=none`, `mocked_llm`, `codex_assisted`, and `provider_llm` through the same draft contract.
+- `mocked_llm` remains test-only; it can exercise the AgentOrchestrator path without provider calls.
+- Node 5 blocks LLM-inference-only source claims before EvidenceMap authority persistence.
+- Review-required drafts are routed to a review package and require a full revised draft; patch DTOs and direct EvidenceMap service patches remain disallowed.
+- Agent invocation audit refs are now preserved in Node 5 node results and trace output so model-like extraction remains auditable without promoting raw model output to evidence authority.
+
+## 2026-05-21 v1a Node 5 Quality Review Fixes
+- Fixed N5 quality review findings without changing the locked workflow policy.
+- Materialization-only warnings now survive into the Node 6 handoff as downstream constraints.
+- Draft lineage validation now uses full functional refs instead of only `ref_id`.
+- Locator provenance refs are prechecked at materialization time so service-level authority validation should not discover known ref drift after a `ready` report.
+- Same-source support/challenge review now requires conflict coverage for the specific involved unit keys.
+
+## 2026-05-21 N5 to N6 Handoff Consumption Guard
+- Implemented the N5-D06 consumption rule in `WorkflowHarness`: `runGenerateNeedCandidateScenario` may accept `TopicSelectionEvidenceMapHandoff@v1` as transition provenance.
+- The runner now validates that the Node 6 EvidenceMap, SearchRun, and LiteratureResourcePoolSnapshot refs match the handoff before context compilation.
+- Node 6 business input refs reject EvidenceMap extraction drafts, extraction context packets, review packages, materialization reports, raw provider/model outputs, raw search logs, hidden reasoning, and debate transcripts.
+- The guard keeps a single semantic lane: N5 creates EvidenceMap authority plus handoff; N6 consumes authority refs and legal projections, not N5 draft/review/audit internals.
+
+## 2026-05-22 N7/N8 Human Confirmation Boundary
+- Locked the N7/N8 split for validation decisions.
+- N7 persists `TopicSelectionValidateNeedAdjudicationResultRecord`; `final_decision=validate` is still pending human confirmation and must not create `ValidatedNeed`.
+- N8 is the explicit confirmation action that writes `HumanConfirmedDecision` and materializes `TopicSelectionValidatedNeedRecord`.
+- `HumanConfirmationInput@v1.actor_mode` may be `human`, `hybrid`, or `human_delegated`. `hybrid` allows a human to review the decision and use Codex to draft auditable rationale/checklist content.
+- `human_delegated` allows a human to authorize Codex or a provider LLM to execute confirmation under fixed policy `n8-validate-only-delegation-v1` while the human remains the authorizer and accountability anchor.
+- Codex/provider confirmation content must remain reviewed input/provenance or delegated executor output. It cannot satisfy confirmation by itself and cannot bypass explicit human, hybrid, or human_delegated submission.
+- Human confirmation is therefore not a manual DB status edit; it is a separate auditable workflow action.
+
+## 2026-05-22 N7-D02 Agent Boundary
+- Locked Node 7 as a single-agent recommendation-capable node with no debate.
+- Allowed modes are `codex_assisted`, `provider_llm`, and `mocked_llm`; default local mode is `codex_assisted`.
+- `provider_llm` is an explicit quality upgrade, and `mocked_llm` remains test/acceptance-only.
+- Multi-agent debate remains outside Node 7 because adjudication should converge on routing an already selected candidate rather than reopen discovery.
+- Model-like output is recommendation material only and cannot create authority, create `ValidatedNeed`, or satisfy human confirmation.
+- `TopicSelectionNeedValidationService.adjudicateNeed` remains the sole adjudication authority writer.
+
+## 2026-05-22 N7-D03 Semantic Content Boundary
+- Locked Node 7 semantic content handling to avoid recommendation-to-authority drift.
+- Semantic recommendation content is allowed as provenance only, not authority.
+- The support packet, readiness assessment, NeedCandidate, and repository-resolved evidence/risk refs are the adjudication semantic SSOT.
+- Natural-language rationale can explain a decision but cannot create evidence refs, risk refs, merge targets, or SearchPlan recheck refs.
+- Authority fields are whitelist-mapped and ref-grounded only: `final_decision`, `rationale`, `required_actions`, `rejected_reason`, `gap_codes`, `accepted_risk_refs`, `residual_risk_refs`, `merge_target_need_candidate_ref`, and search-plan recheck reason/gap fields.
+- Conflicting or unmappable recommendation content must block or require human review instead of being silently normalized into a different adjudication meaning.
+
+## 2026-05-22 N7-D04 Final Decision Semantics
+- Locked Node 7 `final_decision` to existing backend values only: `validate`, `return_to_candidate`, `request_searchplan_recheck`, `reject`, `park`, and `merge`.
+- `validate` routes to Node 8 human confirmation and does not create `ValidatedNeed` in Node 7.
+- `return_to_candidate` means candidate-level repair and requires actionable rationale or `required_actions`.
+- `request_searchplan_recheck` means evidence/search coverage repair and requires `searchplan_recheck_reason` or gap codes.
+- `reject` means candidate not viable and requires `rejected_reason` or equivalent rationale.
+- `park` means preserve as a non-advancing hypothesis and requires park rationale or `required_actions`.
+- `merge` requires a same-title-card non-self merge target and must not auto-merge authority content.
+- `require_human_review` remains a node status/routing outcome, not an adjudication `final_decision`.
+
+## 2026-05-22 N7-D05 Validate To Human Confirmation Boundary
+- Locked `final_decision=validate` as a confirmable adjudication only, not a final validated need.
+- Node 7 must reserve `output_validated_need_id` as a stable target id for automation; the reserved id is not `TopicSelectionValidatedNeedRecord` authority.
+- After N7 `validate`, the NeedCandidate remains pending confirmation with `decision_status=ready_for_validation` and `review_status=needs_human_review`.
+- Node 8 must consume the validate adjudication plus explicit `human`, `hybrid`, or `human_delegated` confirmation before writing `HumanConfirmedDecision` and materializing `ValidatedNeed`.
+- Only Node 8 may move the candidate to `decision_status=resulted_in_validated_need`, `review_status=human_confirmed`, and `lifecycle_status=closed`.
+- v1b publication must consume Node 8 `ValidatedNeed`; it cannot publish from Node 7 adjudication output.
+- Node 7 has no automatic-confirm mode. Codex/provider recommendations can prepare the route to Node 8 but cannot satisfy confirmation.
+
+## 2026-05-22 N7-D06 State Compression Boundary
+- Locked state compression for Node 7 to prevent rich candidate statuses from leaking into model prompts or orchestration logic.
+- Model-like recommendation packets can output only `final_decision` and whitelist authority inputs. They cannot output `decision_status`, `review_status`, `lifecycle_status`, `freshness_status`, `loopback_target`, `result_validated_need_id`, or `open_recheck_request_refs`.
+- WorkflowHarness maps `final_decision` to a small `route_outcome` enum for automation: `advance_to_human_confirmation`, `repair_need_candidate`, `repair_search_plan`, `stop_rejected`, `hold_candidate`, `stop_merged`, `blocked`, or `require_human_review`.
+- Automated callers should branch on `route_outcome`, not on the full DB state tuple.
+- Candidate persistence status is deterministic derived state owned by `TopicSelectionNeedValidationService`.
+- `park` remains `hypothesis`/hold instead of closed terminal state; `validate` remains a Node 8 handoff instead of approval.
+- This avoids a dual-track risk where LLMs, scripts, harnesses, and domain services each interpret candidate statuses independently.
+
+## 2026-05-22 N7-D07 Recommendation To Authority Gate
+- Locked how adjudication recommendation packets become persisted authority.
+- Model-like recommendation packets are never authority by themselves. The runner is the only conversion gate and must validate before calling `TopicSelectionNeedValidationService.adjudicateNeed`.
+- Human or hybrid adjudication packets may persist all six final decisions after validation.
+- Fixture human decisions may do the same only in test/acceptance paths with explicit provenance.
+- Codex/provider recommendations may persist only low-risk decisions without extra human acceptance: `validate`, `request_searchplan_recheck`, and `return_to_candidate`.
+- Low-risk does not mean unconstrained: `validate` still waits for Node 8, recheck is a typed request only, and return-to-candidate requires actionable repair actions.
+- Codex/provider recommendations for `reject`, `merge`, and `park` require human or hybrid acceptance. Without it, the runner returns `require_human_review` and creates no adjudication authority.
+- Mocked LLM remains test/acceptance-only and cannot be treated as product authority.
+
+## 2026-05-22 N7-D08 Readiness Support Packet Freeze Boundary
+- Locked the N7 internal sequence as readiness assessment, validation support packet, recommendation gate, and adjudication.
+- Readiness/support packet creation remains in existing domain services. The runner orchestrates and validates; it does not become a new persistence or reasoning authority.
+- Default packet mode is fresh append-only creation. Existing readiness/support packets require explicit refs; auto-selecting the latest packet is forbidden.
+- Explicit refs must match candidate, title-card scope, lineage, policy/schema expectations, and freshness before use.
+- Non-ready readiness recommendations block before support/adjudication authority creation. The runner may return repair hints, but it must not turn readiness gate findings into adjudication decisions.
+- Readiness `reject` is only a gate finding. Persisted reject adjudication still requires human/hybrid acceptance under D07.
+- The support packet is the frozen evidence/risk/human-check boundary for recommendation and adjudication. After freeze, model-like recommendations and adjudication must not re-read live upstream evidence/search/resource state as business truth.
+- Upstream changes require a new readiness/support packet instead of in-place ref repair.
+
+## 2026-05-22 N7-D09 Recommendation Packet And Automation Handoff
+- Locked the split between model recommendation and automation handoff.
+- `TopicSelectionNeedAdjudicationRecommendationPacket@v1` is artifact/provenance only. It cannot be consumed directly by downstream automation and cannot contain orchestration commands.
+- Recommendation input is compiled from frozen support packet/readiness/candidate/sibling summaries only. No live upstream evidence/search/resource reads are allowed after support packet freeze.
+- Recommendation output is limited to adjudication whitelist fields and must not include `route_outcome`, `next_node_id`, `repair_target`, DB statuses, authority ids to create, or direct workflow commands.
+- Profile `topic-selection.need-adjudication.single-agent.v1` owns model invocation. Default mode is `codex_assisted`; provider is explicit quality upgrade; mocked is test/acceptance-only; schema output is required and fallback is disabled.
+- `TopicSelectionValidateNeedAdjudicationNodeResult@v1` is the downstream automation contract. It carries `status`, `route_outcome`, refs, reserved `validated_need` target ref for `validate`, next node or repair target, blockers/warnings, required actions, risk refs, recheck/merge refs, recommendation packet ref, and harness trace.
+- Automated flows branch only on the runner-derived node result, keeping LLM output out of the orchestration role.
+
+## 2026-05-22 N7-D10 Retry Idempotency And Duplicate Adjudication
+- Locked attempt identity and duplicate protection for automated N7 execution.
+- Every runner call requires `workflow_run_id` and `node_attempt_id`; node result, recommendation packet, readiness/support refs, adjudication refs, and harness trace bind to that attempt.
+- Reusing `node_attempt_id` means exact replay. It returns the existing node result only when input hash, node result, and trace match; it never writes authority.
+- Replay drift or missing replay evidence blocks.
+- New attempts before adjudication remain append-only. They may create fresh readiness/support packets but cannot reuse prior packets implicitly.
+- After an adjudication exists, second adjudication creation is forbidden. The runner returns a blocked duplicate result with existing refs when available.
+- Model retry is same-profile technical retry only, at most once before authority write. Automatic provider/Codex/mock fallback remains disabled.
+- Partial readiness/support artifacts created before a later blocked result remain audit facts and must be referenced instead of rolled back or silently reused.
+
+## 2026-05-22 N7-D11 Node Result Status Taxonomy
+- Locked Node 7 status vocabulary to `ready`, `blocked`, and `require_human_review`.
+- `ready` is the only auto-consumable status and carries a non-blocked route outcome.
+- `blocked` carries blocker codes, repair hints, and existing refs where available; duplicate/pending adjudication uses this status instead of a new duplicate status.
+- `require_human_review` is reserved for cases that need human/hybrid acceptance before materialization or advancement.
+- Warnings, replay, duplicate handling, and route-specific outcomes are represented by `warning_codes`, `replay_provenance`, blocker codes, refs, and `route_outcome`, not by expanding status values.
+- `validate` awaiting Node 8 is a ready handoff, not `require_human_review`; Node 8 remains responsible for actual human confirmation.
+
+## 2026-05-22 N7-D12 Implementation Readiness Review
+- Accepted Node 7 implementation readiness; after the harness runner landed, WorkflowHarness automation callability is `callable`.
+- Current code already provides the domain authority spine: readiness assessment, validation support packet, adjudication, human confirmation, and v1b publication routes/services.
+- Current code also provides duplicate adjudication protection, AgentOrchestrator, model profile registry, and WorkflowHarness trace artifact patterns.
+- The harness implementation now includes shared recommendation/node-result contracts, `topic-selection.need-adjudication.single-agent.v1`, a `needValidation` harness dependency, runner orchestration, D08-D11 validators, and replay/duplicate lookup behavior.
+- No DB migration is expected for the first implementation if node result and recommendation packet remain artifact/control-plane scoped.
+- If replay requires a new durable node-result index, stop and use DB SSOT rather than adding ad hoc storage.
+- The D12 test matrix passed for the harness runner; product route exposure remains separate from policy callability.
+
+## 2026-05-22 N7-D12 Risk Amendments
+- AM01 closes the readiness enum gap. The implementation must cover every shared readiness recommendation, including `merge_required` and `park`; all non-ready values block before support/adjudication and remain gate findings rather than adjudication decisions.
+- AM02 closes the direct-route bypass risk. Support-packet lineage must be checked in WorkflowHarness and in `TopicSelectionNeedValidationService.adjudicateNeed`, covering candidate, readiness, evidence map, search run, search plan, literature snapshot, and policy/schema refs.
+- AM03 closes the replay ambiguity risk. Exact replay depends on recoverable node result, trace, and input hash by `workflow_run_id + node_attempt_id`; if the current persistence/artifact layer cannot provide that, use DB SSOT before the runner becomes callable.
+
+## 2026-05-22 N7 Runner Implementation Consumed By Policy
+- T-088 implemented `runValidateNeedAdjudicationScenario` for `topic-selection.v1a.validate-need-adjudication.v1`.
+- The implementation matches the T-089 policy split: Node 7 remains single-agent, not debate-eligible; recommendation packets are provenance artifacts; `TopicSelectionValidateNeedAdjudicationNodeResult@v1` is the only downstream automation handoff.
+- The runner enforces the D07 high-risk gate, D08 frozen support-packet boundary, D09 recommendation/handoff split, D10 exact replay and duplicate protection, and D11 status taxonomy.
+- Support-packet lineage validation now exists both in WorkflowHarness and in `TopicSelectionNeedValidationService.adjudicateNeed`, closing the direct-route compatibility bypass risk.
+- No `NeedCandidateSet`, alternate adjudication writer, raw reasoning handoff, automatic fallback, direct ValidatedNeed creation, or SearchPlan mutation path was added.
+- Node 7 policy can now mark WorkflowHarness automation callability as `callable`; product route exposure for a generic node runner remains separate from the semantic node policy.
+
+## 2026-05-22 N7 Quality Review Hardening
+- The runner now rejects recommendation packets whose `profile_id`, `policy_version`, or `output_schema_version` drift from the runner input, closing a policy-identity compatibility lane.
+- Exact replay still performs no authority writes, but current scenario assertions are recalculated from the replayed node result so test expectations cannot silently reuse a stale pass.
+- Added harness tests for these two review findings.
+
+## 2026-05-22 N8-D01 Reserved ValidatedNeed Id
+- Locked `output_validated_need_id` as a reserved target id produced by N7 validate adjudication and consumed by N8 human confirmation.
+- The reserved id supports robust automation, replay, and duplicate detection; it is not proof that a `TopicSelectionValidatedNeedRecord` exists.
+- N8 must materialize `TopicSelectionValidatedNeedRecord` with the reserved id and must not mint a different `validated_need_id`.
+- Missing reserved id blocks N8. Existing materialized `ValidatedNeed` for that id is handled as duplicate/idempotency territory, never as a second creation path.
+- Code sync: N7 node results expose `reserved_validated_need_ref` in the runner handoff while keeping `TopicSelectionValidatedNeedRecord` creation exclusively in N8.
+
+## 2026-05-22 N8-D02 Materialization Authority Boundary
+- Tightened N8 wording from "create id" to "materialize reserved id" to avoid dual authority paths.
+- N7 owns id reservation through `TopicSelectionValidateNeedAdjudicationResultRecord.output_validated_need_id`; N8 owns only `TopicSelectionValidatedNeedRecord` persistence with that exact id.
+- N8 must not generate, replace, reinterpret, or accept an alternate `validated_need_id`.
+- Existence and duplicate checks must query `TopicSelectionValidatedNeedRecord`, because a reserved id alone is not materialized authority.
+- This keeps N8 as the only path for `HumanConfirmedDecision` and `TopicSelectionValidatedNeedRecord` authority while preserving N7->N8 automation stability.
+
+## 2026-05-22 N8-D03 Human Delegated Confirmation
+- Added `human_delegated` as a third confirmation actor mode beside `human` and `hybrid`.
+- `human_delegated` means a human grants Codex or a provider LLM authority to execute confirmation under fixed policy `n8-validate-only-delegation-v1`; the model is the delegated executor, not the accountability anchor.
+- Required delegated inputs are now carried through `HumanConfirmationInput@v1`: `accountable_human_ref`, `rationale`, `required_check_results`, `accepted_risk_refs`, and `delegated_executor` with `executor_type`, `provenance_ref`, and `policy_id`.
+- Delegation is validate-confirmation only. It cannot accept newly introduced risk, override required human checks, resolve merge/reject/park choices, or mutate upstream evidence/search/candidate content.
+- N8 still owns only deterministic validation plus `HumanConfirmedDecision`/`TopicSelectionValidatedNeedRecord` authority writes. Authorized model/Codex execution may occur in a pre-node or harness wrapper, but it must submit an auditable confirmation payload and cannot write authority directly.
+- Implementation closure: route/service validation and `runHumanConfirmNeedScenario` now enforce `human_delegated` with fixed policy provenance before authority creation.
+
+## 2026-05-22 N8-D04 Minimal Confirmation Input
+- Simplified the N8 confirmation contract to one node-level value contract: `HumanConfirmationInput@v1`.
+- Removed the heavier split into separate actor/grant/payload contracts; no standalone delegation contract or DB authority is introduced.
+- `HumanConfirmationInput@v1` contains `actor_mode`, `accountable_human_ref`, `rationale`, `accepted_risk_refs`, `required_check_results`, and optional `delegated_executor`.
+- `delegated_executor` is required only for `actor_mode=human_delegated` and contains only `executor_type`, `provenance_ref`, and `policy_id=n8-validate-only-delegation-v1`.
+- Authorization scope is fixed by policy instead of caller-defined input. This keeps the personal/local delegated mode auditable without creating a general authorization subsystem.
+
+## 2026-05-23 N8-D05 Bounded Semantic Review
+- Corrected the N8 execution boundary: N8 does have semantic work because N7 brings semantic rationale, support-packet checks, and residual-risk language into confirmation.
+- Added `HumanConfirmationSemanticReview@v1` as a node-level trace/audit artifact, not a DB authority and not a second adjudication result.
+- The semantic review may parse N7 rationale, support-packet required checks, residual risk refs, confirmation rationale, and delegated executor output for alignment.
+- Default semantic review mode is `codex_assisted`; provider LLM is an explicit quality upgrade; deterministic parsing is allowed for trivial cases; mocked LLM is test/acceptance-only.
+- Semantic review can return pass, warning, or blocked. Scope violations and missing required risk/check coverage block materialization; ambiguous rationale alignment routes to `require_human_review`.
+- The review must not re-evaluate NeedCandidate value, re-read EvidenceMap to infer new evidence roles, change N7 final_decision, invent accepted risks, mutate upstream content, or run debate.
+- The authority gate remains deterministic: `HumanConfirmationSemanticReview@v1` is evidence for the gate, while `HumanConfirmedDecision` and `TopicSelectionValidatedNeedRecord` are still written only after N8 validators pass.
+
+## 2026-05-23 N8-D06 Semantic Review Invocation And Failure Policy
+- Locked profile `topic-selection.confirmation-semantic-review.single-agent.v1` for N8 semantic review.
+- The reviewer consumes frozen `HumanConfirmationSemanticReviewContextPacket@v1` containing adjudication, support-packet, NeedCandidate, `HumanConfirmationInput@v1`, delegated executor provenance, policy, and schema snapshots.
+- Default execution is `codex_assisted`. Provider LLM is explicit quality upgrade only, deterministic parser is limited to trivial fully structured checks, and mocked LLM is test/acceptance-only.
+- The reviewer must emit structured `HumanConfirmationSemanticReview@v1`; hidden reasoning, raw provider logs, mutable live DB readers, raw fulltext, and debate transcripts are forbidden in the context packet.
+- Retry is limited to the same profile and same mode once for transient or malformed structured-output failures.
+- Automatic fallback across providers, Codex, mocked output, keyword/default acceptance, or deterministic acceptance is forbidden.
+- Exact-match cache reuse may be used only when context hash, profile id, execution mode, policy version, and output schema version match; provider-quality runs must not treat cached non-provider responses as provider-backed.
+- Failure never silently bypasses review for materialization: malformed output after retry routes to `require_human_review`; context build failure blocks; blocked semantic output blocks; ambiguous alignment routes to `require_human_review`.
+
+## 2026-05-23 N8-D07 Node Result And Node 9 Handoff
+- Locked `TopicSelectionHumanConfirmNeedNodeResult@v1` as the only N8 output consumed by downstream automation.
+- N8 status vocabulary is compressed to `ready`, `blocked`, and `require_human_review`; warnings, duplicate, replay, and route-specific outcomes must be represented by codes/provenance, not new statuses.
+- `ready` means `HumanConfirmedDecision` exists, the reserved `ValidatedNeed` id has been materialized, semantic review is `pass` or `warning`, and `route_outcome=advance_to_publish_v1b_input_bundle`.
+- `blocked` covers hard failures such as invalid payload, ref mismatch, reserved-id problems, duplicate materialization, missing risk/check coverage, semantic scope violations, or repository safety failures.
+- `require_human_review` covers ambiguous semantic alignment, insufficient confirmation rationale, or model review failures after allowed retry.
+- Ready N8 handoff sets `next_node_id=topic-selection.v1a.publish-v1b-input-bundle.v1`; blocked/review results carry no next node or direct workflow command.
+- N8 must not create `TopicSelectionV1aToV1bInputBundleRecord`; Node 9 remains the only v1b input bundle publisher.
+
+## 2026-05-23 N8-D08 Simple Retry And Idempotency
+- Locked N8 retry/idempotency to four simple rules instead of a complex recovery system.
+- Same `node_attempt_id + input_hash` is exact replay: return the existing `TopicSelectionHumanConfirmNeedNodeResult@v1` and perform no writes or semantic-review invocation.
+- If the reserved `output_validated_need_id` is already materialized as `TopicSelectionValidatedNeedRecord`, return `blocked + DUPLICATE_VALIDATED_NEED`; do not compare confirmation input or semantic review hashes to return idempotent ready.
+- `blocked` and `require_human_review` attempts are append-only trace/audit evidence. Later retry must use a new `node_attempt_id` and cannot implicitly reuse failed attempt state as latest.
+- If `HumanConfirmedDecision` exists but `TopicSelectionValidatedNeedRecord` was not materialized, return `blocked + PARTIAL_CONFIRMATION_WRITE`; recovery requires explicit human/operator repair and no automatic backfill.
+
+## 2026-05-23 N8-D09 Implementation Readiness Review
+- At readiness-review time, accepted N8 policy as `implementation_ready` while keeping automation callability at `not_callable` until runtime gaps were closed.
+- Required implementation gaps are shared N8 contracts/schemas, semantic-review profile, route/service actor validation for `human_delegated`, fixed delegation policy guard, duplicate/partial-write guards, `runHumanConfirmNeedScenario`, semantic review artifacting, and exact replay.
+- Existing repo support appears sufficient to start: human confirmation route/service exists, N7 emits reserved validated-need refs, WorkflowHarness trace/replay patterns exist, and AgentOrchestrator/profile registry exist.
+- DB migration is not assumed. First implementation step must verify whether existing HumanConfirmedDecision snapshots and trace artifacts can carry `HumanConfirmationInput@v1`, semantic review context, semantic review result, and node result refs.
+- Minimum close matrix covers contract schemas, happy path, delegated path, semantic review negatives, retry/duplicate behavior, and boundary checks for no EvidenceMap reread, no N7 mutation, no v1b creation, and no debate.
+
+## 2026-05-23 N8 WorkflowHarness Implementation
+- Implemented shared N8 contracts/schemas for `HumanConfirmationInput@v1`, `HumanConfirmationSemanticReviewContextPacket@v1`, `HumanConfirmationSemanticReview@v1`, and `TopicSelectionHumanConfirmNeedNodeResult@v1`.
+- Added model profile `topic-selection.confirmation-semantic-review.single-agent.v1`.
+- Extended human confirmation service/route to consume normalized `HumanConfirmationInput@v1` while retaining legacy `human_actor`/`human_rationale` compatibility.
+- Implemented fixed `human_delegated` policy guard, semantic-review artifact refs, duplicate reserved-id guard, and partial `HumanConfirmedDecision` write guard without DB migration.
+- Implemented `runHumanConfirmNeedScenario` with semantic context/review artifacts, deterministic parser support, exact replay, Node 9 handoff, and no v1b bundle creation.
+- N8 can now move to `automation_callability=callable`; Node 9 remains `not_callable`.
+
+## 2026-05-23 N8 Quality Closure
+- Aligned `HumanConfirmationInput@v1` schema with service validation: `delegated_executor` is rejected for non-`human_delegated` actor modes.
+- Hardened legacy confirmation fallback so accepted risk coverage includes support-packet residual risks and adjudication residual risks.
+- Added semantic-review lineage validation for workflow run, node attempt, context packet ref, execution mode, profile id, policy version, and output schema version before authority writes.
+- Included `run_mode`, `executor_kind`, and `model_option_id` in the N8 node input and replay hash to prevent cross-mode or cross-model replay.
+
+## 2026-05-23 N9-D01 Deterministic v1a Terminal Handoff
+- Locked `topic-selection.v1a.publish-v1b-input-bundle.v1` as a deterministic node: no LLM, Codex, provider call, semantic parser, or debate runtime.
+- N8 is the v1a domain-result terminal node because it materializes `TopicSelectionValidatedNeedRecord`.
+- N9 is the final forward node of the v1a main chain and the v1a-to-v1b handoff terminal node because it publishes `TopicSelectionV1aToV1bInputBundleRecord`.
+- N9 must not re-evaluate topic value, reinterpret human confirmation, mutate v1a authority, or create v1b domain objects such as `ResearchSlice` or `TopicQuestionContract`.
+- v1a quality signals, accepted risk, recheck requests, and memory suggestions remain side-channel governance/repair flows, not later main-chain nodes.
+
+## 2026-05-23 N9-D02 Handoff Input Contract
+- Locked N9 input as `PublishV1bInputBundleNodeInput@v1`, a handoff contract rather than a thin `validated_need_id` wrapper.
+- The input must declare `validated_need_ref`, source candidate ref, adjudication result ref, support packet ref, human decision ref, evidence/search/literature refs, role/risk/memory/recheck refs, expected bundle version, policy version, and output schema version.
+- N9 may read DB records to verify refs and construct the bundle, but DB live reads must not replace the caller-declared handoff refs.
+- The resulting `TopicSelectionV1aToV1bInputBundleRecord` is the v1b entry boundary; v1b should not reconstruct v1a context by independently reading multiple v1a authority records when a bundle exists.
+
+## 2026-05-23 N9-D03 Traceability Contract
+- N9 must preserve business lineage trace inside `TopicSelectionV1aToV1bInputBundleRecord`.
+- N9 WorkflowHarness must preserve automation execution trace through node input snapshot, input hash, bundle version, bundle payload hash, idempotency result, carried refs, assertions, blockers, and `harness_trace_artifact_ref`.
+- Trace artifacts must not include hidden reasoning, raw provider logs, raw debate transcripts, or new semantic explanations.
+
+## 2026-05-23 N9-D04 Replay And Idempotency
+- Same `node_attempt_id + input_hash` is exact replay: return the existing N9 node result and perform no bundle write.
+- Same `validated_need_ref + expected_bundle_version` with an existing bundle returns `ready` with `idempotency_result=reused_existing_bundle`; no new bundle is created.
+- WorkflowHarness automation requires explicit `expected_bundle_version`; omitting it blocks with `INVALID_PAYLOAD` to avoid service default-version minting in automated flows.
+- Same `node_attempt_id` with changed input hash blocks with `REPLAY_INPUT_HASH_MISMATCH`.
+- Publishing a new version for the same ValidatedNeed is allowed only when a new `expected_bundle_version` is explicit and lineage/hash validation passes.
+
+## 2026-05-23 N9-D05 Stable Failure Semantics
+- N9 failures are limited to a small stable set for automation robustness: `INVALID_PAYLOAD`, `NOT_FOUND`, `VERSION_CONFLICT`, and `GATE_CONSTRAINT_FAILED`.
+- `INVALID_PAYLOAD` covers missing required refs, missing `expected_bundle_version`, invalid ref type, or malformed policy/schema fields.
+- `NOT_FOUND` covers missing required authority records.
+- `VERSION_CONFLICT` covers declared ref lineage mismatch and same-attempt input-hash mismatch.
+- `GATE_CONSTRAINT_FAILED` covers present but ineligible handoff authority, such as missing/non-confirm human decision, missing evidence role bundle, or unresolved blockers that cannot be carried to v1b.
+- Semantic duplicate detection across different bundle versions is out of scope for v1; exact version reuse is sufficient.
+
+## 2026-05-23 N9-D06 Implementation Readiness Review
+- At readiness-review time, decision was ready to implement and N9 remained `automation_callability=not_callable` only until `runPublishV1bInputBundleScenario` landed.
+- Complexity is controlled: deterministic node, no LLM/Codex/provider/debate branch, and a single handoff authority write.
+- Shared contracts required: `PublishV1bInputBundleNodeInput@v1` and `TopicSelectionPublishV1bInputBundleNodeResult@v1`.
+- The node result must expose v1b input bundle ref, bundle version, bundle payload hash, idempotency result, carried refs, blockers, warnings, replay provenance, and harness trace artifact ref.
+- The node result must not hard-code the first v1b node until v1b node policies are normalized; the bundle ref is the v1b entry boundary.
+- Route/service compatibility stays intact: public service input remains `validated_need_id`, `bundle_version`, and `created_by`.
+- Harness owns strict handoff refs, explicit `expected_bundle_version`, input hash, replay, and trace; it calls the existing service and must not write bundles directly.
+- Service should add minimal lineage and human-decision guards from existing records, but must not require the full Harness handoff contract on the public route.
+- No DB migration is required; existing v1b bundle records and control-plane trace artifacts are sufficient.
+
+## 2026-05-23 N9 WorkflowHarness Implementation
+- Implemented `PublishV1bInputBundleNodeInput@v1` and `TopicSelectionPublishV1bInputBundleNodeResult@v1` in shared research-lifecycle contracts with schema tests.
+- Implemented `runPublishV1bInputBundleScenario` with explicit handoff refs, deterministic lineage validation, exact replay, expected-version idempotency, trace artifact, and terminal result without `next_node_id`.
+- Added minimal service guard so bundle publication requires coherent ValidatedNeed/source/support/adjudication lineage and a `confirm` HumanConfirmedDecision.
+- Preserved the existing public route/service input shape and avoided a second bundle persistence path.
+- N9 is now callable in WorkflowHarness and remains deterministic: no AgentOrchestrator, Codex, provider LLM, semantic parser, or debate runtime.

@@ -12,6 +12,23 @@ import {
   type TopicSelectionEvidenceRoleBundle,
 } from './topic-selection-evidence-map-contracts.js';
 
+export const TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION =
+  'TopicSelectionNeedAdjudicationRecommendationPacket@v1' as const;
+export const TOPIC_SELECTION_VALIDATE_NEED_ADJUDICATION_NODE_RESULT_SCHEMA_VERSION =
+  'TopicSelectionValidateNeedAdjudicationNodeResult@v1' as const;
+export const TOPIC_SELECTION_HUMAN_CONFIRMATION_INPUT_SCHEMA_VERSION =
+  'HumanConfirmationInput@v1' as const;
+export const TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_CONTEXT_PACKET_SCHEMA_VERSION =
+  'HumanConfirmationSemanticReviewContextPacket@v1' as const;
+export const TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION =
+  'HumanConfirmationSemanticReview@v1' as const;
+export const TOPIC_SELECTION_HUMAN_CONFIRM_NEED_NODE_RESULT_SCHEMA_VERSION =
+  'TopicSelectionHumanConfirmNeedNodeResult@v1' as const;
+export const TOPIC_SELECTION_PUBLISH_V1B_INPUT_BUNDLE_NODE_INPUT_SCHEMA_VERSION =
+  'PublishV1bInputBundleNodeInput@v1' as const;
+export const TOPIC_SELECTION_PUBLISH_V1B_INPUT_BUNDLE_NODE_RESULT_SCHEMA_VERSION =
+  'TopicSelectionPublishV1bInputBundleNodeResult@v1' as const;
+
 export const TOPIC_SELECTION_NEED_CANDIDATE_LIFECYCLE_STATUSES = [
   'hypothesis',
   'closed',
@@ -96,6 +113,109 @@ export const TOPIC_SELECTION_NEED_ADJUDICATION_DECISIONS = [
 ] as const;
 export type TopicSelectionNeedAdjudicationDecision =
   (typeof TOPIC_SELECTION_NEED_ADJUDICATION_DECISIONS)[number];
+
+export const TOPIC_SELECTION_VALIDATE_NEED_ADJUDICATION_NODE_STATUSES = [
+  'ready',
+  'blocked',
+  'require_human_review',
+] as const;
+export type TopicSelectionValidateNeedAdjudicationNodeStatus =
+  (typeof TOPIC_SELECTION_VALIDATE_NEED_ADJUDICATION_NODE_STATUSES)[number];
+
+export const TOPIC_SELECTION_VALIDATE_NEED_ADJUDICATION_ROUTE_OUTCOMES = [
+  'advance_to_human_confirmation',
+  'repair_need_candidate',
+  'repair_search_plan',
+  'stop_rejected',
+  'hold_candidate',
+  'stop_merged',
+  'blocked',
+  'require_human_review',
+] as const;
+export type TopicSelectionValidateNeedAdjudicationRouteOutcome =
+  (typeof TOPIC_SELECTION_VALIDATE_NEED_ADJUDICATION_ROUTE_OUTCOMES)[number];
+
+export const TOPIC_SELECTION_HUMAN_CONFIRMATION_ACTOR_MODES = [
+  'human',
+  'hybrid',
+  'human_delegated',
+] as const;
+export type TopicSelectionHumanConfirmationActorMode =
+  (typeof TOPIC_SELECTION_HUMAN_CONFIRMATION_ACTOR_MODES)[number];
+
+export const TOPIC_SELECTION_HUMAN_CONFIRMATION_DELEGATED_EXECUTOR_TYPES = [
+  'codex',
+  'provider_llm',
+] as const;
+export type TopicSelectionHumanConfirmationDelegatedExecutorType =
+  (typeof TOPIC_SELECTION_HUMAN_CONFIRMATION_DELEGATED_EXECUTOR_TYPES)[number];
+
+export const TOPIC_SELECTION_HUMAN_CONFIRMATION_REQUIRED_CHECK_RESULTS = [
+  'accepted',
+  'not_applicable',
+] as const;
+export type TopicSelectionHumanConfirmationRequiredCheckResult =
+  (typeof TOPIC_SELECTION_HUMAN_CONFIRMATION_REQUIRED_CHECK_RESULTS)[number];
+
+export const TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_STATUSES = [
+  'pass',
+  'warning',
+  'blocked',
+] as const;
+export type TopicSelectionHumanConfirmationSemanticReviewStatus =
+  (typeof TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_STATUSES)[number];
+
+export const TOPIC_SELECTION_HUMAN_CONFIRMATION_RISK_COVERAGE_STATUSES = [
+  'complete',
+  'missing_required_acceptance',
+] as const;
+export type TopicSelectionHumanConfirmationRiskCoverageStatus =
+  (typeof TOPIC_SELECTION_HUMAN_CONFIRMATION_RISK_COVERAGE_STATUSES)[number];
+
+export const TOPIC_SELECTION_HUMAN_CONFIRMATION_REQUIRED_CHECK_COVERAGE_STATUSES = [
+  'complete',
+  'incomplete',
+] as const;
+export type TopicSelectionHumanConfirmationRequiredCheckCoverageStatus =
+  (typeof TOPIC_SELECTION_HUMAN_CONFIRMATION_REQUIRED_CHECK_COVERAGE_STATUSES)[number];
+
+export const TOPIC_SELECTION_HUMAN_CONFIRM_NEED_NODE_STATUSES = [
+  'ready',
+  'blocked',
+  'require_human_review',
+] as const;
+export type TopicSelectionHumanConfirmNeedNodeStatus =
+  (typeof TOPIC_SELECTION_HUMAN_CONFIRM_NEED_NODE_STATUSES)[number];
+
+export const TOPIC_SELECTION_HUMAN_CONFIRM_NEED_ROUTE_OUTCOMES = [
+  'advance_to_publish_v1b_input_bundle',
+  'blocked',
+  'require_human_review',
+] as const;
+export type TopicSelectionHumanConfirmNeedRouteOutcome =
+  (typeof TOPIC_SELECTION_HUMAN_CONFIRM_NEED_ROUTE_OUTCOMES)[number];
+
+export const TOPIC_SELECTION_PUBLISH_V1B_INPUT_BUNDLE_NODE_STATUSES = [
+  'ready',
+  'blocked',
+] as const;
+export type TopicSelectionPublishV1bInputBundleNodeStatus =
+  (typeof TOPIC_SELECTION_PUBLISH_V1B_INPUT_BUNDLE_NODE_STATUSES)[number];
+
+export const TOPIC_SELECTION_PUBLISH_V1B_INPUT_BUNDLE_ROUTE_OUTCOMES = [
+  'published_v1b_input_bundle',
+  'blocked',
+] as const;
+export type TopicSelectionPublishV1bInputBundleRouteOutcome =
+  (typeof TOPIC_SELECTION_PUBLISH_V1B_INPUT_BUNDLE_ROUTE_OUTCOMES)[number];
+
+export const TOPIC_SELECTION_PUBLISH_V1B_INPUT_BUNDLE_IDEMPOTENCY_RESULTS = [
+  'created_new_bundle',
+  'reused_existing_bundle',
+  'not_applicable',
+] as const;
+export type TopicSelectionPublishV1bInputBundleIdempotencyResult =
+  (typeof TOPIC_SELECTION_PUBLISH_V1B_INPUT_BUNDLE_IDEMPOTENCY_RESULTS)[number];
 
 export const TOPIC_SELECTION_NEED_LOOPBACK_TARGETS = [
   'none',
@@ -896,6 +1016,229 @@ export interface TopicSelectionV1aToV1bInputBundleRecord {
   created_at: string;
 }
 
+export interface TopicSelectionNeedAdjudicationRecommendationPacket {
+  schema_version: typeof TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION;
+  workflow_run_id: string;
+  node_attempt_id: string;
+  recommendation_packet_id: string;
+  need_candidate_ref: TopicSelectionFunctionalRef;
+  validation_support_packet_ref: TopicSelectionFunctionalRef;
+  readiness_assessment_ref?: TopicSelectionFunctionalRef | null;
+  execution_mode: TopicSelectionAgentExecutionMode;
+  profile_id: string;
+  final_decision: TopicSelectionNeedAdjudicationDecision;
+  rationale: string;
+  required_actions: string[];
+  gap_codes: string[];
+  accepted_risk_refs: TopicSelectionFunctionalRef[];
+  residual_risk_refs: TopicSelectionFunctionalRef[];
+  rejected_reason?: TopicSelectionNeedRejectedReason | null;
+  merge_target_need_candidate_ref?: TopicSelectionFunctionalRef | null;
+  searchplan_recheck_reason?: string | null;
+  searchplan_recheck_gap_codes: string[];
+  source_refs: TopicSelectionFunctionalRef[];
+  recommendation_payload: Record<string, unknown>;
+  policy_version: string;
+  output_schema_version: string;
+}
+
+export interface TopicSelectionValidateNeedAdjudicationReplayProvenance {
+  replayed: boolean;
+  source_workflow_run_id?: string | null;
+  source_node_attempt_id?: string | null;
+  source_trace_artifact_ref?: TopicSelectionFunctionalRef | null;
+  input_hash?: string | null;
+}
+
+export interface TopicSelectionValidateNeedAdjudicationNodeResult {
+  schema_version: typeof TOPIC_SELECTION_VALIDATE_NEED_ADJUDICATION_NODE_RESULT_SCHEMA_VERSION;
+  node_id: 'topic-selection.v1a.validate-need-adjudication.v1';
+  workflow_run_id: string;
+  node_attempt_id: string;
+  status: TopicSelectionValidateNeedAdjudicationNodeStatus;
+  route_outcome: TopicSelectionValidateNeedAdjudicationRouteOutcome;
+  need_candidate_ref: TopicSelectionFunctionalRef | null;
+  readiness_assessment_ref: TopicSelectionFunctionalRef | null;
+  validation_support_packet_ref: TopicSelectionFunctionalRef | null;
+  adjudication_result_ref: TopicSelectionFunctionalRef | null;
+  reserved_validated_need_ref?: TopicSelectionFunctionalRef | null;
+  next_node_id?: string | null;
+  repair_target?: string | null;
+  final_decision?: TopicSelectionNeedAdjudicationDecision | null;
+  required_actions: string[];
+  blocker_codes: string[];
+  warning_codes: string[];
+  review_reason_codes: string[];
+  accepted_risk_refs: TopicSelectionFunctionalRef[];
+  residual_risk_refs: TopicSelectionFunctionalRef[];
+  merge_target_need_candidate_ref?: TopicSelectionFunctionalRef | null;
+  recheck_request_ref?: TopicSelectionFunctionalRef | null;
+  memory_suggestion_ref?: TopicSelectionFunctionalRef | null;
+  recommendation_packet_ref?: TopicSelectionFunctionalRef | null;
+  harness_trace_artifact_ref?: TopicSelectionFunctionalRef | null;
+  replay_provenance?: TopicSelectionValidateNeedAdjudicationReplayProvenance | null;
+  duplicate_adjudication_ref?: TopicSelectionFunctionalRef | null;
+  error_code?: string | null;
+  error_message?: string | null;
+}
+
+export interface HumanConfirmationDelegatedExecutor {
+  executor_type: TopicSelectionHumanConfirmationDelegatedExecutorType;
+  provenance_ref: TopicSelectionFunctionalRef;
+  policy_id: 'n8-validate-only-delegation-v1';
+}
+
+export interface HumanConfirmationRequiredCheckResult {
+  check_id: string;
+  result: TopicSelectionHumanConfirmationRequiredCheckResult;
+}
+
+export interface HumanConfirmationInput {
+  schema_version: typeof TOPIC_SELECTION_HUMAN_CONFIRMATION_INPUT_SCHEMA_VERSION;
+  actor_mode: TopicSelectionHumanConfirmationActorMode;
+  accountable_human_ref: TopicSelectionActorRef;
+  rationale: string;
+  accepted_risk_refs: TopicSelectionFunctionalRef[];
+  required_check_results: HumanConfirmationRequiredCheckResult[];
+  delegated_executor?: HumanConfirmationDelegatedExecutor | null;
+}
+
+export interface HumanConfirmationSemanticReviewContextPacket {
+  schema_version: typeof TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_CONTEXT_PACKET_SCHEMA_VERSION;
+  workflow_run_id: string;
+  node_attempt_id: string;
+  context_packet_id: string;
+  adjudication_result_ref: TopicSelectionFunctionalRef;
+  validation_support_packet_ref: TopicSelectionFunctionalRef;
+  need_candidate_ref: TopicSelectionFunctionalRef;
+  output_validated_need_ref: TopicSelectionFunctionalRef;
+  final_decision: 'validate';
+  adjudication_rationale: string;
+  need_candidate_summary: string;
+  required_human_checks: string[];
+  residual_risk_refs: TopicSelectionFunctionalRef[];
+  accepted_risk_refs: TopicSelectionFunctionalRef[];
+  confirmation_input: HumanConfirmationInput;
+  policy_version: string;
+  output_schema_version: string;
+  context_packet_hash: string;
+  created_at: string;
+}
+
+export interface HumanConfirmationSemanticReview {
+  schema_version: typeof TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION;
+  workflow_run_id: string;
+  node_attempt_id: string;
+  review_id: string;
+  context_packet_ref: TopicSelectionFunctionalRef;
+  execution_mode: TopicSelectionAgentExecutionMode | 'deterministic_parser';
+  profile_id: string;
+  status: TopicSelectionHumanConfirmationSemanticReviewStatus;
+  alignment_codes: string[];
+  risk_coverage: TopicSelectionHumanConfirmationRiskCoverageStatus;
+  required_check_coverage: TopicSelectionHumanConfirmationRequiredCheckCoverageStatus;
+  scope_violations: string[];
+  rationale_summary: string;
+  provenance_ref: TopicSelectionFunctionalRef;
+  warning_codes: string[];
+  blocker_codes: string[];
+  review_reason_codes: string[];
+  policy_version: string;
+  output_schema_version: string;
+}
+
+export interface TopicSelectionHumanConfirmNeedReplayProvenance {
+  replayed: boolean;
+  source_workflow_run_id?: string | null;
+  source_node_attempt_id?: string | null;
+  source_trace_artifact_ref?: TopicSelectionFunctionalRef | null;
+  input_hash?: string | null;
+}
+
+export interface TopicSelectionHumanConfirmNeedNodeResult {
+  schema_version: typeof TOPIC_SELECTION_HUMAN_CONFIRM_NEED_NODE_RESULT_SCHEMA_VERSION;
+  node_id: 'topic-selection.v1a.human-confirm-need.v1';
+  workflow_run_id: string;
+  node_attempt_id: string;
+  status: TopicSelectionHumanConfirmNeedNodeStatus;
+  route_outcome: TopicSelectionHumanConfirmNeedRouteOutcome;
+  adjudication_result_ref: TopicSelectionFunctionalRef | null;
+  need_candidate_ref: TopicSelectionFunctionalRef | null;
+  validation_support_packet_ref: TopicSelectionFunctionalRef | null;
+  human_decision_ref: TopicSelectionFunctionalRef | null;
+  validated_need_ref: TopicSelectionFunctionalRef | null;
+  semantic_review_context_packet_ref: TopicSelectionFunctionalRef | null;
+  semantic_review_ref: TopicSelectionFunctionalRef | null;
+  confirmation_input_hash: string | null;
+  accepted_risk_refs: TopicSelectionFunctionalRef[];
+  residual_risk_refs: TopicSelectionFunctionalRef[];
+  required_check_results_snapshot: HumanConfirmationRequiredCheckResult[];
+  blocker_codes: string[];
+  warning_codes: string[];
+  review_reason_codes: string[];
+  next_node_id?: string | null;
+  harness_trace_artifact_ref?: TopicSelectionFunctionalRef | null;
+  replay_provenance?: TopicSelectionHumanConfirmNeedReplayProvenance | null;
+  error_code?: string | null;
+  error_message?: string | null;
+}
+
+export interface PublishV1bInputBundleNodeInput {
+  schema_version: typeof TOPIC_SELECTION_PUBLISH_V1B_INPUT_BUNDLE_NODE_INPUT_SCHEMA_VERSION;
+  workflow_run_id: string;
+  node_attempt_id: string;
+  title_card_ref: TopicSelectionFunctionalRef;
+  validated_need_ref: TopicSelectionFunctionalRef;
+  source_need_candidate_ref: TopicSelectionFunctionalRef;
+  adjudication_result_ref: TopicSelectionFunctionalRef;
+  support_packet_ref: TopicSelectionFunctionalRef;
+  human_decision_ref: TopicSelectionFunctionalRef;
+  evidence_map_ref: TopicSelectionFunctionalRef;
+  search_run_ref: TopicSelectionFunctionalRef;
+  search_plan_ref: TopicSelectionFunctionalRef;
+  literature_snapshot_ref: TopicSelectionFunctionalRef;
+  evidence_role_bundle: TopicSelectionEvidenceRoleBundle;
+  risk_refs: TopicSelectionFunctionalRef[];
+  memory_suggestion_refs: TopicSelectionFunctionalRef[];
+  recheck_request_refs: TopicSelectionFunctionalRef[];
+  expected_bundle_version: string;
+  policy_version: string;
+  output_schema_version: string;
+  created_by?: TopicSelectionActorType;
+}
+
+export interface TopicSelectionPublishV1bInputBundleReplayProvenance {
+  replayed: boolean;
+  source_workflow_run_id?: string | null;
+  source_node_attempt_id?: string | null;
+  source_trace_artifact_ref?: TopicSelectionFunctionalRef | null;
+  input_hash?: string | null;
+}
+
+export interface TopicSelectionPublishV1bInputBundleNodeResult {
+  schema_version: typeof TOPIC_SELECTION_PUBLISH_V1B_INPUT_BUNDLE_NODE_RESULT_SCHEMA_VERSION;
+  node_id: 'topic-selection.v1a.publish-v1b-input-bundle.v1';
+  workflow_run_id: string;
+  node_attempt_id: string;
+  status: TopicSelectionPublishV1bInputBundleNodeStatus;
+  route_outcome: TopicSelectionPublishV1bInputBundleRouteOutcome;
+  validated_need_ref: TopicSelectionFunctionalRef | null;
+  v1b_input_bundle_ref: TopicSelectionFunctionalRef | null;
+  bundle_version: string | null;
+  bundle_payload_hash: string | null;
+  idempotency_result: TopicSelectionPublishV1bInputBundleIdempotencyResult;
+  carried_authority_refs: TopicSelectionFunctionalRef[];
+  risk_refs: TopicSelectionFunctionalRef[];
+  memory_suggestion_refs: TopicSelectionFunctionalRef[];
+  recheck_request_refs: TopicSelectionFunctionalRef[];
+  blocker_codes: string[];
+  warning_codes: string[];
+  harness_trace_artifact_ref?: TopicSelectionFunctionalRef | null;
+  replay_provenance?: TopicSelectionPublishV1bInputBundleReplayProvenance | null;
+  error_code?: string | null;
+  error_message?: string | null;
+}
+
 const stringId = { type: 'string', minLength: 1 } as const;
 const nullableStringId = { anyOf: [stringId, { type: 'null' }] } as const;
 const numberValue = { type: 'number' } as const;
@@ -916,6 +1259,471 @@ const artifactFunctionalRefSchema = {
 const artifactRefArray = { type: 'array', items: artifactFunctionalRefSchema } as const;
 const nullableArtifactRef = { anyOf: [artifactFunctionalRefSchema, { type: 'null' }] } as const;
 const nullableString = { anyOf: [stringId, { type: 'null' }] } as const;
+
+export const topicSelectionNeedAdjudicationRecommendationPacketSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'workflow_run_id',
+    'node_attempt_id',
+    'recommendation_packet_id',
+    'need_candidate_ref',
+    'validation_support_packet_ref',
+    'execution_mode',
+    'profile_id',
+    'final_decision',
+    'rationale',
+    'required_actions',
+    'gap_codes',
+    'accepted_risk_refs',
+    'residual_risk_refs',
+    'searchplan_recheck_gap_codes',
+    'source_refs',
+    'recommendation_payload',
+    'policy_version',
+    'output_schema_version',
+  ],
+  properties: {
+    schema_version: { const: TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION },
+    workflow_run_id: stringId,
+    node_attempt_id: stringId,
+    recommendation_packet_id: stringId,
+    need_candidate_ref: topicSelectionFunctionalRefSchema,
+    validation_support_packet_ref: topicSelectionFunctionalRefSchema,
+    readiness_assessment_ref: nullableFunctionalRef,
+    execution_mode: { enum: [...TOPIC_SELECTION_AGENT_EXECUTION_MODES] },
+    profile_id: stringId,
+    final_decision: { enum: [...TOPIC_SELECTION_NEED_ADJUDICATION_DECISIONS] },
+    rationale: stringId,
+    required_actions: stringArray,
+    gap_codes: stringArray,
+    accepted_risk_refs: functionalRefArray,
+    residual_risk_refs: functionalRefArray,
+    rejected_reason: { anyOf: [{ enum: [...TOPIC_SELECTION_NEED_REJECTED_REASONS] }, { type: 'null' }] },
+    merge_target_need_candidate_ref: nullableFunctionalRef,
+    searchplan_recheck_reason: nullableString,
+    searchplan_recheck_gap_codes: stringArray,
+    source_refs: functionalRefArray,
+    recommendation_payload: objectPayload,
+    policy_version: stringId,
+    output_schema_version: stringId,
+  },
+} as const;
+
+export const topicSelectionValidateNeedAdjudicationReplayProvenanceSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['replayed'],
+  properties: {
+    replayed: booleanValue,
+    source_workflow_run_id: nullableStringId,
+    source_node_attempt_id: nullableStringId,
+    source_trace_artifact_ref: nullableFunctionalRef,
+    input_hash: nullableStringId,
+  },
+} as const;
+
+export const topicSelectionValidateNeedAdjudicationNodeResultSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'node_id',
+    'workflow_run_id',
+    'node_attempt_id',
+    'status',
+    'route_outcome',
+    'need_candidate_ref',
+    'readiness_assessment_ref',
+    'validation_support_packet_ref',
+    'adjudication_result_ref',
+    'required_actions',
+    'blocker_codes',
+    'warning_codes',
+    'review_reason_codes',
+    'accepted_risk_refs',
+    'residual_risk_refs',
+  ],
+  properties: {
+    schema_version: { const: TOPIC_SELECTION_VALIDATE_NEED_ADJUDICATION_NODE_RESULT_SCHEMA_VERSION },
+    node_id: { const: 'topic-selection.v1a.validate-need-adjudication.v1' },
+    workflow_run_id: stringId,
+    node_attempt_id: stringId,
+    status: { enum: [...TOPIC_SELECTION_VALIDATE_NEED_ADJUDICATION_NODE_STATUSES] },
+    route_outcome: { enum: [...TOPIC_SELECTION_VALIDATE_NEED_ADJUDICATION_ROUTE_OUTCOMES] },
+    need_candidate_ref: nullableFunctionalRef,
+    readiness_assessment_ref: nullableFunctionalRef,
+    validation_support_packet_ref: nullableFunctionalRef,
+    adjudication_result_ref: nullableFunctionalRef,
+    reserved_validated_need_ref: nullableFunctionalRef,
+    next_node_id: nullableStringId,
+    repair_target: nullableStringId,
+    final_decision: { anyOf: [{ enum: [...TOPIC_SELECTION_NEED_ADJUDICATION_DECISIONS] }, { type: 'null' }] },
+    required_actions: stringArray,
+    blocker_codes: stringArray,
+    warning_codes: stringArray,
+    review_reason_codes: stringArray,
+    accepted_risk_refs: functionalRefArray,
+    residual_risk_refs: functionalRefArray,
+    merge_target_need_candidate_ref: nullableFunctionalRef,
+    recheck_request_ref: nullableFunctionalRef,
+    memory_suggestion_ref: nullableFunctionalRef,
+    recommendation_packet_ref: nullableFunctionalRef,
+    harness_trace_artifact_ref: nullableFunctionalRef,
+    replay_provenance: {
+      anyOf: [topicSelectionValidateNeedAdjudicationReplayProvenanceSchema, { type: 'null' }],
+    },
+    duplicate_adjudication_ref: nullableFunctionalRef,
+    error_code: nullableStringId,
+    error_message: nullableStringId,
+  },
+} as const;
+
+export const humanConfirmationDelegatedExecutorSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['executor_type', 'provenance_ref', 'policy_id'],
+  properties: {
+    executor_type: { enum: [...TOPIC_SELECTION_HUMAN_CONFIRMATION_DELEGATED_EXECUTOR_TYPES] },
+    provenance_ref: topicSelectionFunctionalRefSchema,
+    policy_id: { const: 'n8-validate-only-delegation-v1' },
+  },
+} as const;
+
+export const humanConfirmationRequiredCheckResultSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['check_id', 'result'],
+  properties: {
+    check_id: stringId,
+    result: { enum: [...TOPIC_SELECTION_HUMAN_CONFIRMATION_REQUIRED_CHECK_RESULTS] },
+  },
+} as const;
+
+const humanConfirmationRequiredCheckResultArray = {
+  type: 'array',
+  items: humanConfirmationRequiredCheckResultSchema,
+} as const;
+
+export const humanConfirmationInputSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'actor_mode',
+    'accountable_human_ref',
+    'rationale',
+    'accepted_risk_refs',
+    'required_check_results',
+  ],
+  properties: {
+    schema_version: { const: TOPIC_SELECTION_HUMAN_CONFIRMATION_INPUT_SCHEMA_VERSION },
+    actor_mode: { enum: [...TOPIC_SELECTION_HUMAN_CONFIRMATION_ACTOR_MODES] },
+    accountable_human_ref: topicSelectionActorRefSchema,
+    rationale: stringId,
+    accepted_risk_refs: functionalRefArray,
+    required_check_results: humanConfirmationRequiredCheckResultArray,
+    delegated_executor: {
+      anyOf: [humanConfirmationDelegatedExecutorSchema, { type: 'null' }],
+    },
+  },
+  allOf: [
+    {
+      if: {
+        properties: {
+          actor_mode: { const: 'human_delegated' },
+        },
+      },
+      then: {
+        required: ['delegated_executor'],
+        properties: {
+          delegated_executor: humanConfirmationDelegatedExecutorSchema,
+        },
+      },
+      else: {
+        properties: {
+          delegated_executor: { type: 'null' },
+        },
+      },
+    },
+  ],
+} as const;
+
+export const humanConfirmationSemanticReviewContextPacketSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'workflow_run_id',
+    'node_attempt_id',
+    'context_packet_id',
+    'adjudication_result_ref',
+    'validation_support_packet_ref',
+    'need_candidate_ref',
+    'output_validated_need_ref',
+    'final_decision',
+    'adjudication_rationale',
+    'need_candidate_summary',
+    'required_human_checks',
+    'residual_risk_refs',
+    'accepted_risk_refs',
+    'confirmation_input',
+    'policy_version',
+    'output_schema_version',
+    'context_packet_hash',
+    'created_at',
+  ],
+  properties: {
+    schema_version: { const: TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_CONTEXT_PACKET_SCHEMA_VERSION },
+    workflow_run_id: stringId,
+    node_attempt_id: stringId,
+    context_packet_id: stringId,
+    adjudication_result_ref: topicSelectionFunctionalRefSchema,
+    validation_support_packet_ref: topicSelectionFunctionalRefSchema,
+    need_candidate_ref: topicSelectionFunctionalRefSchema,
+    output_validated_need_ref: topicSelectionFunctionalRefSchema,
+    final_decision: { const: 'validate' },
+    adjudication_rationale: stringId,
+    need_candidate_summary: stringId,
+    required_human_checks: stringArray,
+    residual_risk_refs: functionalRefArray,
+    accepted_risk_refs: functionalRefArray,
+    confirmation_input: humanConfirmationInputSchema,
+    policy_version: stringId,
+    output_schema_version: stringId,
+    context_packet_hash: stringId,
+    created_at: stringId,
+  },
+} as const;
+
+export const humanConfirmationSemanticReviewSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'workflow_run_id',
+    'node_attempt_id',
+    'review_id',
+    'context_packet_ref',
+    'execution_mode',
+    'profile_id',
+    'status',
+    'alignment_codes',
+    'risk_coverage',
+    'required_check_coverage',
+    'scope_violations',
+    'rationale_summary',
+    'provenance_ref',
+    'warning_codes',
+    'blocker_codes',
+    'review_reason_codes',
+    'policy_version',
+    'output_schema_version',
+  ],
+  properties: {
+    schema_version: { const: TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION },
+    workflow_run_id: stringId,
+    node_attempt_id: stringId,
+    review_id: stringId,
+    context_packet_ref: topicSelectionFunctionalRefSchema,
+    execution_mode: { enum: [...TOPIC_SELECTION_AGENT_EXECUTION_MODES, 'deterministic_parser'] },
+    profile_id: stringId,
+    status: { enum: [...TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_STATUSES] },
+    alignment_codes: stringArray,
+    risk_coverage: { enum: [...TOPIC_SELECTION_HUMAN_CONFIRMATION_RISK_COVERAGE_STATUSES] },
+    required_check_coverage: { enum: [...TOPIC_SELECTION_HUMAN_CONFIRMATION_REQUIRED_CHECK_COVERAGE_STATUSES] },
+    scope_violations: stringArray,
+    rationale_summary: stringId,
+    provenance_ref: topicSelectionFunctionalRefSchema,
+    warning_codes: stringArray,
+    blocker_codes: stringArray,
+    review_reason_codes: stringArray,
+    policy_version: stringId,
+    output_schema_version: stringId,
+  },
+} as const;
+
+export const topicSelectionHumanConfirmNeedReplayProvenanceSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['replayed'],
+  properties: {
+    replayed: booleanValue,
+    source_workflow_run_id: nullableStringId,
+    source_node_attempt_id: nullableStringId,
+    source_trace_artifact_ref: nullableFunctionalRef,
+    input_hash: nullableStringId,
+  },
+} as const;
+
+export const topicSelectionHumanConfirmNeedNodeResultSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'node_id',
+    'workflow_run_id',
+    'node_attempt_id',
+    'status',
+    'route_outcome',
+    'adjudication_result_ref',
+    'need_candidate_ref',
+    'validation_support_packet_ref',
+    'human_decision_ref',
+    'validated_need_ref',
+    'semantic_review_context_packet_ref',
+    'semantic_review_ref',
+    'confirmation_input_hash',
+    'accepted_risk_refs',
+    'residual_risk_refs',
+    'required_check_results_snapshot',
+    'blocker_codes',
+    'warning_codes',
+    'review_reason_codes',
+  ],
+  properties: {
+    schema_version: { const: TOPIC_SELECTION_HUMAN_CONFIRM_NEED_NODE_RESULT_SCHEMA_VERSION },
+    node_id: { const: 'topic-selection.v1a.human-confirm-need.v1' },
+    workflow_run_id: stringId,
+    node_attempt_id: stringId,
+    status: { enum: [...TOPIC_SELECTION_HUMAN_CONFIRM_NEED_NODE_STATUSES] },
+    route_outcome: { enum: [...TOPIC_SELECTION_HUMAN_CONFIRM_NEED_ROUTE_OUTCOMES] },
+    adjudication_result_ref: nullableFunctionalRef,
+    need_candidate_ref: nullableFunctionalRef,
+    validation_support_packet_ref: nullableFunctionalRef,
+    human_decision_ref: nullableFunctionalRef,
+    validated_need_ref: nullableFunctionalRef,
+    semantic_review_context_packet_ref: nullableFunctionalRef,
+    semantic_review_ref: nullableFunctionalRef,
+    confirmation_input_hash: nullableStringId,
+    accepted_risk_refs: functionalRefArray,
+    residual_risk_refs: functionalRefArray,
+    required_check_results_snapshot: humanConfirmationRequiredCheckResultArray,
+    blocker_codes: stringArray,
+    warning_codes: stringArray,
+    review_reason_codes: stringArray,
+    next_node_id: nullableStringId,
+    harness_trace_artifact_ref: nullableFunctionalRef,
+    replay_provenance: {
+      anyOf: [topicSelectionHumanConfirmNeedReplayProvenanceSchema, { type: 'null' }],
+    },
+    error_code: nullableStringId,
+    error_message: nullableStringId,
+  },
+} as const;
+
+export const publishV1bInputBundleNodeInputSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'workflow_run_id',
+    'node_attempt_id',
+    'title_card_ref',
+    'validated_need_ref',
+    'source_need_candidate_ref',
+    'adjudication_result_ref',
+    'support_packet_ref',
+    'human_decision_ref',
+    'evidence_map_ref',
+    'search_run_ref',
+    'search_plan_ref',
+    'literature_snapshot_ref',
+    'evidence_role_bundle',
+    'risk_refs',
+    'memory_suggestion_refs',
+    'recheck_request_refs',
+    'expected_bundle_version',
+    'policy_version',
+    'output_schema_version',
+  ],
+  properties: {
+    schema_version: { const: TOPIC_SELECTION_PUBLISH_V1B_INPUT_BUNDLE_NODE_INPUT_SCHEMA_VERSION },
+    workflow_run_id: stringId,
+    node_attempt_id: stringId,
+    title_card_ref: topicSelectionFunctionalRefSchema,
+    validated_need_ref: topicSelectionFunctionalRefSchema,
+    source_need_candidate_ref: topicSelectionFunctionalRefSchema,
+    adjudication_result_ref: topicSelectionFunctionalRefSchema,
+    support_packet_ref: topicSelectionFunctionalRefSchema,
+    human_decision_ref: topicSelectionFunctionalRefSchema,
+    evidence_map_ref: topicSelectionFunctionalRefSchema,
+    search_run_ref: topicSelectionFunctionalRefSchema,
+    search_plan_ref: topicSelectionFunctionalRefSchema,
+    literature_snapshot_ref: topicSelectionFunctionalRefSchema,
+    evidence_role_bundle: topicSelectionEvidenceRoleBundleSchema,
+    risk_refs: functionalRefArray,
+    memory_suggestion_refs: functionalRefArray,
+    recheck_request_refs: functionalRefArray,
+    expected_bundle_version: stringId,
+    policy_version: stringId,
+    output_schema_version: stringId,
+    created_by: { enum: ['human', 'llm', 'system', 'hybrid'] },
+  },
+} as const;
+
+export const topicSelectionPublishV1bInputBundleReplayProvenanceSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['replayed'],
+  properties: {
+    replayed: booleanValue,
+    source_workflow_run_id: nullableStringId,
+    source_node_attempt_id: nullableStringId,
+    source_trace_artifact_ref: nullableFunctionalRef,
+    input_hash: nullableStringId,
+  },
+} as const;
+
+export const topicSelectionPublishV1bInputBundleNodeResultSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'node_id',
+    'workflow_run_id',
+    'node_attempt_id',
+    'status',
+    'route_outcome',
+    'validated_need_ref',
+    'v1b_input_bundle_ref',
+    'bundle_version',
+    'bundle_payload_hash',
+    'idempotency_result',
+    'carried_authority_refs',
+    'risk_refs',
+    'memory_suggestion_refs',
+    'recheck_request_refs',
+    'blocker_codes',
+    'warning_codes',
+  ],
+  properties: {
+    schema_version: { const: TOPIC_SELECTION_PUBLISH_V1B_INPUT_BUNDLE_NODE_RESULT_SCHEMA_VERSION },
+    node_id: { const: 'topic-selection.v1a.publish-v1b-input-bundle.v1' },
+    workflow_run_id: stringId,
+    node_attempt_id: stringId,
+    status: { enum: [...TOPIC_SELECTION_PUBLISH_V1B_INPUT_BUNDLE_NODE_STATUSES] },
+    route_outcome: { enum: [...TOPIC_SELECTION_PUBLISH_V1B_INPUT_BUNDLE_ROUTE_OUTCOMES] },
+    validated_need_ref: nullableFunctionalRef,
+    v1b_input_bundle_ref: nullableFunctionalRef,
+    bundle_version: nullableStringId,
+    bundle_payload_hash: nullableStringId,
+    idempotency_result: { enum: [...TOPIC_SELECTION_PUBLISH_V1B_INPUT_BUNDLE_IDEMPOTENCY_RESULTS] },
+    carried_authority_refs: functionalRefArray,
+    risk_refs: functionalRefArray,
+    memory_suggestion_refs: functionalRefArray,
+    recheck_request_refs: functionalRefArray,
+    blocker_codes: stringArray,
+    warning_codes: stringArray,
+    harness_trace_artifact_ref: nullableFunctionalRef,
+    replay_provenance: {
+      anyOf: [topicSelectionPublishV1bInputBundleReplayProvenanceSchema, { type: 'null' }],
+    },
+    error_code: nullableStringId,
+    error_message: nullableStringId,
+  },
+} as const;
 
 const topicSelectionNeedCandidateDraftSchema = {
   type: 'object',

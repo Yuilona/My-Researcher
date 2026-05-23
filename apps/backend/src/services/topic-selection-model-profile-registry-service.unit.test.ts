@@ -3,7 +3,10 @@ import test from 'node:test';
 import { AppError } from '../errors/app-error.js';
 import {
   createDefaultTopicSelectionModelProfileRegistry,
+  TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
   TopicSelectionModelProfileRegistryService,
 } from './topic-selection-model-profile-registry-service.js';
 import type {
@@ -30,6 +33,36 @@ test('model profile registry validates default DMP v1 profiles and resolves prov
   });
   assert.equal(singleAgent.profile.output_contract, 'RankedCandidateDraftBatch@v1');
   assert.equal(singleAgent.selected_model_option, null);
+
+  const evidenceExtraction = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+  });
+  assert.equal(evidenceExtraction.profile.output_contract, 'TopicSelectionEvidenceMapExtractionDraft@v1');
+  assert.equal(evidenceExtraction.profile.profile_function, 'evidence_map_extraction_single_agent');
+  assert.equal(evidenceExtraction.selected_model_option?.provider_id, 'openai');
+  assert.equal(evidenceExtraction.selected_model_option?.normalized_params.reasoning_depth, 'high');
+
+  const adjudication = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+  });
+  assert.equal(adjudication.profile.output_contract, 'TopicSelectionNeedAdjudicationRecommendationPacket@v1');
+  assert.equal(adjudication.profile.profile_function, 'need_adjudication_single_agent');
+  assert.equal(adjudication.selected_model_option?.normalized_params.creativity, 'low');
+  assert.equal(adjudication.selected_model_option?.normalized_params.reasoning_depth, 'high');
+
+  const confirmationReview = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+  });
+  assert.equal(confirmationReview.profile.output_contract, 'HumanConfirmationSemanticReview@v1');
+  assert.equal(confirmationReview.profile.profile_function, 'human_confirmation_semantic_review_single_agent');
+  assert.equal(confirmationReview.selected_model_option?.normalized_params.creativity, 'low');
+  assert.equal(confirmationReview.selected_model_option?.normalized_params.reasoning_depth, 'high');
 
   const resolved = service.resolveProfile({
     profile_id: 'topic-selection.need-discovery.explorer.v1',

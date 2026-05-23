@@ -226,6 +226,10 @@ export class TopicSelectionControlPlaneService {
     return this.repository.findArtifactRefById(artifactRefId);
   }
 
+  async listArtifactRefsByWorkflowRunId(workflowRunId: string): Promise<TopicSelectionArtifactRefRecord[]> {
+    return this.repository.listArtifactRefsByWorkflowRunId(workflowRunId);
+  }
+
   async recordWorkflowRun(input: RecordWorkflowRunInput): Promise<RecordWorkflowRunResult> {
     const now = this.now();
     const workflowRun: TopicSelectionLlmWorkflowRunRecord = {
@@ -351,6 +355,15 @@ export class TopicSelectionControlPlaneService {
     humanConfirmedDecisionId: string,
   ): Promise<TopicSelectionHumanConfirmedDecisionRecord | null> {
     return this.repository.findHumanConfirmedDecisionById(humanConfirmedDecisionId);
+  }
+
+  async listHumanDecisionsByTargetRef(
+    targetRef: TopicSelectionFunctionalRef,
+  ): Promise<TopicSelectionHumanConfirmedDecisionRecord[]> {
+    return this.repository.listHumanConfirmedDecisionsByTargetRef({
+      ref_type: targetRef.ref_type,
+      ref_id: targetRef.ref_id,
+    });
   }
 
   async recordHumanDecision(input: HumanDecisionInput): Promise<TopicSelectionHumanConfirmedDecisionRecord> {
