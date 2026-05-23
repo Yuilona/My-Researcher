@@ -46,6 +46,21 @@
   - model-option overrides on non-provider slots return stable `INVALID_PAYLOAD`;
   - E2E summary records `debate_slot_model_option_overrides` for replay/audit.
 
+## 2026-05-23 Slot Model Option Negative E2E
+- Update: added wrapper-only negative E2E coverage for invalid v1a debate slot model-option configurations and fixed explicit unknown option error semantics.
+- Command: `node --check .ai/scripts/topic-selection-v1a-harness-negative-e2e.mjs`
+- Result: passed.
+- Command: `pnpm --dir apps/backend exec node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts`
+- Result: passed; 15 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_NEGATIVE_RUN_ID=v1a-negative-slot-options-20260523205126 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c pnpm topic-selection:v1a-harness-negative-e2e`
+- Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-negative-e2e/v1a-negative-slot-options-20260523205126`.
+- Coverage:
+  - model option on `codex_assisted` explorer fails before harness startup;
+  - cross-profile model option on provider deep critic fails at `harness generate-need-candidate`;
+  - both negative cases leave `NeedCandidate`, `ValidatedNeed`, and v1b input bundle counts at zero.
+
 ## 2026-05-20 DMP Runtime Foundation Slice 1: Profile Registry/Schema Validator
 - Update: added shared DMP profile contracts, backend profile registry validator/resolver, default v1 need-discovery profiles, and focused tests.
 - Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts`

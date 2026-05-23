@@ -149,6 +149,9 @@ test('model profile registry rejects unknown provider and explicit unknown model
       run_mode: 'product',
       model_option_id: 'missing-option',
     }),
-    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+    (error: unknown) =>
+      error instanceof AppError
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && error.message === 'model_option_id is not defined by model profile.',
   );
 });

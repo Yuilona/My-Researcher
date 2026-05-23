@@ -31,6 +31,21 @@
   - malformed override values and non-provider override use return `INVALID_PAYLOAD`;
   - mixed Codex/provider debate E2E completed through v1a publish-v1b-input-bundle with three persisted candidate refs.
 
+## 2026-05-23 v1a Generate-Need-Candidate Negative E2E
+- Update: added negative E2E coverage for invalid slot model-option use and fixed profile resolver error specificity.
+- Command: `node --check .ai/scripts/topic-selection-v1a-harness-negative-e2e.mjs`
+- Result: passed.
+- Command: `pnpm --dir apps/backend exec node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts`
+- Result: passed; 15 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_NEGATIVE_RUN_ID=v1a-negative-slot-options-20260523205126 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c pnpm topic-selection:v1a-harness-negative-e2e`
+- Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-negative-e2e/v1a-negative-slot-options-20260523205126`.
+- Coverage:
+  - invalid model option on a Codex-assisted slot fails before harness startup;
+  - cross-profile model option on a provider slot fails inside `generate-need-candidate`;
+  - no `NeedCandidate`, `ValidatedNeed`, or v1b input bundle authority writes occur in either case.
+
 ## Matrix Acceptance Checks
 - Every topic-selection workflow node has one row in `06-workflow-matrix.md`.
 - The matrix contains the complete D-11 canonical node list before executor classification work begins.

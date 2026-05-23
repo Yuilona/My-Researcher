@@ -28,6 +28,14 @@
   - model-option overrides are legal only for slots whose effective execution mode is `provider_llm`.
 - This removes the previous OpenAI-only E2E workaround without adding provider-specific execution modes or automatic fallback.
 
+## 2026-05-23 v1a Generate-Need-Candidate Negative E2E Coverage
+- Added a repeatable negative E2E wrapper for slot model-option policy.
+- The wrapper asserts that invalid model-option configuration stops before downstream authority writes:
+  - Codex-assisted slot plus model option stops before harness startup;
+  - provider slot plus model option from another slot profile stops at `generate-need-candidate`.
+- The second case also verifies the failure remains inside v1a and does not produce `NeedCandidate`, `ValidatedNeed`, or a v1b input bundle.
+- Fixed profile resolver error semantics so an explicit unknown `model_option_id` reports `model_option_id is not defined by model profile.` rather than the generic no-options message.
+
 ## 2026-05-19 Joint Alignment
 - Consumes D-01 and D-02 from `dev-docs/active/topic-selection-workflow-runtime-foundation/06-joint-decisions.md`.
 - T-089 remains responsible for workflow classification and debate decisions, not runtime implementation.

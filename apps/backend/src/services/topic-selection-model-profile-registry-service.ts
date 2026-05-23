@@ -550,15 +550,17 @@ export class TopicSelectionModelProfileRegistryService {
     profile: TopicSelectionModelProfile,
     modelOptionId?: string | null,
   ): TopicSelectionModelOption {
-    const option = modelOptionId
-      ? profile.model_options.find((item) => item.option_id === modelOptionId)
-      : profile.model_options.find((item) => item.use_when.includes('default_provider_run'))
-        ?? profile.model_options[0];
+    if (modelOptionId) {
+      const explicitOption = profile.model_options.find((item) => item.option_id === modelOptionId);
+      if (!explicitOption) {
+        throw new AppError(400, 'INVALID_PAYLOAD', 'model_option_id is not defined by model profile.');
+      }
+      return explicitOption;
+    }
+    const option = profile.model_options.find((item) => item.use_when.includes('default_provider_run'))
+      ?? profile.model_options[0];
     if (!option) {
       throw new AppError(400, 'INVALID_PAYLOAD', 'provider_llm profile does not define a model option.');
-    }
-    if (modelOptionId && option.option_id !== modelOptionId) {
-      throw new AppError(400, 'INVALID_PAYLOAD', 'model_option_id is not defined by model profile.');
     }
     return option;
   }

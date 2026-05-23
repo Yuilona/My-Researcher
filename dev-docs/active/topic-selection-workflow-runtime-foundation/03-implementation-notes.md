@@ -39,6 +39,14 @@
 - The script summary artifact records `debate_slot_model_option_overrides` so mixed Codex/provider debate runs are reproducible without encoding provider-specific behavior in business workflow branches.
 - Automatic provider fallback remains forbidden; changing a slot's model option is an explicit operator/script configuration and produces normal invocation provenance.
 
+## 2026-05-23 Phase 4 Follow-up: Slot Model Option Negative E2E
+- Added `pnpm topic-selection:v1a-harness-negative-e2e` as a wrapper-only negative runner around the existing v1a harness E2E entrypoint.
+- The negative runner does not define workflow semantics; it launches `.ai/scripts/topic-selection-v1a-harness-e2e.mjs` with invalid slot model-option configurations and asserts failure behavior.
+- Covered cases:
+  - model option supplied for a `codex_assisted` slot fails before harness startup and writes no summary/authority rows;
+  - cross-profile model option supplied to a provider slot fails at `harness generate-need-candidate` and writes no `NeedCandidate`, `ValidatedNeed`, or v1b input bundle.
+- The negative run exposed an imprecise profile-resolution error for explicit unknown model options. `TopicSelectionModelProfileRegistryService` now distinguishes missing explicit options from profiles with no provider options.
+
 ## 2026-05-19 Joint Alignment
 - Locked D-01 and D-02 in `06-joint-decisions.md`.
 - Scope remains planning/runtime-boundary alignment only; no product implementation changes yet.
