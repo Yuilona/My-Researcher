@@ -210,6 +210,26 @@ function normalizeOpenAiResponseFormatName(schemaName: string): string {
   return normalized.length > 0 ? normalized : 'structured_output';
 }
 
+function withJsonObjectInstruction(
+  messages: Array<{ role: 'system' | 'user'; content: string }>,
+  schemaName: string,
+  schema: Record<string, unknown>,
+): Array<{ role: 'system' | 'user'; content: string }> {
+  const instruction = [
+    'Return only valid JSON.',
+    `schema_name: ${schemaName}.`,
+    `The JSON object must satisfy this JSON Schema exactly: ${JSON.stringify(schema)}.`,
+  ].join(' ');
+  const systemIndex = messages.findIndex((message) => message.role === 'system');
+  if (systemIndex < 0) {
+    return [{ role: 'system', content: instruction }, ...messages];
+  }
+
+  return messages.map((message, index) => index === systemIndex
+    ? { ...message, content: `${message.content}\n\n${instruction}` }
+    : message);
+}
+
 export class BackendLlmGateway {
   constructor(
     private readonly options: {
@@ -437,7 +457,7 @@ export class BackendLlmGateway {
       signal,
       body: JSON.stringify({
         model: request.model.modelId,
-        messages: request.messages,
+        messages: withJsonObjectInstruction(request.messages, request.schemaName, request.schema),
         response_format: { type: 'json_object' },
         extra_body: {
           enable_thinking: true,

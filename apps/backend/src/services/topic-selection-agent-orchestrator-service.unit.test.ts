@@ -5,10 +5,14 @@ import type {
   LlmStructuredOutputRequest,
   LlmStructuredOutputResponse,
 } from './llm-gateway.js';
+import { LlmGatewayError } from './llm-gateway.js';
 import { AppError } from '../errors/app-error.js';
 import { InMemoryTopicSelectionControlPlaneRepository } from '../repositories/in-memory-topic-selection-control-plane-repository.js';
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
-import { TopicSelectionAgentOrchestratorService } from './topic-selection-agent-orchestrator-service.js';
+import {
+  TopicSelectionAgentOrchestratorService,
+  type TopicSelectionAgentOrchestratorLlmGateway,
+} from './topic-selection-agent-orchestrator-service.js';
 import { TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID } from './topic-selection-model-profile-registry-service.js';
 
 type CandidateDraftBatch = {
@@ -36,7 +40,22 @@ class StubLlmGateway {
   }
 }
 
-function makeOrchestrator(options: { llmGateway?: StubLlmGateway } = {}) {
+class FailingLlmGateway {
+  readonly calls: LlmStructuredOutputRequest[] = [];
+
+  async createStructuredOutput<T>(
+    request: LlmStructuredOutputRequest,
+  ): Promise<LlmStructuredOutputResponse<T>> {
+    this.calls.push(request);
+    throw new LlmGatewayError(
+      'InvalidRequestError',
+      'Provider rejected request with Bearer sk-test-secret and api_key=local-secret: unsupported request option.',
+      { statusCode: 400, telemetry: telemetry() },
+    );
+  }
+}
+
+function makeOrchestrator(options: { llmGateway?: TopicSelectionAgentOrchestratorLlmGateway } = {}) {
   const repository = new InMemoryTopicSelectionControlPlaneRepository();
   let sequence = 0;
   const controlPlane = new TopicSelectionControlPlaneService(repository, {
@@ -298,6 +317,28 @@ test('agent orchestrator enforces profile output contract and explicit provider 
   assert.equal(providerGateway.calls.at(-1)?.model.providerId, 'dashscope');
   assert.equal(providerGateway.calls.at(-1)?.model.modelId, 'qwen3.6-plus');
   assert.deepEqual(providerGateway.calls.at(-1)?.providerOverrides, { enable_thinking: true });
+});
+
+test('agent orchestrator records a sanitized provider failure summary for blocked invocations', async () => {
+  const providerGateway = new FailingLlmGateway();
+  const { orchestrator } = makeOrchestrator({ llmGateway: providerGateway });
+
+  const result = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+  });
+
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.structured_output, null);
+  assert.equal(result.error_code, 'InvalidRequestError');
+  assert.deepEqual(result.blocker_codes, ['InvalidRequestError']);
+  assert.equal(result.validation.valid, false);
+  assert.equal(result.validation.error_count, 1);
+  assert.match(result.validation.errors[0] ?? '', /^InvalidRequestError status=400:/);
+  assert.equal(JSON.stringify(result.validation).includes('sk-test-secret'), false);
+  assert.equal(JSON.stringify(result.validation).includes('local-secret'), false);
+  assert.equal(result.audit_snapshot.validation.errors[0], result.validation.errors[0]);
 });
 
 test('agent orchestrator audit artifact stores hashes and provenance but not full structured output', async () => {

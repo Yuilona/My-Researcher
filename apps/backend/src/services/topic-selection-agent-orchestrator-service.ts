@@ -134,6 +134,7 @@ type SourceExecution<T> = {
   provenance: TopicSelectionAgentInvocationProvenance;
   error_code?: string | null;
   blocker_codes?: string[];
+  validation?: TopicSelectionAgentValidationSummary;
 };
 
 export class TopicSelectionAgentOrchestratorService {
@@ -175,7 +176,7 @@ export class TopicSelectionAgentOrchestratorService {
         status: 'blocked',
         structuredOutput: null,
         provenance: source.provenance,
-        validation: this.validationSummary(null),
+        validation: source.validation ?? this.validationSummary(null),
         blockerCodes: source.blocker_codes ?? ['AGENT_EXECUTION_FAILED'],
         errorCode: source.error_code ?? 'AGENT_EXECUTION_FAILED',
       });
@@ -431,6 +432,7 @@ export class TopicSelectionAgentOrchestratorService {
         },
         error_code: llmError?.code ?? 'PROVIDER_EXECUTION_FAILED',
         blocker_codes: [llmError?.code ?? 'PROVIDER_EXECUTION_FAILED'],
+        validation: this.providerFailureValidationSummary(llmError),
       };
     }
   }
@@ -601,6 +603,31 @@ export class TopicSelectionAgentOrchestratorService {
       error_count: errors.length,
       errors: errors.map((error) => `${error.instancePath || '/'} ${error.message ?? 'schema validation failed'}`),
     };
+  }
+
+  private providerFailureValidationSummary(error: LlmGatewayError | null): TopicSelectionAgentValidationSummary {
+    if (!error) {
+      return this.validationSummary(null);
+    }
+    const statusSuffix = error.statusCode ? ` status=${error.statusCode}` : '';
+    return {
+      valid: false,
+      error_count: 1,
+      errors: [
+        `${error.code}${statusSuffix}: ${this.sanitizeProviderErrorMessage(error.message)}`,
+      ],
+    };
+  }
+
+  private sanitizeProviderErrorMessage(message: string): string {
+    return message
+      .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/giu, 'Bearer [REDACTED]')
+      .replace(/sk-[A-Za-z0-9_-]+/giu, '[REDACTED_API_KEY]')
+      .replace(/(api[_-]?key\s*[:=]\s*)[^\s,;}]+/giu, '$1[REDACTED]')
+      .replace(/(access[_-]?token\s*[:=]\s*)[^\s,;}]+/giu, '$1[REDACTED]')
+      .replace(/\s+/gu, ' ')
+      .trim()
+      .slice(0, 500);
   }
 
   private findForbiddenOutputPath(value: unknown, path: string[] = ['structured_output']): string | null {

@@ -268,6 +268,12 @@ test('LLM gateway maps DashScope chat completion JSON output and telemetry', asy
   assert.equal(calls[0]?.body.model, 'qwen3.6-plus');
   assert.deepEqual(calls[0]?.body.response_format, { type: 'json_object' });
   assert.deepEqual(calls[0]?.body.extra_body, { enable_thinking: false });
+  const messages = calls[0]?.body.messages as Array<{ role: string; content: string }>;
+  assert.equal(messages[0]?.role, 'system');
+  assert.match(messages[0]?.content ?? '', /\bJSON\b/);
+  assert.match(messages[0]?.content ?? '', /schema_name: ok_schema/);
+  assert.match(messages[0]?.content ?? '', /"ok"/);
+  assert.equal(messages[1]?.content, 'return ok');
 });
 
 test('LLM gateway retries rate limits and records canonical telemetry', async () => {
