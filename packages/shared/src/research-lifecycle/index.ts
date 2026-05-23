@@ -3,7 +3,38 @@ export * from './paper-project-contracts.js';
 export * from './literature-contracts.js';
 export * from './auto-pull-contracts.js';
 export * from './title-card-management-contracts.js';
-export * from './research-argument-contracts.js';
+export * from './research-argument-domain-contracts.js';
+export * from './research-argument-read-model-contracts.js';
+export * from './research-argument-advisory-contracts.js';
+export {
+  type SeedWorkspaceFromTitleCardRequest,
+  type SeedWorkspaceFromTitleCardResponse,
+  type ReadinessVerifyDimensionVerdict,
+  type ReadinessVerifyRequest,
+  type ReadinessVerifyResponse,
+  type DecisionActionRequest,
+  type DecisionActionResponse,
+  type PromoteToPaperProjectRequest,
+  type PromoteToPaperProjectResponse,
+  type WritingEntryPacketRef,
+  type SubmissionRiskReportRef,
+  type WritingEntryPacketClaimSummary,
+  type WritingEntryPacketEvidenceSummary,
+  type WritingEntryPacketBaselineProtocolReproSummary,
+  type WritingEntryPacket as ResearchArgumentWritingEntryPacket,
+  type SubmissionRiskReportDimensionSummary,
+  type SubmissionRiskReport,
+  seedWorkspaceFromTitleCardRequestSchema,
+  seedWorkspaceFromTitleCardResponseSchema,
+  readinessVerifyRequestSchema,
+  readinessVerifyResponseSchema,
+  decisionActionRequestSchema,
+  decisionActionResponseSchema,
+  promoteToPaperProjectRequestSchema,
+  promoteToPaperProjectResponseSchema,
+  writingEntryPacketSchema as researchArgumentWritingEntryPacketSchema,
+  submissionRiskReportSchema,
+} from './research-argument-bridge-contracts.js';
 export * from './experiment-foundation-contracts.js';
 export * from './topic-selection-control-plane-contracts.js';
 export * from './topic-selection-agent-profile-contracts.js';

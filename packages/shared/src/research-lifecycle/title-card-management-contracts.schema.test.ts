@@ -10,12 +10,22 @@ import {
 import * as autoPullContracts from './auto-pull-contracts.js';
 import * as experimentFoundationContracts from './experiment-foundation-contracts.js';
 import * as literatureContracts from './literature-contracts.js';
+import * as paperImplementationContracts from './paper-implementation-contracts.js';
+import * as paperImplementationAiWorkflowHarnessContracts from './paper-implementation-ai-workflow-harness-contracts.js';
+import * as paperImplementationMotiveContracts from './paper-implementation-motive-contracts.js';
+import * as paperImplementationResultClaimDossierContracts from './paper-implementation-result-claim-dossier-contracts.js';
+import * as paperImplementationTraceContracts from './paper-implementation-trace-contracts.js';
+import * as paperImplementationValidationContracts from './paper-implementation-validation-contracts.js';
+import * as paperImplementationWorkOrderContracts from './paper-implementation-workorder-contracts.js';
 import * as paperProjectContracts from './paper-project-contracts.js';
 import * as researchArgumentContracts from './research-argument-contracts.js';
 import * as researchLifecycleContracts from './index.js';
 import * as researchLifecycleCoreContracts from './research-lifecycle-core-contracts.js';
 import * as titleCardManagementContracts from './title-card-management-contracts.js';
 import * as topicSelectionControlPlaneContracts from './topic-selection-control-plane-contracts.js';
+import * as topicSelectionAgentProfileContracts from './topic-selection-agent-profile-contracts.js';
+import * as topicSelectionAgentInvocationContracts from './topic-selection-agent-invocation-contracts.js';
+import * as topicSelectionDebateScenarioContracts from './topic-selection-debate-scenario-contracts.js';
 import * as topicSelectionEvidenceMapContracts from './topic-selection-evidence-map-contracts.js';
 import * as topicSelectionNeedValidationContracts from './topic-selection-need-validation-contracts.js';
 import * as topicSelectionOfflineEvaluationReplayContracts from './topic-selection-offline-evaluation-replay-contracts.js';
@@ -184,11 +194,764 @@ test('topic-selection need-validation schemas load through direct and aggregate 
   assert.ok(topicSelectionNeedValidationContracts.topicSelectionValidatedNeedRecordSchema);
   assert.ok(topicSelectionNeedValidationContracts.topicSelectionCandidateDecisionMemorySuggestionRecordSchema);
   assert.ok(topicSelectionNeedValidationContracts.topicSelectionV1aToV1bInputBundleRecordSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionGenerateNeedCandidateNodeInputSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionRankedCandidateDraftBatchSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionRankedCandidateDraftBatchMinimumValidationReportSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionCandidateDraftAdmissionReportSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionSupplementalRoundRoutingDecisionSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionPersistNeedCandidateBatchCommandSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionGenerateNeedCandidateNodeResultSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryContextCompressionSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryExplorationContextPayloadSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryArbiterContextPayloadSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryExplorerNotesSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryDeepCriticNotesSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryRoleLevelSummarySchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryDebateIssueFrameSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryDebateFinalSynthesisArtifactSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryContextPacketSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryCompiledContextPairSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionGenerateNeedCandidateArtifactSnapshotSchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionGenerateNeedCandidateArtifactRefEntrySchema);
+  assert.ok(topicSelectionNeedValidationContracts.topicSelectionGenerateNeedCandidateArtifactRefBundleSchema);
+  assert.deepEqual([...topicSelectionNeedValidationContracts.TOPIC_SELECTION_AGENT_EXECUTION_MODES], [
+    'mocked_llm',
+    'codex_assisted',
+    'provider_llm',
+  ]);
+  assert.deepEqual([...topicSelectionNeedValidationContracts.TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_ARTIFACT_KEYS], [
+    'exploration_context_packet',
+    'arbiter_context_packet',
+    'debate_role_output',
+    'debate_role_level_summary',
+    'debate_issue_frame',
+    'debate_final_synthesis',
+    'ranked_candidate_draft_batch',
+    'minimum_schema_validation_report',
+    'candidate_draft_admission_report',
+    'supplemental_round_routing_decision',
+    'persist_need_candidate_batch_command',
+    'discovery_audit',
+  ]);
   assert.deepEqual([...topicSelectionNeedValidationContracts.TOPIC_SELECTION_CANDIDATE_MEMORY_SUGGESTION_STATUSES], [
     'suggested',
   ]);
   assert.ok(researchLifecycleContracts.topicSelectionNeedCandidateRecordSchema);
   assert.ok(researchLifecycleContracts.topicSelectionV1aToV1bInputBundleRecordSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionGenerateNeedCandidateNodeResultSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionNeedDiscoveryContextPacketSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionGenerateNeedCandidateArtifactSnapshotSchema);
+});
+
+test('topic-selection agent invocation schemas load through direct and aggregate exports', () => {
+  assert.ok(topicSelectionAgentInvocationContracts.topicSelectionAgentInvocationProvenanceSchema);
+  assert.ok(topicSelectionAgentInvocationContracts.topicSelectionAgentInvocationAuditSnapshotSchema);
+  assert.deepEqual([...topicSelectionAgentInvocationContracts.TOPIC_SELECTION_AGENT_EXECUTOR_KINDS], [
+    'single_agent',
+    'multi_agent_debate',
+    'codex_assisted',
+  ]);
+  assert.deepEqual([...topicSelectionAgentInvocationContracts.TOPIC_SELECTION_AGENT_OUTPUT_SOURCE_KINDS], [
+    'mock_fixture',
+    'codex_response',
+    'provider_response',
+  ]);
+  assert.ok(researchLifecycleContracts.topicSelectionAgentInvocationProvenanceSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionAgentInvocationAuditSnapshotSchema);
+});
+
+test('topic-selection debate scenario schemas load through direct and aggregate exports', () => {
+  assert.ok(topicSelectionDebateScenarioContracts.topicSelectionDebateScenarioContractSchema);
+  assert.ok(topicSelectionDebateScenarioContracts.topicSelectionDebateRoleStageSlotSchema);
+  assert.equal(
+    topicSelectionDebateScenarioContracts.createTopicSelectionV1aGenerateNeedCandidateDebateScenarioContract()
+      .scenario_id,
+    'topic-selection.debate.v1a-need-discovery.v1',
+  );
+  assert.ok(researchLifecycleContracts.topicSelectionDebateScenarioContractSchema);
+});
+
+test('topic-selection generate-need-candidate contracts validate v1a-only node payloads', async () => {
+  const app = Fastify();
+  app.post(
+    '/input',
+    { schema: { body: topicSelectionNeedValidationContracts.topicSelectionGenerateNeedCandidateNodeInputSchema } },
+    async () => ({ ok: true }),
+  );
+  app.post(
+    '/batch',
+    { schema: { body: topicSelectionNeedValidationContracts.topicSelectionRankedCandidateDraftBatchSchema } },
+    async () => ({ ok: true }),
+  );
+  app.post(
+    '/minimum-validation',
+    {
+      schema: {
+        body: topicSelectionNeedValidationContracts.topicSelectionRankedCandidateDraftBatchMinimumValidationReportSchema,
+      },
+    },
+    async () => ({ ok: true }),
+  );
+  app.post(
+    '/admission',
+    { schema: { body: topicSelectionNeedValidationContracts.topicSelectionCandidateDraftAdmissionReportSchema } },
+    async () => ({ ok: true }),
+  );
+  app.post(
+    '/supplemental',
+    { schema: { body: topicSelectionNeedValidationContracts.topicSelectionSupplementalRoundRoutingDecisionSchema } },
+    async () => ({ ok: true }),
+  );
+  app.post(
+    '/persist',
+    { schema: { body: topicSelectionNeedValidationContracts.topicSelectionPersistNeedCandidateBatchCommandSchema } },
+    async () => ({ ok: true }),
+  );
+  app.post(
+    '/result',
+    { schema: { body: topicSelectionNeedValidationContracts.topicSelectionGenerateNeedCandidateNodeResultSchema } },
+    async () => ({ ok: true }),
+  );
+  app.post(
+    '/context-packet',
+    { schema: { body: topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryContextPacketSchema } },
+    async () => ({ ok: true }),
+  );
+  app.post(
+    '/context-pair',
+    { schema: { body: topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryCompiledContextPairSchema } },
+    async () => ({ ok: true }),
+  );
+  app.post(
+    '/artifact',
+    {
+      schema: {
+        body: topicSelectionNeedValidationContracts.topicSelectionGenerateNeedCandidateArtifactSnapshotSchema,
+      },
+    },
+    async () => ({ ok: true }),
+  );
+  app.post(
+    '/artifact-bundle',
+    {
+      schema: {
+        body: topicSelectionNeedValidationContracts.topicSelectionGenerateNeedCandidateArtifactRefBundleSchema,
+      },
+    },
+    async () => ({ ok: true }),
+  );
+  app.post(
+    '/debate-explorer-notes',
+    { schema: { body: topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryExplorerNotesSchema } },
+    async () => ({ ok: true }),
+  );
+  app.post(
+    '/debate-deep-critic-notes',
+    { schema: { body: topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryDeepCriticNotesSchema } },
+    async () => ({ ok: true }),
+  );
+  app.post(
+    '/debate-role-level-summary',
+    { schema: { body: topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryRoleLevelSummarySchema } },
+    async () => ({ ok: true }),
+  );
+  app.post(
+    '/debate-issue-frame',
+    { schema: { body: topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryDebateIssueFrameSchema } },
+    async () => ({ ok: true }),
+  );
+  app.post(
+    '/debate-final-synthesis',
+    {
+      schema: {
+        body: topicSelectionNeedValidationContracts.topicSelectionNeedDiscoveryDebateFinalSynthesisArtifactSchema,
+      },
+    },
+    async () => ({ ok: true }),
+  );
+  await app.ready();
+
+  const ref = functionalRefForSchema;
+  const evidenceRoleBundle = {
+    support_unit_refs: [ref('evidence_unit', 'support_001')],
+    challenge_unit_refs: [ref('evidence_unit', 'challenge_001')],
+    baseline_unit_refs: [],
+    context_unit_refs: [],
+  };
+  const draft = {
+    draft_id: 'draft_001',
+    rank: 1,
+    candidate_need: 'Need a robust way to evaluate retrieval-augmented fine-tuning risk.',
+    unmet_need_statement: 'Existing studies do not isolate retrieval risk during fine-tuning.',
+    mechanism_type: 'evaluation_gap',
+    mechanism_summary: 'Risk-aware evaluation gap.',
+    mechanism_payload: { axis: 'retrieval-risk' },
+    scope_notes: 'CS literature workflow only.',
+    non_goal_notes: null,
+    prior_art_status: 'partial_solution_known',
+    evidence_role_bundle: evidenceRoleBundle,
+    conflict_refs: [ref('evidence_conflict', 'conflict_001')],
+    strength_assessment_refs: [ref('evidence_strength_assessment', 'strength_001')],
+    accepted_risk_refs: [],
+    gap_codes: ['risk_evaluation_gap'],
+    speculative: false,
+    confidence: 0.78,
+  };
+
+  const inputRes = await app.inject({
+    method: 'POST',
+    url: '/input',
+    payload: {
+      schema_version: 'v1',
+      workflow_run_id: 'workflow_run_001',
+      node_attempt_id: 'node_attempt_001',
+      topic_scope_ref: ref('topic_scope', 'topic_scope_001'),
+      evidence_map_ref: ref('evidence_map', 'evidence_map_001'),
+      evidence_strength_ref: ref('evidence_strength_assessment', 'strength_001'),
+      resource_sample_set_ref: ref('resource_sample_set', 'sample_set_001'),
+      candidate_pool_projection_ref: null,
+      search_snapshot_refs: [ref('search_run', 'search_run_001')],
+      resource_snapshot_refs: [ref('literature_snapshot', 'snapshot_001')],
+      exploration_context_ref: ref('artifact_ref', 'exploration_context_001'),
+      arbiter_context_ref: ref('artifact_ref', 'arbiter_context_001'),
+      execution_mode: 'mocked_llm',
+      profile_id: 'topic-selection.generate-need-candidate.single-agent.v1',
+      policy_version: 'v1',
+      operator_reuse_approval_ref: null,
+    },
+  });
+
+  const batchRes = await app.inject({
+    method: 'POST',
+    url: '/batch',
+    payload: {
+      schema_version: 'v1',
+      draft_batch: {
+        batch_id: 'draft_batch_001',
+        node_attempt_id: 'node_attempt_001',
+        terminal_result: 'finalize',
+        ranking_rationale: 'Draft is grounded and has both support and challenge evidence.',
+        max_persisted_candidates: 5,
+      },
+      drafts: [draft],
+      rejected_framings: [
+        {
+          framing_id: 'rejected_001',
+          reason_code: 'pseudo_gap',
+          summary: 'Rejected because it was a generic benchmark complaint.',
+          source_draft_id: null,
+          refs: [],
+        },
+      ],
+      unresolved_points: [],
+    },
+  });
+  const minimumValidationRes = await app.inject({
+    method: 'POST',
+    url: '/minimum-validation',
+    payload: {
+      schema_version: 'v1',
+      batch_id: 'draft_batch_001',
+      node_attempt_id: 'node_attempt_001',
+      valid: true,
+      terminal_result: 'finalize',
+      batch_payload_hash: 'sha256:ranked-batch',
+      draft_count: 1,
+      max_persisted_candidates: 5,
+      checked_at: '2026-05-19T00:00:00.000Z',
+      issue_count: 0,
+      blocking_issue_count: 0,
+      warning_issue_count: 0,
+      blocking_reason_codes: [],
+      warning_codes: [],
+      issues: [],
+    },
+  });
+  const invalidMinimumValidationRes = await app.inject({
+    method: 'POST',
+    url: '/minimum-validation',
+    payload: {
+      schema_version: 'v1',
+      batch_id: 'draft_batch_001',
+      node_attempt_id: 'node_attempt_001',
+      valid: false,
+      terminal_result: 'finalize',
+      batch_payload_hash: 'sha256:ranked-batch',
+      draft_count: 0,
+      max_persisted_candidates: 5,
+      checked_at: '2026-05-19T00:00:00.000Z',
+      issue_count: 1,
+      blocking_issue_count: 1,
+      warning_issue_count: 0,
+      blocking_reason_codes: ['INVALID_RANKED_CANDIDATE_DRAFT_BATCH'],
+      warning_codes: [],
+      issues: [
+        {
+          issue_code: 'FINALIZE_WITHOUT_DRAFTS',
+          severity: 'debug',
+          message: 'finalize requires at least one grounded draft.',
+          draft_id: null,
+          field_path: 'drafts',
+          refs: [],
+        },
+      ],
+      raw_debate_transcript: 'not allowed',
+    },
+  });
+
+  const admissionRes = await app.inject({
+    method: 'POST',
+    url: '/admission',
+    payload: {
+      schema_version: 'v1',
+      batch_id: 'draft_batch_001',
+      node_attempt_id: 'node_attempt_001',
+      terminal_result: 'finalize',
+      draft_results: [
+        {
+          draft_id: 'draft_001',
+          rank: 1,
+          decision: 'admit',
+          reason_codes: ['grounded'],
+          blocking_reason_codes: [],
+          resolved_ref_counts: {
+            support: 1,
+            challenge: 1,
+            baseline: 0,
+            context: 0,
+          },
+          normalized_candidate_key: 'risk-aware-retrieval-finetuning-eval',
+          duplicate_candidate_refs: [],
+          required_human_review_points: [],
+          supplemental_questions: [],
+          admitted_draft_ref: ref('candidate_draft', 'draft_001'),
+          merge_target_ref: null,
+        },
+      ],
+      valid_draft_count: 1,
+      rejected_draft_count: 0,
+      merge_hint_count: 0,
+      blocking_reason_codes: [],
+    },
+  });
+
+  const supplementalRes = await app.inject({
+    method: 'POST',
+    url: '/supplemental',
+    payload: {
+      schema_version: 'v1',
+      batch_id: 'draft_batch_001',
+      node_attempt_id: 'node_attempt_001',
+      current_round_index: 1,
+      remaining_round_budget: 2,
+      routing_decision: 'finalize_with_admitted_batch',
+      source_draft_ids: ['draft_001'],
+      trigger_reason_codes: [],
+      supplemental_questions: [],
+      allowed_roles: [],
+      forbidden_actions: ['broad_re_exploration'],
+      stop_condition: 'admitted_batch_ready',
+    },
+  });
+
+  const persistRes = await app.inject({
+    method: 'POST',
+    url: '/persist',
+    payload: {
+      schema_version: 'v1',
+      node_attempt_id: 'node_attempt_001',
+      workflow_run_id: 'workflow_run_001',
+      topic_scope_ref: ref('topic_scope', 'topic_scope_001'),
+      evidence_map_ref: ref('evidence_map', 'evidence_map_001'),
+      resource_sample_set_ref: ref('resource_sample_set', 'sample_set_001'),
+      ranked_candidate_draft_batch_artifact_ref: ref('artifact_ref', 'ranked_batch_001'),
+      admission_report_artifact_ref: ref('artifact_ref', 'admission_report_001'),
+      supplemental_routing_artifact_refs: [ref('artifact_ref', 'supplemental_routing_001')],
+      admitted_drafts: [
+        {
+          ...draft,
+          normalized_candidate_key: 'risk-aware-retrieval-finetuning-eval',
+          source_admission_decision_ref: ref('candidate_draft_admission', 'draft_001'),
+        },
+      ],
+      idempotency_key: 'workflow_run_001:node_attempt_001:draft_001',
+    },
+  });
+
+  const resultPayload = {
+    schema_version: 'v1',
+    workflow_run_id: 'workflow_run_001',
+    node_attempt_id: 'node_attempt_001',
+    status: 'succeeded',
+    terminal_result: 'finalize',
+    persisted_candidate_refs: [ref('need_candidate', 'need_candidate_001')],
+    candidate_pool_projection_ref: ref('candidate_pool_projection', 'projection_001'),
+    candidate_pool_projection_hash: 'hash_001',
+    artifact_refs: {
+      ranked_candidate_draft_batch: ref('artifact_ref', 'ranked_batch_001'),
+      minimum_schema_validation_report: ref('artifact_ref', 'schema_validation_001'),
+      candidate_draft_admission_report: ref('artifact_ref', 'admission_report_001'),
+      supplemental_round_routing_decisions: [ref('artifact_ref', 'supplemental_routing_001')],
+      persist_need_candidate_batch_command: ref('artifact_ref', 'persist_command_001'),
+      discovery_audit: ref('artifact_ref', 'discovery_audit_001'),
+    },
+    warning_codes: [],
+    error_code: null,
+  };
+
+  const resultRes = await app.inject({
+    method: 'POST',
+    url: '/result',
+    payload: resultPayload,
+  });
+  const invalidErrorCodeRes = await app.inject({
+    method: 'POST',
+    url: '/result',
+    payload: {
+      ...resultPayload,
+      error_code: 'TOPIC_QUESTION_CONTRACT_REQUIRED',
+    },
+  });
+  const badModeRes = await app.inject({
+    method: 'POST',
+    url: '/input',
+    payload: {
+      schema_version: 'v1',
+      workflow_run_id: 'workflow_run_001',
+      node_attempt_id: 'node_attempt_001',
+      topic_scope_ref: ref('topic_scope', 'topic_scope_001'),
+      evidence_map_ref: ref('evidence_map', 'evidence_map_001'),
+      evidence_strength_ref: ref('evidence_strength_assessment', 'strength_001'),
+      search_snapshot_refs: [],
+      resource_snapshot_refs: [],
+      exploration_context_ref: ref('artifact_ref', 'exploration_context_001'),
+      arbiter_context_ref: ref('artifact_ref', 'arbiter_context_001'),
+      execution_mode: 'cached_provider_response',
+      profile_id: 'topic-selection.generate-need-candidate.single-agent.v1',
+      policy_version: 'v1',
+    },
+  });
+  const badContextRefRes = await app.inject({
+    method: 'POST',
+    url: '/input',
+    payload: {
+      schema_version: 'v1',
+      workflow_run_id: 'workflow_run_001',
+      node_attempt_id: 'node_attempt_001',
+      topic_scope_ref: ref('topic_scope', 'topic_scope_001'),
+      evidence_map_ref: ref('evidence_map', 'evidence_map_001'),
+      evidence_strength_ref: ref('evidence_strength_assessment', 'strength_001'),
+      search_snapshot_refs: [],
+      resource_snapshot_refs: [],
+      exploration_context_ref: ref('context_packet', 'exploration_context_001'),
+      arbiter_context_ref: ref('artifact_ref', 'arbiter_context_001'),
+      execution_mode: 'mocked_llm',
+      profile_id: 'topic-selection.generate-need-candidate.single-agent.v1',
+      policy_version: 'v1',
+    },
+  });
+  const artifactSnapshot = {
+    schema_version: 'v1',
+    node_id: 'topic-selection.v1a.generate-need-candidate.v1',
+    workflow_run_id: 'workflow_run_001',
+    node_attempt_id: 'node_attempt_001',
+    artifact_key: 'ranked_candidate_draft_batch',
+    payload_schema: 'RankedCandidateDraftBatch@v1',
+    redaction_policy: 'topic_selection_generate_need_candidate_artifact_redaction_v1',
+    redacted: true,
+    redacted_paths: ['payload.hidden_reasoning'],
+    source_refs: [ref('evidence_map', 'evidence_map_001')],
+    payload_hash: 'sha256:redacted-payload',
+    payload: {
+      draft_count: 1,
+      hidden_reasoning: '[REDACTED]',
+    },
+  };
+  const artifactRes = await app.inject({
+    method: 'POST',
+    url: '/artifact',
+    payload: artifactSnapshot,
+  });
+  const invalidArtifactKeyRes = await app.inject({
+    method: 'POST',
+    url: '/artifact',
+    payload: {
+      ...artifactSnapshot,
+      artifact_key: 'topic_question_contract',
+    },
+  });
+  const explorationContextPacket = {
+    schema_version: 'v1',
+    node_id: 'topic-selection.v1a.generate-need-candidate.v1',
+    workflow_run_id: 'workflow_run_001',
+    node_attempt_id: 'node_attempt_001',
+    context_family: 'exploration_context',
+    input_refs: [ref('evidence_map', 'evidence_map_001')],
+    input_refs_hash: 'sha256:input-refs',
+    context_compiler_version: 'topic-selection-need-discovery-context-compiler-v1',
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    profile_id: 'topic-selection.generate-need-candidate.single-agent.v1',
+    execution_mode: 'mocked_llm',
+    cache_key: 'sha256:exploration-cache-key',
+    cache_hit: false,
+    redaction_policy: 'topic_selection_need_discovery_context_redaction_v1',
+    created_at: '2026-05-19T00:00:00.000Z',
+    memory_digest_hash: 'sha256:memory',
+    candidate_pool_hash: 'sha256:candidate-pool',
+    payload_hash: 'sha256:exploration-payload',
+    compression: {
+      compression_version: 'topic-selection-need-discovery-context-compression-v1',
+      layer_keys: ['evidence_resource_digest', 'candidate_memory_digest'],
+      source_token_estimate: null,
+      compressed_token_estimate: null,
+    },
+    payload: {
+      topic_scope: { title_card_id: 'title_card_001' },
+      evidence_signal_digest: { support_count: 2 },
+      resource_sample_digest: { sample_set_id: 'sample_set_001' },
+      search_coverage_digest: { coverage: 'partial' },
+      sibling_candidate_digest: { candidate_count: 0 },
+      decision_memory_digest: { warnings: [] },
+      exploration_prompts: ['Find grounded need candidates.'],
+      challenge_prompts: ['Identify pseudo-gaps.'],
+      allowed_outputs: ['ranked_candidate_draft_batch'],
+      forbidden_outputs: ['need_candidate_authority_write'],
+    },
+  };
+  const arbiterContextPacket = {
+    ...explorationContextPacket,
+    context_family: 'arbiter_context',
+    cache_key: 'sha256:arbiter-cache-key',
+    payload_hash: 'sha256:arbiter-payload',
+    payload: {
+      node_policy_ref: ref('node_policy', 'generate_need_candidate_v1'),
+      output_schema_ref: ref('schema', 'ranked_candidate_draft_batch_v1'),
+      authority_boundary: { writes: ['NeedCandidate'], forbidden: ['ValidatedNeed'] },
+      max_persisted_candidates: 5,
+      deterministic_gate_checklist: ['schema_validation', 'admission_gates'],
+      role_level_summaries: [{ role: 'explorer', summary_ref: 'artifact_ref_001' }],
+      candidate_pool_digest: { candidate_count: 0 },
+      evidence_ref_table: [{ evidence_ref: ref('evidence_unit', 'support_001') }],
+      rejected_framing_table: [],
+      unresolved_points: [],
+      batch_ranking_rules: ['rank grounded drafts first'],
+      persistence_rules: ['persist admitted drafts only'],
+      failure_rules: ['block when no admitted drafts'],
+    },
+  };
+  const explorationContextRes = await app.inject({
+    method: 'POST',
+    url: '/context-packet',
+    payload: explorationContextPacket,
+  });
+  const arbiterContextRes = await app.inject({
+    method: 'POST',
+    url: '/context-packet',
+    payload: arbiterContextPacket,
+  });
+  const malformedContextRes = await app.inject({
+    method: 'POST',
+    url: '/context-packet',
+    payload: {
+      ...explorationContextPacket,
+      context_family: 'arbiter_context',
+    },
+  });
+  const contextPairRes = await app.inject({
+    method: 'POST',
+    url: '/context-pair',
+    payload: {
+      schema_version: 'v1',
+      node_id: 'topic-selection.v1a.generate-need-candidate.v1',
+      workflow_run_id: 'workflow_run_001',
+      node_attempt_id: 'node_attempt_001',
+      exploration_context_ref: ref('artifact_ref', 'exploration_context_001'),
+      arbiter_context_ref: ref('artifact_ref', 'arbiter_context_001'),
+      exploration_context_hash: 'sha256:exploration',
+      arbiter_context_hash: 'sha256:arbiter',
+      exploration_cache_key: 'sha256:exploration-cache',
+      arbiter_cache_key: 'sha256:arbiter-cache',
+      artifact_refs: [
+        {
+          artifact_key: 'exploration_context_packet',
+          artifact_ref: ref('artifact_ref', 'exploration_context_001'),
+          artifact_hash: 'sha256:artifact',
+          payload_hash: 'sha256:exploration-payload',
+          payload_schema: 'TopicSelectionNeedDiscoveryContextPacket@v1',
+          redacted_paths: [],
+        },
+      ],
+    },
+  });
+  const artifactBundleRes = await app.inject({
+    method: 'POST',
+    url: '/artifact-bundle',
+    payload: {
+      schema_version: 'v1',
+      node_id: 'topic-selection.v1a.generate-need-candidate.v1',
+      workflow_run_id: 'workflow_run_001',
+      node_attempt_id: 'node_attempt_001',
+      artifact_refs: [
+        {
+          artifact_key: 'ranked_candidate_draft_batch',
+          artifact_ref: ref('artifact_ref', 'artifact_ref_001'),
+          artifact_hash: 'sha256:artifact',
+          payload_hash: 'sha256:redacted-payload',
+          payload_schema: 'RankedCandidateDraftBatch@v1',
+          redacted_paths: ['payload.hidden_reasoning'],
+        },
+      ],
+    },
+  });
+  const debateExplorerNotesRes = await app.inject({
+    method: 'POST',
+    url: '/debate-explorer-notes',
+    payload: {
+      schema_version: 'v1',
+      debate_loop_id: 'debate_loop_001',
+      round_index: 1,
+      role: 'explorer',
+      stage: 'round_1_discovery',
+      agent_instance_id: 'explorer_1',
+      candidate_angles: [
+        {
+          angle_id: 'angle_001',
+          summary: 'Evaluate retrieval-risk effects during fine-tuning.',
+          candidate_need_hint: 'Need risk-aware RAG fine-tuning evaluation.',
+          evidence_refs: [ref('evidence_unit', 'support_001')],
+        },
+      ],
+      evidence_refs: [ref('evidence_unit', 'support_001')],
+      unresolved_questions: ['Which risk survives fine-tuning?'],
+      warnings: [],
+    },
+  });
+  const debateDeepCriticNotesRes = await app.inject({
+    method: 'POST',
+    url: '/debate-deep-critic-notes',
+    payload: {
+      schema_version: 'v1',
+      debate_loop_id: 'debate_loop_001',
+      round_index: 1,
+      role: 'deep_critic',
+      stage: 'round_1_discovery',
+      agent_instance_id: 'deep_critic_1',
+      critique_points: [
+        {
+          critique_id: 'critique_001',
+          summary: 'Pseudo-gap risk unless challenge evidence is retained.',
+          severity: 'high',
+          evidence_refs: [ref('evidence_unit', 'challenge_001')],
+        },
+      ],
+      failure_modes: ['overstated novelty'],
+      missing_evidence_questions: ['Which benchmark baseline exists?'],
+      evidence_refs: [ref('evidence_unit', 'challenge_001')],
+      warnings: ['baseline coverage is thin'],
+    },
+  });
+  const debateRoleSummaryRes = await app.inject({
+    method: 'POST',
+    url: '/debate-role-level-summary',
+    payload: {
+      schema_version: 'v1',
+      debate_loop_id: 'debate_loop_001',
+      round_index: 1,
+      role: 'explorer',
+      source_invocation_attempt_ids: ['node_attempt_001.debate_loop_001.explorer.round_1_discovery.explorer_1'],
+      source_artifact_refs: [ref('artifact_ref', 'debate_role_output_001')],
+      summary: 'Explorer surfaced one grounded candidate angle.',
+      candidate_need_signals: ['Need risk-aware RAG fine-tuning evaluation.'],
+      risk_signals: [],
+      evidence_refs: [ref('evidence_unit', 'support_001')],
+      unresolved_questions: ['Which risk survives fine-tuning?'],
+    },
+  });
+  const debateIssueFrameRes = await app.inject({
+    method: 'POST',
+    url: '/debate-issue-frame',
+    payload: {
+      schema_version: 'v1',
+      debate_loop_id: 'debate_loop_001',
+      round_index: 1,
+      role: 'arbiter',
+      stage: 'issue_framing',
+      frame_id: 'issue_frame_001',
+      focused_questions: ['Can the final candidate retain challenge evidence?'],
+      requested_roles: ['explorer', 'deep_critic'],
+      source_role_summary_refs: [ref('artifact_ref', 'debate_role_summary_001')],
+      stop_condition: null,
+    },
+  });
+  const invalidDebateIssueFrameRes = await app.inject({
+    method: 'POST',
+    url: '/debate-issue-frame',
+    payload: {
+      schema_version: 'v1',
+      debate_loop_id: 'debate_loop_001',
+      round_index: 1,
+      role: 'arbiter',
+      stage: 'issue_framing',
+      frame_id: 'issue_frame_001',
+      focused_questions: ['Can the final candidate retain challenge evidence?'],
+      requested_roles: ['grounding_auditor'],
+      source_role_summary_refs: [ref('artifact_ref', 'debate_role_summary_001')],
+    },
+  });
+  const debateFinalSynthesisRes = await app.inject({
+    method: 'POST',
+    url: '/debate-final-synthesis',
+    payload: {
+      schema_version: 'v1',
+      debate_loop_id: 'debate_loop_001',
+      round_index: 1,
+      role: 'arbiter',
+      stage: 'final_synthesis',
+      final_invocation_attempt_id: 'node_attempt_001.debate_loop_001.arbiter.final_synthesis.arbiter_final',
+      final_invocation_audit_ref: ref('artifact_ref', 'agent_audit_001'),
+      issue_frame_ref: ref('artifact_ref', 'debate_issue_frame_001'),
+      role_level_summary_refs: [ref('artifact_ref', 'debate_role_summary_001')],
+      ranked_candidate_draft_batch_hash: 'sha256:ranked-batch',
+      terminal_result: 'finalize',
+      draft_count: 1,
+      rejected_framing_count: 0,
+      unresolved_point_count: 0,
+    },
+  });
+
+  await app.close();
+  assert.equal(inputRes.statusCode, 200);
+  assert.equal(batchRes.statusCode, 200);
+  assert.equal(minimumValidationRes.statusCode, 200);
+  assert.equal(invalidMinimumValidationRes.statusCode, 400);
+  assert.equal(admissionRes.statusCode, 200);
+  assert.equal(supplementalRes.statusCode, 200);
+  assert.equal(persistRes.statusCode, 200);
+  assert.equal(resultRes.statusCode, 200);
+  assert.equal(invalidErrorCodeRes.statusCode, 400);
+  assert.equal(badModeRes.statusCode, 400);
+  assert.equal(badContextRefRes.statusCode, 400);
+  assert.equal(artifactRes.statusCode, 200);
+  assert.equal(invalidArtifactKeyRes.statusCode, 400);
+  assert.equal(debateExplorerNotesRes.statusCode, 200);
+  assert.equal(debateDeepCriticNotesRes.statusCode, 200);
+  assert.equal(debateRoleSummaryRes.statusCode, 200);
+  assert.equal(debateIssueFrameRes.statusCode, 200);
+  assert.equal(invalidDebateIssueFrameRes.statusCode, 400);
+  assert.equal(debateFinalSynthesisRes.statusCode, 200);
+  assert.equal(explorationContextRes.statusCode, 200);
+  assert.equal(arbiterContextRes.statusCode, 200);
+  assert.equal(malformedContextRes.statusCode, 400);
+  assert.equal(contextPairRes.statusCode, 200);
+  assert.equal(artifactBundleRes.statusCode, 200);
+  const resultProperties =
+    topicSelectionNeedValidationContracts.topicSelectionGenerateNeedCandidateNodeResultSchema.properties;
+  const persistProperties =
+    topicSelectionNeedValidationContracts.topicSelectionPersistNeedCandidateBatchCommandSchema.properties;
+  assert.equal(Object.hasOwn(resultProperties, 'topic_question_contract_ref'), false);
+  assert.equal(Object.hasOwn(resultProperties, 'raw_debate_transcript'), false);
+  assert.equal(Object.hasOwn(persistProperties, 'topic_question_contract_ref'), false);
 });
 
 test('topic-selection recheck/risk/memory schemas load through direct and aggregate exports', () => {
@@ -1539,7 +2302,7 @@ test('topic-selection v1c downstream-feedback/recheck schemas load through direc
   assert.ok(topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionDownstreamFeedbackImpactSummarySchema);
   assert.deepEqual(
     [...topicSelectionV1cDownstreamFeedbackRecheckContracts.TOPIC_SELECTION_DOWNSTREAM_FEEDBACK_SOURCE_KINDS],
-    ['paper_project', 'writing', 'research_argument', 'reviewer_check', 'manual'],
+    ['paper_project', 'paper_implementation', 'writing', 'research_argument', 'reviewer_check', 'manual'],
   );
   assert.deepEqual(
     [...topicSelectionV1cDownstreamFeedbackRecheckContracts.TOPIC_SELECTION_DOWNSTREAM_LOOPBACK_TARGETS],
@@ -2567,11 +3330,21 @@ test('research-lifecycle barrel re-exports the runtime value surface of split mo
     ...Object.keys(researchLifecycleCoreContracts),
     ...Object.keys(paperProjectContracts),
     ...Object.keys(literatureContracts),
+    ...Object.keys(paperImplementationContracts),
+    ...Object.keys(paperImplementationAiWorkflowHarnessContracts),
+    ...Object.keys(paperImplementationTraceContracts),
+    ...Object.keys(paperImplementationMotiveContracts),
+    ...Object.keys(paperImplementationValidationContracts),
+    ...Object.keys(paperImplementationWorkOrderContracts),
+    ...Object.keys(paperImplementationResultClaimDossierContracts),
     ...Object.keys(autoPullContracts),
     ...Object.keys(experimentFoundationContracts),
     ...Object.keys(titleCardManagementContracts),
     ...Object.keys(researchArgumentContracts),
     ...Object.keys(topicSelectionControlPlaneContracts),
+    ...Object.keys(topicSelectionAgentProfileContracts),
+    ...Object.keys(topicSelectionAgentInvocationContracts),
+    ...Object.keys(topicSelectionDebateScenarioContracts),
     ...Object.keys(topicSelectionSearchResourceContracts),
     ...Object.keys(topicSelectionResourceSamplingContracts),
     ...Object.keys(topicSelectionEvidenceMapContracts),
@@ -2589,6 +3362,9 @@ test('research-lifecycle barrel re-exports the runtime value surface of split mo
     ...Object.keys(topicSelectionV1cPaperProjectBridgeContracts),
     ...Object.keys(topicSelectionV1cDownstreamFeedbackRecheckContracts),
   ]);
+
+  expectedKeys.delete('writingEntryPacketSchema');
+  expectedKeys.add('researchArgumentWritingEntryPacketSchema');
 
   assert.deepEqual(Object.keys(researchLifecycleContracts).sort(), [...expectedKeys].sort());
 });
@@ -2627,8 +3403,10 @@ test('research-lifecycle barrel keeps key contract helpers and schemas reachable
     true,
   );
   assert.equal(
-    [...researchLifecycleContracts.EXPERIMENT_FOUNDATION_RECORD_KINDS].includes('external_training_job'),
-    true,
+    (researchLifecycleContracts.EXPERIMENT_FOUNDATION_RECORD_KINDS as readonly string[]).includes(
+      'external_training_job',
+    ),
+    false,
   );
   assert.equal(
     [...researchLifecycleContracts.EXPERIMENT_FOUNDATION_EXTERNAL_TRAINING_JOB_STATUSES].includes('running'),
@@ -2692,6 +3470,7 @@ test('research-lifecycle barrel keeps key contract helpers and schemas reachable
   assert.ok(researchLifecycleContracts.readinessVerifyRequestSchema);
   assert.ok(researchLifecycleContracts.topicSelectionChainTransitionAttemptRecordSchema);
   assert.ok(researchLifecycleContracts.topicSelectionOfflineEvaluationMetricResultRecordSchema);
-  assert.ok(researchLifecycleContracts.writingEntryPacketSchema);
+  assert.ok(researchLifecycleContracts.researchArgumentWritingEntryPacketSchema);
+  assert.ok(researchLifecycleContracts.paperImplementationWritingEntryPacketSchema);
   assert.ok(researchLifecycleContracts.submissionRiskReportSchema);
 });
