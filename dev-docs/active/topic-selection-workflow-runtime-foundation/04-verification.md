@@ -16,6 +16,36 @@
   - hidden/raw output fields block before downstream use.
   - diagnostic audit artifacts store hashes/provenance and do not store full structured output.
 
+## 2026-05-23 Per-Slot Debate Model Option Runtime
+- Update: added per-slot provider model-option overrides for v1a need-discovery debate slots and removed the OpenAI-only E2E workaround.
+- Command: `pnpm --dir apps/backend exec node --test --loader ts-node/esm src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 75 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck && node --check .ai/scripts/topic-selection-v1a-harness-e2e.mjs`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared test`
+- Result: passed; 160 tests passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 763 backend tests total, 762 passed, 1 skipped, 0 failed.
+- Command: `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs`
+- Result: passed; registry structurally valid.
+- Command: `node .ai/skills/workflows/llm/llm-engineering/scripts/check-llm-config-keys.mjs`
+- Result: passed; all in-scope LLM config keys registered.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-debate-slot-options-20260523194540 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=multi_agent_debate TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_EXECUTION_MODE=codex_assisted TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-debate-slot-options-20260523194540`.
+- Coverage:
+  - provider-backed debate slots select profile-specific model options per slot;
+  - Codex-assisted explorer carries no provider model option;
+  - DashScope model-option provider overrides are preserved in gateway calls in unit coverage;
+  - malformed/non-string slot model-option overrides return stable `INVALID_PAYLOAD`;
+  - model-option overrides on non-provider slots return stable `INVALID_PAYLOAD`;
+  - E2E summary records `debate_slot_model_option_overrides` for replay/audit.
+
 ## 2026-05-20 DMP Runtime Foundation Slice 1: Profile Registry/Schema Validator
 - Update: added shared DMP profile contracts, backend profile registry validator/resolver, default v1 need-discovery profiles, and focused tests.
 - Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts`

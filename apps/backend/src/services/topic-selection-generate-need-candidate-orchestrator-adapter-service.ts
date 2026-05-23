@@ -35,6 +35,7 @@ import {
 } from './topic-selection-need-discovery-debate-loop-service.js';
 import type {
   TopicSelectionV1aGenerateNeedCandidateDebateSlotExecutionOverrides,
+  TopicSelectionV1aGenerateNeedCandidateDebateSlotModelOptionOverrides,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-debate-scenario-contracts';
 import {
   TopicSelectionPersistNeedCandidateBatchService,
@@ -69,6 +70,7 @@ export type TopicSelectionGenerateNeedCandidateOrchestratorAdapterInput = {
   debate_loop_id?: string | null;
   debate_policy_id?: string | null;
   debate_slot_execution_overrides?: TopicSelectionV1aGenerateNeedCandidateDebateSlotExecutionOverrides | null;
+  debate_slot_model_option_overrides?: TopicSelectionV1aGenerateNeedCandidateDebateSlotModelOptionOverrides | null;
   debate_mocked_outputs?: TopicSelectionNeedDiscoveryDebateMockedOutputs | null;
   debate_codex_responses?: TopicSelectionNeedDiscoveryDebateCodexResponses | null;
   mocked_output?: TopicSelectionMockedAgentOutput<TopicSelectionRankedCandidateDraftBatch> | null;
@@ -181,6 +183,7 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
         debate_policy_id: input.debate_policy_id ?? null,
         round_index: input.current_round_index ?? 1,
         slot_execution_overrides: input.debate_slot_execution_overrides ?? null,
+        slot_model_option_overrides: input.debate_slot_model_option_overrides ?? null,
         mocked_outputs: input.debate_mocked_outputs ?? null,
         codex_responses: input.debate_codex_responses ?? null,
         model_option_id: input.model_option_id ?? null,

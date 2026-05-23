@@ -24,6 +24,10 @@ import {
   TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID,
+  TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FRAMING_PROFILE_ID,
+  TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID,
+  TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
 } from '../../apps/backend/src/services/topic-selection-model-profile-registry-service.ts';
 import { TopicSelectionNeedDiscoveryArtifactBoundaryService } from '../../apps/backend/src/services/topic-selection-need-discovery-artifact-boundary-service.ts';
 import { TopicSelectionNeedDiscoveryContextCompilerService } from '../../apps/backend/src/services/topic-selection-need-discovery-context-compiler-service.ts';
@@ -81,6 +85,13 @@ const DEBATE_SLOT_EXECUTION_MODES = {
     'provider_llm',
   ),
 };
+const DEBATE_SLOT_PROFILE_IDS = {
+  'explorer.round_1_discovery': TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
+  'deep_critic.round_1_discovery': TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID,
+  'arbiter.issue_framing': TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FRAMING_PROFILE_ID,
+  'arbiter.final_synthesis': TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID,
+};
+const DEBATE_SLOT_MODEL_OPTION_OVERRIDES = buildDebateSlotModelOptionOverrides();
 const NEED_ADJUDICATION_EXECUTION_MODE = normalizeExecutionMode(
   process.env.TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE,
   DEFAULT_HARNESS_AGENT_EXECUTION_MODE,
@@ -132,6 +143,48 @@ function normalizeGenerateExecutorKind(value, fallback) {
   throw new Error(`Unsupported v1a harness generate executor kind: ${value}`);
 }
 
+function normalizeOptionalString(value) {
+  const normalized = value?.trim();
+  return normalized || null;
+}
+
+function debateSlotModelOptionEnv(slotId) {
+  return {
+    'explorer.round_1_discovery': process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_MODEL_OPTION_ID,
+    'deep_critic.round_1_discovery': process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_MODEL_OPTION_ID,
+    'arbiter.issue_framing': process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_MODEL_OPTION_ID,
+    'arbiter.final_synthesis': process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_MODEL_OPTION_ID,
+  }[slotId];
+}
+
+function debateSlotDefaultModelOptionId(slotId) {
+  const profileId = DEBATE_SLOT_PROFILE_IDS[slotId];
+  if (!profileId) {
+    throw new Error(`Unsupported debate slot for model option selection: ${slotId}`);
+  }
+  return PROVIDER_ID === 'dashscope'
+    ? `${profileId}.dashscope-budget`
+    : `${profileId}.openai-balanced`;
+}
+
+function buildDebateSlotModelOptionOverrides() {
+  if (GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate') {
+    return null;
+  }
+  const overrides = {};
+  for (const slotId of Object.keys(DEBATE_SLOT_EXECUTION_MODES)) {
+    const envOverride = normalizeOptionalString(debateSlotModelOptionEnv(slotId));
+    if (DEBATE_SLOT_EXECUTION_MODES[slotId] !== 'provider_llm') {
+      if (envOverride) {
+        throw new Error(`${slotId} model option override requires provider_llm execution mode.`);
+      }
+      continue;
+    }
+    overrides[slotId] = envOverride ?? debateSlotDefaultModelOptionId(slotId);
+  }
+  return Object.keys(overrides).length > 0 ? overrides : null;
+}
+
 if (
   GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
   && DEBATE_SLOT_EXECUTION_MODES['arbiter.final_synthesis'] === 'codex_assisted'
@@ -150,9 +203,6 @@ if (
   && GENERATE_NEED_CANDIDATE_EXECUTION_MODE === 'codex_assisted'
 ) {
   throw new Error('generate execution mode codex_assisted requires generate executor kind codex_assisted.');
-}
-if (GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate' && PROVIDER_ID !== 'openai') {
-  throw new Error('multi_agent_debate E2E currently requires openai because debate slots use per-profile default provider options.');
 }
 
 function ref(refType, refId, titleCardId, versionId = null) {
@@ -1204,6 +1254,9 @@ async function runGenerateNeedCandidate(runtime, input) {
     debate_slot_execution_overrides: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
       ? DEBATE_SLOT_EXECUTION_MODES
       : null,
+    debate_slot_model_option_overrides: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+      ? DEBATE_SLOT_MODEL_OPTION_OVERRIDES
+      : null,
     debate_mocked_outputs: buildDebateMockedOutputs(debateFixtureInput),
     debate_codex_responses: buildDebateCodexResponses(debateFixtureInput),
     mocked_output: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate'
@@ -1824,6 +1877,9 @@ try {
     debate_slot_execution_modes: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
       ? DEBATE_SLOT_EXECUTION_MODES
       : null,
+    debate_slot_model_option_overrides: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+      ? DEBATE_SLOT_MODEL_OPTION_OVERRIDES
+      : null,
     harness_adjudication_execution_mode: NEED_ADJUDICATION_EXECUTION_MODE,
     resource_sample_source: EXISTING_RESOURCE_SAMPLE_SET_ID ? 'existing_sample_set' : 'created_in_run',
     resource_sample_set_id: resourceSample.sample_set.resource_sample_set_id,
@@ -1861,6 +1917,9 @@ try {
     harness_generate_executor_kind: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND,
     debate_slot_execution_modes: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
       ? DEBATE_SLOT_EXECUTION_MODES
+      : null,
+    debate_slot_model_option_overrides: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+      ? DEBATE_SLOT_MODEL_OPTION_OVERRIDES
       : null,
     harness_adjudication_execution_mode: NEED_ADJUDICATION_EXECUTION_MODE,
     error: sanitizeError(error),

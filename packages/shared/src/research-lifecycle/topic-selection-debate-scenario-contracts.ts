@@ -311,6 +311,9 @@ export type TopicSelectionV1aGenerateNeedCandidateDebateSlotId =
 export type TopicSelectionV1aGenerateNeedCandidateDebateSlotExecutionOverrides =
   Partial<Record<TopicSelectionV1aGenerateNeedCandidateDebateSlotId, TopicSelectionAgentExecutionMode>>;
 
+export type TopicSelectionV1aGenerateNeedCandidateDebateSlotModelOptionOverrides =
+  Partial<Record<TopicSelectionV1aGenerateNeedCandidateDebateSlotId, string>>;
+
 export function createTopicSelectionV1aGenerateNeedCandidateDebateScenarioContract(): TopicSelectionDebateScenarioContract {
   return {
     schema_version: TOPIC_SELECTION_DEBATE_SCENARIO_CONTRACT_SCHEMA_VERSION,

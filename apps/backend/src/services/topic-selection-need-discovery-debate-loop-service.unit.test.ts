@@ -29,7 +29,12 @@ import {
   type TopicSelectionNeedDiscoveryDebateMockedOutputs,
   TopicSelectionNeedDiscoveryDebateLoopService,
 } from './topic-selection-need-discovery-debate-loop-service.js';
-import { TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID } from './topic-selection-model-profile-registry-service.js';
+import {
+  TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID,
+  TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FRAMING_PROFILE_ID,
+  TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID,
+  TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
+} from './topic-selection-model-profile-registry-service.js';
 
 class ThrowingLlmGateway {
   readonly calls: LlmStructuredOutputRequest[] = [];
@@ -469,6 +474,53 @@ test('need-discovery debate loop uses contract defaults for provider role instan
   );
 });
 
+test('need-discovery debate loop supports slot-level provider model option overrides', async () => {
+  const providerGateway = new ProviderDebateGateway();
+  const { debateLoop, llmGateway, compiledContext } = await makeRuntime({
+    llmGateway: providerGateway,
+    executionMode: 'provider_llm',
+  });
+  const result = await debateLoop.runNeedDiscoveryDebate({
+    workspace_id: 'workspace_001',
+    title_card_id: 'title_card_001',
+    node_input: {
+      ...nodeInput(compiledContext),
+      execution_mode: 'provider_llm',
+    },
+    run_mode: 'acceptance',
+    exploration_context_packet: compiledContext.exploration_context_packet,
+    arbiter_context_packet: compiledContext.arbiter_context_packet,
+    debate_loop_id: 'debate_loop_001',
+    slot_model_option_overrides: {
+      'explorer.round_1_discovery': `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.dashscope-budget`,
+      'deep_critic.round_1_discovery': `${TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID}.openai-balanced`,
+      'arbiter.issue_framing': `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FRAMING_PROFILE_ID}.dashscope-budget`,
+      'arbiter.final_synthesis': `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID}.openai-balanced`,
+    },
+  });
+
+  assert.equal(result.status, 'succeeded');
+  assert.deepEqual(
+    llmGateway.calls.map((call) => call.model.providerId),
+    ['dashscope', 'dashscope', 'openai', 'dashscope', 'openai'],
+  );
+  assert.deepEqual(
+    result.role_invocation_results.map((invocation) => invocation.provenance.model_option_id),
+    [
+      `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.dashscope-budget`,
+      `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.dashscope-budget`,
+      `${TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID}.openai-balanced`,
+      `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FRAMING_PROFILE_ID}.dashscope-budget`,
+    ],
+  );
+  assert.equal(
+    result.final_invocation_result.provenance.model_option_id,
+    `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID}.openai-balanced`,
+  );
+  assert.equal((llmGateway.calls[0]?.providerOverrides as { enable_thinking?: boolean }).enable_thinking, true);
+  assert.equal(Object.keys(llmGateway.calls[2]?.providerOverrides ?? {}).length, 0);
+});
+
 test('need-discovery debate loop supports slot-level Codex substitution while final synthesis stays provider-backed', async () => {
   const providerGateway = new ProviderDebateGateway();
   const { debateLoop, llmGateway, compiledContext } = await makeRuntime({
@@ -512,6 +564,69 @@ test('need-discovery debate loop supports slot-level Codex substitution while fi
       'topic_selection_need_discovery_debate_issue_frame',
       'topic_selection_ranked_candidate_draft_batch',
     ],
+  );
+});
+
+test('need-discovery debate loop rejects model option override on non-provider slot', async () => {
+  const providerGateway = new ProviderDebateGateway();
+  const { debateLoop, compiledContext } = await makeRuntime({
+    llmGateway: providerGateway,
+    executionMode: 'provider_llm',
+  });
+  await assert.rejects(
+    () => debateLoop.runNeedDiscoveryDebate({
+      workspace_id: 'workspace_001',
+      title_card_id: 'title_card_001',
+      node_input: {
+        ...nodeInput(compiledContext),
+        execution_mode: 'provider_llm',
+      },
+      run_mode: 'acceptance',
+      exploration_context_packet: compiledContext.exploration_context_packet,
+      arbiter_context_packet: compiledContext.arbiter_context_packet,
+      debate_loop_id: 'debate_loop_001',
+      slot_execution_overrides: {
+        'explorer.round_1_discovery': 'codex_assisted',
+      },
+      slot_model_option_overrides: {
+        'explorer.round_1_discovery': `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.openai-balanced`,
+      },
+      codex_responses: {
+        explorer: [
+          {
+            operator_label: 'codex_local_explorer',
+            output: explorerNotes('explorer_1', 'angle_codex_001'),
+          },
+        ],
+      },
+    }),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
+});
+
+test('need-discovery debate loop rejects malformed slot model option override values', async () => {
+  const providerGateway = new ProviderDebateGateway();
+  const { debateLoop, compiledContext } = await makeRuntime({
+    llmGateway: providerGateway,
+    executionMode: 'provider_llm',
+  });
+  await assert.rejects(
+    () => debateLoop.runNeedDiscoveryDebate({
+      workspace_id: 'workspace_001',
+      title_card_id: 'title_card_001',
+      node_input: {
+        ...nodeInput(compiledContext),
+        execution_mode: 'provider_llm',
+      },
+      run_mode: 'acceptance',
+      exploration_context_packet: compiledContext.exploration_context_packet,
+      arbiter_context_packet: compiledContext.arbiter_context_packet,
+      debate_loop_id: 'debate_loop_001',
+      slot_model_option_overrides: {
+        'deep_critic.round_1_discovery': 42,
+      } as never,
+    }),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
   );
 });
 

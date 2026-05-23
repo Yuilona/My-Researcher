@@ -7,6 +7,7 @@
 - Shared invocation provenance/audit envelope contracts are implemented and `AgentOrchestrator` validates audit snapshots against them before artifact persistence.
 - Generate-need-candidate `WorkflowHarness` scenario execution exists for the current v1a runtime slice.
 - Initial v1a need-discovery multi-agent debate role invocation runtime exists for `generate-need-candidate`.
+- v1a need-discovery debate provider slots now support explicit per-slot model-option selection while keeping concrete provider/model resolution inside the profile registry.
 - Profile escalation policy runtime, route-level runner integration, supplemental debate round automation, and full legacy script migration are still pending.
 
 ## 2026-05-23 Phase 4 Slice: v1a Full Harness E2E Runner
@@ -28,7 +29,15 @@
 - Guardrails added to prevent ambiguous script configurations:
   - final synthesis cannot be configured as `codex_assisted`;
   - `codex_assisted` executor kind must match `codex_assisted` execution mode outside debate;
-  - multi-agent debate E2E currently requires OpenAI because debate slot provider selection still uses per-profile default model options, not per-slot provider override mapping.
+  - provider model-option selection is explicit per `provider_llm` debate slot, and model-option overrides are rejected on non-provider slots.
+
+## 2026-05-23 Phase 4 Follow-up: Per-Slot Debate Model Options
+- Added `slot_model_option_overrides` for the v1a need-discovery debate loop, flowing from WorkflowHarness input through the generate-need-candidate adapter into each role/stage invocation.
+- Provider-backed slots resolve `model_option_id` in this order: explicit slot override, legacy node-level `model_option_id`, profile default. Non-provider slots always carry `model_option_id=null`.
+- Runtime validation rejects unknown slot ids, non-object override payloads, empty/non-string model option ids, and any model-option override applied to a `mocked_llm` or `codex_assisted` slot.
+- The v1a harness E2E script now maps provider-backed debate slots to profile-specific OpenAI/DashScope option ids instead of reusing the single-agent generate profile option.
+- The script summary artifact records `debate_slot_model_option_overrides` so mixed Codex/provider debate runs are reproducible without encoding provider-specific behavior in business workflow branches.
+- Automatic provider fallback remains forbidden; changing a slot's model option is an explicit operator/script configuration and produces normal invocation provenance.
 
 ## 2026-05-19 Joint Alignment
 - Locked D-01 and D-02 in `06-joint-decisions.md`.

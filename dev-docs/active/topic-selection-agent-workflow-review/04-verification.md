@@ -3,6 +3,34 @@
 ## Status
 - Verification runs are recorded below. New implementation must add focused checks next to the decision or slice it validates.
 
+## 2026-05-23 v1a Generate-Need-Candidate Per-Slot Model Options
+- Update: v1a need-discovery debate can now select provider model options per role/stage slot while preserving the DMP execution-mode boundary.
+- Command: `pnpm --dir apps/backend exec node --test --loader ts-node/esm src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 75 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck && node --check .ai/scripts/topic-selection-v1a-harness-e2e.mjs`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared test`
+- Result: passed; 160 tests passed.
+- Command: `set -a; source .env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 763 backend tests total, 762 passed, 1 skipped, 0 failed.
+- Command: `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs`
+- Result: passed; registry structurally valid.
+- Command: `node .ai/skills/workflows/llm/llm-engineering/scripts/check-llm-config-keys.mjs`
+- Result: passed; all in-scope LLM config keys registered.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-debate-slot-options-20260523194540 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=multi_agent_debate TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_EXECUTION_MODE=codex_assisted TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-debate-slot-options-20260523194540`.
+- Coverage:
+  - per-slot model options are legal only for `provider_llm` slots;
+  - Codex substitution and provider option selection are independent controls;
+  - malformed override values and non-provider override use return `INVALID_PAYLOAD`;
+  - mixed Codex/provider debate E2E completed through v1a publish-v1b-input-bundle with three persisted candidate refs.
+
 ## Matrix Acceptance Checks
 - Every topic-selection workflow node has one row in `06-workflow-matrix.md`.
 - The matrix contains the complete D-11 canonical node list before executor classification work begins.

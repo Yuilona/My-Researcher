@@ -26,6 +26,7 @@ import {
   type TopicSelectionDebateRoleStageSlot,
   type TopicSelectionV1aGenerateNeedCandidateDebateSlotExecutionOverrides,
   type TopicSelectionV1aGenerateNeedCandidateDebateSlotId,
+  type TopicSelectionV1aGenerateNeedCandidateDebateSlotModelOptionOverrides,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-debate-scenario-contracts';
 import { AppError } from '../errors/app-error.js';
 import {
@@ -87,6 +88,7 @@ export type TopicSelectionNeedDiscoveryDebateLoopInput = {
   debate_policy_id?: string | null;
   round_index?: number | null;
   slot_execution_overrides?: TopicSelectionV1aGenerateNeedCandidateDebateSlotExecutionOverrides | null;
+  slot_model_option_overrides?: TopicSelectionV1aGenerateNeedCandidateDebateSlotModelOptionOverrides | null;
   mocked_outputs?: TopicSelectionNeedDiscoveryDebateMockedOutputs | null;
   codex_responses?: TopicSelectionNeedDiscoveryDebateCodexResponses | null;
   model_option_id?: string | null;
@@ -251,6 +253,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     const outputs = input.mocked_outputs?.explorer ?? [];
     const codexResponses = input.codex_responses?.explorer ?? [];
     const executionMode = this.slotExecutionMode(input, EXPLORER_SLOT);
+    const modelOptionId = this.slotModelOptionId(input, EXPLORER_SLOT, executionMode);
     const instanceCount = this.instanceCount(
       executionMode,
       'explorer',
@@ -262,7 +265,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     for (let index = 0; index < instanceCount; index += 1) {
       const agentInstanceId = `explorer_${index + 1}`;
       const invocation = await this.dependencies.agentOrchestrator.invokeStructuredOutput<TopicSelectionNeedDiscoveryExplorerNotes>({
-        ...this.baseInvocation(input, debateLoopId, debatePolicyId, roundIndex, 'explorer', 'round_1_discovery', agentInstanceId, executionMode),
+        ...this.baseInvocation(input, debateLoopId, debatePolicyId, roundIndex, 'explorer', 'round_1_discovery', agentInstanceId, executionMode, modelOptionId),
         profile_id: EXPLORER_SLOT.profile_id,
         output_contract: EXPLORER_SLOT.output_contract,
         prompt: {
@@ -296,6 +299,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     const outputs = input.mocked_outputs?.deep_critic ?? [];
     const codexResponses = input.codex_responses?.deep_critic ?? [];
     const executionMode = this.slotExecutionMode(input, DEEP_CRITIC_SLOT);
+    const modelOptionId = this.slotModelOptionId(input, DEEP_CRITIC_SLOT, executionMode);
     const instanceCount = this.instanceCount(
       executionMode,
       'deep_critic',
@@ -307,7 +311,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     for (let index = 0; index < instanceCount; index += 1) {
       const agentInstanceId = `deep_critic_${index + 1}`;
       const invocation = await this.dependencies.agentOrchestrator.invokeStructuredOutput<TopicSelectionNeedDiscoveryDeepCriticNotes>({
-        ...this.baseInvocation(input, debateLoopId, debatePolicyId, roundIndex, 'deep_critic', 'round_1_discovery', agentInstanceId, executionMode),
+        ...this.baseInvocation(input, debateLoopId, debatePolicyId, roundIndex, 'deep_critic', 'round_1_discovery', agentInstanceId, executionMode, modelOptionId),
         profile_id: DEEP_CRITIC_SLOT.profile_id,
         output_contract: DEEP_CRITIC_SLOT.output_contract,
         prompt: {
@@ -342,6 +346,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     parentInvocationAttemptIds: string[];
   }): Promise<RoleInvocationRecord<TopicSelectionNeedDiscoveryDebateIssueFrame>> {
     const executionMode = this.slotExecutionMode(input.input, ISSUE_FRAME_SLOT);
+    const modelOptionId = this.slotModelOptionId(input.input, ISSUE_FRAME_SLOT, executionMode);
     const invocation = await this.dependencies.agentOrchestrator.invokeStructuredOutput<TopicSelectionNeedDiscoveryDebateIssueFrame>({
       ...this.baseInvocation(
         input.input,
@@ -352,6 +357,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
         'issue_framing',
         'arbiter_issue_frame',
         executionMode,
+        modelOptionId,
         input.parentInvocationAttemptIds,
       ),
       profile_id: ISSUE_FRAME_SLOT.profile_id,
@@ -392,6 +398,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     parentInvocationAttemptIds: string[];
   }): Promise<TopicSelectionAgentInvocationResult<TopicSelectionRankedCandidateDraftBatch>> {
     const executionMode = this.slotExecutionMode(input.input, FINAL_SYNTHESIS_SLOT);
+    const modelOptionId = this.slotModelOptionId(input.input, FINAL_SYNTHESIS_SLOT, executionMode);
     return this.dependencies.agentOrchestrator.invokeStructuredOutput<TopicSelectionRankedCandidateDraftBatch>({
       ...this.baseInvocation(
         input.input,
@@ -402,6 +409,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
         'final_synthesis',
         'arbiter_final',
         executionMode,
+        modelOptionId,
         input.parentInvocationAttemptIds,
         {
           arbiter_issue_frame_ref: input.issueFrameRef,
@@ -436,6 +444,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     stage: string,
     agentInstanceId: string,
     executionMode: TopicSelectionAgentExecutionMode,
+    modelOptionId: string | null,
     parentInvocationAttemptIds: string[] = [],
     refs: {
       role_level_summary_ref?: TopicSelectionFunctionalRef | null;
@@ -454,7 +463,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
       execution_mode: executionMode,
       executor_kind: 'multi_agent_debate' as const,
       run_mode: input.run_mode,
-      model_option_id: input.model_option_id ?? null,
+      model_option_id: modelOptionId,
       input_refs: this.inputRefs(input.node_input),
       context_packet_refs: [
         input.node_input.exploration_context_ref,
@@ -856,6 +865,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
 
   private assertInput(input: TopicSelectionNeedDiscoveryDebateLoopInput): void {
     this.assertKnownSlotExecutionOverrides(input);
+    this.assertSlotModelOptionOverrides(input);
     if (input.exploration_context_packet.context_family !== 'exploration_context') {
       throw new AppError(400, 'INVALID_PAYLOAD', 'exploration_context_packet must be exploration_context.');
     }
@@ -911,6 +921,20 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     return executionMode;
   }
 
+  private slotModelOptionId(
+    input: TopicSelectionNeedDiscoveryDebateLoopInput,
+    slot: TopicSelectionDebateRoleStageSlot,
+    executionMode: TopicSelectionAgentExecutionMode,
+  ): string | null {
+    if (executionMode !== 'provider_llm') {
+      return null;
+    }
+    const slotId = slot.slot_id as TopicSelectionV1aGenerateNeedCandidateDebateSlotId;
+    return input.slot_model_option_overrides?.[slotId]?.trim()
+      || input.model_option_id?.trim()
+      || null;
+  }
+
   private assertKnownSlotExecutionOverrides(
     input: TopicSelectionNeedDiscoveryDebateLoopInput,
   ): void {
@@ -919,6 +943,33 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     for (const slotId of Object.keys(overrides)) {
       if (!knownSlotIds.has(slotId)) {
         throw new AppError(400, 'INVALID_PAYLOAD', `Unknown debate slot execution override: ${slotId}.`);
+      }
+    }
+  }
+
+  private assertSlotModelOptionOverrides(
+    input: TopicSelectionNeedDiscoveryDebateLoopInput,
+  ): void {
+    const overrides = input.slot_model_option_overrides ?? {};
+    if (typeof overrides !== 'object' || Array.isArray(overrides)) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'slot_model_option_overrides must be an object keyed by debate slot id.');
+    }
+    const knownSlotIds = new Set(NEED_DISCOVERY_DEBATE_CONTRACT.role_stage_slots.map((slot) => slot.slot_id));
+    for (const [slotId, modelOptionId] of Object.entries(overrides)) {
+      if (!knownSlotIds.has(slotId)) {
+        throw new AppError(400, 'INVALID_PAYLOAD', `Unknown debate slot model option override: ${slotId}.`);
+      }
+      if (typeof modelOptionId !== 'string' || !modelOptionId.trim()) {
+        throw new AppError(400, 'INVALID_PAYLOAD', `${slotId} model_option_id override must be a non-empty string.`);
+      }
+      const slot = roleStageSlot(slotId);
+      const executionMode = this.slotExecutionMode(input, slot);
+      if (executionMode !== 'provider_llm') {
+        throw new AppError(
+          400,
+          'INVALID_PAYLOAD',
+          `${slotId} model_option_id override requires execution_mode=provider_llm.`,
+        );
       }
     }
   }

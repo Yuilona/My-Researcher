@@ -38,6 +38,8 @@ This document records the executable v1a debate contract for generating need can
 ## Provider Options
 Provider/model selection is owned by the model profile registry, not by node policy or workflow code.
 
+Provider-backed debate runs MAY pass explicit `slot_model_option_overrides` keyed by the slot ids above. Each value must be a model option defined by that slot's bound profile. Overrides are illegal for slots whose effective `execution_mode` is `mocked_llm` or `codex_assisted`.
+
 Default option for every current v1a debate profile:
 - `provider_id`: `openai`
 - `model_id`: `gpt-5.4-mini`
@@ -63,6 +65,7 @@ Normalized params for current model options:
 - Provider changes require manual rerun or explicit model-option override with new provenance.
 - `mocked_llm` is test/acceptance-only and cannot satisfy real provider-quality evidence.
 - Slot-level Codex substitution is supported only through explicit `slot_execution_overrides`; it is never an automatic fallback from provider failure.
+- Slot-level provider model-option selection is supported only through explicit `slot_model_option_overrides`; it is never an automatic fallback or provider-ranking mechanism.
 - The round cap is 3. Supplemental repair orchestration remains a follow-up runtime slice; the current executable contract covers the runnable initial discovery loop.
 - Required artifacts: `debate_role_output`, `debate_role_level_summary`, `debate_issue_frame`, `debate_final_synthesis`.
 

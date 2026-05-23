@@ -12,7 +12,21 @@
   - `arbiter.final_synthesis`: `provider_llm`.
 - This preserves the earlier D-16/D-17/DMP decision that the final arbiter remains provider-backed while Codex can cover a bounded exploratory role for local cost control.
 - The runtime now gives arbiter calls structured role-level summaries and issue-frame payloads, so the debate loop is not semantically dependent on artifact refs alone.
-- Remaining design gap: provider/model option selection is still profile-default per slot. Per-slot provider/model-option mapping and multi-provider role diversity remain future T-089/T-088 work, not silently encoded in the E2E script.
+- Follow-up implementation closed the immediate per-slot model option gap: provider-backed debate slots now accept explicit slot-level `model_option_id` overrides and reject model-option overrides on Codex/mock slots.
+- Remaining design gap: role diversity policy beyond explicit per-slot model option selection is still future T-089/T-088 work; it must not be silently encoded as provider ranking or fallback in the E2E script.
+
+## 2026-05-23 v1a Generate-Need-Candidate Per-Slot Model Option Runtime
+- Added per-slot model-option selection to the executable v1a generate-need-candidate debate runtime.
+- The mapping remains role/stage oriented:
+  - `explorer.round_1_discovery` resolves through `topic-selection.need-discovery.explorer.v1`;
+  - `deep_critic.round_1_discovery` resolves through `topic-selection.need-discovery.deep-critic.v1`;
+  - `arbiter.issue_framing` resolves through `topic-selection.need-discovery.arbiter-framing.v1`;
+  - `arbiter.final_synthesis` resolves through `topic-selection.need-discovery.arbiter-final.v1`.
+- Provider/model/parameter details still live in the model profile registry; the debate scenario contract and node policy reference slots and profile ids only.
+- Slot-level Codex substitution and slot-level provider model-option selection are now separate controls:
+  - execution overrides decide whether a slot is `codex_assisted`, `provider_llm`, or `mocked_llm`;
+  - model-option overrides are legal only for slots whose effective execution mode is `provider_llm`.
+- This removes the previous OpenAI-only E2E workaround without adding provider-specific execution modes or automatic fallback.
 
 ## 2026-05-19 Joint Alignment
 - Consumes D-01 and D-02 from `dev-docs/active/topic-selection-workflow-runtime-foundation/06-joint-decisions.md`.
