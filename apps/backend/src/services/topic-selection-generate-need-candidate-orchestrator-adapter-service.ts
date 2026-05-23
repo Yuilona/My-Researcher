@@ -533,6 +533,8 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
         content: [
           'Generate a RankedCandidateDraftBatch for the v1a topic-selection generate-need-candidate node.',
           'Use only the supplied refs and context packets.',
+          'The candidate_pool_digest and sibling_candidate_digest describe existing sibling candidates for duplicate awareness only; an empty pool means there are no known duplicates, not that generation should stop.',
+          'Generate new candidate drafts from the evidence signals, evidence_ref_table, resource sample digest, and challenge prompts.',
           'Do not create NeedCandidate, ValidatedNeed, TopicQuestionContract, SearchPlan, or any authority record.',
           'Do not include hidden reasoning, raw transcripts, provider logs, credentials, or secrets.',
           'Return only the structured output matching the ranked candidate draft batch schema.',
@@ -562,6 +564,9 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
               ? arbiterContext.payload.max_persisted_candidates
               : 5,
             authority_write_boundary: 'artifact-only ranked draft batch; no authority writes',
+            candidate_pool_digest_role: 'existing_sibling_candidates_for_duplicate_awareness',
+            empty_candidate_pool_meaning: 'no known duplicate candidates; still generate new drafts from evidence',
+            generation_source: 'evidence signals and refs, not pre-existing candidate pool entries',
           },
         }),
       },

@@ -593,3 +593,58 @@ Minimum close criteria:
 - Result: passed.
 - Coverage: happy publish, terminal node result without `next_node_id`, trace artifact with stable `created_by=system` default, exact replay, existing bundle reuse by expected version, same-attempt hash mismatch block, lineage drift block, missing expected version block, stable invalid-confirmation input rejection before missing-adjudication lookup, and service rejection of non-confirm human decision before bundle persistence.
 - Follow-up review fix: clarified that the WorkflowHarness runner owns normalized automation while the REST route remains a compatibility service boundary; removed malformed YAML indentation in the N9 policy block.
+
+## 2026-05-23 v1a Full WorkflowHarness E2E Verification
+- Update: added `.ai/scripts/topic-selection-v1a-harness-e2e.mjs` and `pnpm topic-selection:v1a-harness-e2e` as the v1a-only real-environment harness acceptance runner.
+- Command: `node --check .ai/scripts/topic-selection-v1a-harness-e2e.mjs`
+- Result: passed.
+- Initial command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-full-harness-env-20260523171457 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 pnpm topic-selection:v1a-harness-e2e`
+- Result: failed at N3 because `coverage_rows_preserve_blueprint_semantics` compared functional refs through `JSON.stringify`, making DB-returned ref key order look semantically different.
+- Fix: `TopicSelectionWorkflowHarnessService.coverageRowsMatchBlueprint` now compares refs by canonical ref identity instead of object key order.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 64 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Follow-up command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-full-harness-env-20260523171700 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 pnpm topic-selection:v1a-harness-e2e`
+- Result: failed at N5 because the new E2E fixture used invalid evidence-map enum values (`role_group`, `role_pattern`, `risk_boundary`, `medium`).
+- Fix: the fixture now uses the shared evidence-map contract enums (`method_family`, `limitation_family`, `baseline_family`, `solution`, `limitation`, `baseline`, `context`, `claim_conflict`, `moderate`).
+- Successful command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-full-harness-env-20260523171750 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; reused existing sample set `resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c`, executed all nine v1a harness nodes, and produced `v1b_input_bundle_dd36f81f-b8d7-441b-83f1-262306f56e4d`.
+- Successful command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-full-harness-create-sample-20260523171809 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=8 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; created sample set `resource_sample_set_df6b9775-6611-437b-be66-5503638ab515`, executed all nine v1a harness nodes, and produced `v1b_input_bundle_49c526bb-c164-4592-a9c2-66b907fd122c`.
+- Artifact dirs:
+  - `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-full-harness-env-20260523171750`
+  - `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-full-harness-create-sample-20260523171809`
+- Coverage: real DB, real title-card fixture, persisted resource sample set, v1a `WorkflowHarness` execution for N1 through N9, persisted `TopicSeed`, `LiteratureResourcePoolSnapshot`, `SearchPlan`, `SearchRun`, `EvidenceMap`, `NeedCandidate`, adjudication result, reserved-id `ValidatedNeed`, and terminal v1b input bundle handoff.
+
+## 2026-05-23 v1a Provider Participation E2E Verification
+- Update: added per-node v1a harness execution modes for N6 and N7 and verified real provider participation without changing shared business contracts.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/llm-gateway.unit.test.ts src/services/topic-selection-generate-need-candidate-orchestrator-adapter-service.unit.test.ts src/services/topic-selection-agent-orchestrator-service.unit.test.ts`
+- Result: passed; 20 tests passed.
+- Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts src/services/topic-selection-generate-need-candidate-orchestrator-adapter-service.unit.test.ts src/services/llm-gateway.unit.test.ts`
+- Result: passed; 80 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-full-harness-codex-20260523172858 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_V1A_HARNESS_AGENT_EXECUTION_MODE=codex_assisted pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; Codex-assisted boundary executed all nine v1a nodes and produced `v1b_input_bundle_e6ed894a-f801-46bb-a8e9-615299c64b16`.
+- Initial N7 provider command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-full-harness-n7-provider-20260523173700 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: failed at N7 with `InvalidRequestError`; no adjudication authority was created.
+- Fix: normalized OpenAI structured-output transport names and provider-only schema conversion for shared-contract `const` fields; internal schema names and audit provenance remain unchanged.
+- Successful N7 provider command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-full-harness-n7-provider-20260523174130 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; N7 provider call advanced to N8 and produced `v1b_input_bundle_8fc9b5b2-a052-4377-b65b-404f645a858a`.
+- Initial full-provider command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-full-harness-provider-20260523174400 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: failed at N6 with `NO_ADMISSIBLE_NEED_CANDIDATE`; provider interpreted empty candidate pool as no generation target. No NeedCandidate was persisted.
+- Fix: clarified N6 context semantics and output constraints so empty candidate pools mean no known duplicates, not no candidates to generate.
+- Follow-up full-provider run generated 3 candidates and passed N6 admission, then exposed brittle exact-count E2E expectations.
+- Fix: added bounded count expectations for N6 provider scenarios (`min/max admitted` and `min/max persisted`) while preserving exact counts for mocked/Codex fixtures.
+- Follow-up full-provider run passed N6 but stopped before N7 because the selected first candidate was `evidence_gap`.
+- Fix: the E2E harness now passes true EvidenceMap evidence roles into `evidence_ref_table` and selects a readiness-ready persisted candidate for the N7 handoff.
+- Successful full-provider command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-full-harness-provider-20260523180200 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; provider LLM participated in N6 and N7, N6 persisted 4 NeedCandidates, readiness selected `need_candidate_60271bc6b1d0416736932829`, and N9 published `v1b_input_bundle_5e6a60da-3db0-40c8-8b91-7535e2fa4299`.
+- Artifact dir: `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-full-harness-provider-20260523180200`
+- Command: `set -a; source ./.env.local; set +a; pnpm --filter @paper-engineering-assistant/backend test`
+- Result: passed; 760 tests, 759 passed, 1 skipped.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.

@@ -147,6 +147,60 @@ test('LLM gateway normalizes OpenAI structured output schemas to strict objects'
   );
 });
 
+test('LLM gateway normalizes OpenAI response format names without changing the internal schema name', async () => {
+  const calls: Array<Record<string, unknown>> = [];
+  const gateway = new BackendLlmGateway({
+    settingsService: createSettingsService(),
+    fetchImpl: (async (_input, init) => {
+      calls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response(JSON.stringify({
+        output_text: JSON.stringify({ ok: true }),
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch,
+  });
+
+  await gateway.createStructuredOutput<{ ok: boolean }>({
+    executionContext: { feature: 'test', operation: 'schema-name' },
+    model: { providerId: 'openai', modelId: 'gpt-test', profileId: 'test-profile' },
+    prompt: { promptTemplateId: 'test-prompt', version: 'v1' },
+    messages: [{ role: 'user', content: 'return ok' }],
+    schemaName: 'TopicSelectionNeedAdjudicationRecommendationPacket@v1',
+    schema: {
+      type: 'object',
+      properties: {
+        schema_version: { const: 'TopicSelectionNeedAdjudicationRecommendationPacket@v1' },
+        ok: { type: 'boolean' },
+      },
+    },
+  });
+
+  const body = calls[0] as {
+    text?: {
+      format?: {
+        name?: string;
+        schema?: {
+          properties?: {
+            schema_version?: {
+              const?: string;
+              enum?: string[];
+              type?: string;
+            };
+          };
+        };
+      };
+    };
+  };
+  assert.equal(body.text?.format?.name, 'TopicSelectionNeedAdjudicationRecommendationPacket_v1');
+  assert.equal(body.text?.format?.schema?.properties?.schema_version?.const, undefined);
+  assert.deepEqual(body.text?.format?.schema?.properties?.schema_version?.enum, [
+    'TopicSelectionNeedAdjudicationRecommendationPacket@v1',
+  ]);
+  assert.equal(body.text?.format?.schema?.properties?.schema_version?.type, 'string');
+});
+
 test('LLM gateway parses embedding vectors from OpenAI data shape', async () => {
   const gateway = new BackendLlmGateway({
     settingsService: createSettingsService(),

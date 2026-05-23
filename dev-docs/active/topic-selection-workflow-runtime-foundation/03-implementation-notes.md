@@ -7,7 +7,15 @@
 - Shared invocation provenance/audit envelope contracts are implemented and `AgentOrchestrator` validates audit snapshots against them before artifact persistence.
 - Generate-need-candidate `WorkflowHarness` scenario execution exists for the current v1a runtime slice.
 - Initial v1a need-discovery multi-agent debate role invocation runtime exists for `generate-need-candidate`.
-- Profile escalation policy runtime, full scenario registry execution, route-level runner integration, supplemental debate round automation, and legacy script migration are still pending.
+- Profile escalation policy runtime, route-level runner integration, supplemental debate round automation, and full legacy script migration are still pending.
+
+## 2026-05-23 Phase 4 Slice: v1a Full Harness E2E Runner
+- Added a v1a-only real-environment runner that executes the normalized v1a chain through `TopicSelectionWorkflowHarnessService` nodes instead of route-level compatibility orchestration.
+- Scope is limited to the nine v1a nodes: `create-topic-seed`, `snapshot-literature-resource-pool`, `create-search-plan`, `record-search-run`, `build-evidence-map`, `generate-need-candidate`, `validate-need-adjudication`, `human-confirm-need`, and `publish-v1b-input-bundle`.
+- The existing `.ai/scripts/topic-selection-real-e2e.mjs` remains the broader v1a -> v1b -> v1c product canary; the new runner is the v1a harness acceptance entry and must not redefine business contracts.
+- Resource sampling may still be loaded through the existing persisted sample-set API because sampling is the productized input layer before the normalized v1a workflow.
+- The runner supports both existing sample-set replay and deterministic local sample-set creation for repeatable acceptance.
+- Implementation review fix: SearchPlan blueprint semantic checks now compare `TopicSelectionFunctionalRef` arrays by canonical identity rather than object key order, avoiding DB serialization drift.
 
 ## 2026-05-19 Joint Alignment
 - Locked D-01 and D-02 in `06-joint-decisions.md`.
@@ -865,3 +873,13 @@
 - Added recommendation lineage guards for `profile_id`, `policy_version`, and `output_schema_version`; a model-like packet can no longer pass with correct refs but drifted execution policy identity.
 - Exact replay now re-evaluates current scenario assertions while still returning the stored node result and avoiding authority writes. This prevents stale test expectations from being reported as a fresh pass.
 - Added focused harness coverage for recommendation profile/policy/schema drift and replay assertion re-evaluation.
+
+## 2026-05-23 v1a Provider Participation Closure
+- Extended `.ai/scripts/topic-selection-v1a-harness-e2e.mjs` so N6 `generate-need-candidate` and N7 `validate-need-adjudication` can be switched independently through `TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE` and `TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE`.
+- Kept `TOPIC_SELECTION_V1A_HARNESS_AGENT_EXECUTION_MODE` as a compatibility default, but the per-node modes are the product-facing acceptance boundary for provider/Codex participation.
+- Fixed OpenAI structured-output transport normalization in `BackendLlmGateway`: provider request format names are sanitized for OpenAI while internal schema names stay unchanged, and shared-contract `const` fields are converted to provider-compatible single-value `enum` fields only in the transport schema.
+- Clarified N6 prompt semantics: `candidate_pool_digest` and `sibling_candidate_digest` are existing-candidate/duplicate-awareness context, not the source list of candidates to rank. Empty candidate pools mean no known duplicates; generation must still use evidence signals and refs.
+- Tightened the v1a E2E harness evidence table so provider calls receive the actual `support | challenge | baseline | context` evidence roles from the materialized EvidenceMap instead of inferring roles from generated ids.
+- Updated N6 scenario expectations to support bounded counts for provider runs (`1..5`) while keeping exact fixture counts for mocked/Codex runs.
+- Updated the E2E harness N6-to-N7 handoff to choose the first persisted candidate whose readiness assessment is `ready_for_validation`; this preserves the readiness gate instead of assuming the first generated candidate is validatable.
+- Successful real-provider run `v1a-full-harness-provider-20260523180200` executed all nine v1a nodes with provider LLM participation in N6 and N7 and produced `v1b_input_bundle_5e6a60da-3db0-40c8-8b91-7535e2fa4299`.

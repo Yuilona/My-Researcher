@@ -220,7 +220,11 @@ export type TopicSelectionWorkflowHarnessExpectation = {
   status?: TopicSelectionGenerateNeedCandidateOrchestratorAdapterResult['status'];
   routing_decision?: TopicSelectionSupplementalRoundRoutingDecisionKind | null;
   admitted_draft_count?: number | null;
+  min_admitted_draft_count?: number | null;
+  max_admitted_draft_count?: number | null;
   persisted_candidate_count?: number | null;
+  min_persisted_candidate_count?: number | null;
+  max_persisted_candidate_count?: number | null;
   error_code?: string | null;
   blocker_codes?: string[];
   persistence?: 'required' | 'forbidden' | 'optional';
@@ -6087,7 +6091,7 @@ export class TopicSelectionWorkflowHarnessService {
         && row.priority === intent.priority
         && row.expected_evidence_role === intent.expected_evidence_role
         && JSON.stringify(row.target_source_types) === JSON.stringify(intent.target_source_types)
-        && JSON.stringify(row.refs) === JSON.stringify(intent.refs);
+        && this.sameFunctionalRefArray(row.refs, intent.refs);
     });
   }
 
@@ -6192,9 +6196,10 @@ export class TopicSelectionWorkflowHarnessService {
         adapterResult.supplemental_round_routing_decision?.routing_decision ?? null,
       ));
     }
+    const admittedCount = adapterResult.candidate_draft_admission_report?.draft_results
+      .filter((result) => result.decision === 'admit').length ?? 0;
+    const persistedCount = adapterResult.persist_need_candidate_batch_result?.persisted_candidate_refs.length ?? 0;
     if (expectations.admitted_draft_count !== undefined && expectations.admitted_draft_count !== null) {
-      const admittedCount = adapterResult.candidate_draft_admission_report?.draft_results
-        .filter((result) => result.decision === 'admit').length ?? 0;
       assertions.push(this.assertion(
         'expected_admitted_draft_count',
         admittedCount === expectations.admitted_draft_count,
@@ -6203,13 +6208,48 @@ export class TopicSelectionWorkflowHarnessService {
         admittedCount,
       ));
     }
+    if (expectations.min_admitted_draft_count !== undefined && expectations.min_admitted_draft_count !== null) {
+      assertions.push(this.assertion(
+        'expected_min_admitted_draft_count',
+        admittedCount >= expectations.min_admitted_draft_count,
+        'Admitted draft count must be at least the scenario minimum.',
+        expectations.min_admitted_draft_count,
+        admittedCount,
+      ));
+    }
+    if (expectations.max_admitted_draft_count !== undefined && expectations.max_admitted_draft_count !== null) {
+      assertions.push(this.assertion(
+        'expected_max_admitted_draft_count',
+        admittedCount <= expectations.max_admitted_draft_count,
+        'Admitted draft count must not exceed the scenario maximum.',
+        expectations.max_admitted_draft_count,
+        admittedCount,
+      ));
+    }
     if (expectations.persisted_candidate_count !== undefined && expectations.persisted_candidate_count !== null) {
-      const persistedCount = adapterResult.persist_need_candidate_batch_result?.persisted_candidate_refs.length ?? 0;
       assertions.push(this.assertion(
         'expected_persisted_candidate_count',
         persistedCount === expectations.persisted_candidate_count,
         'Persisted NeedCandidate count must match scenario expectation.',
         expectations.persisted_candidate_count,
+        persistedCount,
+      ));
+    }
+    if (expectations.min_persisted_candidate_count !== undefined && expectations.min_persisted_candidate_count !== null) {
+      assertions.push(this.assertion(
+        'expected_min_persisted_candidate_count',
+        persistedCount >= expectations.min_persisted_candidate_count,
+        'Persisted NeedCandidate count must be at least the scenario minimum.',
+        expectations.min_persisted_candidate_count,
+        persistedCount,
+      ));
+    }
+    if (expectations.max_persisted_candidate_count !== undefined && expectations.max_persisted_candidate_count !== null) {
+      assertions.push(this.assertion(
+        'expected_max_persisted_candidate_count',
+        persistedCount <= expectations.max_persisted_candidate_count,
+        'Persisted NeedCandidate count must not exceed the scenario maximum.',
+        expectations.max_persisted_candidate_count,
         persistedCount,
       ));
     }
@@ -6918,6 +6958,11 @@ export class TopicSelectionWorkflowHarnessService {
     return left.ref_type === right.ref_type
       && left.ref_id === right.ref_id
       && (left.version_id ?? null) === (right.version_id ?? null);
+  }
+
+  private sameFunctionalRefArray(left: TopicSelectionFunctionalRef[], right: TopicSelectionFunctionalRef[]): boolean {
+    return left.length === right.length
+      && left.every((leftRef, index) => this.refIdentity(leftRef) === this.refIdentity(right[index]!));
   }
 
   private refIdentity(ref: TopicSelectionFunctionalRef): string {

@@ -3453,6 +3453,35 @@ test('workflow harness runs generate-need-candidate finalize scenario through pe
   );
 });
 
+test('workflow harness supports bounded generate-need-candidate count expectations', async () => {
+  const { workflowHarness } = await makeRuntime();
+  const result = await workflowHarness.runGenerateNeedCandidateScenario(scenarioInput({
+    expectations: {
+      status: 'succeeded',
+      routing_decision: 'finalize_with_admitted_batch',
+      min_admitted_draft_count: 1,
+      max_admitted_draft_count: 5,
+      min_persisted_candidate_count: 1,
+      max_persisted_candidate_count: 5,
+      persistence: 'required',
+    },
+  }));
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(
+    result.assertions.some((assertion) =>
+      assertion.assertion_id === 'expected_min_admitted_draft_count' && assertion.passed,
+    ),
+    true,
+  );
+  assert.equal(
+    result.assertions.some((assertion) =>
+      assertion.assertion_id === 'expected_max_persisted_candidate_count' && assertion.passed,
+    ),
+    true,
+  );
+});
+
 test('workflow harness can drive mocked multi-agent debate without authority persistence', async () => {
   const { workflowHarness, controlPlaneRepository, needValidationRepository, llmGateway } = await makeRuntime();
   const result = await workflowHarness.runGenerateNeedCandidateScenario(scenarioInput({

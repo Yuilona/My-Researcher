@@ -158,6 +158,18 @@ function normalizeOpenAiStructuredOutputSchema(schema: unknown): unknown {
     normalized[key] = normalizeOpenAiStructuredOutputSchema(value);
   }
 
+  if (Object.hasOwn(normalized, 'const')) {
+    const constValue = normalized.const;
+    delete normalized.const;
+    normalized.enum = [constValue];
+    normalized.type ??= inferJsonSchemaType(constValue);
+  }
+  if (Array.isArray(normalized.enum) && normalized.type === undefined) {
+    const enumTypes = [...new Set(normalized.enum.map((item) => inferJsonSchemaType(item)))];
+    if (enumTypes.length === 1) {
+      normalized.type = enumTypes[0];
+    }
+  }
   if (normalized.type === 'object' || isRecord(normalized.properties)) {
     if (!isRecord(normalized.properties)) {
       normalized.properties = {};
@@ -169,6 +181,33 @@ function normalizeOpenAiStructuredOutputSchema(schema: unknown): unknown {
   }
 
   return normalized;
+}
+
+function inferJsonSchemaType(value: unknown): string {
+  if (value === null) {
+    return 'null';
+  }
+  if (Array.isArray(value)) {
+    return 'array';
+  }
+  if (typeof value === 'string') {
+    return 'string';
+  }
+  if (typeof value === 'number') {
+    return Number.isInteger(value) ? 'integer' : 'number';
+  }
+  if (typeof value === 'boolean') {
+    return 'boolean';
+  }
+  if (isRecord(value)) {
+    return 'object';
+  }
+  return 'string';
+}
+
+function normalizeOpenAiResponseFormatName(schemaName: string): string {
+  const normalized = schemaName.replace(/[^a-zA-Z0-9_-]/gu, '_');
+  return normalized.length > 0 ? normalized : 'structured_output';
 }
 
 export class BackendLlmGateway {
@@ -378,7 +417,7 @@ export class BackendLlmGateway {
           text: {
             format: {
               type: 'json_schema',
-              name: request.schemaName,
+              name: normalizeOpenAiResponseFormatName(request.schemaName),
               strict: true,
               schema: normalizeOpenAiStructuredOutputSchema(request.schema),
             },

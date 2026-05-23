@@ -299,6 +299,14 @@ test('generate-need-candidate adapter produces ranked draft batch through mocked
     if (mode === 'provider_llm') {
       assert.equal(llmGateway.calls[0]?.model.profileId, TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID);
       assert.equal(result.invocation_result.provenance.model_option_id, `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.openai-balanced`);
+      assert.match(
+        llmGateway.calls[0]?.messages[0]?.content ?? '',
+        /empty pool means there are no known duplicates/,
+      );
+      assert.match(
+        llmGateway.calls[0]?.messages[1]?.content ?? '',
+        /candidate_pool_digest_role/,
+      );
     }
   }
 });
