@@ -70,10 +70,45 @@ const CLAIM_SUPPORT_EVIDENCE_REF_TYPES = new Set([
   'citableevidenceunit',
   'citablesourceevidence',
   'citablesourceevidenceunit',
-  'literatureref',
-  'sourceref',
-  'evidenceunit',
 ]);
+const HIGH_RISK_OVERCLAIM_TERMS = [
+  'broad',
+  'broadly',
+  'general',
+  'generalize',
+  'generalizes',
+  'generalization',
+  'universal',
+  'universally',
+  'all tasks',
+  'all datasets',
+  'all domains',
+  'every task',
+  'every dataset',
+  'any task',
+  'any dataset',
+  'reliable',
+  'reliability',
+  'robust',
+  'robustness',
+  'always',
+  'superior',
+  'superiority',
+  'best',
+  'outperform',
+  'outperforms',
+  'state of the art',
+  'sota',
+] as const;
+const HIGH_RISK_OVERCLAIM_STATEMENT_PATTERNS = [
+  /\b(universal|universally|always)\b/u,
+  /\b(generalize|generalizes|generalized|generalization)\b/u,
+  /\b(all|every|any) (task|tasks|dataset|datasets|domain|domains|setting|settings)\b/u,
+  /\b(broadly|generally|globally) (improve|improves|outperform|outperforms|generalize|generalizes|reliable|superior)\b/u,
+  /\b(reliable|robust) (across|for all|in all|on all)\b/u,
+  /\b(superior|superiority|best|state of the art|sota)\b/u,
+  /\boutperform(s)? (all|every|any|across)\b/u,
+] as const;
 const MEMO_OR_SUMMARY_REF_TYPES = new Set([
   'resultinterpretationpacket',
   'llmrationale',
@@ -218,7 +253,7 @@ export class PaperImplementationResultClaimDossierService {
       claim_type: request.claim_type,
       claim_statement: request.claim_statement.trim(),
       claim_strength: request.claim_strength,
-      claim_status: 'supported',
+      claim_status: claimTracePacket ? 'supported' : 'support_pending_trace',
       boundary_gate_status: boundaryGateStatus,
       result_interpretation_packet_refs: resultPackets.map((packet) =>
         this.ref(
@@ -664,7 +699,7 @@ export class PaperImplementationResultClaimDossierService {
       throw new AppError(
         409,
         'GATE_CONSTRAINT_FAILED',
-        'ClaimCandidate support must point to run evidence, citable literature/source evidence, or citation candidates.',
+        'ClaimCandidate support must point to run evidence, citation candidates, or explicit citable/source evidence units.',
         {
           ref_type: unsupportedRef.ref_type,
           ref_id: unsupportedRef.ref_id,
@@ -690,12 +725,13 @@ export class PaperImplementationResultClaimDossierService {
       const normalized = this.normalizeText(item);
       return normalized.length > 0 && normalizedStatement.includes(normalized);
     });
-    if (matched) {
+    const highRiskMatched = matched ?? this.matchHighRiskOverclaim(normalizedStatement, forbidden);
+    if (highRiskMatched) {
       throw new AppError(
         409,
         'GATE_CONSTRAINT_FAILED',
         'ClaimBoundaryGate blocks a claim statement that matches a forbidden overclaim.',
-        { forbidden_overclaim: matched },
+        { forbidden_overclaim: highRiskMatched },
       );
     }
   }
@@ -792,6 +828,19 @@ export class PaperImplementationResultClaimDossierService {
         'GATE_CONSTRAINT_FAILED',
         'Ready ImplementationDossier must admit or reject every included ClaimCandidate.',
         { claim_candidate_ids: undisposed },
+      );
+    }
+    const pendingAdmitted = claimCandidates.find((candidate) =>
+      admittedCandidateIds.has(candidate.claim_candidate_id) && candidate.claim_status !== 'supported');
+    if (pendingAdmitted) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        'Ready ImplementationDossier can only admit ClaimCandidate objects with supported trace-ready status.',
+        {
+          claim_candidate_id: pendingAdmitted.claim_candidate_id,
+          claim_status: pendingAdmitted.claim_status,
+        },
       );
     }
   }
@@ -986,6 +1035,18 @@ export class PaperImplementationResultClaimDossierService {
       ...resultPackets.flatMap((packet) => packet.claim_implications.forbidden_overclaims),
       ...request.boundary.forbidden_overclaims,
     ];
+  }
+
+  private matchHighRiskOverclaim(normalizedStatement: string, forbidden: string[]): string | null {
+    const statementHasHighRiskTerm = HIGH_RISK_OVERCLAIM_STATEMENT_PATTERNS.some((pattern) =>
+      pattern.test(normalizedStatement));
+    if (!statementHasHighRiskTerm) {
+      return null;
+    }
+    return forbidden.find((item) => {
+      const normalized = this.normalizeText(item);
+      return HIGH_RISK_OVERCLAIM_TERMS.some((term) => normalized.includes(term));
+    }) ?? null;
   }
 
   private hasRiskyInterpretationSignals(request: CreateResultInterpretationPacketRequest): boolean {

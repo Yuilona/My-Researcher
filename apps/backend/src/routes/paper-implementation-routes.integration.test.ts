@@ -1213,11 +1213,52 @@ test('PaperImplementation motive routes bootstrap draft admission and evidence b
     assertStatus(harnessRun, 201);
     assert.equal((harnessRun.json() as ResearchWorkOrderHarnessRun).run_status, 'submitted');
 
+    const missingRunEvidenceTraceMonitor = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/run-monitor-intakes`,
+      payload: {
+        work_order_id: 'research_work_order_route_001',
+        run_evidence_unit_id: 'run_evidence_unit_route_001',
+        external_job_ref: ref('experiment_foundation_run', 'experiment_foundation_run_001'),
+        external_job_hash: 'external_job_hash_001',
+        monitor_event_kind: 'failed',
+        run_status: 'failed',
+        failure_summary: 'The controlled run failed before producing trusted result artifacts.',
+      },
+    });
+    assertStatus(missingRunEvidenceTraceMonitor, 409);
+
+    const routeRunEvidenceId = 'run_evidence_unit_route_001';
+    const runEvidenceTrace = await app.inject({
+      method: 'POST',
+      url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/trace-manifests`,
+      payload: {
+        target_ref: ref('run_evidence_unit', routeRunEvidenceId, 'v1'),
+        lineage: {
+          ...emptyTraceLineage(),
+          experiment: {
+            ...emptyTraceLineage().experiment,
+            work_order_refs: [ref('research_work_order', 'research_work_order_route_001')],
+            run_refs: [ref('experiment_foundation_run', 'experiment_foundation_run_001')],
+          },
+          artifact: {
+            ...emptyTraceLineage().artifact,
+            dataset_refs: [ref('dataset_version', 'dataset_route_001')],
+            code_version_refs: [ref('code_version', 'code_route_001')],
+            config_refs: [ref('config', 'config_route_001')],
+          },
+        },
+      },
+    });
+    assertStatus(runEvidenceTrace, 201);
+
     const monitor = await app.inject({
       method: 'POST',
       url: `/paper-implementation/projects/${encodeURIComponent(projectId)}/run-monitor-intakes`,
       payload: {
         work_order_id: 'research_work_order_route_001',
+        run_evidence_unit_id: routeRunEvidenceId,
+        run_evidence_trace_manifest_id: (runEvidenceTrace.json() as TraceManifest).trace_manifest_id,
         external_job_ref: ref('experiment_foundation_run', 'experiment_foundation_run_001'),
         external_job_hash: 'external_job_hash_001',
         monitor_event_kind: 'failed',
@@ -1236,8 +1277,8 @@ test('PaperImplementation motive routes bootstrap draft admission and evidence b
     });
     assertStatus(runEvidenceUnits, 200);
     assert.equal((runEvidenceUnits.json() as { items: RunEvidenceUnit[] }).items[0]?.work_order_id, 'research_work_order_route_001');
-    const routeRunEvidenceId = monitorBody.run_evidence_unit?.run_evidence_unit_id;
-    assert.ok(routeRunEvidenceId);
+    assert.equal(monitorBody.run_evidence_unit?.run_evidence_unit_id, routeRunEvidenceId);
+    assert.equal(monitorBody.run_evidence_unit?.trace_manifest_id, (runEvidenceTrace.json() as TraceManifest).trace_manifest_id);
 
     const resultTrace = await app.inject({
       method: 'POST',

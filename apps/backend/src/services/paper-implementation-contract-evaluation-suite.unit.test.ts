@@ -1048,9 +1048,14 @@ test('T-101 replays the PaperImplementation ready path across child authorities'
     external_job_ref: ref('experiment_foundation_run', 'experiment_run_001'),
     external_job_hash: 'experiment_run_hash_001',
   });
+  const runEvidenceTrace = await harness.traceService.createTraceManifest(projectId, {
+    target_ref: ref('run_evidence_unit', RUN_EVIDENCE_ID, 'v1'),
+    lineage: experimentLineage(),
+  });
   const monitor = await harness.workOrderService.recordRunMonitorIntake(projectId, {
     work_order_id: WORK_ORDER_ID,
     run_evidence_unit_id: RUN_EVIDENCE_ID,
+    run_evidence_trace_manifest_id: runEvidenceTrace.trace_manifest_id,
     external_job_ref: ref('experiment_foundation_run', 'experiment_run_001'),
     external_job_hash: 'experiment_run_hash_001',
     monitor_event_kind: 'failed',

@@ -58,6 +58,7 @@ const WRITING_AFFECTING_TARGET_REQUIREMENTS = new Map<string, PaperImplementatio
   ['citationcandidate', ['literature']],
   ['implementationdossier', ['literature']],
   ['resultclaim', ['experiment']],
+  ['resultinterpretationpacket', ['experiment']],
   ['resultinterpretationpacketlight', ['experiment']],
   ['runevidenceunit', ['experiment', 'artifact']],
   ['validationcycle', ['decision']],

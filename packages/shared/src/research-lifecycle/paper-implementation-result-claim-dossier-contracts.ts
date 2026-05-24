@@ -37,6 +37,7 @@ export type PaperImplementationClaimType =
 
 export const PAPER_IMPLEMENTATION_CLAIM_CANDIDATE_STATUSES = [
   'proposed',
+  'support_pending_trace',
   'supported',
   'weakened',
   'rejected',

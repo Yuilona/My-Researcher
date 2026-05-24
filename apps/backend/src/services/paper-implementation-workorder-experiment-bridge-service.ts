@@ -264,7 +264,7 @@ export class PaperImplementationWorkOrderExperimentBridgeService {
     implementationProjectId: string,
     request: RecordRunMonitorIntakeRequest,
   ): Promise<RecordRunMonitorIntakeResponse> {
-    await this.requireActiveProject(implementationProjectId);
+    const project = await this.requireActiveProject(implementationProjectId);
     const receivedAt = request.received_at ?? this.now();
     const workOrder = request.work_order_id
       ? await this.requireWorkOrder(implementationProjectId, request.work_order_id)
@@ -298,8 +298,14 @@ export class PaperImplementationWorkOrderExperimentBridgeService {
       updatedWorkOrder = this.updateWorkOrderForRunStatus(workOrder, request.run_status, receivedAt);
       if (FINAL_RUN_STATUSES.has(request.run_status)) {
         this.assertFinalRunEvidenceInput(request);
+        const runEvidenceUnitId = this.requireRunEvidenceUnitId(request.run_evidence_unit_id);
+        const runEvidenceTraceManifest = await this.requireRunEvidenceTraceManifest(
+          implementationProjectId,
+          request.run_evidence_trace_manifest_id,
+          runEvidenceUnitId,
+        );
         runEvidenceUnit = {
-          run_evidence_unit_id: request.run_evidence_unit_id ?? this.idFactory('run_evidence_unit'),
+          run_evidence_unit_id: runEvidenceUnitId,
           implementation_project_id: implementationProjectId,
           work_order_id: workOrder.work_order_id,
           validation_cycle_id: workOrder.validation_cycle_id,
@@ -324,8 +330,8 @@ export class PaperImplementationWorkOrderExperimentBridgeService {
             ? this.idFactory('run_failure_summary')
             : null,
           failure_summary: request.failure_summary ?? null,
-          trace_manifest_ref: workOrder.trace_manifest_ref,
-          trace_manifest_id: workOrder.trace_manifest_id,
+          trace_manifest_ref: this.traceManifestRef(project, runEvidenceTraceManifest),
+          trace_manifest_id: runEvidenceTraceManifest.trace_manifest_id,
           created_by: request.created_by ?? 'system',
           created_at: receivedAt,
         };
@@ -523,6 +529,37 @@ export class PaperImplementationWorkOrderExperimentBridgeService {
         'Failed, cancelled, inconclusive, and negative run evidence requires failure_summary.',
       );
     }
+  }
+
+  private requireRunEvidenceUnitId(runEvidenceUnitId: string | undefined): string {
+    if (!this.hasText(runEvidenceUnitId)) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        'Trusted final run evidence requires explicit run_evidence_unit_id so its TraceManifest can target it.',
+      );
+    }
+    return runEvidenceUnitId;
+  }
+
+  private async requireRunEvidenceTraceManifest(
+    implementationProjectId: string,
+    traceManifestId: string | null | undefined,
+    runEvidenceUnitId: string,
+  ): Promise<TraceManifest> {
+    if (!this.hasText(traceManifestId)) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        'Trusted final run evidence requires run_evidence_trace_manifest_id targeting the RunEvidenceUnit.',
+      );
+    }
+    return this.requireCompleteTraceManifest(
+      implementationProjectId,
+      traceManifestId,
+      'run_evidence_unit',
+      runEvidenceUnitId,
+    );
   }
 
   private assertMonitorMatchesWorkOrder(

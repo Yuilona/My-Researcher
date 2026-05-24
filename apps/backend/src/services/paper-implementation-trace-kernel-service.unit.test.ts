@@ -235,6 +235,22 @@ test('known writing-affecting target with empty required lineage is broken', asy
   assert.equal(queue[0]?.lineage_type, 'literature');
 });
 
+test('result interpretation packet target requires experiment lineage', async () => {
+  const { service } = makeHarness();
+  const broken = await service.createTraceManifest(PROJECT.implementation_project_id, {
+    target_ref: ref('result_interpretation_packet', 'result_interpretation_packet_001', 'v1'),
+    lineage: emptyLineage(),
+  });
+  assert.equal(broken.trace_status, 'broken');
+  assert.equal(broken.missing_ref_count, 1);
+
+  const complete = await service.createTraceManifest(PROJECT.implementation_project_id, {
+    target_ref: ref('result_interpretation_packet', 'result_interpretation_packet_002', 'v1'),
+    lineage: lineageWithExperiment(),
+  });
+  assert.equal(complete.trace_status, 'complete');
+});
+
 test('missing refs create broken manifest and repair queue item', async () => {
   const { service } = makeHarness();
   const manifest = await service.createTraceManifest(PROJECT.implementation_project_id, {

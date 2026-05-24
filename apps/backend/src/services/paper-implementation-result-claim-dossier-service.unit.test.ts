@@ -534,6 +534,7 @@ test('result interpretation, claim, dossier, and writing packet close the ready 
 
   const claim = await service.createClaimCandidate(PROJECT_ID, validClaimRequest());
   assert.equal(claim.claim_trace_packet_id, 'claim_trace_packet_001');
+  assert.equal(claim.claim_status, 'supported');
 
   const dossier = await service.createImplementationDossier(PROJECT_ID, {
     dossier_id: 'implementation_dossier_001',
@@ -591,11 +592,43 @@ test('claim boundary blocks interpretation refs as support and forbidden overcla
     (error) => error instanceof AppError && error.message.includes('support must point'),
   );
 
+  for (const refType of ['literature_ref', 'source_ref', 'evidence_unit']) {
+    const broadContextSupport = validClaimRequest();
+    broadContextSupport.support_refs = [ref(refType, `${refType}_001`)];
+    await assert.rejects(
+      service.createClaimCandidate(PROJECT_ID, broadContextSupport),
+      (error) => error instanceof AppError && error.message.includes('support must point'),
+    );
+  }
+
   const overclaim = validClaimRequest();
   overclaim.claim_statement = 'The method gives broad generalization across all tasks.';
   await assert.rejects(
     service.createClaimCandidate(PROJECT_ID, overclaim),
     (error) => error instanceof AppError && error.message.includes('forbidden overclaim'),
+  );
+
+  const paraphraseOverclaim = validClaimRequest();
+  paraphraseOverclaim.claim_statement = 'The method is universally reliable and globally superior across all datasets.';
+  await assert.rejects(
+    service.createClaimCandidate(PROJECT_ID, paraphraseOverclaim),
+    (error) => error instanceof AppError && error.message.includes('forbidden overclaim'),
+  );
+});
+
+test('claim without claim trace stays pending and cannot be admitted to ready dossier', async () => {
+  const { service } = await setup();
+  await service.createResultInterpretationPacket(PROJECT_ID, validResultRequest());
+
+  const pendingRequest = validClaimRequest();
+  delete (pendingRequest as Partial<CreateClaimCandidateRequest>).claim_trace_packet_id;
+  const pending = await service.createClaimCandidate(PROJECT_ID, pendingRequest);
+  assert.equal(pending.claim_status, 'support_pending_trace');
+  assert.equal(pending.claim_trace_packet_id, null);
+
+  await assert.rejects(
+    service.createImplementationDossier(PROJECT_ID, validDossierRequest()),
+    (error) => error instanceof AppError && error.message.includes('supported trace-ready status'),
   );
 });
 

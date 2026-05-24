@@ -8,13 +8,14 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 102 (planned: 3, in-progress: 3, blocked: 0, done: 29, archived: 67)
+- Tasks: 103 (planned: 3, in-progress: 3, blocked: 0, done: 30, archived: 67)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
 | T-090 experiment-foundation-capability-validation | done | F-001 | dev-docs/active/experiment-foundation-capability-validation |
+| T-102 paper-implementation-v1-hardening | done | F-001 | dev-docs/active/paper-implementation-v1-hardening |
 | T-103 experiment-foundation-full-flow-validation-runner | planned | F-001 | dev-docs/active/experiment-foundation-full-flow-validation-runner |
 | T-091 paper-implementation-full-landing | done | F-001 | dev-docs/active/paper-implementation-full-landing |
 | T-101 paper-implementation-contract-evaluation-suite | done | F-001 | dev-docs/active/paper-implementation-contract-evaluation-suite |

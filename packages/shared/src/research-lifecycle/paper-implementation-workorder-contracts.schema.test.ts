@@ -133,6 +133,8 @@ test('harness and monitor schemas separate trusted linkage from raw callback pay
       {
         monitor_event_kind: 'failed',
         run_status: 'failed',
+        run_evidence_unit_id: 'run_evidence_unit_001',
+        run_evidence_trace_manifest_id: 'trace_manifest_run_evidence_001',
         failure_summary: 'Dataset unavailable.',
         raw_payload: {
           adapter_status: 'failed',

@@ -229,6 +229,7 @@ export interface SubmitResearchWorkOrderHarnessRunRequest {
 export interface RecordRunMonitorIntakeRequest {
   monitor_intake_id?: string;
   run_evidence_unit_id?: string;
+  run_evidence_trace_manifest_id?: string | null;
   work_order_id?: string | null;
   external_job_ref?: TopicSelectionFunctionalRef | null;
   external_job_hash?: string | null;
@@ -372,6 +373,7 @@ export const recordRunMonitorIntakeRequestSchema = {
   properties: {
     monitor_intake_id: stringId,
     run_evidence_unit_id: stringId,
+    run_evidence_trace_manifest_id: nullableStringId,
     work_order_id: nullableStringId,
     external_job_ref: nullableFunctionalRef,
     external_job_hash: nullableStringId,

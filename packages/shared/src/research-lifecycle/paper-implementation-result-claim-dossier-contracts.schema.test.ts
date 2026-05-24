@@ -192,6 +192,36 @@ test('claim candidate schema keeps support refs explicit and rejects unsupported
     ),
     400,
   );
+
+  assert.equal(
+    await validateWithSchema(
+      resultClaimContracts.claimCandidateSchema,
+      {
+        claim_candidate_id: 'claim_candidate_001',
+        implementation_project_id: 'implementation_project_001',
+        claim_type: 'empirical_finding',
+        claim_statement: 'The method improves the primary metric on the admitted benchmark.',
+        claim_strength: 'moderate',
+        claim_status: 'support_pending_trace',
+        boundary_gate_status: 'allow_moderate',
+        result_interpretation_packet_refs: [functionalRef('result_interpretation_packet', 'result_interpretation_packet_001')],
+        support_refs: [functionalRef('run_evidence_unit', 'run_evidence_unit_001')],
+        challenge_refs: [],
+        scope: validClaimCandidateRequest().scope,
+        boundary: validClaimCandidateRequest().boundary,
+        trace_manifest_ref: functionalRef('trace_manifest', 'trace_manifest_claim_001'),
+        trace_manifest_id: 'trace_manifest_claim_001',
+        claim_trace_packet_ref: null,
+        claim_trace_packet_id: null,
+        human_confirmation_required: false,
+        forbidden_overclaim_count: 0,
+        policy_version_id: null,
+        created_by: 'system',
+        created_at: '2026-05-24T00:00:00.000Z',
+      },
+    ),
+    200,
+  );
 });
 
 test('dossier and writing packet schemas expose readiness and projection fields', async () => {
