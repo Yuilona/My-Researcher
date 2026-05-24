@@ -3453,6 +3453,30 @@ test('workflow harness runs generate-need-candidate finalize scenario through pe
   );
 });
 
+test('workflow harness reuses persisted NeedCandidate refs when generate-need-candidate attempt is replayed', async () => {
+  const { workflowHarness, needValidationRepository } = await makeRuntime();
+  const input = scenarioInput({
+    workflow_run_id: 'workflow_run_generate_need_replay',
+    node_attempt_id: 'node_attempt_generate_need_replay',
+    mocked_output: {
+      fixture_id: 'fixture_generate_need_candidate_replay',
+      output: rankedBatch('node_attempt_generate_need_replay'),
+    },
+  });
+  const first = await workflowHarness.runGenerateNeedCandidateScenario(input);
+  const replay = await workflowHarness.runGenerateNeedCandidateScenario(input);
+
+  assert.equal(first.scenario_status, 'passed');
+  assert.equal(replay.scenario_status, 'passed');
+  assert.equal(first.adapter_result.persist_need_candidate_batch_result?.replayed, false);
+  assert.equal(replay.adapter_result.persist_need_candidate_batch_result?.replayed, true);
+  assert.deepEqual(
+    replay.adapter_result.persist_need_candidate_batch_result?.persisted_candidate_refs,
+    first.adapter_result.persist_need_candidate_batch_result?.persisted_candidate_refs,
+  );
+  assert.equal((await needValidationRepository.listNeedCandidatesByTitleCardId('title_card_001')).length, 1);
+});
+
 test('workflow harness supports bounded generate-need-candidate count expectations', async () => {
   const { workflowHarness } = await makeRuntime();
   const result = await workflowHarness.runGenerateNeedCandidateScenario(scenarioInput({

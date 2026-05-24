@@ -166,3 +166,19 @@
 ## 2026-05-19 Cleanup Note
 - Legacy temporary harnesses and run artifacts under `.ai/.tmp/topic-selection-real-flow*` and `.ai/.tmp/topic-selection-sampling-quality*` were removed during workspace cleanup.
 - Historical commands above are retained as verification evidence; new real-flow execution should use the durable runner `.ai/scripts/topic-selection-real-e2e.mjs` or `pnpm topic-selection:real-e2e`.
+
+## 2026-05-24 Underfilled Resource Pool Regression
+- Update: added service coverage for partially usable resource pools where selected resources exist but role targets and sample size cannot be fully satisfied.
+- Command: `pnpm --dir apps/backend exec node --test --loader ts-node/esm src/services/topic-selection-resource-sampling-service.unit.test.ts`
+  - Result: passed; 13 tests passed.
+- Command: `pnpm --dir apps/backend exec node --test --loader ts-node/esm src/services/topic-selection-resource-sampling-service.unit.test.ts src/routes/topic-selection-resource-sampling-routes.integration.test.ts src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts src/services/topic-selection-agent-orchestrator-service.unit.test.ts`
+  - Result: passed; 31 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+  - Result: passed.
+- Command: `git diff --check`
+  - Result: passed.
+- Coverage:
+  - underfilled baseline/context role targets produce `ROLE_TARGET_UNDERFILLED_*` warnings;
+  - underfilled overall sample size produces `SAMPLE_SIZE_UNDERFILLED`;
+  - a partial but non-empty eligible pool remains `ready_with_warning`, not `blocked`;
+  - no fallback role invention is required to satisfy the requested sample size.

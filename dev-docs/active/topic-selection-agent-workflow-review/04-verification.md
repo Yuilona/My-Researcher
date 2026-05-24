@@ -46,6 +46,27 @@
   - cross-profile model option on a provider slot fails inside `generate-need-candidate`;
   - no `NeedCandidate`, `ValidatedNeed`, or v1b input bundle authority writes occur in either case.
 
+## 2026-05-24 v1a Negative E2E Diagnostics And Robustness
+- Update: hardened the negative E2E wrapper to persist per-case stdout/stderr/summary artifacts and reran the focused robustness suite.
+- Command: `node --check .ai/scripts/topic-selection-v1a-harness-negative-e2e.mjs`
+  - Result: passed.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_NEGATIVE_RUN_ID=diagnostic-negative-20260524 pnpm topic-selection:v1a-harness-negative-e2e`
+  - Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-negative-e2e/diagnostic-negative-20260524`.
+- Command: `pnpm --dir apps/backend exec node --test --loader ts-node/esm src/services/topic-selection-resource-sampling-service.unit.test.ts src/routes/topic-selection-resource-sampling-routes.integration.test.ts src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts src/services/topic-selection-agent-orchestrator-service.unit.test.ts`
+  - Result: passed; 31 tests passed.
+- Command: `pnpm --dir apps/backend exec node --test --loader ts-node/esm src/services/topic-selection-persist-need-candidate-batch-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts src/services/topic-selection-resource-sampling-service.unit.test.ts src/routes/topic-selection-resource-sampling-routes.integration.test.ts src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts src/services/topic-selection-agent-orchestrator-service.unit.test.ts`
+  - Result: passed; 102 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+  - Result: passed.
+- Command: `git diff --check`
+  - Result: passed.
+- Coverage:
+  - invalid non-provider slot model-option override still fails before authority writes;
+  - cross-profile provider slot override still fails at `harness generate-need-candidate`;
+  - each negative case now records the child process output and harness summary before wrapper assertions run, so future failures are diagnosable without rerunning.
+  - N6 generate-need-candidate replay reuses persisted NeedCandidate refs through the batch idempotency key and does not create duplicate authority rows.
+  - N7/N8/N9 exact replay/idempotency tests remain green in the same focused suite.
+
 ## Matrix Acceptance Checks
 - Every topic-selection workflow node has one row in `06-workflow-matrix.md`.
 - The matrix contains the complete D-11 canonical node list before executor classification work begins.

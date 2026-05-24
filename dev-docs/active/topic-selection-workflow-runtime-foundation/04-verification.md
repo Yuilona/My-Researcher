@@ -61,6 +61,26 @@
   - cross-profile model option on provider deep critic fails at `harness generate-need-candidate`;
   - both negative cases leave `NeedCandidate`, `ValidatedNeed`, and v1b input bundle counts at zero.
 
+## 2026-05-24 Replay And Negative Diagnostics Regression
+- Update: added WorkflowHarness coverage that replaying the same `generate-need-candidate` attempt reuses persisted NeedCandidate refs through batch idempotency instead of creating duplicates; negative E2E wrapper now persists per-case child output for diagnosis.
+- Command: `node --check .ai/scripts/topic-selection-v1a-harness-negative-e2e.mjs`
+  - Result: passed.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_NEGATIVE_RUN_ID=diagnostic-negative-20260524 pnpm topic-selection:v1a-harness-negative-e2e`
+  - Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-negative-e2e/diagnostic-negative-20260524`.
+- Command: `pnpm --dir apps/backend exec node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+  - Result: passed; 66 tests passed.
+- Command: `pnpm --dir apps/backend exec node --test --loader ts-node/esm src/services/topic-selection-persist-need-candidate-batch-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts src/services/topic-selection-resource-sampling-service.unit.test.ts src/routes/topic-selection-resource-sampling-routes.integration.test.ts src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts src/services/topic-selection-agent-orchestrator-service.unit.test.ts`
+  - Result: passed; 102 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+  - Result: passed.
+- Command: `git diff --check`
+  - Result: passed.
+- Coverage:
+  - N6 generate-need-candidate same-attempt replay returns `persist_need_candidate_batch_result.replayed=true`;
+  - repeated N6 attempt returns the same persisted candidate refs and leaves exactly one NeedCandidate row;
+  - N7/N8/N9 exact replay/idempotency coverage remains green;
+  - invalid slot model-option negative E2E keeps downstream authority counts at zero.
+
 ## 2026-05-20 DMP Runtime Foundation Slice 1: Profile Registry/Schema Validator
 - Update: added shared DMP profile contracts, backend profile registry validator/resolver, default v1 need-discovery profiles, and focused tests.
 - Command: `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts`

@@ -423,6 +423,71 @@ test('resource sampling keeps low-relevance target-role candidates out of the se
   assert.ok(lora?.guardrail_codes.includes('TARGET_ROLE_RELEVANCE_TOO_LOW'));
 });
 
+test('resource sampling returns ready_with_warning when role targets and sample size are underfilled', async () => {
+  const scores = {
+    support: 0,
+    challenge: 0,
+    baseline: 0,
+    context: 0,
+    review: 0,
+    excluded: 0,
+  };
+  const records = [
+    literature('lit_support_only', 'RAG support method', 'Positive retrieval augmented generation method evidence.', ['rag']),
+    literature('lit_challenge_only', 'RAG poisoning risk', 'Adversarial poisoning and source verification risk evidence for RAG.', ['security']),
+  ];
+  const service = makeService({
+    classifications: [
+      {
+        literature_ref: ref('lit_support_only'),
+        primary_role: 'support',
+        topic_relevance: 0.9,
+        evidence_polarity: 'positive_method',
+        role_scores: { ...scores, support: 0.9 },
+        confidence: 0.86,
+        classification_rationale: 'Supportive RAG method evidence.',
+        method_families: ['rag'],
+      },
+      {
+        literature_ref: ref('lit_challenge_only'),
+        primary_role: 'challenge',
+        topic_relevance: 0.9,
+        evidence_polarity: 'risk_or_failure',
+        role_scores: { ...scores, challenge: 0.9 },
+        confidence: 0.86,
+        classification_rationale: 'Challenge evidence for poisoning and source verification risk.',
+        method_families: ['rag_security'],
+      },
+    ],
+  }, records);
+
+  const result = await service.createResourceSampleSet({
+    topic_id: TOPIC_ID,
+    title_card_id: TITLE_CARD_ID,
+    sample_size: 4,
+    role_targets: {
+      support: 1,
+      challenge: 1,
+      baseline: 1,
+      context: 1,
+    },
+  });
+
+  assert.equal(result.sample_set.status, 'ready_with_warning');
+  assert.equal(result.selected_items.length, 2);
+  assert.deepEqual(result.sample_set.role_counts, {
+    support: 1,
+    challenge: 1,
+    baseline: 0,
+    context: 0,
+    review: 0,
+    excluded: 0,
+  });
+  assert.ok(result.sample_set.warnings.includes('ROLE_TARGET_UNDERFILLED_BASELINE'));
+  assert.ok(result.sample_set.warnings.includes('ROLE_TARGET_UNDERFILLED_CONTEXT'));
+  assert.ok(result.sample_set.warnings.includes('SAMPLE_SIZE_UNDERFILLED'));
+});
+
 test('resource sampling produces stable sample hash for identical input and policy', async () => {
   const first = await makeService(makeLlmOutput()).createResourceSampleSet({
     topic_id: TOPIC_ID,

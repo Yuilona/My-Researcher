@@ -77,6 +77,15 @@ async function runHarnessCase(testCase) {
   const harnessArtifactDir = path.join(HARNESS_ARTIFACT_ROOT, runId);
   const summaryPath = path.join(harnessArtifactDir, '90-summary.json');
   const summary = await readJsonIfExists(summaryPath);
+  const caseArtifactPath = path.join(ARTIFACT_DIR, `${testCase.case_id}.json`);
+  await fs.writeFile(caseArtifactPath, `${JSON.stringify({
+    case_id: testCase.case_id,
+    run_id: runId,
+    exit_code: exitCode,
+    stdout,
+    stderr,
+    summary,
+  }, null, 2)}\n`);
 
   expect(exitCode !== 0, `${testCase.case_id}: expected harness failure, got exit code 0.`);
   expect(
