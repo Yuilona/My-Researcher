@@ -45,6 +45,50 @@ export type PaperImplementationWorkOrderExperimentBridgeServiceOptions = {
 const FINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'inconclusive', 'negative']);
 const RESULT_REQUIRED_RUN_STATUSES = new Set(['succeeded']);
 const FAILURE_SUMMARY_REQUIRED_RUN_STATUSES = new Set(['failed', 'cancelled', 'inconclusive', 'negative']);
+const EXPERIMENT_FOUNDATION_COPY_FORBIDDEN_KEYS = new Set([
+  'dataset_asset',
+  'dataset_asset_dto',
+  'dataset_version',
+  'dataset_version_dto',
+  'benchmark_asset',
+  'benchmark_asset_dto',
+  'baseline_asset',
+  'baseline_asset_dto',
+  'evaluation_protocol',
+  'evaluation_protocol_dto',
+  'run_recipe',
+  'run_recipe_dto',
+  'training_task_spec',
+  'training_task_spec_dto',
+  'materialization_result',
+  'materialization_result_dto',
+  'experiment_result',
+  'experiment_result_dto',
+  'fine_tuning_result',
+  'fine_tuning_result_dto',
+  'evidence_candidate',
+  'evidence_candidate_dto',
+  'paper_experiment_sidecar',
+  'paper_experiment_sidecar_dto',
+  'claim_text',
+  'paper_claim',
+  'acceptance_status',
+  'final_conclusion',
+  'publication_ready_text',
+  'publication_claim',
+  'leaderboard_rank',
+  'leaderboard_row',
+  'leaderboard_rows',
+  'leaderboard',
+  'ranking',
+  'rankings',
+  'winner',
+  'best_result',
+  'final_table',
+  'rendered_table',
+  'markdown_table',
+  'latex_table',
+]);
 
 export class PaperImplementationWorkOrderExperimentBridgeService {
   private readonly projectRepository: PaperImplementationRepository;
@@ -226,6 +270,7 @@ export class PaperImplementationWorkOrderExperimentBridgeService {
       ? await this.requireWorkOrder(implementationProjectId, request.work_order_id)
       : null;
     const trustStatus = workOrder ? 'trusted' : 'untrusted';
+    this.assertNoExperimentFoundationPayloadCopy(request.raw_payload ?? {}, 'RunMonitorIntake raw_payload');
     const monitorIntake: RunMonitorIntakeRecord = {
       monitor_intake_id: request.monitor_intake_id ?? this.idFactory('run_monitor_intake'),
       implementation_project_id: implementationProjectId,
@@ -435,6 +480,7 @@ export class PaperImplementationWorkOrderExperimentBridgeService {
 
   private assertExperimentBridge(request: CreateResearchWorkOrderDraftRequest): void {
     const bridge = request.experiment_bridge;
+    this.assertNoExperimentFoundationPayloadCopy(bridge, 'ResearchWorkOrder experiment_bridge');
     if (!this.hasText(bridge.run_recipe_hash)) {
       throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'ResearchWorkOrder requires run_recipe_hash.');
     }
@@ -601,4 +647,47 @@ export class PaperImplementationWorkOrderExperimentBridgeService {
   private hasText(value: string | null | undefined): value is string {
     return typeof value === 'string' && value.trim().length > 0;
   }
+
+  private assertNoExperimentFoundationPayloadCopy(value: unknown, context: string): void {
+    const blocked = findExperimentFoundationPayloadCopyKey(value);
+    if (blocked) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        `${context} must carry experiment-foundation refs/hashes only; forbidden field ${blocked} copies domain DTO or paper-claim state.`,
+      );
+    }
+  }
+}
+
+function findExperimentFoundationPayloadCopyKey(
+  value: unknown,
+  seen: WeakSet<object> = new WeakSet(),
+): string | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  if (seen.has(value)) {
+    return null;
+  }
+  seen.add(value);
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const blocked = findExperimentFoundationPayloadCopyKey(item, seen);
+      if (blocked) {
+        return blocked;
+      }
+    }
+    return null;
+  }
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    if (EXPERIMENT_FOUNDATION_COPY_FORBIDDEN_KEYS.has(key)) {
+      return key;
+    }
+    const blocked = findExperimentFoundationPayloadCopyKey(nested, seen);
+    if (blocked) {
+      return blocked;
+    }
+  }
+  return null;
 }

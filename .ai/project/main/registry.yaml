@@ -851,13 +851,13 @@ tasks:
     updated: 2026-05-19
   - id: T-090
     slug: experiment-foundation-capability-validation
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-012
     dev_docs_path: dev-docs/active/experiment-foundation-capability-validation
-    updated: 2026-05-19
+    updated: 2026-05-24
   - id: T-091
     slug: paper-implementation-full-landing
     status: done

@@ -8,12 +8,13 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 101 (planned: 3, in-progress: 3, blocked: 0, done: 28, archived: 67)
+- Tasks: 101 (planned: 2, in-progress: 3, blocked: 0, done: 29, archived: 67)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
+| T-090 experiment-foundation-capability-validation | done | F-001 | dev-docs/active/experiment-foundation-capability-validation |
 | T-091 paper-implementation-full-landing | done | F-001 | dev-docs/active/paper-implementation-full-landing |
 | T-101 paper-implementation-contract-evaluation-suite | done | F-001 | dev-docs/active/paper-implementation-contract-evaluation-suite |
 | T-094 paper-implementation-motive-evidence-board | done | F-001 | dev-docs/active/paper-implementation-motive-evidence-board |
@@ -29,9 +30,7 @@ Project: `main`
 | T-093 paper-implementation-intake-bootstrap | done | F-001 | dev-docs/active/paper-implementation-intake-bootstrap |
 | T-097 paper-implementation-trace-kernel | done | F-001 | dev-docs/active/paper-implementation-trace-kernel |
 | T-089 topic-selection-agent-workflow-review | planned | F-001 | dev-docs/active/topic-selection-agent-workflow-review |
-| T-090 experiment-foundation-capability-validation | planned | F-001 | dev-docs/active/experiment-foundation-capability-validation |
 | T-075 experiment-foundation-candidate-promotion-contracts | done | F-001 | dev-docs/active/experiment-foundation-candidate-promotion-contracts |
 | T-076 experiment-foundation-persistence-api-readiness | done | F-001 | dev-docs/active/experiment-foundation-persistence-api-readiness |
 | T-077 experiment-foundation-execution-adapters | done | F-001 | dev-docs/active/experiment-foundation-execution-adapters |
-| T-078 experiment-foundation-desktop-workbench | done | F-001 | dev-docs/active/experiment-foundation-desktop-workbench |
 <!-- AUTO-GENERATED:END dashboard -->

@@ -75,9 +75,9 @@ Post-review cleanup:
 | Live DB application and full DB smoke | Repo migrations and DB context exist; live DB migration application is out of scope | Follow-up |
 
 ## Follow-up Validation Package
-- `T-090 experiment-foundation-capability-validation` is now the owner for deep function-by-function capability testing.
-- It should prove automation, external-boundary behavior, result/evidence creation, sidecar compatibility, desktop/API operation, and adjacent-flow robustness against the T-070~T-078 minimum chain.
-- It must not expand product semantics; defects found by validation may be fixed narrowly or split into explicit follow-up packages.
+- `T-090 experiment-foundation-capability-validation` is complete as of 2026-05-24.
+- It proved automation, external-boundary behavior, result/evidence creation, sidecar compatibility, desktop/API operation, and adjacent-flow robustness against the T-070~T-078 minimum chain.
+- The validation package did not expand product semantics; it added tests/harnesses and narrowly fixed the adjacent workorder bridge no-copy guard exposed by validation.
 
 ## Code Quality Review
 Quality signals:

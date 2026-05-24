@@ -2,8 +2,8 @@ version: 1
 task_id: T-090
 project: main
 slug: experiment-foundation-capability-validation
-status: planned
-updated: "2026-05-19"
+status: done
+updated: "2026-05-24"
 keywords:
   - experiment-foundation
   - parent-task:T-043

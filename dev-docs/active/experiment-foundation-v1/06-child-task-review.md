@@ -128,3 +128,8 @@
 - T-043 remains `planned` only as the parent closure/backlog umbrella; do not start a second experiment-foundation implementation track under adjacent modules.
 - Any remaining work must be opened as new follow-up task packages that consume the existing experiment-foundation contracts, registry/readiness APIs, execution APIs, and sidecar refs.
 - T-090 `experiment-foundation-capability-validation` is the first explicit follow-up package. It owns scenario-level testing of automation, external interactions, and adjacent-flow robustness for the already-closed minimum chain.
+
+## Capability Validation Review Status - 2026-05-24
+- T-090 `experiment-foundation-capability-validation`: done.
+- T-090 validated the minimum chain through backend scenario harnesses, LocalScript execution, mocked Aliyun mirror/policy gates, candidate promotion, result/evidence/sidecar guards, adjacent workorder no-copy guards, and desktop smoke.
+- The remaining items are product-expansion follow-ups, not evidence that the T-070~T-078 minimum chain is still open.

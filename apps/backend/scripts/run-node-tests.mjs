@@ -1,12 +1,13 @@
 import { fileURLToPath } from 'node:url';
-import { readdir } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { readFile, readdir } from 'node:fs/promises';
+import { join, relative, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 
 const rootDirUrl = new URL('../', import.meta.url);
 const srcDirUrl = new URL('../src/', import.meta.url);
 const rootDir = fileURLToPath(rootDirUrl);
 const srcDir = fileURLToPath(srcDirUrl);
+const repoRoot = resolve(rootDir, '../..');
 
 const PRESERVE_REAL_ENV_FLAG = 'BACKEND_TEST_PRESERVE_REAL_ENV';
 const REPOSITORY_STRATEGY_ENV_KEYS = [
@@ -22,6 +23,13 @@ const PROVIDER_SECRET_ENV_KEYS = [
   'DASHSCOPE_API_KEY_CODING',
   'DEEPSEEK_API_KEY',
 ];
+
+await loadLocalEnvFiles([
+  join(repoRoot, '.env.local'),
+  join(repoRoot, '.env'),
+  join(rootDir, '.env.local'),
+  join(rootDir, '.env'),
+]);
 
 const testFiles = await collectTestFiles(srcDir);
 if (testFiles.length === 0) {
@@ -60,6 +68,67 @@ async function collectTestFiles(directoryPath) {
   );
 
   return nested.flat().sort((left, right) => left.localeCompare(right));
+}
+
+async function loadLocalEnvFiles(filePaths) {
+  for (const filePath of filePaths) {
+    let content;
+    try {
+      content = await readFile(filePath, 'utf8');
+    } catch (error) {
+      if (error && typeof error === 'object' && error.code === 'ENOENT') {
+        continue;
+      }
+      throw error;
+    }
+
+    for (const line of content.split(/\r?\n/)) {
+      const parsed = parseEnvLine(line);
+      if (!parsed || process.env[parsed.key] !== undefined) {
+        continue;
+      }
+      process.env[parsed.key] = parsed.value;
+    }
+  }
+}
+
+function parseEnvLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith('#')) {
+    return null;
+  }
+
+  const declaration = trimmed.startsWith('export ') ? trimmed.slice('export '.length).trim() : trimmed;
+  const separatorIndex = declaration.indexOf('=');
+  if (separatorIndex <= 0) {
+    return null;
+  }
+
+  const key = declaration.slice(0, separatorIndex).trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+    return null;
+  }
+
+  return {
+    key,
+    value: parseEnvValue(declaration.slice(separatorIndex + 1).trim()),
+  };
+}
+
+function parseEnvValue(value) {
+  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    return value
+      .slice(1, -1)
+      .replaceAll('\\n', '\n')
+      .replaceAll('\\"', '"')
+      .replaceAll('\\\\', '\\');
+  }
+
+  if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1);
+  }
+
+  return value;
 }
 
 function buildTestEnv() {

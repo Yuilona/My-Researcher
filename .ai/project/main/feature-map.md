@@ -103,7 +103,7 @@ Project: `main`
 | T-087 topic-selection-desktop-workbench-v1abc | archived | dev-docs/archive/topic-selection-desktop-workbench-v1abc |
 | T-088 topic-selection-workflow-runtime-foundation | in-progress | dev-docs/active/topic-selection-workflow-runtime-foundation |
 | T-089 topic-selection-agent-workflow-review | planned | dev-docs/active/topic-selection-agent-workflow-review |
-| T-090 experiment-foundation-capability-validation | planned | dev-docs/active/experiment-foundation-capability-validation |
+| T-090 experiment-foundation-capability-validation | done | dev-docs/active/experiment-foundation-capability-validation |
 | T-091 paper-implementation-full-landing | done | dev-docs/active/paper-implementation-full-landing |
 | T-092 paper-implementation-contracts-and-gap-map | done | dev-docs/active/paper-implementation-contracts-and-gap-map |
 | T-093 paper-implementation-intake-bootstrap | done | dev-docs/active/paper-implementation-intake-bootstrap |

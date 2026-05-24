@@ -2,7 +2,7 @@
 
 ## Status
 - State: planned
-- Next step: run `T-090 experiment-foundation-capability-validation` to prove the T-070~T-078 minimum chain through scenario-level automation, external-boundary, and adjacent-flow robustness tests. Keep T-043 open only as the parent closure/backlog umbrella.
+- Next step: T-090 is complete; open future product expansion as explicit follow-up task packages. Keep T-043 open only as the parent closure/backlog umbrella.
 
 ## Parent / Child Task Model
 - This package is the parent package for experiment-foundation V1.

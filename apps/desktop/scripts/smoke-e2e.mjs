@@ -4,10 +4,15 @@ import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const DEFAULT_BACKEND_PORT = 3310;
 const DEFAULT_DESKTOP_PORT = 5189;
 const DEFAULT_TIMEOUT_MS = 45_000;
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const DESKTOP_ROOT = path.resolve(SCRIPT_DIR, '..');
 
 function parseIntOr(value, fallback) {
   const parsed = Number(value);
@@ -120,6 +125,111 @@ async function getJson(url) {
   return body;
 }
 
+async function readDesktopSource(relativePath) {
+  return readFile(path.join(DESKTOP_ROOT, relativePath), 'utf8');
+}
+
+function assertIncludes(source, snippet, label) {
+  if (!source.includes(snippet)) {
+    throw new Error(`${label} missing expected snippet: ${snippet}`);
+  }
+}
+
+async function assertExperimentFoundationWorkbenchSource() {
+  const [constants, app, api, controller, moduleSource, utils] = await Promise.all([
+    readDesktopSource('src/renderer/literature/shared/constants.ts'),
+    readDesktopSource('src/renderer/App.tsx'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/api.ts'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/useExperimentFoundationController.ts'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/ExperimentFoundationModule.tsx'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/utils.ts'),
+  ]);
+
+  assertIncludes(constants, "['文献管理', '实验基座', '选题管理', '论文管理']", 'desktop nav order');
+  assertIncludes(app, "activeModule === '实验基座'", 'desktop module mount');
+  assertIncludes(app, '<ExperimentFoundationModule />', 'desktop module mount');
+  assertIncludes(moduleSource, 'aria-label="实验基座工作台"', 'experiment foundation workbench');
+
+  for (const endpoint of [
+    '/experiment-foundation/records',
+    '/experiment-foundation/readiness/',
+    '/experiment-foundation/readiness/check',
+    '/experiment-foundation/candidates/',
+    '/experiment-foundation/execution/jobs',
+    '/experiment-foundation/execution/jobs/submit',
+    '/sync',
+    '/cancel',
+    '/collect',
+  ]) {
+    assertIncludes(api, endpoint, 'experiment foundation desktop API client');
+  }
+  assertIncludes(api, 'requestGovernance<', 'experiment foundation desktop API client');
+
+  const rendererSources = [api, controller, moduleSource, utils];
+  for (const forbidden of [
+    'fetch(',
+    'buildApp(',
+    'PrismaClient',
+    'child_process',
+    'new Ajv',
+    'LocalScriptAdapter',
+    'AliyunPaiDlcAdapter',
+    'TrainingPlatformAdapter',
+  ]) {
+    if (rendererSources.some((source) => source.includes(forbidden))) {
+      throw new Error(`Experiment foundation renderer must not own backend/materialization semantics: ${forbidden}`);
+    }
+  }
+}
+
+async function smokeExperimentFoundationApis(backendBaseUrl) {
+  const datasetAssetId = 'desktop_smoke_dataset_asset';
+  const created = await postJson(`${backendBaseUrl}/experiment-foundation/records`, {
+    record_kind: 'dataset_asset',
+    payload: {
+      dataset_asset_id: datasetAssetId,
+      name: 'Desktop Smoke Dataset',
+      aliases: ['desktop_smoke_dataset'],
+      description: 'Dataset identity used by desktop smoke.',
+      source_refs: [{ ref_type: 'desktop_smoke', ref_id: 'source_001' }],
+      task_types: ['text_classification'],
+      schema_summary: { columns: ['text', 'label'], row_count: 2 },
+      default_version_id: null,
+      catalog_status: 'active',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+  });
+  if (created.record_kind !== 'dataset_asset' || created.record_id !== datasetAssetId) {
+    throw new Error('Experiment foundation registry smoke check failed: dataset record identity mismatch.');
+  }
+
+  const records = await getJson(`${backendBaseUrl}/experiment-foundation/records?record_kind=dataset_asset`);
+  if (!Array.isArray(records.records) || !records.records.some((record) => record.record_id === datasetAssetId)) {
+    throw new Error('Experiment foundation registry smoke check failed: dataset list missing created record.');
+  }
+
+  const readiness = await postJson(`${backendBaseUrl}/experiment-foundation/readiness/check`, {
+    target_ref: { ref_type: 'dataset_asset', ref_id: datasetAssetId },
+    source_refs: [{ ref_type: 'desktop_smoke', ref_id: 'readiness_check' }],
+  });
+  if (!readiness.readiness_report_id || typeof readiness.readiness_status !== 'string') {
+    throw new Error('Experiment foundation readiness smoke check failed.');
+  }
+
+  const latestReadiness = await getJson(
+    `${backendBaseUrl}/experiment-foundation/readiness/dataset_asset/${datasetAssetId}/latest`,
+  );
+  if (latestReadiness.readiness_report_id !== readiness.readiness_report_id) {
+    throw new Error('Experiment foundation latest readiness smoke check failed.');
+  }
+
+  const jobs = await getJson(`${backendBaseUrl}/experiment-foundation/execution/jobs`);
+  if (!Array.isArray(jobs.jobs)) {
+    throw new Error('Experiment foundation execution jobs smoke check failed.');
+  }
+}
+
 async function main() {
   const backendPort = parseIntOr(process.env.DESKTOP_SMOKE_BACKEND_PORT, DEFAULT_BACKEND_PORT);
   const desktopPort = parseIntOr(process.env.DESKTOP_SMOKE_PORT, DEFAULT_DESKTOP_PORT);
@@ -212,6 +322,8 @@ async function main() {
     if (!html.includes('<div id="root"></div>')) {
       throw new Error('Renderer root element not found.');
     }
+    await assertExperimentFoundationWorkbenchSource();
+    await smokeExperimentFoundationApis(backendBaseUrl);
 
     const timeline = await getJson(`${backendBaseUrl}/paper-projects/${paperId}/timeline`);
     if (!Array.isArray(timeline.events) || timeline.events.length === 0) {

@@ -1,9 +1,9 @@
 # T-090 Experiment Foundation Capability Validation
 
 ## Status
-- State: planned
+- State: done
 - Parent task: `T-043 experiment-foundation-v1`
-- Next step: design and implement the first capability-test harness around the existing T-076/T-077 APIs.
+- Next step: no remaining T-090 implementation step; future product expansion should be opened as explicit follow-up task packages.
 
 ## Goal
 Build a deep, function-by-function validation package for the experiment foundation minimum chain. The package should prove that the existing system is not only type/schema correct, but operationally robust across automation, external adapter boundaries, and handoff points with adjacent workflows.
@@ -37,13 +37,13 @@ This task validates the implemented experiment foundation as an integrated capab
 - No paper-project bridge product UI beyond testing ref/sidecar compatibility.
 - No broad refactor of contracts, backend services, or desktop UI unless a failing validation exposes a concrete defect.
 
-## Success Criteria
-- A scenario test suite proves `Validate -> Submit -> Monitor -> Collect -> Validate Result -> Evidence/Sidecar refs` for the LocalScript path.
-- A mocked external adapter suite proves Aliyun mirror/policy/checksum gates and credential-free adapter metadata boundaries.
-- Automation tests prove idempotent create/upsert/submit/cancel/collect behavior and stable error codes for invalid payloads, stale state, duplicate keys, and missing refs.
-- Integration robustness tests prove adjacent workflows consume experiment refs/sidecars without copying canonical DTOs or paper-claim fields.
-- Desktop smoke verifies the `实验基座` workbench can list/create/readiness-check/submit/sync/collect through existing APIs without renderer-owned semantics.
-- Verification evidence is recorded in this package and any discovered defects are either fixed in this task or split into explicit follow-up tasks.
+## Acceptance Criteria
+- [x] A scenario test suite proves `Validate -> Submit -> Monitor -> Collect -> Validate Result -> Evidence/Sidecar refs` for the LocalScript path.
+- [x] A mocked external adapter suite proves Aliyun mirror/policy/checksum gates and credential-free adapter metadata boundaries.
+- [x] Automation tests prove idempotent create/upsert/submit/cancel/collect behavior and stable error codes for invalid payloads, stale state, duplicate keys, and missing refs.
+- [x] Integration robustness tests prove adjacent workflows consume experiment refs/sidecars without copying canonical DTOs or paper-claim fields.
+- [x] Desktop smoke verifies the `实验基座` workbench can access registry/readiness/execution APIs through existing renderer API clients without renderer-owned semantics.
+- [x] Verification evidence is recorded in this package and any discovered defects are either fixed in this task or split into explicit follow-up tasks.
 
 ## Current Assumptions
 - T-070 through T-078 remain the implementation baseline.

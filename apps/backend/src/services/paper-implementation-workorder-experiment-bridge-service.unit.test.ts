@@ -413,6 +413,63 @@ test('requires confirmatory version lock and forbids autotune on primary evidenc
   );
 });
 
+test('rejects experiment foundation DTO copies and paper claims at adjacent bridge boundaries', async () => {
+  const { service } = await makeHarness();
+  await assertRejectsWithCode(
+    () => service.createResearchWorkOrderDraft(PROJECT_ID, {
+      ...workOrderRequest(),
+      experiment_bridge: {
+        ...workOrderRequest().experiment_bridge,
+        run_recipe: {
+          run_recipe_id: 'run_recipe_001',
+          run_recipe_hash: 'sha256:run-recipe',
+        },
+      } as never,
+    }),
+    'GATE_CONSTRAINT_FAILED',
+  );
+
+  await assertRejectsWithCode(
+    () => service.recordRunMonitorIntake(PROJECT_ID, {
+      monitor_event_kind: 'result_available',
+      run_status: 'succeeded',
+      raw_payload: {
+        adapter_event_id: 'adapter_event_001',
+        nested_payload: {
+          experiment_result: {
+            experiment_result_id: 'experiment_result_001',
+            result_hash: 'sha256:experiment-result',
+          },
+        },
+      },
+    }),
+    'GATE_CONSTRAINT_FAILED',
+  );
+
+  await assertRejectsWithCode(
+    () => service.recordRunMonitorIntake(PROJECT_ID, {
+      monitor_event_kind: 'result_available',
+      run_status: 'succeeded',
+      raw_payload: {
+        result_ref: ref('experiment_result', 'experiment_result_001'),
+        result_hash: 'sha256:experiment-result',
+        claim_text: 'This belongs to paper drafting, not run monitor intake.',
+      },
+    }),
+    'GATE_CONSTRAINT_FAILED',
+  );
+
+  const lightweight = await service.recordRunMonitorIntake(PROJECT_ID, {
+    monitor_event_kind: 'status_update',
+    run_status: 'running',
+    raw_payload: {
+      external_event_ref: ref('adapter_event', 'adapter_event_001'),
+      result_hash: 'sha256:result-observed',
+    },
+  });
+  assert.equal(lightweight.monitor_intake.trust_status, 'untrusted');
+  assert.deepEqual(Object.keys(lightweight.monitor_intake.raw_payload).sort(), ['external_event_ref', 'result_hash']);
+});
 test('admits work order, submits harness run, and records failed run evidence', async () => {
   const { service, workOrderRepository } = await makeHarness();
   await service.createResearchWorkOrderDraft(PROJECT_ID, workOrderRequest());
