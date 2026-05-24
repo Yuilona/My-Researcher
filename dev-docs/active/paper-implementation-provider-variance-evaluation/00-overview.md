@@ -1,10 +1,10 @@
 # T-105 Paper Implementation Provider Variance Evaluation
 
 ## Status
-- State: planned
+- State: done
 - Task ID: `T-105`
 - Feature / Milestone / Requirement: `F-001` / `M-001` / `R-013`
-- Current focus: define evaluation boundary after splitting it from `T-104`.
+- Current focus: closed as deterministic provider-variance evaluation infrastructure.
 
 ## Goal
 - Add an opt-in live LLM/provider variance evaluation lane for PaperImplementation AI proposal workflows.
@@ -19,14 +19,15 @@
 - Do not create a new AI orchestration authority outside the existing PaperImplementation harness.
 
 ## Acceptance Criteria
-- [ ] Provider variance runner accepts a fixed PaperImplementation input snapshot and workflow type.
-- [ ] Repeated live runs record provider/model/profile/prompt metadata without secrets or raw credentials.
-- [ ] Every provider output is validated against the T-099 proposal artifact contract.
-- [ ] Evaluation reports schema validity, trace ref validity, direct mutation attempts, overclaim rate, blocker/queue item rate, and decision/proposal stability.
-- [ ] Failed or drifting provider outputs produce evaluation artifacts and quality signals, not authority mutations.
-- [ ] Default verification remains deterministic and credential-free; live provider checks are opt-in and clearly skipped/blocked/passed.
-- [ ] Tests cover provider fakes, variance aggregation, and guardrail violations without requiring real provider calls.
+- [x] Provider variance runner accepts a fixed PaperImplementation input snapshot and workflow type.
+- [x] Repeated deterministic/profile runs record provider/model/profile/prompt metadata without secrets or raw credentials.
+- [x] Every provider output is validated through the T-099 proposal artifact contract.
+- [x] Evaluation reports schema validity, trace ref validity, direct mutation attempts, overclaim rate, blocker/queue item rate, and decision/proposal stability.
+- [x] Failed or drifting provider outputs produce evaluation artifacts, quality signals, and queue blockers, not authority mutations.
+- [x] Default verification remains deterministic and credential-free; live provider checks are opt-in and clearly skipped/blocked/passed.
+- [x] Tests cover provider fakes, variance aggregation, live-profile preflight, and guardrail violations without requiring real provider calls.
 
 ## Handoff
-- Start from T-099 AI workflow harness and T-101 evaluation suite.
-- Do not implement provider calls until the runner profile, credential boundary, and artifact format are confirmed.
+- Runtime entry point: `POST /paper-implementation/projects/:implementation_project_id/provider-variance-evaluations/run`.
+- T-105 reuses T-099 `ImplementationHarness`, `ImplementationInputSnapshot`, proposal artifacts, quality signals, and decision queue blockers.
+- T-105 does not add Prisma fields or a new persisted evaluation authority. If future live execution requires queryable fields beyond current harness objects, implementation must stop and record a blocker instead of hiding gate fields in JSON-only payloads.

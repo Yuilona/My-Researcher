@@ -75,6 +75,7 @@ export const PAPER_IMPLEMENTATION_PROPOSAL_ARTIFACT_KINDS = [
   'quality_signal',
   'gate_prep_report',
   'decision_work_queue_suggestion',
+  'evaluation_report',
 ] as const;
 export type PaperImplementationProposalArtifactKind =
   (typeof PAPER_IMPLEMENTATION_PROPOSAL_ARTIFACT_KINDS)[number];
@@ -156,6 +157,12 @@ export const PAPER_IMPLEMENTATION_QUALITY_SIGNAL_TYPES = [
   'run_mode_isolation_failure',
   'gate_blocker',
   'low_confidence_output',
+  'provider_variance_contract_failure',
+  'provider_variance_handoff_gap',
+  'provider_variance_authority_violation',
+  'provider_variance_traceability_violation',
+  'provider_variance_claim_safety_violation',
+  'provider_variance_operability_failure',
 ] as const;
 export type PaperImplementationQualitySignalType =
   (typeof PAPER_IMPLEMENTATION_QUALITY_SIGNAL_TYPES)[number];

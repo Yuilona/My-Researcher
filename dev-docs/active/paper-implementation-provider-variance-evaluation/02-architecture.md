@@ -9,6 +9,7 @@
 | Input | Fixed `ImplementationInputSnapshot` plus workflow spec/prompt/model profile. |
 | Output | Evaluation report, quality signals, and optional queue blockers; no motive/claim/dossier writes. |
 | Secrets | Provider credentials stay in environment/config; never in artifacts. |
+| Persistence | No new Prisma fields or DB authority. T-105 materializes through existing T-099 harness objects and returns the aggregate report from the route response. |
 
 ## Proposed Flow
 ```text
@@ -19,6 +20,14 @@ ImplementationInputSnapshot
   -> Variance aggregation
   -> Evaluation report / quality signals
 ```
+
+## Implemented Interfaces
+- Shared contract: `paper-implementation-provider-variance-contracts`.
+- Harness vocabulary extension: `evaluation_report` proposal artifact kind and provider-variance quality signal types.
+- Service: `PaperImplementationProviderVarianceEvaluationService`.
+- REST route: `POST /paper-implementation/projects/:implementation_project_id/provider-variance-evaluations/run`.
+- Default runner: deterministic fake-provider replay through T-099 `createAgentWorkflowHarnessRun`.
+- Live-provider profile: preflight-only `passed/skipped/blocked` report; no live provider call in T-105.
 
 ## Flow-Oriented Metrics
 T-105 metrics are not a generic model benchmark. They answer whether provider output can safely and consistently advance the PaperImplementation automation workflow.
@@ -44,6 +53,7 @@ Token, cost, latency, and model telemetry may be recorded as diagnostics. They a
 - Live provider profiles must be explicit, opt-in, and separately reported.
 - Deterministic fake-provider tests must be enough to close the task by default.
 - Topic-selection provider canary infrastructure patterns may be reused, but topic-selection business semantics, node policies, ref allowlists, output shapes, and success criteria must not be reused.
+- If implementation discovers current T-099 columnized fields cannot support a required gate/query, stop and record a blocker. Do not add JSON-only query fields in T-105.
 
 ## Allowed Outputs
 | Output | Consumer | Purpose |

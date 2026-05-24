@@ -42,7 +42,8 @@
     "./research-lifecycle/paper-implementation-workorder-contracts": "./src/research-lifecycle/paper-implementation-workorder-contracts.ts",
     "./research-lifecycle/paper-implementation-live-experiment-adapter-contracts": "./src/research-lifecycle/paper-implementation-live-experiment-adapter-contracts.ts",
     "./research-lifecycle/paper-implementation-result-claim-dossier-contracts": "./src/research-lifecycle/paper-implementation-result-claim-dossier-contracts.ts",
-    "./research-lifecycle/paper-implementation-ai-workflow-harness-contracts": "./src/research-lifecycle/paper-implementation-ai-workflow-harness-contracts.ts"
+    "./research-lifecycle/paper-implementation-ai-workflow-harness-contracts": "./src/research-lifecycle/paper-implementation-ai-workflow-harness-contracts.ts",
+    "./research-lifecycle/paper-implementation-provider-variance-contracts": "./src/research-lifecycle/paper-implementation-provider-variance-contracts.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",

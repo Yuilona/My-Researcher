@@ -8,7 +8,7 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 105 (planned: 3, in-progress: 4, blocked: 0, done: 31, archived: 67)
+- Tasks: 105 (planned: 2, in-progress: 4, blocked: 0, done: 32, archived: 67)
 
 ## Recent tasks
 
@@ -18,7 +18,7 @@ Project: `main`
 | T-102 paper-implementation-v1-hardening | done | F-001 | dev-docs/active/paper-implementation-v1-hardening |
 | T-103 experiment-foundation-full-flow-validation-runner | in-progress | F-001 | dev-docs/active/experiment-foundation-full-flow-validation-runner |
 | T-104 paper-implementation-live-experiment-adapter | done | F-001 | dev-docs/active/paper-implementation-live-experiment-adapter |
-| T-105 paper-implementation-provider-variance-evaluation | planned | F-001 | dev-docs/active/paper-implementation-provider-variance-evaluation |
+| T-105 paper-implementation-provider-variance-evaluation | done | F-001 | dev-docs/active/paper-implementation-provider-variance-evaluation |
 | T-091 paper-implementation-full-landing | done | F-001 | dev-docs/active/paper-implementation-full-landing |
 | T-101 paper-implementation-contract-evaluation-suite | done | F-001 | dev-docs/active/paper-implementation-contract-evaluation-suite |
 | T-094 paper-implementation-motive-evidence-board | done | F-001 | dev-docs/active/paper-implementation-motive-evidence-board |

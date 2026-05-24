@@ -146,6 +146,7 @@ import { PaperImplementationTraceKernelService } from './services/paper-implemen
 import { PaperImplementationValidationCyclePlanningService } from './services/paper-implementation-validation-cycle-planning-service.js';
 import { PaperImplementationWorkOrderExperimentBridgeService } from './services/paper-implementation-workorder-experiment-bridge-service.js';
 import { PaperImplementationLiveExperimentAdapterService } from './services/paper-implementation-live-experiment-adapter-service.js';
+import { PaperImplementationProviderVarianceEvaluationService } from './services/paper-implementation-provider-variance-evaluation-service.js';
 import { ResearchLifecycleService } from './services/research-lifecycle-service.js';
 import {
   TitleCardManagementService,
@@ -507,6 +508,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     traceRepository: paperImplementationTraceRepository,
     harnessRepository: paperImplementationAiWorkflowHarnessRepository,
   });
+  const paperImplementationProviderVarianceEvaluationService = new PaperImplementationProviderVarianceEvaluationService({
+    aiWorkflowHarness: paperImplementationAiWorkflowHarnessService,
+  });
   const paperImplementationController = new PaperImplementationController(
     paperImplementationIntakeBootstrapService,
     paperImplementationTraceKernelService,
@@ -516,6 +520,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     paperImplementationResultClaimDossierService,
     paperImplementationAiWorkflowHarnessService,
     paperImplementationLiveExperimentAdapterService,
+    paperImplementationProviderVarianceEvaluationService,
   );
   const topicSelectionV1cController = new TopicSelectionV1cController(
     topicSelectionV1cPromotionInputService,

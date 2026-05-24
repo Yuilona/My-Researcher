@@ -114,5 +114,5 @@ Project: `main`
 | T-102 paper-implementation-v1-hardening | done | F-001 | dev-docs/active/paper-implementation-v1-hardening |
 | T-103 experiment-foundation-full-flow-validation-runner | in-progress | F-001 | dev-docs/active/experiment-foundation-full-flow-validation-runner |
 | T-104 paper-implementation-live-experiment-adapter | done | F-001 | dev-docs/active/paper-implementation-live-experiment-adapter |
-| T-105 paper-implementation-provider-variance-evaluation | planned | F-001 | dev-docs/active/paper-implementation-provider-variance-evaluation |
+| T-105 paper-implementation-provider-variance-evaluation | done | F-001 | dev-docs/active/paper-implementation-provider-variance-evaluation |
 <!-- AUTO-GENERATED:END task-index -->

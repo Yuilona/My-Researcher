@@ -55,6 +55,9 @@ import {
   submitLiveExperimentRunRequestSchema,
   syncLiveExperimentRunRequestSchema,
 } from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-live-experiment-adapter-contracts';
+import {
+  runProviderVarianceEvaluationRequestSchema,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-provider-variance-contracts';
 
 import { PaperImplementationController } from '../controllers/paper-implementation-controller.js';
 
@@ -211,6 +214,16 @@ export async function registerPaperImplementationRoutes(
     '/paper-implementation/projects/:implementation_project_id/decision-work-queue',
     { schema: implementationProjectParams },
     controller.listDecisionWorkQueueItems,
+  );
+  fastify.post(
+    '/paper-implementation/projects/:implementation_project_id/provider-variance-evaluations/run',
+    {
+      schema: {
+        ...implementationProjectParams,
+        body: runProviderVarianceEvaluationRequestSchema,
+      },
+    },
+    controller.runProviderVarianceEvaluation,
   );
   fastify.post(
     '/paper-implementation/projects/:implementation_project_id/decision-work-queue/:queue_item_id/resolve',

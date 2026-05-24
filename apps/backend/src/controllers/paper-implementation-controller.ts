@@ -55,6 +55,9 @@ import type {
   SubmitLiveExperimentRunRequest,
   SyncLiveExperimentRunRequest,
 } from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-live-experiment-adapter-contracts';
+import type {
+  RunProviderVarianceEvaluationRequest,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-provider-variance-contracts';
 
 import { AppError } from '../errors/app-error.js';
 import { PaperImplementationIntakeBootstrapService } from '../services/paper-implementation-intake-bootstrap-service.js';
@@ -65,6 +68,7 @@ import { PaperImplementationWorkOrderExperimentBridgeService } from '../services
 import { PaperImplementationResultClaimDossierService } from '../services/paper-implementation-result-claim-dossier-service.js';
 import { PaperImplementationAiWorkflowHarnessService } from '../services/paper-implementation-ai-workflow-harness-service.js';
 import { PaperImplementationLiveExperimentAdapterService } from '../services/paper-implementation-live-experiment-adapter-service.js';
+import { PaperImplementationProviderVarianceEvaluationService } from '../services/paper-implementation-provider-variance-evaluation-service.js';
 
 type BodyRequest<T> = FastifyRequest<{ Body: T }>;
 type ParamsRequest<T> = FastifyRequest<{ Params: T }>;
@@ -104,6 +108,7 @@ export class PaperImplementationController {
     private readonly resultClaimDossier: PaperImplementationResultClaimDossierService,
     private readonly aiWorkflowHarness: PaperImplementationAiWorkflowHarnessService,
     private readonly liveExperimentAdapter?: PaperImplementationLiveExperimentAdapterService,
+    private readonly providerVarianceEvaluation?: PaperImplementationProviderVarianceEvaluationService,
   ) {}
 
   bootstrapProject = async (
@@ -1384,4 +1389,29 @@ export class PaperImplementationController {
       return handleError(reply, error);
     }
   };
+
+  runProviderVarianceEvaluation = async (
+    request: FastifyRequest<{
+      Params: { implementation_project_id: string };
+      Body: RunProviderVarianceEvaluationRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.requireProviderVarianceEvaluation().runProviderVarianceEvaluation(
+        request.params.implementation_project_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  private requireProviderVarianceEvaluation(): PaperImplementationProviderVarianceEvaluationService {
+    if (!this.providerVarianceEvaluation) {
+      throw new AppError(500, 'INTERNAL_ERROR', 'PaperImplementation provider variance evaluation is not configured.');
+    }
+    return this.providerVarianceEvaluation;
+  }
 }

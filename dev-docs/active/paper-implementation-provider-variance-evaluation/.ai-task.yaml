@@ -2,7 +2,7 @@ version: 1
 task_id: T-105
 project: main
 slug: paper-implementation-provider-variance-evaluation
-status: planned
+status: done
 updated: "2026-05-24"
 keywords:
   - paper-implementation

@@ -118,7 +118,7 @@ Project: `main`
 | T-102 paper-implementation-v1-hardening | done | dev-docs/active/paper-implementation-v1-hardening |
 | T-103 experiment-foundation-full-flow-validation-runner | in-progress | dev-docs/active/experiment-foundation-full-flow-validation-runner |
 | T-104 paper-implementation-live-experiment-adapter | done | dev-docs/active/paper-implementation-live-experiment-adapter |
-| T-105 paper-implementation-provider-variance-evaluation | planned | dev-docs/active/paper-implementation-provider-variance-evaluation |
+| T-105 paper-implementation-provider-variance-evaluation | done | dev-docs/active/paper-implementation-provider-variance-evaluation |
 
 ### F-002 Desktop Frontend Foundation
 
