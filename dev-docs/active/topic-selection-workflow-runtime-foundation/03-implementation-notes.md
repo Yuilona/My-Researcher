@@ -913,3 +913,9 @@
 - Updated N6 scenario expectations to support bounded counts for provider runs (`1..5`) while keeping exact fixture counts for mocked/Codex runs.
 - Updated the E2E harness N6-to-N7 handoff to choose the first persisted candidate whose readiness assessment is `ready_for_validation`; this preserves the readiness gate instead of assuming the first generated candidate is validatable.
 - Successful real-provider run `v1a-full-harness-provider-20260523180200` executed all nine v1a nodes with provider LLM participation in N6 and N7 and produced `v1b_input_bundle_5e6a60da-3db0-40c8-8b91-7535e2fa4299`.
+
+## 2026-05-24 N6 Exact Replay Runtime
+- Added replay provenance to `TopicSelectionGenerateNeedCandidateOrchestratorAdapterResult`.
+- `runGenerateNeedCandidateScenario` now checks existing discovery trace artifacts before context compilation. A matching `input_hash` returns the stored trace snapshot and adapter result; a mismatched hash fails with `VERSION_CONFLICT`.
+- The N6 discovery trace now carries the minimal replay snapshot needed by WorkflowHarness automation while remaining inside the existing control-plane artifact boundary.
+- Provider-mode replay coverage proves the second call does not hit the LLM gateway and does not create duplicate `NeedCandidate` authority rows.

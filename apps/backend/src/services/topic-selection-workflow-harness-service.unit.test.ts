@@ -3454,14 +3454,12 @@ test('workflow harness runs generate-need-candidate finalize scenario through pe
 });
 
 test('workflow harness reuses persisted NeedCandidate refs when generate-need-candidate attempt is replayed', async () => {
-  const { workflowHarness, needValidationRepository } = await makeRuntime();
+  const { workflowHarness, needValidationRepository, llmGateway } = await makeRuntime();
   const input = scenarioInput({
     workflow_run_id: 'workflow_run_generate_need_replay',
-    node_attempt_id: 'node_attempt_generate_need_replay',
-    mocked_output: {
-      fixture_id: 'fixture_generate_need_candidate_replay',
-      output: rankedBatch('node_attempt_generate_need_replay'),
-    },
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    mocked_output: null,
   });
   const first = await workflowHarness.runGenerateNeedCandidateScenario(input);
   const replay = await workflowHarness.runGenerateNeedCandidateScenario(input);
@@ -3469,11 +3467,35 @@ test('workflow harness reuses persisted NeedCandidate refs when generate-need-ca
   assert.equal(first.scenario_status, 'passed');
   assert.equal(replay.scenario_status, 'passed');
   assert.equal(first.adapter_result.persist_need_candidate_batch_result?.replayed, false);
-  assert.equal(replay.adapter_result.persist_need_candidate_batch_result?.replayed, true);
+  assert.equal(replay.adapter_result.replay_provenance?.replayed, true);
   assert.deepEqual(
     replay.adapter_result.persist_need_candidate_batch_result?.persisted_candidate_refs,
     first.adapter_result.persist_need_candidate_batch_result?.persisted_candidate_refs,
   );
+  assert.equal(llmGateway.calls.length, 1);
+  assert.equal((await needValidationRepository.listNeedCandidatesByTitleCardId('title_card_001')).length, 1);
+});
+
+test('workflow harness rejects changed generate-need-candidate input for an existing attempt', async () => {
+  const { workflowHarness, needValidationRepository, llmGateway } = await makeRuntime();
+  const input = scenarioInput({
+    workflow_run_id: 'workflow_run_generate_need_hash_mismatch',
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    mocked_output: null,
+  });
+  const first = await workflowHarness.runGenerateNeedCandidateScenario(input);
+
+  await assert.rejects(
+    () => workflowHarness.runGenerateNeedCandidateScenario({
+      ...input,
+      model_option_id: `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.dashscope-budget`,
+    }),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'VERSION_CONFLICT',
+  );
+
+  assert.equal(first.scenario_status, 'passed');
+  assert.equal(llmGateway.calls.length, 1);
   assert.equal((await needValidationRepository.listNeedCandidatesByTitleCardId('title_card_001')).length, 1);
 });
 

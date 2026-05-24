@@ -62,22 +62,27 @@
   - both negative cases leave `NeedCandidate`, `ValidatedNeed`, and v1b input bundle counts at zero.
 
 ## 2026-05-24 Replay And Negative Diagnostics Regression
-- Update: added WorkflowHarness coverage that replaying the same `generate-need-candidate` attempt reuses persisted NeedCandidate refs through batch idempotency instead of creating duplicates; negative E2E wrapper now persists per-case child output for diagnosis.
+- Update: added WorkflowHarness exact replay for the same `generate-need-candidate` attempt; matching input hash returns the existing discovery trace snapshot without context recompilation, provider/Codex/debate invocation, or authority writes. The negative E2E wrapper now persists per-case child output for diagnosis.
 - Command: `node --check .ai/scripts/topic-selection-v1a-harness-negative-e2e.mjs`
+  - Result: passed.
+- Command: `node --check .ai/scripts/topic-selection-real-e2e.mjs && node --check .ai/scripts/topic-selection-v1a-harness-negative-e2e.mjs`
   - Result: passed.
 - Command: `TOPIC_SELECTION_V1A_HARNESS_NEGATIVE_RUN_ID=diagnostic-negative-20260524 pnpm topic-selection:v1a-harness-negative-e2e`
   - Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-negative-e2e/diagnostic-negative-20260524`.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_NEGATIVE_RUN_ID=n6-replay-negative-20260524 pnpm topic-selection:v1a-harness-negative-e2e`
+  - Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-negative-e2e/n6-replay-negative-20260524`.
 - Command: `pnpm --dir apps/backend exec node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
-  - Result: passed; 66 tests passed.
+  - Result: passed; 67 tests passed.
 - Command: `pnpm --dir apps/backend exec node --test --loader ts-node/esm src/services/topic-selection-persist-need-candidate-batch-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts src/services/topic-selection-resource-sampling-service.unit.test.ts src/routes/topic-selection-resource-sampling-routes.integration.test.ts src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts src/services/topic-selection-agent-orchestrator-service.unit.test.ts`
-  - Result: passed; 102 tests passed.
+  - Result: passed; 103 tests passed.
 - Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
   - Result: passed.
 - Command: `git diff --check`
   - Result: passed.
 - Coverage:
-  - N6 generate-need-candidate same-attempt replay returns `persist_need_candidate_batch_result.replayed=true`;
-  - repeated N6 attempt returns the same persisted candidate refs and leaves exactly one NeedCandidate row;
+  - N6 generate-need-candidate same-attempt replay returns `adapter_result.replay_provenance.replayed=true`;
+  - repeated N6 attempt returns the same persisted candidate refs, does not call the provider again, and leaves exactly one NeedCandidate row;
+  - N6 same-attempt input hash drift fails with `VERSION_CONFLICT` before context compilation, provider/Codex/debate invocation, or authority writes;
   - N7/N8/N9 exact replay/idempotency coverage remains green;
   - invalid slot model-option negative E2E keeps downstream authority counts at zero.
 

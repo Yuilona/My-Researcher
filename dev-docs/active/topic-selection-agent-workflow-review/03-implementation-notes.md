@@ -1263,3 +1263,10 @@
 - Added minimal service guard so bundle publication requires coherent ValidatedNeed/source/support/adjudication lineage and a `confirm` HumanConfirmedDecision.
 - Preserved the existing public route/service input shape and avoided a second bundle persistence path.
 - N9 is now callable in WorkflowHarness and remains deterministic: no AgentOrchestrator, Codex, provider LLM, semantic parser, or debate runtime.
+
+## 2026-05-24 N6 Exact Replay Hardening
+- Implemented N6 `generate-need-candidate` exact replay using `workflow_run_id + node_attempt_id + input_hash`.
+- The discovery trace now stores the replay snapshot needed for automation: `payload_schema`, `input_hash`, `node_input`, `compiled_context`, `adapter_result`, assertions, artifact refs, and authority refs.
+- Matching replay returns the stored adapter result with `replay_provenance` and does not recompile context, call Codex/provider/debate, or write authority.
+- Same attempt with input hash drift fails with `VERSION_CONFLICT` before context compilation or model-like invocation.
+- `.ai/scripts/topic-selection-real-e2e.mjs` now passes `controlPlane` into `TopicSelectionWorkflowHarnessService` so durable real-flow runs can use the same replay lookup path.

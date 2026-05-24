@@ -50,12 +50,16 @@
 - Update: hardened the negative E2E wrapper to persist per-case stdout/stderr/summary artifacts and reran the focused robustness suite.
 - Command: `node --check .ai/scripts/topic-selection-v1a-harness-negative-e2e.mjs`
   - Result: passed.
+- Command: `node --check .ai/scripts/topic-selection-real-e2e.mjs && node --check .ai/scripts/topic-selection-v1a-harness-negative-e2e.mjs`
+  - Result: passed.
 - Command: `TOPIC_SELECTION_V1A_HARNESS_NEGATIVE_RUN_ID=diagnostic-negative-20260524 pnpm topic-selection:v1a-harness-negative-e2e`
   - Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-negative-e2e/diagnostic-negative-20260524`.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_NEGATIVE_RUN_ID=n6-replay-negative-20260524 pnpm topic-selection:v1a-harness-negative-e2e`
+  - Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-negative-e2e/n6-replay-negative-20260524`.
 - Command: `pnpm --dir apps/backend exec node --test --loader ts-node/esm src/services/topic-selection-resource-sampling-service.unit.test.ts src/routes/topic-selection-resource-sampling-routes.integration.test.ts src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts src/services/topic-selection-agent-orchestrator-service.unit.test.ts`
   - Result: passed; 31 tests passed.
 - Command: `pnpm --dir apps/backend exec node --test --loader ts-node/esm src/services/topic-selection-persist-need-candidate-batch-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts src/services/topic-selection-resource-sampling-service.unit.test.ts src/routes/topic-selection-resource-sampling-routes.integration.test.ts src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts src/services/topic-selection-agent-orchestrator-service.unit.test.ts`
-  - Result: passed; 102 tests passed.
+  - Result: passed; 103 tests passed.
 - Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
   - Result: passed.
 - Command: `git diff --check`
@@ -64,7 +68,8 @@
   - invalid non-provider slot model-option override still fails before authority writes;
   - cross-profile provider slot override still fails at `harness generate-need-candidate`;
   - each negative case now records the child process output and harness summary before wrapper assertions run, so future failures are diagnosable without rerunning.
-  - N6 generate-need-candidate replay reuses persisted NeedCandidate refs through the batch idempotency key and does not create duplicate authority rows.
+  - N6 generate-need-candidate exact replay returns the existing discovery trace snapshot, does not recompile context, does not call provider/Codex/debate again, and does not create duplicate authority rows.
+  - N6 same-attempt input hash drift fails with `VERSION_CONFLICT` before context compilation, provider/Codex/debate invocation, or authority writes.
   - N7/N8/N9 exact replay/idempotency tests remain green in the same focused suite.
 
 ## Matrix Acceptance Checks

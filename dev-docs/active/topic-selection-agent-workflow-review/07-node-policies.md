@@ -111,7 +111,7 @@ This snapshot prevents `policy_status=implementation_ready` from being mistaken 
 | `topic-selection.v1a.create-search-plan.v1` | `implementation_ready` | `callable` | `runCreateSearchPlanScenario` exists with strict blueprint validation, success/blocked result, and trace artifact. |
 | `topic-selection.v1a.record-search-run.v1` | `implementation_ready` | `callable` | `runRecordSearchRunScenario` exists with normalized bundle validation, success/blocked result, handoff/loopback routing, and trace artifact. |
 | `topic-selection.v1a.build-evidence-map.v1` | `implementation_ready` | `callable` | `runBuildEvidenceMapScenario` exists with stable success/blocked/review-required result and trace artifact. |
-| `topic-selection.v1a.generate-need-candidate.v1` | `implementation_ready` | `callable` | `runGenerateNeedCandidateScenario` exists and is used by the real E2E canary. |
+| `topic-selection.v1a.generate-need-candidate.v1` | `implementation_ready` | `callable` | `runGenerateNeedCandidateScenario` exists with exact replay, stable trace snapshot, and real E2E canary use. |
 | `topic-selection.v1a.validate-need-adjudication.v1` | `implementation_ready` | `callable` | `runValidateNeedAdjudicationScenario` exists with strict readiness/support lineage, recommendation gate, replay/duplicate handling, and trace artifact. |
 | `topic-selection.v1a.human-confirm-need.v1` | `implementation_ready` | `callable` | `runHumanConfirmNeedScenario` exists with stable success/blocked/review result, semantic review artifacts, exact replay, duplicate/partial-write guards, and trace artifact. |
 | `topic-selection.v1a.publish-v1b-input-bundle.v1` | `implementation_ready` | `callable` | `runPublishV1bInputBundleScenario` exists with explicit handoff refs, exact replay, version reuse idempotency, lineage guards, and trace artifact. |
@@ -2121,6 +2121,8 @@ deterministic_validators:
   - initial candidate_version is 1.
   - idempotency_key is derived from workflow_run_id, node_attempt_id, admitted draft ids, and admission report hash.
   - replaying the same idempotency_key returns the same persisted candidate refs and must not insert duplicates.
+  - same workflow_run_id + node_attempt_id + input_hash is exact replay and returns the existing discovery trace snapshot without recompiling context, reinvoking Codex/provider/debate, or writing authority.
+  - same workflow_run_id + node_attempt_id with a changed input_hash blocks with VERSION_CONFLICT before context compilation, model invocation, or authority writes.
   - normalized candidate key conflicts block with DUPLICATE_NEED_CANDIDATE and do not auto-merge.
   - persisted candidates link to ranked candidate draft batch artifact ref, admission report artifact ref, supplemental routing artifact refs, discovery audit ref, workflow_run_id, and node_attempt_id.
   - successful persistence returns persisted_candidate_refs, candidate_pool_projection_ref, and candidate_pool_projection_hash.
@@ -2214,12 +2216,14 @@ authority_write_boundary:
   partial_batch_persistence: false
 audit_artifact_policy:
   - Persist candidate discovery audit summary with execution_mode, executor_kind, profile, input hash, output hash, candidate versions/hashes, and persisted candidate refs.
+  - Persist WorkflowHarness discovery trace with payload_schema, input_hash, node_input, compiled_context, adapter_result, assertions, artifact refs, and authority refs so exact replay can return a stable node result.
   - Persist exploration_context and arbiter_context packet refs/hashes, cache hit/miss status, and compression versions.
   - If response reuse occurs, record response_source=cached_exact_invocation, cache key, source workflow/node/attempt id, source execution mode, response hash, context packet hash, schema/profile/policy versions, operator approval or local setting ref, and non_provider=true.
   - Store ranked candidate draft batch, minimum schema validation report, CandidateDraftAdmissionReport, SupplementalRoundRoutingDecision, PersistNeedCandidateBatchCommand redacted snapshot, explored alternatives, rejected framings, merge hints, recheck suggestions, unresolved points, batch ranking, debate role summaries, arbiter output, draft-to-record mapping report, candidate-pool projection refs/hash, and validation report as artifacts.
   - Do not persist hidden reasoning, provider secrets, or raw provider logs.
 failure_semantics:
   - invalid payload or missing preconditions returns blocked before authority write.
+  - node_attempt_id replay with input_hash drift fails with VERSION_CONFLICT before context compilation, provider/Codex/debate invocation, or authority writes.
   - stale, missing, or hash-mismatched context packets block before model/debate invocation.
   - response cache hit in a provider-quality scenario requiring provider_llm is treated as a miss or block, not as provider execution.
   - malformed model/debate output follows D-05 retry/escalation and then blocked or require_human_review.

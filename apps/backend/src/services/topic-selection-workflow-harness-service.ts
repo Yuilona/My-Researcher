@@ -13,6 +13,7 @@ import type {
   TopicSelectionAgentExecutionMode,
   TopicSelectionArtifactFunctionalRef,
   TopicSelectionGenerateNeedCandidateArtifactRefEntry,
+  TopicSelectionGenerateNeedCandidateArtifactSnapshot,
   TopicSelectionGenerateNeedCandidateNodeInput,
   TopicSelectionNeedAdjudicationDecision,
   TopicSelectionNeedAdjudicationRecommendationPacket,
@@ -1065,14 +1066,19 @@ export type TopicSelectionWorkflowHarnessGenerateNeedCandidateInput = {
 
 export type TopicSelectionWorkflowHarnessTraceSnapshot = {
   schema_version: 'topic-selection-workflow-harness-trace-v1';
+  payload_schema: typeof HARNESS_TRACE_PAYLOAD_SCHEMA;
   scenario_id: string;
   scenario_case_id: string | null;
   node_id: typeof GENERATE_NEED_CANDIDATE_NODE_ID;
   workflow_run_id: string;
   node_attempt_id: string;
   scenario_status: 'passed' | 'failed';
+  input_hash: string;
   execution_mode: TopicSelectionAgentExecutionMode;
   run_mode: TopicSelectionAgentRunMode;
+  node_input: TopicSelectionGenerateNeedCandidateNodeInput;
+  compiled_context: TopicSelectionNeedDiscoveryCompiledContextPairResult;
+  adapter_result: TopicSelectionGenerateNeedCandidateOrchestratorAdapterResult;
   adapter_status: TopicSelectionGenerateNeedCandidateOrchestratorAdapterResult['status'];
   routing_decision: TopicSelectionSupplementalRoundRoutingDecisionKind | null;
   context_packet_refs: TopicSelectionArtifactFunctionalRef[];
@@ -2376,6 +2382,11 @@ export class TopicSelectionWorkflowHarnessService {
     input: TopicSelectionWorkflowHarnessGenerateNeedCandidateInput,
   ): Promise<TopicSelectionWorkflowHarnessGenerateNeedCandidateResult> {
     this.assertScenarioInput(input);
+    const inputHash = this.hash(this.generateNeedCandidateInputHashPayload(input));
+    const replay = await this.findGenerateNeedCandidateReplay(input, inputHash);
+    if (replay) {
+      return replay;
+    }
     const compiledContext = await this.dependencies.contextCompiler.compileContextPair(
       this.contextCompileInput(input),
     );
@@ -2406,7 +2417,9 @@ export class TopicSelectionWorkflowHarnessService {
     const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
     const traceSnapshot = this.traceSnapshot({
       input,
+      inputHash,
       compiledContext,
+      nodeInput,
       adapterResult,
       assertions,
       scenarioStatus,
@@ -2437,6 +2450,143 @@ export class TopicSelectionWorkflowHarnessService {
       assertions,
       harness_trace_snapshot: traceSnapshot,
       harness_trace_artifact: traceArtifact.artifact_entry,
+    };
+  }
+
+  private async findGenerateNeedCandidateReplay(
+    input: TopicSelectionWorkflowHarnessGenerateNeedCandidateInput,
+    inputHash: string,
+  ): Promise<TopicSelectionWorkflowHarnessGenerateNeedCandidateResult | null> {
+    if (!this.dependencies.controlPlane) {
+      return null;
+    }
+    const artifacts = await this.dependencies.controlPlane.listArtifactRefsByWorkflowRunId(input.workflow_run_id);
+    const traceArtifacts = artifacts
+      .filter((artifact) => {
+        const snapshot = this.generateNeedCandidateArtifactSnapshot(artifact);
+        return snapshot?.artifact_key === 'discovery_audit'
+          && snapshot.node_attempt_id === input.node_attempt_id
+          && this.generateNeedCandidateTracePayload(snapshot.payload)?.payload_schema === HARNESS_TRACE_PAYLOAD_SCHEMA;
+      })
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+    if (traceArtifacts.length === 0) {
+      return null;
+    }
+
+    const matching = traceArtifacts.find((artifact) => {
+      const snapshot = this.generateNeedCandidateArtifactSnapshot(artifact);
+      const payload = snapshot ? this.generateNeedCandidateTracePayload(snapshot.payload) : null;
+      return payload?.input_hash === inputHash;
+    });
+    if (!matching) {
+      throw new AppError(
+        409,
+        'VERSION_CONFLICT',
+        'node_attempt_id replay input hash does not match the existing generate-need-candidate attempt.',
+        {
+          blocker_codes: ['REPLAY_INPUT_HASH_MISMATCH'],
+          node_attempt_id: input.node_attempt_id,
+        },
+      );
+    }
+
+    const snapshot = this.generateNeedCandidateArtifactSnapshot(matching);
+    const existingPayload = snapshot ? this.generateNeedCandidateTracePayload(snapshot.payload) : null;
+    if (!snapshot || !existingPayload) {
+      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'GenerateNeedCandidate replay trace payload is not readable.');
+    }
+    const existingTraceRef = this.ref('artifact_ref', matching.artifact_ref_id, matching.title_card_id ?? input.title_card_id);
+    const adapterResult: TopicSelectionGenerateNeedCandidateOrchestratorAdapterResult = {
+      ...existingPayload.adapter_result,
+      replay_provenance: {
+        replayed: true,
+        source_workflow_run_id: existingPayload.workflow_run_id,
+        source_node_attempt_id: existingPayload.node_attempt_id,
+        source_trace_artifact_ref: existingTraceRef,
+        input_hash: existingPayload.input_hash,
+      },
+    };
+    const assertions = this.evaluateAssertions(input, adapterResult);
+    const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
+    const harnessTraceArtifact = this.generateNeedCandidateArtifactEntry(matching, snapshot, existingTraceRef);
+    return {
+      schema_version: 'v1',
+      scenario_id: input.scenario_id,
+      scenario_case_id: input.scenario_case_id ?? null,
+      node_id: GENERATE_NEED_CANDIDATE_NODE_ID,
+      workflow_run_id: input.workflow_run_id,
+      node_attempt_id: input.node_attempt_id,
+      scenario_status: scenarioStatus,
+      node_input: existingPayload.node_input,
+      compiled_context: existingPayload.compiled_context,
+      adapter_result: adapterResult,
+      assertions,
+      harness_trace_snapshot: {
+        ...existingPayload,
+        scenario_id: input.scenario_id,
+        scenario_case_id: input.scenario_case_id ?? null,
+        scenario_status: scenarioStatus,
+        adapter_result: adapterResult,
+        adapter_status: adapterResult.status,
+        routing_decision: adapterResult.supplemental_round_routing_decision?.routing_decision ?? null,
+        assertions,
+      },
+      harness_trace_artifact: harnessTraceArtifact,
+    };
+  }
+
+  private generateNeedCandidateArtifactSnapshot(
+    record: TopicSelectionArtifactRefRecord,
+  ): TopicSelectionGenerateNeedCandidateArtifactSnapshot | null {
+    if (!record.payload || typeof record.payload !== 'object') {
+      return null;
+    }
+    const payload = record.payload as Partial<TopicSelectionGenerateNeedCandidateArtifactSnapshot>;
+    if (
+      payload.node_id !== GENERATE_NEED_CANDIDATE_NODE_ID
+      || payload.workflow_run_id !== record.workflow_run_id
+      || typeof payload.node_attempt_id !== 'string'
+      || typeof payload.artifact_key !== 'string'
+      || typeof payload.payload_hash !== 'string'
+      || !payload.payload
+    ) {
+      return null;
+    }
+    return payload as TopicSelectionGenerateNeedCandidateArtifactSnapshot;
+  }
+
+  private generateNeedCandidateTracePayload(value: unknown): TopicSelectionWorkflowHarnessTraceSnapshot | null {
+    if (!value || typeof value !== 'object') {
+      return null;
+    }
+    const payload = value as Partial<TopicSelectionWorkflowHarnessTraceSnapshot>;
+    if (
+      payload.payload_schema !== HARNESS_TRACE_PAYLOAD_SCHEMA
+      || payload.node_id !== GENERATE_NEED_CANDIDATE_NODE_ID
+      || typeof payload.workflow_run_id !== 'string'
+      || typeof payload.node_attempt_id !== 'string'
+      || typeof payload.input_hash !== 'string'
+      || !payload.node_input
+      || !payload.compiled_context
+      || !payload.adapter_result
+    ) {
+      return null;
+    }
+    return payload as TopicSelectionWorkflowHarnessTraceSnapshot;
+  }
+
+  private generateNeedCandidateArtifactEntry(
+    record: TopicSelectionArtifactRefRecord,
+    snapshot: TopicSelectionGenerateNeedCandidateArtifactSnapshot,
+    artifactRef: TopicSelectionFunctionalRef,
+  ): TopicSelectionGenerateNeedCandidateArtifactRefEntry {
+    return {
+      artifact_key: snapshot.artifact_key,
+      artifact_ref: artifactRef as TopicSelectionArtifactFunctionalRef,
+      artifact_hash: record.checksum ?? this.hash(record.payload),
+      payload_hash: snapshot.payload_hash,
+      payload_schema: snapshot.payload_schema,
+      redacted_paths: snapshot.redacted_paths,
     };
   }
 
@@ -6118,6 +6268,50 @@ export class TopicSelectionWorkflowHarnessService {
     };
   }
 
+  private generateNeedCandidateInputHashPayload(
+    input: TopicSelectionWorkflowHarnessGenerateNeedCandidateInput,
+  ): Record<string, unknown> {
+    return {
+      node_id: GENERATE_NEED_CANDIDATE_NODE_ID,
+      workspace_id: input.workspace_id ?? null,
+      title_card_id: input.title_card_id,
+      workflow_run_id: input.workflow_run_id,
+      input_snapshot_id: input.input_snapshot_id ?? null,
+      node_attempt_id: input.node_attempt_id,
+      topic_scope_ref: input.topic_scope_ref,
+      evidence_map_ref: input.evidence_map_ref,
+      evidence_strength_ref: input.evidence_strength_ref,
+      resource_sample_set_ref: input.resource_sample_set_ref ?? null,
+      candidate_pool_projection_ref: input.candidate_pool_projection_ref ?? null,
+      evidence_map_handoff_hash: input.evidence_map_handoff ? this.hash(input.evidence_map_handoff) : null,
+      search_snapshot_refs: input.search_snapshot_refs,
+      resource_snapshot_refs: input.resource_snapshot_refs,
+      context_input_refs: input.context_input_refs ?? null,
+      policy_version: input.policy_version,
+      output_schema_version: input.output_schema_version,
+      profile_id: input.profile_id,
+      execution_mode: input.execution_mode,
+      run_mode: input.run_mode,
+      executor_kind: input.executor_kind ?? 'single_agent',
+      debate_loop_id: input.debate_loop_id ?? null,
+      debate_policy_id: input.debate_policy_id ?? null,
+      debate_slot_execution_overrides: input.debate_slot_execution_overrides ?? null,
+      debate_slot_model_option_overrides: input.debate_slot_model_option_overrides ?? null,
+      debate_mocked_outputs_hash: input.debate_mocked_outputs ? this.hash(input.debate_mocked_outputs) : null,
+      debate_codex_responses_hash: input.debate_codex_responses ? this.hash(input.debate_codex_responses) : null,
+      exploration_payload_hash: this.hash(input.exploration_payload),
+      arbiter_payload_hash: this.hash(input.arbiter_payload),
+      mocked_output_hash: input.mocked_output ? this.hash(input.mocked_output) : null,
+      codex_response_hash: input.codex_response ? this.hash(input.codex_response) : null,
+      model_option_id: input.model_option_id ?? null,
+      current_round_index: input.current_round_index ?? null,
+      remaining_round_budget: input.remaining_round_budget ?? null,
+      persist_admitted_candidates: input.persist_admitted_candidates ?? false,
+      persistence_context: input.persistence_context ?? null,
+      created_by: input.created_by ?? 'system',
+    };
+  }
+
   private nodeInput(
     input: TopicSelectionWorkflowHarnessGenerateNeedCandidateInput,
     compiledContext: TopicSelectionNeedDiscoveryCompiledContextPairResult,
@@ -6299,6 +6493,8 @@ export class TopicSelectionWorkflowHarnessService {
 
   private traceSnapshot(input: {
     input: TopicSelectionWorkflowHarnessGenerateNeedCandidateInput;
+    inputHash: string;
+    nodeInput: TopicSelectionGenerateNeedCandidateNodeInput;
     compiledContext: TopicSelectionNeedDiscoveryCompiledContextPairResult;
     adapterResult: TopicSelectionGenerateNeedCandidateOrchestratorAdapterResult;
     assertions: TopicSelectionWorkflowHarnessAssertion[];
@@ -6306,14 +6502,19 @@ export class TopicSelectionWorkflowHarnessService {
   }): TopicSelectionWorkflowHarnessTraceSnapshot {
     return {
       schema_version: 'topic-selection-workflow-harness-trace-v1',
+      payload_schema: HARNESS_TRACE_PAYLOAD_SCHEMA,
       scenario_id: input.input.scenario_id,
       scenario_case_id: input.input.scenario_case_id ?? null,
       node_id: GENERATE_NEED_CANDIDATE_NODE_ID,
       workflow_run_id: input.input.workflow_run_id,
       node_attempt_id: input.input.node_attempt_id,
       scenario_status: input.scenarioStatus,
+      input_hash: input.inputHash,
       execution_mode: input.input.execution_mode,
       run_mode: input.input.run_mode,
+      node_input: input.nodeInput,
+      compiled_context: input.compiledContext,
+      adapter_result: input.adapterResult,
       adapter_status: input.adapterResult.status,
       routing_decision: input.adapterResult.supplemental_round_routing_decision?.routing_decision ?? null,
       context_packet_refs: [

@@ -103,6 +103,13 @@ export type TopicSelectionGenerateNeedCandidateOrchestratorAdapterResult = {
   arbiter_context_packet: TopicSelectionNeedDiscoveryContextPacket;
   invocation_result: TopicSelectionAgentInvocationResult<unknown>;
   debate_result?: TopicSelectionNeedDiscoveryDebateLoopResult | null;
+  replay_provenance?: {
+    replayed: true;
+    source_workflow_run_id: string;
+    source_node_attempt_id: string;
+    source_trace_artifact_ref: TopicSelectionFunctionalRef;
+    input_hash: string;
+  } | null;
   blocker_codes: string[];
   error_code?: string | null;
 };

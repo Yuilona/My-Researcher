@@ -689,6 +689,7 @@ function makeWorkflowHarness(prisma, llmGateway) {
     contextCompiler,
     generateNeedCandidateAdapter,
     artifactBoundary,
+    controlPlane,
   });
 }
 
