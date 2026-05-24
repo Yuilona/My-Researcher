@@ -115,6 +115,7 @@ Project: `main`
 | T-099 paper-implementation-ai-workflow-harness | done | dev-docs/active/paper-implementation-ai-workflow-harness |
 | T-100 paper-implementation-desktop-workbench | done | dev-docs/active/paper-implementation-desktop-workbench |
 | T-101 paper-implementation-contract-evaluation-suite | done | dev-docs/active/paper-implementation-contract-evaluation-suite |
+| T-103 experiment-foundation-full-flow-validation-runner | planned | dev-docs/active/experiment-foundation-full-flow-validation-runner |
 
 ### F-002 Desktop Frontend Foundation
 

@@ -111,4 +111,5 @@ Project: `main`
 | T-099 paper-implementation-ai-workflow-harness | done | F-001 | dev-docs/active/paper-implementation-ai-workflow-harness |
 | T-100 paper-implementation-desktop-workbench | done | F-001 | dev-docs/active/paper-implementation-desktop-workbench |
 | T-101 paper-implementation-contract-evaluation-suite | done | F-001 | dev-docs/active/paper-implementation-contract-evaluation-suite |
+| T-103 experiment-foundation-full-flow-validation-runner | planned | F-001 | dev-docs/active/experiment-foundation-full-flow-validation-runner |
 <!-- AUTO-GENERATED:END task-index -->
