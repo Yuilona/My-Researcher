@@ -8,7 +8,7 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 103 (planned: 2, in-progress: 4, blocked: 0, done: 30, archived: 67)
+- Tasks: 105 (planned: 4, in-progress: 4, blocked: 0, done: 30, archived: 67)
 
 ## Recent tasks
 
@@ -17,6 +17,8 @@ Project: `main`
 | T-090 experiment-foundation-capability-validation | done | F-001 | dev-docs/active/experiment-foundation-capability-validation |
 | T-102 paper-implementation-v1-hardening | done | F-001 | dev-docs/active/paper-implementation-v1-hardening |
 | T-103 experiment-foundation-full-flow-validation-runner | in-progress | F-001 | dev-docs/active/experiment-foundation-full-flow-validation-runner |
+| T-104 paper-implementation-live-experiment-adapter | planned | F-001 | dev-docs/active/paper-implementation-live-experiment-adapter |
+| T-105 paper-implementation-provider-variance-evaluation | planned | F-001 | dev-docs/active/paper-implementation-provider-variance-evaluation |
 | T-091 paper-implementation-full-landing | done | F-001 | dev-docs/active/paper-implementation-full-landing |
 | T-101 paper-implementation-contract-evaluation-suite | done | F-001 | dev-docs/active/paper-implementation-contract-evaluation-suite |
 | T-094 paper-implementation-motive-evidence-board | done | F-001 | dev-docs/active/paper-implementation-motive-evidence-board |
@@ -32,6 +34,4 @@ Project: `main`
 | T-093 paper-implementation-intake-bootstrap | done | F-001 | dev-docs/active/paper-implementation-intake-bootstrap |
 | T-097 paper-implementation-trace-kernel | done | F-001 | dev-docs/active/paper-implementation-trace-kernel |
 | T-089 topic-selection-agent-workflow-review | planned | F-001 | dev-docs/active/topic-selection-agent-workflow-review |
-| T-075 experiment-foundation-candidate-promotion-contracts | done | F-001 | dev-docs/active/experiment-foundation-candidate-promotion-contracts |
-| T-076 experiment-foundation-persistence-api-readiness | done | F-001 | dev-docs/active/experiment-foundation-persistence-api-readiness |
 <!-- AUTO-GENERATED:END dashboard -->

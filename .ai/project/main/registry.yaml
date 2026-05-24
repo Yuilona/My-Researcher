@@ -975,3 +975,21 @@ tasks:
       - R-012
     dev_docs_path: dev-docs/active/experiment-foundation-full-flow-validation-runner
     updated: 2026-05-24
+  - id: T-104
+    slug: paper-implementation-live-experiment-adapter
+    status: planned
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-013
+    dev_docs_path: dev-docs/active/paper-implementation-live-experiment-adapter
+    updated: 2026-05-24
+  - id: T-105
+    slug: paper-implementation-provider-variance-evaluation
+    status: planned
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-013
+    dev_docs_path: dev-docs/active/paper-implementation-provider-variance-evaluation
+    updated: 2026-05-24
