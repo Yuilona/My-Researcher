@@ -23,17 +23,23 @@ ValidationCycle
   -> T-098 result/claim/dossier
 ```
 
-## Handoff Response Shape
+## Implemented Handoff Response Shape
 T-104 may return handoff refs for the next workflow step, but these are read-model hints only:
 
 ```ts
 {
-  work_order_id: string;
-  external_job_ref: TopicSelectionFunctionalRef | null;
-  monitor_intake_id: string | null;
-  run_evidence_unit_id: string | null;
-  run_evidence_trace_manifest_id: string | null;
-  next_allowed_actions: string[];
+  action: 'submit' | 'sync' | 'collect' | 'cancel';
+  outcome: 'submitted' | 'synced' | 'collected' | 'cancel_requested' | 'already_recorded' | 'blocked';
+  external_job: ExternalTrainingJob;
+  harness_run?: ResearchWorkOrderHarnessRun | null;
+  monitor_intake?: RunMonitorIntakeRecord | null;
+  run_evidence_unit?: RunEvidenceUnit | null;
+  trace_manifest?: TraceManifest | null;
+  handoff: {
+    next_action_refs: TopicSelectionFunctionalRef[];
+    recommended_next_actions: string[];
+    notes: string[];
+  };
 }
 ```
 
@@ -53,13 +59,17 @@ Allowed handoff actions may include `create_result_interpretation_packet`, but T
   - `collectJob`
   - `ExternalTrainingJob`
 
-## Initial API Shape
-- `POST /paper-implementation/projects/:implementation_project_id/research-work-orders/:work_order_id/live-experiment-submissions`
-- `POST /paper-implementation/projects/:implementation_project_id/research-work-orders/:work_order_id/live-experiment-sync`
-- `POST /paper-implementation/projects/:implementation_project_id/research-work-orders/:work_order_id/live-experiment-collect`
-- `POST /paper-implementation/projects/:implementation_project_id/research-work-orders/:work_order_id/live-experiment-cancel`
+## Implemented API Shape
+- `POST /paper-implementation/projects/:implementation_project_id/research-work-orders/:work_order_id/live-experiment-runs/submit`
+- `POST /paper-implementation/projects/:implementation_project_id/research-work-orders/:work_order_id/live-experiment-runs/:external_job_id/sync`
+- `POST /paper-implementation/projects/:implementation_project_id/research-work-orders/:work_order_id/live-experiment-runs/:external_job_id/collect`
+- `POST /paper-implementation/projects/:implementation_project_id/research-work-orders/:work_order_id/live-experiment-runs/:external_job_id/cancel`
 
-The route names are provisional until Phase 0 closes.
+## Queryability Decision
+- No Prisma migration was required.
+- Submit idempotency uses `PaperImplementationWorkOrderHarnessRun.idempotencyKey`, already columnized/indexed.
+- External job lookup and final evidence lookup use existing external job ref columns on harness/run evidence tables.
+- `materialization_result_ref/hash` were added to the WorkOrder bridge contract and stored in existing `experimentBridge` JSON because they are submit payload refs, not a gate/queue/trace lookup key.
 
 ## Hard Invariants
 - No trusted live result without an admitted WorkOrder.

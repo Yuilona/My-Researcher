@@ -34,6 +34,12 @@ export interface PaperImplementationWorkOrderRepository {
     workOrder: ResearchWorkOrder,
   ): Promise<ResearchWorkOrderHarnessRun>;
 
+  findHarnessRunByIdempotencyKey(
+    implementationProjectId: string,
+    workOrderId: string,
+    idempotencyKey: string,
+  ): Promise<ResearchWorkOrderHarnessRun | null>;
+
   listHarnessRuns(
     implementationProjectId: string,
     workOrderId: string,
@@ -50,5 +56,12 @@ export interface PaperImplementationWorkOrderRepository {
   findRunEvidenceUnitById(
     implementationProjectId: string,
     runEvidenceUnitId: string,
+  ): Promise<RunEvidenceUnit | null>;
+
+  findRunEvidenceUnitByExternalJob(
+    implementationProjectId: string,
+    externalJobRefType: string,
+    externalJobRefId: string,
+    externalJobVersionId?: string | null,
   ): Promise<RunEvidenceUnit | null>;
 }

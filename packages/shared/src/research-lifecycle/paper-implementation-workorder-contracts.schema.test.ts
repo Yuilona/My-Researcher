@@ -45,6 +45,8 @@ function validBridge() {
     run_recipe_hash: 'sha256:run_recipe_001',
     version_lock_hash: 'sha256:version_lock_001',
     config_snapshot_hash: 'sha256:config_snapshot_001',
+    materialization_result_ref: functionalRef('training_task_materialization_result', 'materialization_result_001'),
+    materialization_result_hash: 'sha256:materialization_result_001',
     training_task_spec_ref: functionalRef('training_task_spec', 'training_task_spec_001'),
     training_task_spec_hash: 'sha256:training_task_spec_001',
   };

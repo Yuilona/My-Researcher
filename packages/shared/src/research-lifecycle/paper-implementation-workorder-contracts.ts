@@ -95,6 +95,8 @@ export interface ExperimentFoundationBridgeRefs {
   run_recipe_hash: string;
   version_lock_hash?: string | null;
   config_snapshot_hash?: string | null;
+  materialization_result_ref?: TopicSelectionFunctionalRef | null;
+  materialization_result_hash?: string | null;
   training_task_spec_ref?: TopicSelectionFunctionalRef | null;
   training_task_spec_hash?: string | null;
   external_job_ref?: TopicSelectionFunctionalRef | null;
@@ -303,6 +305,8 @@ export const experimentFoundationBridgeRefsSchema = {
     run_recipe_hash: stringId,
     version_lock_hash: nullableStringId,
     config_snapshot_hash: nullableStringId,
+    materialization_result_ref: nullableFunctionalRef,
+    materialization_result_hash: nullableStringId,
     training_task_spec_ref: nullableFunctionalRef,
     training_task_spec_hash: nullableStringId,
     external_job_ref: nullableFunctionalRef,

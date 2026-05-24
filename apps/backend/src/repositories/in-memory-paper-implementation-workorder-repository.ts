@@ -71,6 +71,19 @@ implements PaperImplementationWorkOrderRepository {
     return structuredClone(harnessRun);
   }
 
+  async findHarnessRunByIdempotencyKey(
+    implementationProjectId: string,
+    workOrderId: string,
+    idempotencyKey: string,
+  ): Promise<ResearchWorkOrderHarnessRun | null> {
+    const run = (this.harnessRunIdsByWorkOrder.get(workOrderId) ?? [])
+      .map((id) => this.harnessRuns.get(id))
+      .find((candidate) => candidate
+        && candidate.implementation_project_id === implementationProjectId
+        && candidate.idempotency_key === idempotencyKey);
+    return run ? structuredClone(run) : null;
+  }
+
   async listHarnessRuns(
     implementationProjectId: string,
     workOrderId: string,
@@ -136,6 +149,19 @@ implements PaperImplementationWorkOrderRepository {
       return null;
     }
     return structuredClone(unit);
+  }
+
+  async findRunEvidenceUnitByExternalJob(
+    implementationProjectId: string,
+    externalJobRefType: string,
+    externalJobRefId: string,
+    externalJobVersionId: string | null = null,
+  ): Promise<RunEvidenceUnit | null> {
+    const unit = [...this.runEvidenceUnits.values()].find((candidate) => candidate.implementation_project_id === implementationProjectId
+      && candidate.external_job_ref?.ref_type === externalJobRefType
+      && candidate.external_job_ref.ref_id === externalJobRefId
+      && (candidate.external_job_ref.version_id ?? null) === externalJobVersionId);
+    return unit ? structuredClone(unit) : null;
   }
 
   private assertNewId<T>(map: Map<string, T>, id: string, label: string): void {

@@ -61,6 +61,7 @@ export * from './paper-implementation-trace-contracts.js';
 export * from './paper-implementation-motive-contracts.js';
 export * from './paper-implementation-validation-contracts.js';
 export * from './paper-implementation-workorder-contracts.js';
+export * from './paper-implementation-live-experiment-adapter-contracts.js';
 export * from './paper-implementation-result-claim-dossier-contracts.js';
 export * from './paper-implementation-ai-workflow-harness-contracts.js';
 export {

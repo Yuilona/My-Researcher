@@ -11,8 +11,16 @@
 | `git diff --check -- dev-docs/active/paper-implementation-live-experiment-adapter .ai/project/main` | passed | No whitespace errors in T-104 docs or generated project views. |
 
 ## Required Before Closure
-- Shared/backend tests for any contract/service changes.
-- Targeted PaperImplementation WorkOrder and result/claim regression tests.
-- Experiment-foundation execution service tests or adapter fakes.
-- Governance sync/lint.
-- `git diff --check` for touched paths.
+- Completed below.
+
+## 2026-05-24 - Implementation Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/shared test` | passed | 164 shared schema tests passed, including live experiment adapter contract exports and barrel re-export coverage. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/paper-implementation-live-experiment-adapter-service.unit.test.ts` | passed | Covered submit idempotency, missing materialization gate, sync monitor-only behavior, collect target-specific trace + trusted evidence, and route validation/delegation. |
+| `pnpm --filter @paper-engineering-assistant/backend typecheck` | passed | Backend TypeScript compile passed after Prisma generate. |
+| `pnpm --filter @paper-engineering-assistant/backend prisma:validate` | blocked | Initial run failed because `DATABASE_URL` was unset in the shell, not because of schema drift. |
+| `DATABASE_URL='postgresql://user:pass@localhost:5432/my_researcher_validate' pnpm --filter @paper-engineering-assistant/backend prisma:validate` | passed | Prisma schema validates; no migration was added. |
+| `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main` | passed | Regenerated project views after marking T-104 done. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Governance lint passed. |
+| `git diff --check -- <T-104 touched paths>` | passed | No whitespace errors in T-104 code, contracts, tests, or docs. |

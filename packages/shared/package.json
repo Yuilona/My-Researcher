@@ -40,6 +40,7 @@
     "./research-lifecycle/paper-implementation-motive-contracts": "./src/research-lifecycle/paper-implementation-motive-contracts.ts",
     "./research-lifecycle/paper-implementation-validation-contracts": "./src/research-lifecycle/paper-implementation-validation-contracts.ts",
     "./research-lifecycle/paper-implementation-workorder-contracts": "./src/research-lifecycle/paper-implementation-workorder-contracts.ts",
+    "./research-lifecycle/paper-implementation-live-experiment-adapter-contracts": "./src/research-lifecycle/paper-implementation-live-experiment-adapter-contracts.ts",
     "./research-lifecycle/paper-implementation-result-claim-dossier-contracts": "./src/research-lifecycle/paper-implementation-result-claim-dossier-contracts.ts",
     "./research-lifecycle/paper-implementation-ai-workflow-harness-contracts": "./src/research-lifecycle/paper-implementation-ai-workflow-harness-contracts.ts"
   },

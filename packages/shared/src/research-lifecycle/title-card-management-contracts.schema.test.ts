@@ -17,6 +17,7 @@ import * as paperImplementationResultClaimDossierContracts from './paper-impleme
 import * as paperImplementationTraceContracts from './paper-implementation-trace-contracts.js';
 import * as paperImplementationValidationContracts from './paper-implementation-validation-contracts.js';
 import * as paperImplementationWorkOrderContracts from './paper-implementation-workorder-contracts.js';
+import * as paperImplementationLiveExperimentAdapterContracts from './paper-implementation-live-experiment-adapter-contracts.js';
 import * as paperProjectContracts from './paper-project-contracts.js';
 import * as researchArgumentContracts from './research-argument-contracts.js';
 import * as researchLifecycleContracts from './index.js';
@@ -3336,6 +3337,7 @@ test('research-lifecycle barrel re-exports the runtime value surface of split mo
     ...Object.keys(paperImplementationMotiveContracts),
     ...Object.keys(paperImplementationValidationContracts),
     ...Object.keys(paperImplementationWorkOrderContracts),
+    ...Object.keys(paperImplementationLiveExperimentAdapterContracts),
     ...Object.keys(paperImplementationResultClaimDossierContracts),
     ...Object.keys(autoPullContracts),
     ...Object.keys(experimentFoundationContracts),

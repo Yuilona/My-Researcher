@@ -17,3 +17,11 @@
 - Default T-104 closure should remain deterministic/credential-free.
 - Real cloud/external execution checks must be opt-in and reported separately.
 - Live LLM/provider variance remains a separate follow-up task.
+
+## 2026-05-24 - Implementation Closed
+- Added `paper-implementation-live-experiment-adapter-contracts` with submit/sync/collect/cancel schemas and response shape.
+- Added `PaperImplementationLiveExperimentAdapterService` as orchestration-only composition over experiment-foundation execution, experiment-foundation records, trace kernel, and the existing WorkOrder bridge service.
+- Added WorkOrder bridge `materialization_result_ref/hash` to satisfy experiment-foundation submit requirements. This does not add Prisma columns; it remains in the existing bridge payload because it is not a downstream query/gate field.
+- Added repository methods for idempotent harness lookup and run evidence lookup by external job using existing columnized/indexed fields.
+- Added REST endpoints under `live-experiment-runs` and wired them through the existing PaperImplementation controller.
+- Final collect/cancel evidence uses preallocated run evidence identity, target-specific `TraceManifest`, and existing `recordRunMonitorIntake`; no result interpretation, claim, dossier, or writing packet authority is created.

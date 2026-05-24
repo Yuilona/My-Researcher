@@ -49,6 +49,12 @@ import {
   createImplementationInputSnapshotRequestSchema,
   resolveDecisionWorkQueueItemRequestSchema,
 } from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-ai-workflow-harness-contracts';
+import {
+  cancelLiveExperimentRunRequestSchema,
+  collectLiveExperimentRunRequestSchema,
+  submitLiveExperimentRunRequestSchema,
+  syncLiveExperimentRunRequestSchema,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-live-experiment-adapter-contracts';
 
 import { PaperImplementationController } from '../controllers/paper-implementation-controller.js';
 
@@ -95,6 +101,11 @@ const validationFeedbackCandidateParams = paramsSchema({
 const researchWorkOrderParams = paramsSchema({
   implementation_project_id: stringId,
   work_order_id: stringId,
+});
+const liveExperimentRunParams = paramsSchema({
+  implementation_project_id: stringId,
+  work_order_id: stringId,
+  external_job_id: stringId,
 });
 const runEvidenceUnitParams = paramsSchema({
   implementation_project_id: stringId,
@@ -535,6 +546,46 @@ export async function registerPaperImplementationRoutes(
     '/paper-implementation/projects/:implementation_project_id/research-work-orders/:work_order_id/harness-runs',
     { schema: researchWorkOrderParams },
     controller.listResearchWorkOrderHarnessRuns,
+  );
+  fastify.post(
+    '/paper-implementation/projects/:implementation_project_id/research-work-orders/:work_order_id/live-experiment-runs/submit',
+    {
+      schema: {
+        ...researchWorkOrderParams,
+        body: submitLiveExperimentRunRequestSchema,
+      },
+    },
+    controller.submitLiveExperimentRun,
+  );
+  fastify.post(
+    '/paper-implementation/projects/:implementation_project_id/research-work-orders/:work_order_id/live-experiment-runs/:external_job_id/sync',
+    {
+      schema: {
+        ...liveExperimentRunParams,
+        body: syncLiveExperimentRunRequestSchema,
+      },
+    },
+    controller.syncLiveExperimentRun,
+  );
+  fastify.post(
+    '/paper-implementation/projects/:implementation_project_id/research-work-orders/:work_order_id/live-experiment-runs/:external_job_id/collect',
+    {
+      schema: {
+        ...liveExperimentRunParams,
+        body: collectLiveExperimentRunRequestSchema,
+      },
+    },
+    controller.collectLiveExperimentRun,
+  );
+  fastify.post(
+    '/paper-implementation/projects/:implementation_project_id/research-work-orders/:work_order_id/live-experiment-runs/:external_job_id/cancel',
+    {
+      schema: {
+        ...liveExperimentRunParams,
+        body: cancelLiveExperimentRunRequestSchema,
+      },
+    },
+    controller.cancelLiveExperimentRun,
   );
   fastify.post(
     '/paper-implementation/projects/:implementation_project_id/run-monitor-intakes',

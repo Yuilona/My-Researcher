@@ -49,6 +49,12 @@ import type {
   CreateImplementationInputSnapshotRequest,
   ResolveDecisionWorkQueueItemRequest,
 } from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-ai-workflow-harness-contracts';
+import type {
+  CancelLiveExperimentRunRequest,
+  CollectLiveExperimentRunRequest,
+  SubmitLiveExperimentRunRequest,
+  SyncLiveExperimentRunRequest,
+} from '@paper-engineering-assistant/shared/research-lifecycle/paper-implementation-live-experiment-adapter-contracts';
 
 import { AppError } from '../errors/app-error.js';
 import { PaperImplementationIntakeBootstrapService } from '../services/paper-implementation-intake-bootstrap-service.js';
@@ -58,6 +64,7 @@ import { PaperImplementationValidationCyclePlanningService } from '../services/p
 import { PaperImplementationWorkOrderExperimentBridgeService } from '../services/paper-implementation-workorder-experiment-bridge-service.js';
 import { PaperImplementationResultClaimDossierService } from '../services/paper-implementation-result-claim-dossier-service.js';
 import { PaperImplementationAiWorkflowHarnessService } from '../services/paper-implementation-ai-workflow-harness-service.js';
+import { PaperImplementationLiveExperimentAdapterService } from '../services/paper-implementation-live-experiment-adapter-service.js';
 
 type BodyRequest<T> = FastifyRequest<{ Body: T }>;
 type ParamsRequest<T> = FastifyRequest<{ Params: T }>;
@@ -96,6 +103,7 @@ export class PaperImplementationController {
     private readonly workOrderExperimentBridge: PaperImplementationWorkOrderExperimentBridgeService,
     private readonly resultClaimDossier: PaperImplementationResultClaimDossierService,
     private readonly aiWorkflowHarness: PaperImplementationAiWorkflowHarnessService,
+    private readonly liveExperimentAdapter?: PaperImplementationLiveExperimentAdapterService,
   ) {}
 
   bootstrapProject = async (
@@ -876,6 +884,100 @@ export class PaperImplementationController {
     }
   };
 
+  submitLiveExperimentRun = async (
+    request: FastifyRequest<{
+      Params: {
+        implementation_project_id: string;
+        work_order_id: string;
+      };
+      Body: SubmitLiveExperimentRunRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.requireLiveExperimentAdapter().submitLiveExperimentRun(
+        request.params.implementation_project_id,
+        request.params.work_order_id,
+        request.body,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  syncLiveExperimentRun = async (
+    request: FastifyRequest<{
+      Params: {
+        implementation_project_id: string;
+        work_order_id: string;
+        external_job_id: string;
+      };
+      Body: SyncLiveExperimentRunRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.requireLiveExperimentAdapter().syncLiveExperimentRun(
+        request.params.implementation_project_id,
+        request.params.work_order_id,
+        request.params.external_job_id,
+        request.body,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  collectLiveExperimentRun = async (
+    request: FastifyRequest<{
+      Params: {
+        implementation_project_id: string;
+        work_order_id: string;
+        external_job_id: string;
+      };
+      Body: CollectLiveExperimentRunRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.requireLiveExperimentAdapter().collectLiveExperimentRun(
+        request.params.implementation_project_id,
+        request.params.work_order_id,
+        request.params.external_job_id,
+        request.body,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  cancelLiveExperimentRun = async (
+    request: FastifyRequest<{
+      Params: {
+        implementation_project_id: string;
+        work_order_id: string;
+        external_job_id: string;
+      };
+      Body: CancelLiveExperimentRunRequest;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.requireLiveExperimentAdapter().cancelLiveExperimentRun(
+        request.params.implementation_project_id,
+        request.params.work_order_id,
+        request.params.external_job_id,
+        request.body,
+      );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
   recordRunMonitorIntake = async (
     request: FastifyRequest<{
       Params: { implementation_project_id: string };
@@ -893,6 +995,13 @@ export class PaperImplementationController {
       return handleError(reply, error);
     }
   };
+
+  private requireLiveExperimentAdapter(): PaperImplementationLiveExperimentAdapterService {
+    if (!this.liveExperimentAdapter) {
+      throw new AppError(500, 'INTERNAL_ERROR', 'PaperImplementation live experiment adapter is not configured.');
+    }
+    return this.liveExperimentAdapter;
+  }
 
   listRunEvidenceUnits = async (
     request: ParamsRequest<{ implementation_project_id: string }>,

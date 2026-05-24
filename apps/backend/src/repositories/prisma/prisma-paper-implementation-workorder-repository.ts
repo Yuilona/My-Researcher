@@ -221,6 +221,18 @@ implements PaperImplementationWorkOrderRepository {
     return toHarnessRun(runRow);
   }
 
+  async findHarnessRunByIdempotencyKey(
+    implementationProjectId: string,
+    workOrderId: string,
+    idempotencyKey: string,
+  ): Promise<ResearchWorkOrderHarnessRun | null> {
+    const row = await this.prisma.paperImplementationWorkOrderHarnessRun.findFirst({
+      where: { implementationProjectId, workOrderId, idempotencyKey },
+      orderBy: { createdAt: 'desc' },
+    });
+    return row ? toHarnessRun(row) : null;
+  }
+
   async listHarnessRuns(
     implementationProjectId: string,
     workOrderId: string,
@@ -281,6 +293,24 @@ implements PaperImplementationWorkOrderRepository {
   ): Promise<RunEvidenceUnit | null> {
     const row = await this.prisma.paperImplementationRunEvidenceUnit.findFirst({
       where: { id: runEvidenceUnitId, implementationProjectId },
+    });
+    return row ? toRunEvidenceUnit(row) : null;
+  }
+
+  async findRunEvidenceUnitByExternalJob(
+    implementationProjectId: string,
+    externalJobRefType: string,
+    externalJobRefId: string,
+    externalJobVersionId: string | null = null,
+  ): Promise<RunEvidenceUnit | null> {
+    const row = await this.prisma.paperImplementationRunEvidenceUnit.findFirst({
+      where: {
+        implementationProjectId,
+        externalJobRefType,
+        externalJobRefId,
+        externalJobVersionId,
+      },
+      orderBy: { createdAt: 'desc' },
     });
     return row ? toRunEvidenceUnit(row) : null;
   }

@@ -145,6 +145,7 @@ import { PaperImplementationResultClaimDossierService } from './services/paper-i
 import { PaperImplementationTraceKernelService } from './services/paper-implementation-trace-kernel-service.js';
 import { PaperImplementationValidationCyclePlanningService } from './services/paper-implementation-validation-cycle-planning-service.js';
 import { PaperImplementationWorkOrderExperimentBridgeService } from './services/paper-implementation-workorder-experiment-bridge-service.js';
+import { PaperImplementationLiveExperimentAdapterService } from './services/paper-implementation-live-experiment-adapter-service.js';
 import { ResearchLifecycleService } from './services/research-lifecycle-service.js';
 import {
   TitleCardManagementService,
@@ -486,6 +487,13 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     validationRepository: paperImplementationValidationRepository,
     workOrderRepository: paperImplementationWorkOrderRepository,
   });
+  const paperImplementationLiveExperimentAdapterService = new PaperImplementationLiveExperimentAdapterService({
+    experimentExecution: experimentFoundationExecutionService,
+    experimentRecords: experimentFoundationService,
+    workOrderService: paperImplementationWorkOrderExperimentBridgeService,
+    traceKernel: paperImplementationTraceKernelService,
+    workOrderRepository: paperImplementationWorkOrderRepository,
+  });
   const paperImplementationResultClaimDossierService = new PaperImplementationResultClaimDossierService({
     projectRepository: paperImplementationRepository,
     resultClaimRepository: paperImplementationResultClaimDossierRepository,
@@ -507,6 +515,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     paperImplementationWorkOrderExperimentBridgeService,
     paperImplementationResultClaimDossierService,
     paperImplementationAiWorkflowHarnessService,
+    paperImplementationLiveExperimentAdapterService,
   );
   const topicSelectionV1cController = new TopicSelectionV1cController(
     topicSelectionV1cPromotionInputService,
