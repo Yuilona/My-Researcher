@@ -1,9 +1,9 @@
 # T-103 Experiment Foundation Full-flow Validation Runner
 
 ## Status
-- State: planned
+- State: in-progress
 - Task: T-103
-- Current focus: define a repeatable post-V1 validation runner that proves the closed experiment-foundation chain can run end to end in a real local environment.
+- Current focus: Phase 1 runner command contract is being landed as a runnable skeleton; Phase 2 will implement real environment preflight.
 
 ## Goal
 - Provide one operator-facing command for experiment-foundation full-flow validation.
@@ -29,5 +29,5 @@
 - [ ] T-103 docs record how the runner consumes T-090 harness fixtures without duplicating readiness, promotion, materialization, adapter, or result-validation semantics.
 
 ## Handoff
-- Start by inventorying current commands from T-090 and backend env runner behavior.
-- Then implement the smallest runner that can preflight and orchestrate the deterministic local lanes.
+- Phase 1 starts with a contract-only runner skeleton. It must not execute expensive checks or real external integrations yet.
+- Phase 2 should implement the actual preflight checks described in `01-plan.md` and `02-architecture.md`.

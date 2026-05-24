@@ -23,11 +23,29 @@ The runner is an orchestration and evidence tool. It must call existing commands
 ## Artifact Contract
 - Artifact root should be under `.ai/.tmp/experiment-foundation-full-flow/<run-id>/`.
 - Report files must be redacted and safe to share in dev-docs.
-- Recommended outputs:
-  - `00-preflight.md`
-  - `01-command-results.json`
+- Phase 1 contract-mode outputs:
+  - `00-command-contract.md`
+  - `01-lane-manifest.json`
   - `02-validation-report.md`
   - `03-blockers.md`
+
+## CLI Contract
+- Script: `.ai/scripts/experiment-foundation-full-flow-runner.mjs`
+- Package entry: `pnpm experiment-foundation:full-flow -- <options>`
+- Supported flags:
+  - `--mode <contract|preflight|deterministic|real-local-db|full>`; default `contract`
+  - `--run-id <id>`; default timestamped run id
+  - `--artifact-dir <path>`; default `.ai/.tmp/experiment-foundation-full-flow/<run-id>`
+  - `--include-external-canary`; default false
+  - `--require-real-db`; default false
+- Phase 1 only allows `contract` mode to exit successfully. Other modes must write a `NOT_IMPLEMENTED` report and exit non-zero.
+
+## Lane Manifest Shape
+The contract-mode runner writes a JSON manifest with:
+- runner id/version, task id, run id, mode, artifact dir, and flags;
+- lane definitions for `preflight`, `deterministic`, `real-local-db`, and `external-opt-in`;
+- deterministic command inventory with command ids, cwd, argv, and display string;
+- phase marker `phase_1_contract_only: true`.
 
 ## Anti-drift Rules
 - Do not duplicate T-090 fixture graph construction outside the existing harness unless an explicit reusable helper is extracted.

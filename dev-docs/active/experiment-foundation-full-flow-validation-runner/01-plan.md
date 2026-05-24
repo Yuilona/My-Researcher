@@ -1,11 +1,13 @@
 # 01 Plan
 
 ## Phase 1 - Inventory and Command Contract
-- Confirm the canonical command list from T-090 verification.
-- Define the runner CLI shape, flags, and artifact directory convention.
-- Classify lanes as `deterministic`, `real_local_db`, and `external_opt_in`.
+- [x] Confirm the canonical command list from T-090 verification.
+- [x] Define the runner CLI shape, flags, and artifact directory convention.
+- [x] Classify lanes as `preflight`, `deterministic`, `real-local-db`, and `external-opt-in`.
+- [x] Land a runnable contract-only skeleton that writes redacted artifacts without executing expensive checks.
 
 ## Phase 2 - Environment Preflight
+- Next phase.
 - Check `.env.local` presence without printing values.
 - Confirm `DATABASE_URL` resolves through the same local env loading path as backend tests.
 - Check Postgres connectivity and migration availability.
