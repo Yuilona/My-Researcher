@@ -116,6 +116,26 @@ This snapshot prevents `policy_status=implementation_ready` from being mistaken 
 | `topic-selection.v1a.human-confirm-need.v1` | `implementation_ready` | `callable` | `runHumanConfirmNeedScenario` exists with stable success/blocked/review result, semantic review artifacts, exact replay, duplicate/partial-write guards, and trace artifact. |
 | `topic-selection.v1a.publish-v1b-input-bundle.v1` | `implementation_ready` | `callable` | `runPublishV1bInputBundleScenario` exists with explicit handoff refs, exact replay, version reuse idempotency, lineage guards, and trace artifact. |
 
+## Current v1a Replay / Idempotency Matrix
+This matrix prevents automated runners from assuming full-chain exact replay where the implementation only guarantees deterministic validation or append-only materialization.
+
+| Node | Current replay/idempotency mode | Automation rule |
+|---|---|---|
+| `topic-selection.v1a.create-topic-seed.v1` | append-only materialization; no exact replay lookup | Retrying a failed or changed attempt SHOULD use a new `node_attempt_id`; the runner MUST rely on lineage, gate, transition, and trace assertions rather than reusing a prior TopicSeed authority. |
+| `topic-selection.v1a.snapshot-literature-resource-pool.v1` | append-only materialization with `snapshot_hash` as content-equivalence key | Equivalent repeated runs MAY create a new snapshot authority id but MUST produce the same `snapshot_hash`; runners MUST NOT treat `snapshot_hash` as an authority ref or skip control-plane evidence. |
+| `topic-selection.v1a.create-search-plan.v1` | deterministic materialization with blueprint/schema/lineage/hash guards; no exact replay lookup | A repeated automated run SHOULD use a new `node_attempt_id`; same-attempt reuse is not a replay contract and MUST NOT bypass blueprint validation, snapshot-hash verification, or authority creation guards. |
+| `topic-selection.v1a.record-search-run.v1` | append-only factual record with lineage, accounting, snapshot-membership, and handoff/loopback guards | A repeated consumable run SHOULD use a new `node_attempt_id`; failed/partial/non-consumable records remain audit facts and MUST NOT be transformed into Node 5 handoff by replay. |
+| `topic-selection.v1a.build-evidence-map.v1` | materialization from a validated extraction draft/report; no exact replay lookup | Review or blocked attempts are terminal for that attempt; retries MUST use a new `node_attempt_id` and a full revised draft unless future policy adds explicit replay lookup. |
+| `topic-selection.v1a.generate-need-candidate.v1` | exact replay by `workflow_run_id + node_attempt_id + input_hash` | Matching replay returns the stored discovery trace snapshot and adapter result without context recompilation, model invocation, debate execution, or authority writes; input-hash drift blocks with `REPLAY_INPUT_HASH_MISMATCH`. |
+| `topic-selection.v1a.validate-need-adjudication.v1` | exact replay by `workflow_run_id + node_attempt_id + input_hash` plus duplicate adjudication protection | Matching replay returns the stored node result; changed input hash or missing replay evidence blocks before authority writes. Fresh retries use a new `node_attempt_id`. |
+| `topic-selection.v1a.human-confirm-need.v1` | exact replay by `workflow_run_id + node_attempt_id + input_hash` plus duplicate/partial-write guards | Matching replay returns the stored node result; duplicate reserved-id materialization and partial confirmation writes block instead of creating alternate confirmation semantics. |
+| `topic-selection.v1a.publish-v1b-input-bundle.v1` | exact replay by `workflow_run_id + node_attempt_id + input_hash`; idempotent bundle reuse by `validated_need_ref + expected_bundle_version` | Matching replay performs no bundle write; existing expected-version bundle reuse is explicit `ready` idempotency, while changed input hash blocks. |
+
+Implementation boundary:
+- N1-N5 exact replay is a future enhancement, not an implied v1a invariant.
+- N1-N5 automated retries MUST be modeled as fresh attempts unless the node-specific policy is amended and code adds durable replay lookup.
+- N6-N9 exact replay is implemented and test-covered today; automated E2E replay of the whole v1a chain MUST account for N1-N5 fresh-attempt semantics.
+
 ## Stub Policy Template
 ```yaml
 policy_status: stub

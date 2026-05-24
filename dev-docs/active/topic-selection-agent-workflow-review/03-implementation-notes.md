@@ -1270,3 +1270,9 @@
 - Matching replay returns the stored adapter result with `replay_provenance` and does not recompile context, call Codex/provider/debate, or write authority.
 - Same attempt with input hash drift fails with `VERSION_CONFLICT` before context compilation or model-like invocation.
 - `.ai/scripts/topic-selection-real-e2e.mjs` now passes `controlPlane` into `TopicSelectionWorkflowHarnessService` so durable real-flow runs can use the same replay lookup path.
+
+## 2026-05-24 v1a Replay Boundary Review
+- Added a v1a replay/idempotency matrix to prevent automation from treating all callable nodes as exact-replay capable.
+- N1-N5 remain deterministic or append-only authority materialization nodes with hash, lineage, version, and blocked-result guards; automated retries should use fresh `node_attempt_id` values unless a future policy and code slice adds durable replay lookup.
+- N6-N9 are the current exact-replay nodes. They use `workflow_run_id + node_attempt_id + input_hash` and block input drift before model invocation or authority writes.
+- Full-chain E2E replay must account for this split: same-run replay can be asserted at N6-N9, while N1-N5 are currently verified through deterministic outputs, append-only audit trails, and explicit lineage/currentness checks.

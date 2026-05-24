@@ -1186,3 +1186,15 @@ Close criteria:
 - Result: passed; N6 ran as `multi_agent_debate`, persisted 3 candidates, N7 provider adjudication advanced, N8 confirmed, and N9 published `v1b_input_bundle_95471cc3-d8c3-4ce1-9e2b-187d73294c1f`.
 - Artifact dir: `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-debate-mixed-20260523180445`.
 - Coverage: mixed role execution provenance, provider-backed final arbiter, role-level summaries, issue-frame/final-synthesis artifacts, no hidden-reasoning fields, candidate admission/persistence, readiness-selected N7 handoff, human confirmation, and v1b input bundle publication.
+
+## 2026-05-24 v1a Replay Boundary And Harness Canary
+- Update: added a v1a replay/idempotency matrix so WorkflowHarness automation does not treat N1-N5 as exact-replay nodes.
+- Policy result: N1-N5 are callable with deterministic/append-only/hash/lineage guards; N6-N9 are the exact-replay nodes backed by durable trace lookup and input-hash drift blocking.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-replay-boundary-canary-20260524 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=multi_agent_debate TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_EXECUTION_MODE=codex_assisted TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; N1-N9 completed, N6 ran as `multi_agent_debate`, persisted 3 `NeedCandidate` records, N7 advanced, N8 confirmed, and N9 published `v1b_input_bundle_87e47cba-7c0e-4ffd-8286-3d8e33681dac`.
+- Artifact dir: `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-replay-boundary-canary-20260524`.
+- Coverage: real local DB, existing resource sample set `resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c`, deterministic resource sampling mode, mixed debate slot provenance, selected literature role balance, all v1a node handoffs, and final v1a-to-v1b bundle publication.
