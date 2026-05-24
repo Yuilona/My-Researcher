@@ -19,3 +19,9 @@
 - Root cause: the local database has unapplied repo migrations, including the experiment-foundation core/job tables and later paper-implementation tables.
 - Fix/workaround: do not hide this in the runner; surface it as `prisma-migration-status` with an action to inspect and apply migrations intentionally.
 - Prevention: keep migration status as a blocker before deterministic/full-flow orchestration so later test failures are not misdiagnosed as experiment-foundation runtime defects.
+
+### External canary must not become implicit cloud execution
+- Symptom: A "full-flow" label can be misread as permission to submit real cloud jobs whenever credential key names are present.
+- Root cause: external readiness, credential policy, real SDK invocation, and cost controls are separate concerns.
+- Fix/workaround: T-103 implements external canary as a gate-only lane. It records skipped/blocked/passed status and always records `real_submission_executed=false`.
+- Prevention: require both `--include-external-canary` and `EXPERIMENT_FOUNDATION_EXTERNAL_CANARY_ENABLED=true` before the gate can pass, and keep real cloud submission for a future explicitly approved hardening task.

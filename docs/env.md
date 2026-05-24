@@ -2,7 +2,7 @@
 
 This document is generated from `env/contract.yaml`. Do not hand-edit.
 
-Generated at (UTC): `2026-05-23T13:40:35Z`
+Generated at (UTC): `2026-05-24T06:25:26Z`
 
 ## Environments
 - `dev`, `prod`, `staging`
@@ -20,6 +20,9 @@ Generated at (UTC): `2026-05-23T13:40:35Z`
 | `DASHSCOPE_BASE_URL` | `active` | `url` | no | no | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `` | `dev` | `` | `` | `` | OpenAI-compatible DashScope base URL used by backend LLM workflows; may be overridden in .env.local for local provider experiments. |
 | `DATABASE_URL` | `active` | `url` | yes | yes | `` | `database_url` | `dev` | `` | `` | `` | Prisma database URL for the local development database. |
 | `DEEPSEEK_API_KEY` | `active` | `string` | no | yes | `` | `deepseek_api_key` | `dev` | `` | `` | `` | Local DeepSeek API key for future backend LLM provider integrations. |
+| `EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ENABLED` | `active` | `enum` | no | no | `false` | `` | `dev` | `` | `` | `` | Explicit opt-in switch for experiment-foundation LocalScript execution outside NODE_ENV=test. |
+| `EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ROOT` | `active` | `string` | no | no | `.ai/.tmp/experiment-foundation-local-execution` | `` | `dev` | `` | `` | `` | LocalScript execution root for experiment-foundation smoke runs; all working directories and outputs must stay inside this root. |
+| `EXPERIMENT_FOUNDATION_LOCAL_SCRIPT_ALLOWED_COMMANDS` | `active` | `string` | no | no | `` | `` | `dev` | `` | `` | `` | Comma-separated LocalScript command allowlist; keep narrow for local smoke execution. |
 | `HOST` | `active` | `string` | no | no | `0.0.0.0` | `` | `*` | `` | `` | `` | Service listen host. |
 | `LITERATURE_CONTENT_PROCESSING_ROOT` | `active` | `string` | no | no | `/Volumes/DataDisk/Data/PaperEngineer/literature-content-processing` | `` | `dev` | `` | `` | `` | Local root directory for literature raw files, normalized text, pipeline artifacts, indexes, and exports. |
 | `LITERATURE_PIPELINE_EMBEDDING_API_KEY` | `active` | `string` | no | no | `` | `` | `*` | `` | `` | `` | Optional API key for external embedding endpoint. |

@@ -15,20 +15,24 @@
 - [x] Write redacted preflight report and blocker/action summary.
 
 ## Phase 3 - Deterministic Runner
-- Next phase after local migration blocker is resolved.
-- Orchestrate shared checks, backend full suite, desktop checks, T-090 smoke/harness, governance sync/lint, and diff check.
-- Capture command exit status, duration, and redacted output summaries.
-- Stop early on structural preflight failures; continue per-lane on optional skips.
+- [x] Run preflight before deterministic commands and stop before expensive checks if preflight has blockers.
+- [x] Orchestrate shared checks, backend full suite, desktop checks, T-090 smoke/harness, governance sync/lint, and diff check.
+- [x] Capture command exit status, duration, bounded redacted output tails, and actionable blockers.
+- [x] Write deterministic lane artifacts as `06-deterministic.md` and `07-deterministic.json`.
 
 ## Phase 4 - Real-environment Lanes
-- Add a disposable-schema or read-only DB smoke lane for registry/readiness/execution records.
-- Keep cloud/Aliyun canary opt-in and skipped by default.
-- Require explicit environment flags for any real external submission.
+- [x] Add a disposable-schema DB smoke lane for registry/readiness/execution records.
+- [x] Apply repo migrations to the disposable schema without mutating the normal dev schema.
+- [x] Round-trip `ExperimentFoundationRecord`, `ExperimentFoundationReadinessReport`, and `ExperimentFoundationExternalTrainingJob`.
+- [x] Drop the disposable schema during cleanup and report cleanup status.
+- [x] Keep cloud/Aliyun canary opt-in and skipped by default.
+- [x] Require explicit environment flags before the external canary can report passed; T-103 still performs no real external submission.
 
 ## Phase 5 - Report and Handoff
-- Emit a redacted Markdown/JSON validation report.
-- Document local troubleshooting and rerun instructions.
-- Mark T-103 done only after the deterministic lane passes and optional lanes produce correct skipped/blocked/passed states.
+- [x] Implement `full` mode as preflight -> deterministic -> real-local-DB -> external canary status.
+- [x] Emit a redacted Markdown/JSON validation report.
+- [x] Document local troubleshooting and rerun instructions.
+- [x] Mark T-103 done after the full lane passes and optional external lane produces skipped/blocked/passed states.
 
 ## Execution Order
 1. Preflight only.

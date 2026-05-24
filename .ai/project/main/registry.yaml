@@ -968,7 +968,7 @@ tasks:
     updated: 2026-05-24
   - id: T-103
     slug: experiment-foundation-full-flow-validation-runner
-    status: in-progress
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:

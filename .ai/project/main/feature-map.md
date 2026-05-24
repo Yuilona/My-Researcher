@@ -116,7 +116,7 @@ Project: `main`
 | T-100 paper-implementation-desktop-workbench | done | dev-docs/active/paper-implementation-desktop-workbench |
 | T-101 paper-implementation-contract-evaluation-suite | done | dev-docs/active/paper-implementation-contract-evaluation-suite |
 | T-102 paper-implementation-v1-hardening | done | dev-docs/active/paper-implementation-v1-hardening |
-| T-103 experiment-foundation-full-flow-validation-runner | in-progress | dev-docs/active/experiment-foundation-full-flow-validation-runner |
+| T-103 experiment-foundation-full-flow-validation-runner | done | dev-docs/active/experiment-foundation-full-flow-validation-runner |
 | T-104 paper-implementation-live-experiment-adapter | done | dev-docs/active/paper-implementation-live-experiment-adapter |
 | T-105 paper-implementation-provider-variance-evaluation | done | dev-docs/active/paper-implementation-provider-variance-evaluation |
 

@@ -1,6 +1,6 @@
 {
   "env": "dev",
-  "generated_at_utc": "2026-05-16T23:18:18Z",
+  "generated_at_utc": "2026-05-24T06:25:30Z",
   "values": {
     "APPLICATION_SETTINGS_REPOSITORY": "prisma",
     "APP_ENV": "dev",
@@ -8,8 +8,12 @@
     "AUTO_PULL_SCHEDULER_ENABLED": "false",
     "DASHSCOPE_API_KEY": "***REDACTED***",
     "DASHSCOPE_API_KEY_CODING": "***REDACTED***",
+    "DASHSCOPE_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "DATABASE_URL": "***REDACTED***",
     "DEEPSEEK_API_KEY": "***REDACTED***",
+    "EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ENABLED": "true",
+    "EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ROOT": "/Volumes/DataDisk/Project/My-Researcher/.ai/.tmp/experiment-foundation-local-execution",
+    "EXPERIMENT_FOUNDATION_LOCAL_SCRIPT_ALLOWED_COMMANDS": "node",
     "HOST": "127.0.0.1",
     "LITERATURE_CONTENT_PROCESSING_ROOT": "/Volumes/DataDisk/Data/PaperEngineer/literature-content-processing",
     "LITERATURE_PIPELINE_EMBEDDING_MODEL": "text-embedding-v1",

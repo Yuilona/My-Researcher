@@ -2,7 +2,7 @@ version: 1
 task_id: T-103
 project: main
 slug: experiment-foundation-full-flow-validation-runner
-status: in-progress
+status: done
 updated: "2026-05-24"
 keywords:
   - experiment-foundation

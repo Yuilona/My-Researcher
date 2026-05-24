@@ -104,6 +104,25 @@ variables:
     default: /Volumes/DataDisk/Data/PaperEngineer
     scopes: [dev]
     description: Local root directory for Paper Engineer runtime data and generated artifacts.
+  EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ROOT:
+    type: string
+    required: false
+    default: .ai/.tmp/experiment-foundation-local-execution
+    scopes: [dev]
+    description: LocalScript execution root for experiment-foundation smoke runs; all working directories and outputs must stay inside this root.
+  EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ENABLED:
+    type: enum
+    enum: ['true', 'false']
+    required: false
+    default: 'false'
+    scopes: [dev]
+    description: Explicit opt-in switch for experiment-foundation LocalScript execution outside NODE_ENV=test.
+  EXPERIMENT_FOUNDATION_LOCAL_SCRIPT_ALLOWED_COMMANDS:
+    type: string
+    required: false
+    default: ''
+    scopes: [dev]
+    description: Comma-separated LocalScript command allowlist; keep narrow for local smoke execution.
   LITERATURE_CONTENT_PROCESSING_ROOT:
     type: string
     required: false
