@@ -20,18 +20,56 @@ ImplementationInputSnapshot
   -> Evaluation report / quality signals
 ```
 
-## Metrics
-- Schema validity rate.
-- Direct authority mutation attempt rate.
-- Invalid or missing trace ref rate.
-- Unsupported evidence/citation ref rate.
-- Overclaim or scope-drift rate.
-- Decision/proposal stability across repeated runs.
-- Provider failure and timeout rate.
-- Latency and token/cost summary where available.
+## Flow-Oriented Metrics
+T-105 metrics are not a generic model benchmark. They answer whether provider output can safely and consistently advance the PaperImplementation automation workflow.
+
+A metric belongs in the T-105 closure gate only if it is consumed by a concrete workflow decision: auto-advance, block, human-review escalation, provider/profile enablement, or follow-up tuning. Metrics without a consumer are diagnostics only.
+
+| Metric | Consumer | Decision |
+|---|---|---|
+| `contract_validity_rate` | T-099 harness / EvaluationHarness | Accept as proposal artifact or reject as invalid provider output. |
+| `handoff_readiness_rate` | Workflow scheduler / DecisionWorkQueue | Auto-advance to next node or create missing-input queue item. |
+| `authority_violation_rate` | GateService / DecisionWorkQueue | Create critical blocker and prevent direct authority mutation. |
+| `traceability_violation_rate` | TraceHarness / GateService | Block or repair outputs with missing lineage, invalid refs, or evidence misuse. |
+| `claim_safety_violation_rate` | ClaimBoundaryGate / human review queue | Block overclaim/scope drift or require human review. |
+| `workflow_stability_rate` | Workflow scheduler / PortfolioCoordinator | Allow repeated automation or downgrade provider/profile to human-reviewed mode. |
+| `human_review_burden_rate` | Product/workflow ops | Decide whether automation is useful enough or needs tuning before use. |
+| `provider_operability_rate` | Runtime/config owner | Enable, pause, or demote a provider/profile. |
+
+Token, cost, latency, and model telemetry may be recorded as diagnostics. They are not first-class closure metrics except where they cause provider operability failure.
 
 ## Hard Invariants
 - Provider output cannot bypass T-099 proposal artifact validation.
 - Provider output cannot directly create or mutate motive, validation, WorkOrder, run evidence, trace, claim, dossier, or writing packet authority.
 - Live provider profiles must be explicit, opt-in, and separately reported.
 - Deterministic fake-provider tests must be enough to close the task by default.
+- Topic-selection provider canary infrastructure patterns may be reused, but topic-selection business semantics, node policies, ref allowlists, output shapes, and success criteria must not be reused.
+
+## Allowed Outputs
+| Output | Consumer | Purpose |
+|---|---|---|
+| Evaluation artifact / report | EvaluationHarness | Preserve provider variance evidence. |
+| Quality signal | workflow ops / harness | Mark provider/profile or workflow risk. |
+| Decision work queue blocker | GateService / human reviewer | Route invalid, unsafe, unstable, or untraceable output for review. |
+| Provider/profile recommendation | Runtime/config owner | Suggest enable, pause, demote, or tune. |
+
+## Forbidden Outputs
+T-105 must not create or mutate:
+- `CoreMotiveVersion`
+- `ValidationCycle`
+- `ResearchWorkOrder`
+- `RunEvidenceUnit`
+- `ClaimCandidate`
+- `ImplementationDossier`
+- `WritingEntryPacket`
+- any other PaperImplementation authority object
+
+## Reuse Boundary
+| Reusable from topic-selection canaries | Not reusable |
+|---|---|
+| Opt-in provider profile | Topic-selection node semantics |
+| Credential preflight | Topic-selection ref allowlists |
+| Skipped / blocked / passed reporting | Topic-selection success criteria |
+| Redacted artifact directory | Topic-selection provider output shape |
+| Fixed input snapshot repeat runs | Topic-selection business routing rules |
+| Provider/model/prompt metadata | Topic-selection-specific quality thresholds |

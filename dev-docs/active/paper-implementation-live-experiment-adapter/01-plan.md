@@ -10,6 +10,7 @@
 - [ ] Inspect `ExperimentFoundationExecutionService` submit/sync/cancel/collect behavior.
 - [ ] Inspect PaperImplementation WorkOrder, harness run, monitor intake, and run evidence repository boundaries.
 - [ ] Identify whether existing Prisma fields cover external job linkage and sync state.
+- [ ] Gate: prove existing fields cover WorkOrder submit idempotency, external job lookup, latest sync visibility, and final evidence lookup; if not, document the exact schema gap before adding Prisma fields.
 - [ ] Identify route-level API shape for PaperImplementation-owned orchestration commands.
 
 ## Phase 2 - Contract/API Slice

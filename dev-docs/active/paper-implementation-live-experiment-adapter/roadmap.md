@@ -25,20 +25,21 @@ T-104 turns the existing PaperImplementation WorkOrder control plane into a live
 | ID | Decision | Recommendation | Status |
 |---|---|---|---|
 | L1 | Which task ID? | Use `T-104`; `T-103` is occupied. | confirmed |
-| L2 | Where does adapter authority live? | PaperImplementation owns orchestration; experiment-foundation owns execution artifacts. | proposed |
-| L3 | Is a new Prisma model required? | Start with existing WorkOrder/harness/external-job fields; add schema only if idempotency or queryability has a real gap. | proposed |
-| L4 | How is final run evidence trusted? | Through `RunMonitorIntake -> RunEvidenceUnit` only, with target-specific trace. | proposed |
-| L5 | Should real cloud execution be default? | No; default tests use deterministic fakes, external canary is opt-in. | proposed |
-| L6 | Should adapter create result interpretation or claims? | No; T-098 remains the only owner. | proposed |
-| L7 | Should this include provider variance? | No; split into `T-105 paper-implementation-provider-variance-evaluation`. | confirmed |
+| L2 | Where does adapter authority live? | PaperImplementation owns WorkOrder and evidence admission; experiment-foundation owns execution artifacts; T-104 is orchestration only and must not create a new authority root or direct persistence path. | confirmed |
+| L3 | Is a new Prisma model required? | Do not add Prisma fields by default. During implementation, explicitly check idempotency and queryability; add schema only if a concrete gap cannot be represented by existing queryable fields without JSON-only drift. | confirmed |
+| L4 | How is final run evidence trusted? | Use option A: T-104 pre-allocates `run_evidence_unit_id`, creates or requires a complete `TraceManifest` targeting `run_evidence_unit:<id>`, then calls `recordRunMonitorIntake`; the WorkOrder service remains the final gate. | confirmed |
+| L5 | Should real cloud execution be default? | No. Default verification is deterministic and credential-free; real cloud/external execution is opt-in canary with preflight, redacted artifacts, and skipped/blocked/passed reporting separate from default pass/fail. | confirmed |
+| L6 | Should adapter create result interpretation or claims? | No. T-104 stops at trusted `RunEvidenceUnit` and monitor/evidence ledger closure; `ResultInterpretationPacket`, `ClaimCandidate`, `ImplementationDossier`, and `WritingEntryPacket` remain owned by T-098/downstream writing. | confirmed |
+| L7 | Should this include provider variance? | No. T-104 is live experiment execution infrastructure only; live LLM/provider variance is owned by `T-105 paper-implementation-provider-variance-evaluation` and must not be implemented inside T-104. | confirmed |
 
 ## Recommended Execution Order
 1. Audit current experiment-foundation execution API and PaperImplementation WorkOrder fields.
-2. Decide whether existing contracts are enough or add a narrow adapter command contract.
-3. Implement service composition and route commands.
-4. Add deterministic adapter tests and route tests.
-5. Re-run PaperImplementation result/claim/dossier regression tests.
-6. Update task docs and governance.
+2. Check whether existing fields cover submit idempotency, external job lookup, latest sync visibility, and final evidence lookup.
+3. Decide whether existing contracts are enough or add a narrow adapter command contract.
+4. Implement service composition, target-specific run evidence trace orchestration, and route commands.
+5. Add deterministic adapter tests and route tests.
+6. Re-run PaperImplementation result/claim/dossier regression tests.
+7. Update task docs and governance.
 
 ## Completion Signal
 T-104 is complete when an admitted WorkOrder can be submitted to experiment-foundation execution, synced/collected, and converted into trusted run evidence through the existing monitor/evidence ledger path without creating any parallel authority or default live-cloud dependency.

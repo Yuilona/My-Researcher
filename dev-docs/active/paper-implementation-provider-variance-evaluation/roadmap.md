@@ -24,14 +24,14 @@ T-105 evaluates real provider behavior for PaperImplementation AI proposal workf
 | ID | Decision | Recommendation | Status |
 |---|---|---|---|
 | V1 | Should provider variance be inside T-104? | No; keep execution and AI evaluation separate. | confirmed |
-| V2 | Is live provider evaluation required for default closure? | No; default uses deterministic fake providers. | proposed |
-| V3 | What is the minimum metric set? | Schema validity, trace/ref validity, direct mutation attempts, overclaim rate, proposal stability, provider failure/latency. | proposed |
-| V4 | Should provider output create quality signals? | Only for violations; never direct domain authority writes. | proposed |
-| V5 | Should topic-selection provider canary be reused? | Reuse patterns only; do not inherit topic-selection semantics. | proposed |
+| V2 | Is live provider evaluation required for default closure? | No. Default closure uses deterministic fake-provider scenarios; real provider runs are explicit opt-in canaries with credential preflight and skipped/blocked/passed reporting. | confirmed |
+| V3 | What is the minimum metric set? | Use only metrics consumed by concrete workflow decisions. Required flow metrics are contract validity, handoff readiness, authority violation, traceability violation, claim safety violation, workflow stability, human review burden, and provider operability. Metrics without a consumer are diagnostics only. | confirmed |
+| V4 | Should provider output create quality signals? | Yes, but only governance signals: evaluation artifacts, quality signals, decision queue blockers, and provider/profile recommendations. They are consumed by existing gates/schedulers/reviewers/config owners and must never create or mutate PaperImplementation domain authority. | confirmed |
+| V5 | Should topic-selection provider canary be reused? | Reuse infrastructure patterns only: opt-in profile, credential preflight, skipped/blocked/passed reporting, redacted artifacts, fixed snapshots, and provider/model/prompt metadata. Do not reuse topic-selection business semantics, node policies, ref allowlists, output shape, or success criteria. | confirmed |
 
 ## Recommended Execution Order
 1. Audit T-099 and T-101 evaluation surfaces.
-2. Define metrics and artifact schema.
+2. Define flow-oriented metrics and artifact schema.
 3. Implement fake-provider variance runner.
 4. Add optional live-provider profile.
 5. Add guardrail and aggregation tests.
