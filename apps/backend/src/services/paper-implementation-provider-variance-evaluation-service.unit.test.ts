@@ -239,6 +239,44 @@ test('provider variance evaluation reports live provider profiles without execut
   assert.equal(blocked.recommendations[0]?.recommendation, 'pause');
 });
 
+test('provider variance evaluation covers schema trace authority and handoff guardrails', async () => {
+  const { aiWorkflowHarness, project, service } = buildService();
+  await seedHarnessContext(aiWorkflowHarness, project.implementation_project_id);
+
+  const response = await service.runProviderVarianceEvaluation(
+    project.implementation_project_id,
+    makeEvaluationRequest({
+      cases: [
+        makeCase('case_invalid_contract', 'invalid_contract', { expected_handoff_ready: false }),
+        makeCase('case_missing_trace', 'missing_trace', { expected_handoff_ready: false }),
+        makeCase('case_direct_authority', 'direct_authority_mutation', { expected_handoff_ready: false }),
+        makeCase('case_handoff_gap', 'handoff_gap', { expected_handoff_ready: false }),
+      ],
+    }),
+  );
+
+  const invalidContract = requireCase(response, 'case_invalid_contract');
+  assert.equal(invalidContract.contract_valid, false);
+  assert.ok(invalidContract.blocked_reasons.includes('proposal_artifact_required'));
+
+  const missingTrace = requireCase(response, 'case_missing_trace');
+  assert.equal(missingTrace.traceability_violation, true);
+  assert.ok(missingTrace.blocked_reasons.includes('proposal_trace_manifest_required'));
+
+  const directAuthority = requireCase(response, 'case_direct_authority');
+  assert.equal(directAuthority.authority_violation, true);
+  assert.ok(directAuthority.quality_signal_refs.length > 0);
+  assert.ok(directAuthority.queue_item_refs.length > 0);
+
+  const handoffGap = requireCase(response, 'case_handoff_gap');
+  assert.equal(handoffGap.handoff_ready, false);
+  assert.ok(handoffGap.blocked_reasons.includes('provider_variance_handoff_gap'));
+
+  assertMetric(response, 'authority_violation_rate', { numerator: 1, denominator: 4, value: 0.25 });
+  assertMetric(response, 'traceability_violation_rate', { numerator: 1, denominator: 4, value: 0.25 });
+  assert.equal(response.recommendations[0]?.recommendation, 'demote_to_human_review');
+});
+
 test('provider variance evaluation route validates payloads and returns aggregate report', async () => {
   const { aiWorkflowHarness, project, service } = buildService();
   await seedHarnessContext(aiWorkflowHarness, project.implementation_project_id);
@@ -494,6 +532,15 @@ function assertMetric(
   assert.equal(metric.numerator, expected.numerator);
   assert.equal(metric.denominator, expected.denominator);
   assert.equal(metric.value, expected.value);
+}
+
+function requireCase(
+  response: RunProviderVarianceEvaluationResponse,
+  caseId: string,
+) {
+  const result = response.case_results.find((candidate) => candidate.case_id === caseId);
+  assert.ok(result, `missing case result ${caseId}`);
+  return result;
 }
 
 function ref(refType: string, refId: string, versionId: string | null = null): TopicSelectionFunctionalRef {

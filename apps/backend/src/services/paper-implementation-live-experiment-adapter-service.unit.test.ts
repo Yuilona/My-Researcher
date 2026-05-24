@@ -214,6 +214,13 @@ class FakeExperimentExecution {
     return { external_job: structuredClone(this.job) };
   }
 
+  async getJobByIdempotencyKey(idempotencyKey: string) {
+    if (this.job.idempotency_key !== idempotencyKey) {
+      throw new AppError(404, 'NOT_FOUND', `External job ${idempotencyKey} not found.`);
+    }
+    return { external_job: structuredClone(this.job) };
+  }
+
   async syncJob(_externalJobId: string, _input: SyncExternalTrainingJobRequest) {
     this.job = {
       ...this.job,
@@ -243,8 +250,8 @@ class FakeExperimentExecution {
   async cancelJob(_externalJobId: string, input: CancelExternalTrainingJobRequest) {
     this.job = {
       ...this.job,
-      job_status: 'cancelled',
-      completed_at: NOW,
+      job_status: input.reason === 'still cancelling' ? 'cancelling' : 'cancelled',
+      completed_at: input.reason === 'still cancelling' ? null : NOW,
       updated_at: NOW,
       adapter_metadata_hashes: [input.idempotency_key],
     };
@@ -529,6 +536,35 @@ test('submits admitted WorkOrder to experiment-foundation execution idempotently
   });
   assert.equal(repeated.harness_run?.harness_run_id, submitted.harness_run?.harness_run_id);
   assert.equal((await workOrderService.listHarnessRuns(PROJECT_ID, WORK_ORDER_ID)).length, 1);
+  assert.equal(execution.submitInputs.length, 1);
+});
+
+test('blocks submit before external execution when WorkOrder is not admitted or running', async () => {
+  const { service, execution, workOrderService, traceKernel } = await makeHarness();
+  await traceKernel.createTraceManifest(PROJECT_ID, {
+    target_ref: ref('research_work_order', 'research_work_order_draft_only'),
+    lineage: {
+      ...emptyLineage(),
+      experiment: {
+        ...emptyLineage().experiment,
+        experiment_plan_refs: [ref('experiment_plan_light', EXPERIMENT_PLAN_ID)],
+      },
+    },
+    integrity: {},
+  });
+  await workOrderService.createResearchWorkOrderDraft(PROJECT_ID, {
+    ...workOrderRequest(),
+    work_order_id: 'research_work_order_draft_only',
+    trace_manifest_id: 'trace_manifest_001',
+  });
+
+  await assertRejectsWithCode(
+    () => service.submitLiveExperimentRun(PROJECT_ID, 'research_work_order_draft_only', {
+      idempotency_key: 'work_order_attempt_draft_only',
+    }),
+    'GATE_CONSTRAINT_FAILED',
+  );
+  assert.equal(execution.submitInputs.length, 0);
 });
 
 test('blocks live submit when WorkOrder lacks materialization refs', async () => {
@@ -592,6 +628,41 @@ test('collect creates target-specific trace and trusted run evidence from stored
   assert.equal(collected.trace_manifest?.target_ref.ref_type, 'run_evidence_unit');
   assert.equal(collected.trace_manifest?.target_ref.ref_id, collected.run_evidence_unit?.run_evidence_unit_id);
   assert.equal(collected.trace_manifest?.trace_status, 'complete');
+});
+
+test('cancel records non-final status without trusted run evidence while external job is cancelling', async () => {
+  const { service } = await makeHarness();
+  await service.submitLiveExperimentRun(PROJECT_ID, WORK_ORDER_ID, {
+    idempotency_key: 'work_order_attempt_001',
+  });
+
+  const cancelled = await service.cancelLiveExperimentRun(PROJECT_ID, WORK_ORDER_ID, EXTERNAL_JOB_ID, {
+    reason: 'still cancelling',
+    idempotency_key: 'cancel_attempt_001',
+  });
+
+  assert.equal(cancelled.outcome, 'cancel_requested');
+  assert.equal(cancelled.monitor_intake?.run_status, 'running');
+  assert.equal(cancelled.run_evidence_unit, null);
+});
+
+test('cancel finalizes trusted cancelled run evidence with target-specific trace', async () => {
+  const { service } = await makeHarness();
+  await service.submitLiveExperimentRun(PROJECT_ID, WORK_ORDER_ID, {
+    idempotency_key: 'work_order_attempt_001',
+  });
+
+  const cancelled = await service.cancelLiveExperimentRun(PROJECT_ID, WORK_ORDER_ID, EXTERNAL_JOB_ID, {
+    reason: 'human stopped expensive run',
+    idempotency_key: 'cancel_attempt_001',
+  });
+
+  assert.equal(cancelled.outcome, 'cancel_requested');
+  assert.equal(cancelled.monitor_intake?.run_status, 'cancelled');
+  assert.equal(cancelled.run_evidence_unit?.run_status, 'cancelled');
+  assert.equal(cancelled.run_evidence_unit?.failure_summary, 'human stopped expensive run');
+  assert.equal(cancelled.trace_manifest?.target_ref.ref_type, 'run_evidence_unit');
+  assert.equal(cancelled.trace_manifest?.target_ref.ref_id, cancelled.run_evidence_unit?.run_evidence_unit_id);
 });
 
 test('route wiring validates submit payload and delegates live experiment submit', async () => {

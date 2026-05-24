@@ -155,6 +155,18 @@ export class ExperimentFoundationExecutionService {
     return { external_job: await this.requireJob(externalJobId) };
   }
 
+  async getJobByIdempotencyKey(idempotencyKey: string): Promise<ExternalTrainingJobResponse> {
+    const job = await this.repository.findExternalTrainingJobByIdempotencyKey(idempotencyKey);
+    if (!job) {
+      throw new AppError(
+        404,
+        'NOT_FOUND',
+        `ExternalTrainingJob idempotency key ${idempotencyKey} not found.`,
+      );
+    }
+    return { external_job: job };
+  }
+
   async listJobs(query: {
     adapter_kind?: string;
     status?: string;

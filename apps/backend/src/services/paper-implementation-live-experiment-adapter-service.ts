@@ -32,7 +32,7 @@ import { PaperImplementationWorkOrderExperimentBridgeService } from './paper-imp
 
 type ExperimentExecutionPort = Pick<
   ExperimentFoundationExecutionService,
-  'submitJob' | 'syncJob' | 'collectJob' | 'cancelJob'
+  'submitJob' | 'getJobByIdempotencyKey' | 'syncJob' | 'collectJob' | 'cancelJob'
 >;
 
 type ExperimentRecordPort = Pick<ExperimentFoundationService, 'getRecord'>;
@@ -92,13 +92,15 @@ export class PaperImplementationLiveExperimentAdapterService {
       requested_by_ref: request.requested_by_ref ?? this.workOrderExperimentRef(workOrder),
       source_refs: this.defaultSourceRefs(workOrder, request.source_refs),
     };
-    const { external_job: externalJob } = await this.options.experimentExecution.submitJob(submitInput);
     const existing = await this.options.workOrderRepository.findHarnessRunByIdempotencyKey(
       implementationProjectId,
       workOrderId,
       request.idempotency_key,
     );
     if (existing) {
+      const { external_job: externalJob } = await this.options.experimentExecution.getJobByIdempotencyKey(
+        request.idempotency_key,
+      );
       this.assertHarnessMatchesExternalJob(existing.external_job_ref, existing.external_job_hash, externalJob);
       return this.response('submit', 'submitted', externalJob, {
         harness_run: existing,
@@ -106,6 +108,8 @@ export class PaperImplementationLiveExperimentAdapterService {
         notes: ['Existing WorkOrder harness run returned for matching idempotency key.'],
       });
     }
+    this.assertWorkOrderCanSubmit(workOrder);
+    const { external_job: externalJob } = await this.options.experimentExecution.submitJob(submitInput);
     const harnessRun = await this.options.workOrderService.submitHarnessRun(
       implementationProjectId,
       workOrderId,
@@ -535,6 +539,16 @@ export class PaperImplementationLiveExperimentAdapterService {
         409,
         'VERSION_CONFLICT',
         'Existing harness run idempotency key points to a different external job.',
+      );
+    }
+  }
+
+  private assertWorkOrderCanSubmit(workOrder: ResearchWorkOrder): void {
+    if (!['admitted', 'running'].includes(workOrder.work_order_status)) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        'Live experiment submit requires an admitted or already running ResearchWorkOrder.',
       );
     }
   }

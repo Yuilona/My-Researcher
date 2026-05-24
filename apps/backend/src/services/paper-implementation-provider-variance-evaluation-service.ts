@@ -496,7 +496,7 @@ export class PaperImplementationProviderVarianceEvaluationService {
       model_profile_id: profile.model_profile_id,
       case_id: testCase.case_id,
       case_kind: testCase.case_kind,
-      repeat_index: repeatIndex,
+      repeat_observed: repeatIndex > 0,
       output_kind: 'proposal_only_evaluation_report',
       proposed_handoff_ready: testCase.case_kind === 'happy_path',
     };
@@ -505,12 +505,81 @@ export class PaperImplementationProviderVarianceEvaluationService {
   private outputSignature(response: CreateAgentWorkflowHarnessRunResponse): string {
     return crypto
       .createHash('sha256')
-      .update(JSON.stringify({
-        blocked_reasons: response.harness_run.blocked_reasons,
-        proposal_statuses: response.proposal_artifacts.map((artifact) => artifact.proposal_status),
-        queue_count: response.queue_items.length,
+      .update(this.stableStringify({
+        blocked_reasons: [...response.harness_run.blocked_reasons].sort(),
+        validations: {
+          schema: response.harness_run.schema_validation_status,
+          reference: response.harness_run.reference_validation_status,
+          trace: response.harness_run.trace_validation_status,
+          nl_field_role: response.harness_run.nl_field_role_validation_status,
+          memo_as_evidence_detected: response.harness_run.memo_as_evidence_detected,
+          direct_state_mutation_detected: response.harness_run.direct_state_mutation_detected,
+          run_status: response.harness_run.run_status,
+        },
+        proposals: response.proposal_artifacts
+          .map((artifact) => ({
+            artifact_kind: artifact.artifact_kind,
+            proposal_status: artifact.proposal_status,
+            target_ref: this.refSignature(artifact.target_ref),
+            source_refs: this.refSignatures(artifact.source_refs),
+            trace_manifest_refs: this.refSignatures(artifact.trace_manifest_refs),
+            payload: artifact.payload,
+          }))
+          .sort((a, b) => this.stableStringify(a).localeCompare(this.stableStringify(b))),
+        quality_signals: response.quality_signals
+          .map((signal) => ({
+            signal_type: signal.signal_type,
+            severity: signal.severity,
+            target_ref: this.refSignature(signal.target_ref),
+            summary: signal.summary,
+            payload: signal.payload,
+            policy_version_id: signal.policy_version_id ?? null,
+          }))
+          .sort((a, b) => this.stableStringify(a).localeCompare(this.stableStringify(b))),
+        queue_items: response.queue_items
+          .map((item) => ({
+            queue_type: item.queue_type,
+            stage: item.stage,
+            priority: item.priority,
+            status: item.status,
+            target_ref: this.refSignature(item.target_ref),
+            blocking_transition_keys: [...item.blocking_transition_keys].sort(),
+            recommended_actions: [...item.recommended_actions].sort(),
+          }))
+          .sort((a, b) => this.stableStringify(a).localeCompare(this.stableStringify(b))),
       }))
       .digest('hex');
+  }
+
+  private stableStringify(value: unknown): string {
+    return JSON.stringify(this.normalizeForSignature(value));
+  }
+
+  private normalizeForSignature(value: unknown): unknown {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.normalizeForSignature(item));
+    }
+    if (!value || typeof value !== 'object') {
+      return value;
+    }
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nested]) => [key, this.normalizeForSignature(nested)]),
+    );
+  }
+
+  private refSignatures(refs: TopicSelectionFunctionalRef[]): string[] {
+    return refs.map((ref) => this.refSignature(ref)).sort();
+  }
+
+  private refSignature(ref: TopicSelectionFunctionalRef): string {
+    return [
+      ref.ref_type,
+      ref.ref_id,
+      ref.title_card_id ?? '',
+      ref.version_id ?? '',
+    ].join(':');
   }
 
   private ref(refType: string, refId: string): TopicSelectionFunctionalRef {
