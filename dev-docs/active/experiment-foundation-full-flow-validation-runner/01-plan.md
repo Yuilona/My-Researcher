@@ -7,14 +7,15 @@
 - [x] Land a runnable contract-only skeleton that writes redacted artifacts without executing expensive checks.
 
 ## Phase 2 - Environment Preflight
-- Next phase.
-- Check `.env.local` presence without printing values.
-- Confirm `DATABASE_URL` resolves through the same local env loading path as backend tests.
-- Check Postgres connectivity and migration availability.
-- Check LocalScript execution root and command allowlist requirements.
-- Check required backend/desktop ports or select safe alternatives.
+- [x] Check `.env.local` presence without printing values.
+- [x] Confirm `DATABASE_URL` resolves through the same local env loading path as backend tests.
+- [x] Check Postgres connectivity and migration availability.
+- [x] Check LocalScript execution root and command allowlist requirements.
+- [x] Check required backend/desktop ports or select safe alternatives.
+- [x] Write redacted preflight report and blocker/action summary.
 
 ## Phase 3 - Deterministic Runner
+- Next phase after local migration blocker is resolved.
 - Orchestrate shared checks, backend full suite, desktop checks, T-090 smoke/harness, governance sync/lint, and diff check.
 - Capture command exit status, duration, and redacted output summaries.
 - Stop early on structural preflight failures; continue per-lane on optional skips.

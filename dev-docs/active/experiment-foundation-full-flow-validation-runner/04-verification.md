@@ -23,6 +23,21 @@
 - [pass] `git diff --check`
   - Result: no whitespace errors in the current diff.
 
+## Phase 2 Preflight Verification - 2026-05-24
+- [pass] `node --check .ai/scripts/experiment-foundation-full-flow-runner.mjs`
+  - Result: runner script syntax check passed after preflight implementation.
+- [pass] `node .ai/scripts/experiment-foundation-full-flow-runner.mjs --mode preflight --run-id t103-phase2-preflight-smoke`
+  - Result: preflight executed and returned `PREFLIGHT_FAILED` with one blocker.
+  - Expected blocker in current local env: `prisma-migration-status`, because Prisma reports unapplied repo migrations.
+  - Positive checks in the same run: `.env.local` present, `DATABASE_URL` parseable, Postgres connectivity passed, default desktop smoke ports available, external canary skipped.
+  - Warning in the same run: LocalScript root/enabled/allowlist is incomplete for non-test real execution.
+- [pass] `pnpm experiment-foundation:full-flow -- --mode preflight --run-id t103-phase2-package-preflight-smoke`
+  - Result: package entry drove the same preflight and returned the same expected migration blocker.
+- [pass] `node .ai/scripts/experiment-foundation-full-flow-runner.mjs --mode contract --run-id t103-phase2-contract-smoke`
+  - Result: contract mode still exits 0 after Phase 2 changes.
+- [pass] redaction spot-check for Phase 2 artifacts
+  - Result: no raw database URL, provider key value, access key, secret key, or OpenAI-style key pattern was found in preflight artifacts.
+
 ## Phase 1 Command-contract Verification - 2026-05-24
 - [pass] `node --check .ai/scripts/experiment-foundation-full-flow-runner.mjs`
   - Result: runner script syntax check passed.

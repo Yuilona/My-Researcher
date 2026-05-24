@@ -18,3 +18,17 @@
   - `02-validation-report.md`
   - `03-blockers.md`
 - The lane manifest records the deterministic command inventory for shared/backend/desktop/T-090/governance/diff checks, but marks every command as `phase_1_execution = not_executed`.
+
+## Phase 2 Preflight - 2026-05-24
+- Implemented `--mode preflight` in `.ai/scripts/experiment-foundation-full-flow-runner.mjs`.
+- The preflight checks:
+  - root `.env.local` presence;
+  - `DATABASE_URL` local env resolution and URL parsing;
+  - Postgres connectivity through Prisma `SELECT 1`;
+  - Prisma migration status through `pnpm exec prisma migrate status --schema prisma/schema.prisma`;
+  - LocalScript root/enabled/allowlist readiness;
+  - desktop smoke backend and renderer port availability;
+  - external canary credential readiness only when explicitly requested.
+- Preflight writes `04-preflight.md` and `05-preflight.json` in addition to the existing command contract, manifest, validation report, and blockers files.
+- The implementation stores only key presence, source names, statuses, durations, and action text. It does not store raw `DATABASE_URL`, provider keys, credential paths, Prisma output, SDK payloads, or logs.
+- Current local run result: `PREFLIGHT_FAILED` because Prisma reports unapplied repo migrations. Postgres connectivity itself passed.

@@ -13,3 +13,9 @@
 - Root cause: the Phase 1 parser handled only runner flags and did not ignore the conventional package-script separator.
 - Fix: the parser now skips a bare `--` before processing runner options.
 - Prevention: keep package-script invocation in the Phase 1 verification list so future parser changes preserve the public operator command.
+
+### Migration status blocks full-flow preflight
+- Symptom: Phase 2 preflight could connect to Postgres, but `prisma migrate status` returned non-zero.
+- Root cause: the local database has unapplied repo migrations, including the experiment-foundation core/job tables and later paper-implementation tables.
+- Fix/workaround: do not hide this in the runner; surface it as `prisma-migration-status` with an action to inspect and apply migrations intentionally.
+- Prevention: keep migration status as a blocker before deterministic/full-flow orchestration so later test failures are not misdiagnosed as experiment-foundation runtime defects.

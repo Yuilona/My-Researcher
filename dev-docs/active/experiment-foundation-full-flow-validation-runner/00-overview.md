@@ -3,7 +3,7 @@
 ## Status
 - State: in-progress
 - Task: T-103
-- Current focus: Phase 1 runner command contract is being landed as a runnable skeleton; Phase 2 will implement real environment preflight.
+- Current focus: Phase 2 preflight mode is implemented; current local environment is blocked by unapplied Prisma migrations.
 
 ## Goal
 - Provide one operator-facing command for experiment-foundation full-flow validation.
@@ -29,5 +29,5 @@
 - [ ] T-103 docs record how the runner consumes T-090 harness fixtures without duplicating readiness, promotion, materialization, adapter, or result-validation semantics.
 
 ## Handoff
-- Phase 1 starts with a contract-only runner skeleton. It must not execute expensive checks or real external integrations yet.
-- Phase 2 should implement the actual preflight checks described in `01-plan.md` and `02-architecture.md`.
+- Phase 2 preflight can now be run with `pnpm experiment-foundation:full-flow -- --mode preflight`.
+- The next implementation step is Phase 3 deterministic orchestration after the local database migration blocker is resolved.

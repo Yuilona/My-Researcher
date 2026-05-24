@@ -23,11 +23,14 @@ The runner is an orchestration and evidence tool. It must call existing commands
 ## Artifact Contract
 - Artifact root should be under `.ai/.tmp/experiment-foundation-full-flow/<run-id>/`.
 - Report files must be redacted and safe to share in dev-docs.
-- Phase 1 contract-mode outputs:
+- Contract-mode outputs:
   - `00-command-contract.md`
   - `01-lane-manifest.json`
   - `02-validation-report.md`
   - `03-blockers.md`
+- Preflight-mode adds:
+  - `04-preflight.md`
+  - `05-preflight.json`
 
 ## CLI Contract
 - Script: `.ai/scripts/experiment-foundation-full-flow-runner.mjs`
@@ -38,14 +41,24 @@ The runner is an orchestration and evidence tool. It must call existing commands
   - `--artifact-dir <path>`; default `.ai/.tmp/experiment-foundation-full-flow/<run-id>`
   - `--include-external-canary`; default false
   - `--require-real-db`; default false
-- Phase 1 only allows `contract` mode to exit successfully. Other modes must write a `NOT_IMPLEMENTED` report and exit non-zero.
+- `contract` and `preflight` are implemented.
+- `deterministic`, `real-local-db`, and `full` still write a `NOT_IMPLEMENTED` report and exit non-zero until later phases.
+
+## Preflight Checks
+- `.env.local` presence is a blocker when missing.
+- `DATABASE_URL` is loaded with explicit env first, then repo/backend local env files; only source and parse status are recorded.
+- Postgres connectivity is checked with a lightweight Prisma `SELECT 1`.
+- Migration status is checked with `pnpm exec prisma migrate status --schema prisma/schema.prisma`; raw command output is not stored.
+- LocalScript root/enabled/allowlist gaps are warnings in Phase 2 because deterministic tests install isolated test env overrides.
+- Desktop smoke backend/renderer ports are probed; occupied default ports become warnings when a nearby alternative is available.
+- External canary credentials are skipped by default and become blockers only when `--include-external-canary` is requested.
 
 ## Lane Manifest Shape
 The contract-mode runner writes a JSON manifest with:
 - runner id/version, task id, run id, mode, artifact dir, and flags;
 - lane definitions for `preflight`, `deterministic`, `real-local-db`, and `external-opt-in`;
 - deterministic command inventory with command ids, cwd, argv, and display string;
-- phase marker `phase_1_contract_only: true`.
+- phase marker and mode-specific artifact file list.
 
 ## Anti-drift Rules
 - Do not duplicate T-090 fixture graph construction outside the existing harness unless an explicit reusable helper is extracted.
