@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'node:fs/promises';
+import { access, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { afterEach } from 'node:test';
 import type {
   DataPolicy,
   DatasetMirror,
@@ -23,6 +23,14 @@ import { ExperimentFoundationExecutionService } from './experiment-foundation-ex
 import { ExperimentFoundationService } from './experiment-foundation-service.js';
 
 const timestamp = '2026-05-18T00:00:00.000Z';
+const temporaryExecutionRoots = new Set<string>();
+
+afterEach(async () => {
+  await Promise.all(
+    [...temporaryExecutionRoots].map((root) => rm(root, { recursive: true, force: true })),
+  );
+  temporaryExecutionRoots.clear();
+});
 
 function sourceRef(refType: string, refId: string): ExperimentFoundationRef {
   return { ref_type: refType, ref_id: refId };
@@ -282,10 +290,12 @@ async function seedExecutableTask(
     markReady?: boolean;
     command?: string;
     args?: string[];
+    taskSpecOverrides?: Partial<TrainingTaskSpec>;
   } = {},
 ) {
   const adapterKind = options.adapterKind ?? 'local_script';
   const outputRoot = await mkdtemp(path.join(tmpdir(), 'experiment-foundation-execution-'));
+  temporaryExecutionRoots.add(outputRoot);
   if (adapterKind === 'local_script') {
     process.env.EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ROOT = outputRoot;
   }
@@ -304,6 +314,7 @@ async function seedExecutableTask(
     input_refs: adapterKind === 'aliyun_pai_dlc'
       ? [sourceRef('dataset_mirror', 'dataset_mirror_001')]
       : [],
+    ...options.taskSpecOverrides,
   });
   const materialization = {
     ...materializationResultPayload(),
@@ -417,6 +428,122 @@ test('LocalScript submit requires readiness and command allowlist', async () => 
     } else {
       process.env.EXPERIMENT_FOUNDATION_LOCAL_SCRIPT_ALLOWED_COMMANDS = previousAllowed;
     }
+    restoreOptionalEnv('EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ROOT', previousRoot);
+  }
+});
+
+test('LocalScript robustness blocks disabled execution and execution-root escapes', async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousRoot = process.env.EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ROOT;
+  const previousEnabled = process.env.EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ENABLED;
+  const previousAllowed = process.env.EXPERIMENT_FOUNDATION_LOCAL_SCRIPT_ALLOWED_COMMANDS;
+  let outsideRoot: string | null = null;
+  try {
+    process.env.NODE_ENV = 'production';
+    delete process.env.EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ENABLED;
+    process.env.EXPERIMENT_FOUNDATION_LOCAL_SCRIPT_ALLOWED_COMMANDS = process.execPath;
+    const disabled = await createServices();
+    await seedExecutableTask(disabled.registryService);
+    await assert.rejects(
+      () => disabled.executionService.submitJob(submitRequest()),
+      (error) => error instanceof AppError && error.errorCode === 'GATE_CONSTRAINT_FAILED',
+    );
+
+    process.env.NODE_ENV = 'test';
+    outsideRoot = await mkdtemp(path.join(tmpdir(), 'experiment-foundation-root-escape-'));
+    const rootEscape = await createServices();
+    await seedExecutableTask(rootEscape.registryService, {
+      taskSpecOverrides: {
+        output_contract: { working_directory: outsideRoot },
+      },
+    });
+    await assert.rejects(
+      () => rootEscape.executionService.submitJob(submitRequest()),
+      (error) => error instanceof AppError && error.errorCode === 'GATE_CONSTRAINT_FAILED',
+    );
+  } finally {
+    process.env.NODE_ENV = previousNodeEnv;
+    restoreOptionalEnv('EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ROOT', previousRoot);
+    restoreOptionalEnv('EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ENABLED', previousEnabled);
+    restoreOptionalEnv('EXPERIMENT_FOUNDATION_LOCAL_SCRIPT_ALLOWED_COMMANDS', previousAllowed);
+    if (outsideRoot) {
+      await rm(outsideRoot, { recursive: true, force: true });
+    }
+  }
+});
+
+test('LocalScript robustness keeps shell metacharacter args literal with shell=false', async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousRoot = process.env.EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ROOT;
+  const markerRoot = await mkdtemp(path.join(tmpdir(), 'experiment-foundation-shell-false-'));
+  const injectedMarker = path.join(markerRoot, 'shell-injected-marker');
+  process.env.NODE_ENV = 'test';
+  try {
+    const { registryService, executionService } = await createServices();
+    await seedExecutableTask(registryService, {
+      args: [
+        '-e',
+        'console.log("shell-false-ok")',
+        `$(touch ${injectedMarker})`,
+      ],
+    });
+    const submitted = await executionService.submitJob(submitRequest());
+    const synced = await syncUntilTerminal(executionService, submitted.external_job.external_job_id);
+    assert.equal(synced.external_job.job_status, 'succeeded');
+    await assert.rejects(
+      () => access(injectedMarker),
+      /ENOENT/,
+      'shell metacharacter argument must not create a marker file',
+    );
+  } finally {
+    process.env.NODE_ENV = previousNodeEnv;
+    restoreOptionalEnv('EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ROOT', previousRoot);
+    await rm(markerRoot, { recursive: true, force: true });
+  }
+});
+
+test('LocalScript robustness handles timeout, non-terminal collect, and repeated collect deterministically', async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousRoot = process.env.EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ROOT;
+  process.env.NODE_ENV = 'test';
+  try {
+    const { registryService, executionService } = await createServices();
+    await seedExecutableTask(registryService, {
+      args: ['-e', 'setTimeout(() => {}, 5000)'],
+      taskSpecOverrides: { timeout_seconds: 1 },
+    });
+    const submitted = await executionService.submitJob(submitRequest());
+    assert.equal(submitted.external_job.job_status, 'running');
+    await assert.rejects(
+      () => executionService.collectJob(submitted.external_job.external_job_id, {
+        source_refs: [sourceRef('test_case', 'collect_before_terminal')],
+      }),
+      (error) => error instanceof AppError && error.errorCode === 'GATE_CONSTRAINT_FAILED',
+    );
+
+    const timedOut = await syncUntilTerminal(executionService, submitted.external_job.external_job_id, 'failed');
+    assert.equal(timedOut.external_job.job_status, 'failed');
+    const collected = await executionService.collectJob(submitted.external_job.external_job_id, {
+      source_refs: [sourceRef('test_case', 'timeout_collect')],
+    });
+    assert.equal(collected.external_job.job_status, 'failed');
+    assert.equal(
+      collected.external_job.result_refs.some((ref) => ref.ref_type === 'evidence_candidate'),
+      false,
+    );
+    const validationRef = collected.external_job.result_refs.find((ref) => ref.ref_type === 'result_validation_report');
+    assert.ok(validationRef);
+    const validation = await registryService.getRecord('result_validation_report', validationRef.ref_id);
+    assert.equal(validation.status, 'partial');
+
+    const repeated = await executionService.collectJob(submitted.external_job.external_job_id, {
+      source_refs: [sourceRef('test_case', 'timeout_collect_repeated')],
+    });
+    assert.deepEqual(repeated.external_job.result_refs, collected.external_job.result_refs);
+    assert.deepEqual(repeated.external_job.partial_result_refs, collected.external_job.partial_result_refs);
+    assert.equal(repeated.external_job.stage_event_refs.length, collected.external_job.stage_event_refs.length);
+  } finally {
+    process.env.NODE_ENV = previousNodeEnv;
     restoreOptionalEnv('EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ROOT', previousRoot);
   }
 });
@@ -612,6 +739,7 @@ test('execution routes cover submit, read, list, sync, cancel, collect and schem
 
 async function seedExecutableTaskForRoutes(app: ReturnType<typeof buildApp>) {
   const outputRoot = await mkdtemp(path.join(tmpdir(), 'experiment-foundation-route-'));
+  temporaryExecutionRoots.add(outputRoot);
   process.env.EXPERIMENT_FOUNDATION_LOCAL_EXECUTION_ROOT = outputRoot;
   const taskSpec = trainingTaskSpecPayload({
     output_contract: { working_directory: outputRoot },
@@ -638,7 +766,7 @@ async function syncUntilTerminal(
   expectedStatus: 'succeeded' | 'failed' | 'cancelled' = 'succeeded',
 ) {
   let latest;
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     latest = await executionService.syncJob(externalJobId, {
       source_refs: [sourceRef('test_case', 'sync')],
     });

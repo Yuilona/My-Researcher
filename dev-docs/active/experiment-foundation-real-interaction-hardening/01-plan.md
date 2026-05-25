@@ -1,0 +1,68 @@
+# T-106 Plan
+
+## Implementation Order
+
+1. Confirm roadmap decisions D1 through D8.
+2. Build the hardening matrix and fixture inventory.
+3. Add the minimum harness command or test entrypoint for T-106 only.
+4. Land LocalScript robustness tests.
+5. Land API, persistence, readiness, promotion, and recovery tests.
+6. Define the UI-driven workbench smoke or Playwright flow contract; implement it later after backend/API and runner hardening lanes stabilize.
+7. Land cross-flow seam tests with PaperImplementation or adjacent evidence consumers.
+8. Implement the external canary lane shape: safe default gates, local fake provider, and true opt-in canary contract.
+9. Stabilize the standalone hardening command, then integrate it with T-103 or document it as the official post-V1 hardening entrypoint.
+10. Close T-106 only after verification artifacts are redacted and residual risks are recorded.
+
+## Phase Acceptance
+
+### Phase 1
+- [x] A matrix identifies every critical node from registry payload creation to evidence/sidecar consumption.
+- [x] Each row names the layer, fixture, command/test file, expected outcome, and artifact.
+- [x] The matrix separates deterministic, real-local-DB, and external opt-in checks.
+- [x] Fixture inventory classifies every fixture as synthetic default, controlled local real opt-in, or true external canary opt-in.
+- [x] No raw dataset, model weight, checkpoint, credential, raw log, or unredacted external payload is checked into the repo.
+
+### Phase 2
+- [x] LocalScript failures are deterministic and produce stable backend errors.
+- [x] Cancellation and timeout paths leave no orphan process assumptions in test artifacts.
+- [x] Collect produces valid, partial, or invalid result/validation/evidence behavior according to T-074 and T-077 contracts.
+- [x] Allowlist, execution root, `shell=false`, cwd/output containment, idempotent submit, idempotency conflict, repeated sync, repeated collect, and malformed result paths are covered.
+- [x] Stress/load testing remains out of default scope unless a later finding justifies a separate follow-up.
+
+### Phase 3
+- [ ] Memory and disposable-DB paths agree on create/upsert/list/readiness/promotion/job state semantics.
+- [ ] Idempotency and conflict behavior is tested across registry and execution APIs.
+- [ ] Recovery after failed readiness, promotion, submit, sync, cancel, and collect is explicit.
+- [ ] Paper-implementation automation can consume stable refs, statuses, validation reports, and evidence refs from both memory and disposable DB paths.
+- [ ] Normal developer schemas are not mutated; disposable schema setup and cleanup are explicit.
+
+### Phase 4
+- [ ] Desktop workbench flow contract names the exact user path, backend calls, expected states, and error states.
+- [ ] UI acceptance criteria prove API consumption and error rendering without requiring immediate automation implementation.
+- [ ] Future screenshots or logs must be redacted where stored.
+
+### Phase 5
+- [ ] Adjacent flows consume refs and hashes only.
+- [ ] Tests prevent canonical experiment-foundation DTO copies from entering PaperImplementation state.
+- [ ] Paper claim or final-table wording does not leak into evidence candidates or sidecars.
+- [ ] Any required product bridge expansion is recorded as a follow-up unless it is a small compatibility fix exposed by a seam test.
+
+### Phase 6
+- [ ] Default external checks remain safe: gate-only config validation and local fake provider flow.
+- [ ] True external canary exists as an explicit opt-in lane for real connectivity and minimum real flow verification.
+- [ ] True canary has credential, cost, cleanup, blocked/skipped/pass, and redaction guardrails.
+- [ ] True canary artifacts store refs, hashes, summaries, and cleanup status only.
+
+### Phase 7
+- [ ] A standalone T-106 hardening command exists with clear deterministic, real-local-DB, UI-definition, cross-flow, and true-external-canary lanes.
+- [ ] T-103 handoff is stable and does not change the default full-flow runner semantics.
+- [ ] Governance sync and lint pass.
+- [ ] Residual hardening work is either closed or split into explicit follow-up tasks.
+
+## Initial Verification Commands
+
+```bash
+node .ai/scripts/ctl-project-governance.mjs sync --apply --project main
+node .ai/scripts/ctl-project-governance.mjs lint --check --project main
+git diff --check -- dev-docs/active/experiment-foundation-real-interaction-hardening .ai/project/main
+```
