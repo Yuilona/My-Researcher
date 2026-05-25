@@ -22,3 +22,9 @@
 | `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main` | passed | Regenerated project views after T-105 status changed to `done`. |
 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed. |
 | `git diff --check -- <T-105 touched paths>` | passed | No whitespace errors in T-105 touched paths. |
+
+## 2026-05-25 - Doc-Only Boundary Clarification
+| Command | Result | Notes |
+|---|---|---|
+| `rg -n "deterministic_fake\|live_provider_preflight\|live_provider_execution\|preflight-only\|live provider execution\|live-provider variance execution" dev-docs/active/paper-implementation-provider-variance-evaluation` | passed | T-105 docs now explicitly distinguish implemented deterministic/preflight modes from unimplemented live-provider execution. |
+| `git diff --check -- dev-docs/active/paper-implementation-provider-variance-evaluation/00-overview.md dev-docs/active/paper-implementation-provider-variance-evaluation/01-plan.md dev-docs/active/paper-implementation-provider-variance-evaluation/02-architecture.md dev-docs/active/paper-implementation-provider-variance-evaluation/03-implementation-notes.md dev-docs/active/paper-implementation-provider-variance-evaluation/04-verification.md dev-docs/active/paper-implementation-provider-variance-evaluation/05-pitfalls.md` | passed | No whitespace errors in the doc-only boundary patch. |

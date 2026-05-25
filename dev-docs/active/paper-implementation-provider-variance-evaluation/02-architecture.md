@@ -5,11 +5,18 @@
 |---|---|
 | AI authority | T-099 `AgentWorkflowHarnessRun` remains proposal-only; T-105 does not write domain authority. |
 | Evaluation owner | T-105 owns provider variance metrics and artifacts. |
-| Provider profile | Live provider execution is opt-in and must not be default CI. |
+| Provider profile | T-105 implements live-provider preflight only; live provider execution is future work and must not be default CI. |
 | Input | Fixed `ImplementationInputSnapshot` plus workflow spec/prompt/model profile. |
 | Output | Evaluation report, quality signals, and optional queue blockers; no motive/claim/dossier writes. |
 | Secrets | Provider credentials stay in environment/config; never in artifacts. |
 | Persistence | No new Prisma fields or DB authority. T-105 materializes through existing T-099 harness objects and returns the aggregate report from the route response. |
+
+## Provider Mode Boundary
+| Mode | T-105 status | Behavior | Closure meaning |
+|---|---|---|---|
+| `deterministic_fake` | Implemented | Runs deterministic fake-provider cases through the T-099 proposal-only harness. | Verifies contract, guardrail, queue, metric, and recommendation behavior without credentials. |
+| `live_provider_preflight` | Implemented | Reports provider/profile readiness as `passed`, `skipped`, or `blocked`; enabled live profiles are blocked because execution is not part of T-105. | Verifies opt-in wiring and reporting semantics only. |
+| `live_provider_execution` | Not implemented | Would call a real provider and measure real output variance. | Must be a future explicit task with credential, replay, observability, and queryability decisions. |
 
 ## Proposed Flow
 ```text
@@ -27,7 +34,7 @@ ImplementationInputSnapshot
 - Service: `PaperImplementationProviderVarianceEvaluationService`.
 - REST route: `POST /paper-implementation/projects/:implementation_project_id/provider-variance-evaluations/run`.
 - Default runner: deterministic fake-provider replay through T-099 `createAgentWorkflowHarnessRun`.
-- Live-provider profile: preflight-only `passed/skipped/blocked` report; no live provider call in T-105.
+- Live-provider profile: preflight-only `passed/skipped/blocked` report; no live provider call or real output variance benchmark in T-105.
 
 ## Flow-Oriented Metrics
 T-105 metrics are not a generic model benchmark. They answer whether provider output can safely and consistently advance the PaperImplementation automation workflow.
@@ -51,6 +58,7 @@ Token, cost, latency, and model telemetry may be recorded as diagnostics. They a
 - Provider output cannot bypass T-099 proposal artifact validation.
 - Provider output cannot directly create or mutate motive, validation, WorkOrder, run evidence, trace, claim, dossier, or writing packet authority.
 - Live provider profiles must be explicit, opt-in, and separately reported.
+- Enabling a live-provider profile in T-105 must not silently become live execution; it remains a preflight result unless a future task adds an explicit execution mode.
 - Deterministic fake-provider tests must be enough to close the task by default.
 - Topic-selection provider canary infrastructure patterns may be reused, but topic-selection business semantics, node policies, ref allowlists, output shapes, and success criteria must not be reused.
 - If implementation discovers current T-099 columnized fields cannot support a required gate/query, stop and record a blocker. Do not add JSON-only query fields in T-105.

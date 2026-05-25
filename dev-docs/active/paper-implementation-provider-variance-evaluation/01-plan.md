@@ -3,7 +3,7 @@
 ## Phase 0 - Boundary Alignment
 - [x] Confirm T-105 is separate from T-104.
 - [x] Confirm provider variance is evaluation infrastructure, not authority logic.
-- [x] Confirm live provider runs are opt-in and skipped/blocked by default.
+- [x] Confirm live-provider handling is preflight-only, opt-in, and skipped/blocked by default.
 - [x] Confirm output metrics and artifact expectations.
 
 ## Phase 1 - Current-State Audit
