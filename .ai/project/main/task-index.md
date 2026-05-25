@@ -115,4 +115,7 @@ Project: `main`
 | T-103 experiment-foundation-full-flow-validation-runner | done | F-001 | dev-docs/active/experiment-foundation-full-flow-validation-runner |
 | T-104 paper-implementation-live-experiment-adapter | done | F-001 | dev-docs/active/paper-implementation-live-experiment-adapter |
 | T-105 paper-implementation-provider-variance-evaluation | done | F-001 | dev-docs/active/paper-implementation-provider-variance-evaluation |
+| T-106 experiment-foundation-real-interaction-hardening | in-progress | F-001 | dev-docs/active/experiment-foundation-real-interaction-hardening |
+| T-107 topic-selection-v1b-workflow-hardening | planned | F-001 | dev-docs/active/topic-selection-v1b-workflow-hardening |
+| T-108 topic-selection-v1c-workflow-hardening | planned | F-001 | dev-docs/active/topic-selection-v1c-workflow-hardening |
 <!-- AUTO-GENERATED:END task-index -->

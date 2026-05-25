@@ -8,12 +8,15 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 105 (planned: 2, in-progress: 3, blocked: 0, done: 33, archived: 67)
+- Tasks: 108 (planned: 4, in-progress: 4, blocked: 0, done: 33, archived: 67)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
+| T-106 experiment-foundation-real-interaction-hardening | in-progress | F-001 | dev-docs/active/experiment-foundation-real-interaction-hardening |
+| T-107 topic-selection-v1b-workflow-hardening | planned | F-001 | dev-docs/active/topic-selection-v1b-workflow-hardening |
+| T-108 topic-selection-v1c-workflow-hardening | planned | F-001 | dev-docs/active/topic-selection-v1c-workflow-hardening |
 | T-090 experiment-foundation-capability-validation | done | F-001 | dev-docs/active/experiment-foundation-capability-validation |
 | T-102 paper-implementation-v1-hardening | done | F-001 | dev-docs/active/paper-implementation-v1-hardening |
 | T-103 experiment-foundation-full-flow-validation-runner | done | F-001 | dev-docs/active/experiment-foundation-full-flow-validation-runner |
@@ -31,7 +34,4 @@ Project: `main`
 | T-087 topic-selection-desktop-workbench-v1abc | archived | F-001 | dev-docs/archive/topic-selection-desktop-workbench-v1abc |
 | T-088 topic-selection-workflow-runtime-foundation | in-progress | F-001 | dev-docs/active/topic-selection-workflow-runtime-foundation |
 | T-092 paper-implementation-contracts-and-gap-map | done | F-001 | dev-docs/active/paper-implementation-contracts-and-gap-map |
-| T-093 paper-implementation-intake-bootstrap | done | F-001 | dev-docs/active/paper-implementation-intake-bootstrap |
-| T-097 paper-implementation-trace-kernel | done | F-001 | dev-docs/active/paper-implementation-trace-kernel |
-| T-089 topic-selection-agent-workflow-review | planned | F-001 | dev-docs/active/topic-selection-agent-workflow-review |
 <!-- AUTO-GENERATED:END dashboard -->
