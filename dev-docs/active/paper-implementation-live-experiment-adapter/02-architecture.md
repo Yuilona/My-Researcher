@@ -35,6 +35,7 @@ T-104 may return handoff refs for the next workflow step, but these are read-mod
   monitor_intake?: RunMonitorIntakeRecord | null;
   run_evidence_unit?: RunEvidenceUnit | null;
   trace_manifest?: TraceManifest | null;
+  terminal_evidence_recorded: boolean;
   handoff: {
     next_action_refs: TopicSelectionFunctionalRef[];
     recommended_next_actions: string[];
@@ -74,8 +75,13 @@ Allowed handoff actions may include `create_result_interpretation_packet`, but T
 ## Hard Invariants
 - No trusted live result without an admitted WorkOrder.
 - No trusted live result without a submitted or linked external job.
+- `sync`, `collect`, and `cancel` must perform read-only external job ownership preflight before invoking side-effectful experiment-foundation operations.
+- External job ownership is checked by comparing the WorkOrder harness `external_job_ref/hash` with the experiment-foundation job projection.
 - No final trusted evidence without `run_evidence_unit_id` and `run_evidence_trace_manifest_id`.
 - T-104 must pre-allocate the final `run_evidence_unit_id`, create or require a complete target-specific `TraceManifest`, and pass both values into `recordRunMonitorIntake`; `recordRunMonitorIntake` remains the final admission gate.
+- Terminal status observed during `sync` remains monitor-only and must recommend collect/cancel finalization instead of another sync loop.
+- `collect` and `cancel` retries must return existing trusted `RunEvidenceUnit` before creating duplicate evidence or repeating external side effects.
+- Live adapter responses expose `terminal_evidence_recorded` so UI/schedulers can distinguish non-final status from final trusted evidence.
 - No direct PaperImplementation copy of experiment-foundation DTO payloads.
 - No result interpretation, claim, dossier, or writing packet mutation in the adapter.
 - No default test dependency on cloud credentials.

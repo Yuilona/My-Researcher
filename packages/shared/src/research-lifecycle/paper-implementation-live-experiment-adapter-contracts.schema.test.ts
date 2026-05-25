@@ -33,6 +33,10 @@ test('paper-implementation live experiment schemas load through direct and aggre
   assert.ok(liveContracts.syncLiveExperimentRunRequestSchema);
   assert.ok(liveContracts.collectLiveExperimentRunRequestSchema);
   assert.ok(liveContracts.cancelLiveExperimentRunRequestSchema);
+  assert.ok(
+    (liveContracts.paperImplementationLiveExperimentRunResponseSchema.required as readonly string[])
+      .includes('terminal_evidence_recorded'),
+  );
   assert.ok(researchLifecycleContracts.submitLiveExperimentRunRequestSchema);
 });
 

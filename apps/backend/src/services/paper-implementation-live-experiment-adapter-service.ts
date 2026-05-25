@@ -32,7 +32,7 @@ import { PaperImplementationWorkOrderExperimentBridgeService } from './paper-imp
 
 type ExperimentExecutionPort = Pick<
   ExperimentFoundationExecutionService,
-  'submitJob' | 'getJobByIdempotencyKey' | 'syncJob' | 'collectJob' | 'cancelJob'
+  'submitJob' | 'getJob' | 'getJobByIdempotencyKey' | 'syncJob' | 'collectJob' | 'cancelJob'
 >;
 
 type ExperimentRecordPort = Pick<ExperimentFoundationService, 'getRecord'>;
@@ -140,10 +140,13 @@ export class PaperImplementationLiveExperimentAdapterService {
       implementationProjectId,
       workOrderId,
     );
+    await this.requireOwnedExternalJob(workOrder, externalJobId);
     const { external_job: externalJob } = await this.options.experimentExecution.syncJob(externalJobId, {
       source_refs: this.defaultSourceRefs(workOrder, request.source_refs, externalJobId),
     });
+    this.assertExternalJobBelongsToWorkOrder(workOrder, externalJob, externalJobId);
     const mapping = this.mapSyncMonitorStatus(externalJob.job_status);
+    const terminalObserved = this.isTerminalExternalJobStatus(externalJob.job_status);
     const monitor = await this.options.workOrderService.recordRunMonitorIntake(
       implementationProjectId,
       {
@@ -162,7 +165,12 @@ export class PaperImplementationLiveExperimentAdapterService {
       monitor_intake: monitor.monitor_intake,
       run_evidence_unit: monitor.run_evidence_unit,
       handoffRefs: [this.externalTrainingJobRef(externalJob)],
-      notes: ['External job status synced without creating final trusted evidence.'],
+      recommendedNextActions: terminalObserved
+        ? this.finalizationActionsForExternalJob(externalJob)
+        : undefined,
+      notes: terminalObserved
+        ? ['Terminal external job status observed during sync; collect or cancel finalization is required to create trusted RunEvidenceUnit.']
+        : ['External job status synced without creating final trusted evidence.'],
     });
   }
 
@@ -176,6 +184,16 @@ export class PaperImplementationLiveExperimentAdapterService {
       implementationProjectId,
       workOrderId,
     );
+    const preflightJob = await this.requireOwnedExternalJob(workOrder, externalJobId);
+    const existingBeforeCollect = await this.findExistingRunEvidence(implementationProjectId, preflightJob);
+    if (existingBeforeCollect) {
+      return this.response('collect', 'already_recorded', preflightJob, {
+        run_evidence_unit: existingBeforeCollect,
+        terminalEvidenceRecorded: true,
+        handoffRefs: [this.runEvidenceRef(existingBeforeCollect)],
+        notes: ['Existing trusted RunEvidenceUnit returned for this external job before collect side effects.'],
+      });
+    }
     const collectInput: CollectExternalTrainingJobRequest = {
       source_refs: this.defaultSourceRefs(workOrder, request.source_refs, externalJobId),
       accept_partial: request.accept_partial,
@@ -184,10 +202,12 @@ export class PaperImplementationLiveExperimentAdapterService {
       externalJobId,
       collectInput,
     );
+    this.assertExternalJobBelongsToWorkOrder(workOrder, externalJob, externalJobId);
     const existingEvidence = await this.findExistingRunEvidence(implementationProjectId, externalJob);
     if (existingEvidence) {
       return this.response('collect', 'already_recorded', externalJob, {
         run_evidence_unit: existingEvidence,
+        terminalEvidenceRecorded: true,
         handoffRefs: [this.runEvidenceRef(existingEvidence)],
         notes: ['Existing trusted RunEvidenceUnit returned for this external job.'],
       });
@@ -218,12 +238,23 @@ export class PaperImplementationLiveExperimentAdapterService {
       implementationProjectId,
       workOrderId,
     );
+    const preflightJob = await this.requireOwnedExternalJob(workOrder, externalJobId);
+    const existingBeforeCancel = await this.findExistingRunEvidence(implementationProjectId, preflightJob);
+    if (existingBeforeCancel) {
+      return this.response('cancel', 'already_recorded', preflightJob, {
+        run_evidence_unit: existingBeforeCancel,
+        terminalEvidenceRecorded: true,
+        handoffRefs: [this.runEvidenceRef(existingBeforeCancel)],
+        notes: ['Existing trusted RunEvidenceUnit returned for this external job before cancel side effects.'],
+      });
+    }
     const { external_job: externalJob } = await this.options.experimentExecution.cancelJob(externalJobId, {
       requested_by_ref: request.requested_by_ref ?? this.workOrderExperimentRef(workOrder),
       reason: request.reason,
       idempotency_key: request.idempotency_key,
       source_refs: this.defaultSourceRefs(workOrder, request.source_refs, externalJobId),
     });
+    this.assertExternalJobBelongsToWorkOrder(workOrder, externalJob, externalJobId);
     return this.recordFinalOrStatusUpdate(
       implementationProjectId,
       workOrder,
@@ -273,6 +304,7 @@ export class PaperImplementationLiveExperimentAdapterService {
       );
       return this.response(input.action, input.action === 'cancel' ? 'cancel_requested' : 'synced', externalJob, {
         monitor_intake: monitor.monitor_intake,
+        terminalEvidenceRecorded: false,
         handoffRefs: [this.externalTrainingJobRef(externalJob)],
         notes: ['External job is not terminal; no trusted RunEvidenceUnit was created.'],
       });
@@ -314,6 +346,7 @@ export class PaperImplementationLiveExperimentAdapterService {
       monitor_intake: monitor.monitor_intake,
       run_evidence_unit: monitor.run_evidence_unit,
       trace_manifest: traceManifest,
+      terminalEvidenceRecorded: Boolean(monitor.run_evidence_unit),
       handoffRefs: monitor.run_evidence_unit ? [this.runEvidenceRef(monitor.run_evidence_unit)] : [],
       notes: ['Terminal external job converted into trusted RunEvidenceUnit through WorkOrder monitor intake.'],
     });
@@ -502,10 +535,13 @@ export class PaperImplementationLiveExperimentAdapterService {
       monitor_intake?: PaperImplementationLiveExperimentRunResponse['monitor_intake'];
       run_evidence_unit?: PaperImplementationLiveExperimentRunResponse['run_evidence_unit'];
       trace_manifest?: PaperImplementationLiveExperimentRunResponse['trace_manifest'];
+      terminalEvidenceRecorded?: boolean;
       handoffRefs: TopicSelectionFunctionalRef[];
+      recommendedNextActions?: string[];
       notes: string[];
     },
   ): PaperImplementationLiveExperimentRunResponse {
+    const terminalEvidenceRecorded = input.terminalEvidenceRecorded ?? Boolean(input.run_evidence_unit);
     return {
       action,
       outcome,
@@ -514,11 +550,12 @@ export class PaperImplementationLiveExperimentAdapterService {
       monitor_intake: input.monitor_intake ?? null,
       run_evidence_unit: input.run_evidence_unit ?? null,
       trace_manifest: input.trace_manifest ?? null,
+      terminal_evidence_recorded: terminalEvidenceRecorded,
       handoff: {
         next_action_refs: input.handoffRefs,
-        recommended_next_actions: input.run_evidence_unit
+        recommended_next_actions: input.recommendedNextActions ?? (terminalEvidenceRecorded
           ? ['create_result_interpretation_packet']
-          : ['sync_live_experiment_run'],
+          : ['sync_live_experiment_run']),
         notes: input.notes,
       },
     };
@@ -551,6 +588,68 @@ export class PaperImplementationLiveExperimentAdapterService {
         'Live experiment submit requires an admitted or already running ResearchWorkOrder.',
       );
     }
+  }
+
+  private async requireOwnedExternalJob(
+    workOrder: ResearchWorkOrder,
+    externalJobId: string,
+  ): Promise<ExternalTrainingJob> {
+    const { external_job: externalJob } = await this.options.experimentExecution.getJob(externalJobId);
+    this.assertExternalJobBelongsToWorkOrder(workOrder, externalJob, externalJobId);
+    return externalJob;
+  }
+
+  private assertExternalJobBelongsToWorkOrder(
+    workOrder: ResearchWorkOrder,
+    externalJob: ExternalTrainingJob,
+    externalJobId: string,
+  ): void {
+    const expectedExternalJobRef = workOrder.experiment_bridge.external_job_ref ?? null;
+    const expectedExternalJobHash = workOrder.experiment_bridge.external_job_hash ?? null;
+    if (externalJob.external_job_id !== externalJobId) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        'External job lookup returned a different external_job_id than requested.',
+      );
+    }
+    if (!expectedExternalJobRef || !this.hasText(expectedExternalJobHash)) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        'Live experiment operation requires a ResearchWorkOrder linked to an external job.',
+      );
+    }
+    if (
+      expectedExternalJobRef.ref_type !== externalJob.external_job_ref.ref_type
+      || expectedExternalJobRef.ref_id !== externalJob.external_job_ref.ref_id
+      || (expectedExternalJobRef.version_id ?? null) !== (externalJob.external_job_ref.version_id ?? null)
+      || expectedExternalJobHash !== externalJob.external_job_hash
+    ) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        'External job does not belong to the ResearchWorkOrder harness run.',
+      );
+    }
+  }
+
+  private isTerminalExternalJobStatus(status: ExternalTrainingJob['job_status']): boolean {
+    return status === 'succeeded' || status === 'failed' || status === 'cancelled';
+  }
+
+  private finalizationActionsForExternalJob(externalJob: ExternalTrainingJob): string[] {
+    if (externalJob.job_status === 'cancelled') {
+      return ['cancel_live_experiment_run'];
+    }
+    if (externalJob.job_status === 'succeeded' || externalJob.job_status === 'failed') {
+      return ['collect_live_experiment_run'];
+    }
+    return ['sync_live_experiment_run'];
+  }
+
+  private hasText(value: string | null | undefined): value is string {
+    return typeof value === 'string' && value.trim().length > 0;
   }
 
   private rawPayload(externalJob: ExternalTrainingJob): Record<string, unknown> {

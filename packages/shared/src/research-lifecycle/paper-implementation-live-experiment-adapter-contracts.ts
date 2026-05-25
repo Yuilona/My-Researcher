@@ -97,6 +97,7 @@ export interface PaperImplementationLiveExperimentRunResponse {
   monitor_intake?: RunMonitorIntakeRecord | null;
   run_evidence_unit?: RunEvidenceUnit | null;
   trace_manifest?: TraceManifest | null;
+  terminal_evidence_recorded: boolean;
   handoff: LiveExperimentHandoff;
 }
 
@@ -186,7 +187,7 @@ export const liveExperimentHandoffSchema = {
 export const paperImplementationLiveExperimentRunResponseSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['action', 'outcome', 'external_job', 'handoff'],
+  required: ['action', 'outcome', 'external_job', 'terminal_evidence_recorded', 'handoff'],
   properties: {
     action: { enum: [...PAPER_IMPLEMENTATION_LIVE_EXPERIMENT_ACTIONS] },
     outcome: { enum: [...PAPER_IMPLEMENTATION_LIVE_EXPERIMENT_OUTCOMES] },
@@ -195,6 +196,7 @@ export const paperImplementationLiveExperimentRunResponseSchema = {
     monitor_intake: { anyOf: [runMonitorIntakeRecordSchema, { type: 'null' }] },
     run_evidence_unit: { anyOf: [runEvidenceUnitSchema, { type: 'null' }] },
     trace_manifest: { anyOf: [traceManifestSchema, { type: 'null' }] },
+    terminal_evidence_recorded: { type: 'boolean' },
     handoff: liveExperimentHandoffSchema,
   },
 } as const;

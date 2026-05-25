@@ -55,6 +55,7 @@ const WORK_ORDER_ID = 'research_work_order_001';
 const VALIDATION_CYCLE_ID = 'validation_cycle_001';
 const EXPERIMENT_PLAN_ID = 'experiment_plan_light_001';
 const EXTERNAL_JOB_ID = 'external_training_job_001';
+const WRONG_EXTERNAL_JOB_ID = 'external_training_job_wrong';
 
 function ref(refType: string, refId: string, versionId: string | null = null): TopicSelectionFunctionalRef {
   return {
@@ -169,6 +170,10 @@ class StaticProjectRepository implements PaperImplementationRepository {
 
 class FakeExperimentExecution {
   submitInputs: SubmitExternalTrainingJobRequest[] = [];
+  syncJobIds: string[] = [];
+  collectJobIds: string[] = [];
+  cancelJobIds: string[] = [];
+  nextSyncStatus: ExternalTrainingJob['job_status'] = 'running';
   job: ExternalTrainingJob = {
     external_job_id: EXTERNAL_JOB_ID,
     training_task_spec_ref: experimentRef('training_task_spec', 'training_task_spec_001'),
@@ -200,6 +205,13 @@ class FakeExperimentExecution {
     created_at: NOW,
     updated_at: NOW,
   };
+  wrongJob: ExternalTrainingJob = {
+    ...this.job,
+    external_job_id: WRONG_EXTERNAL_JOB_ID,
+    idempotency_key: 'wrong_attempt_001',
+    external_job_ref: experimentRef('local_script_job', 'local_job_wrong'),
+    external_job_hash: 'external_job_hash_wrong',
+  };
 
   async submitJob(input: SubmitExternalTrainingJobRequest) {
     this.submitInputs.push(input);
@@ -214,6 +226,16 @@ class FakeExperimentExecution {
     return { external_job: structuredClone(this.job) };
   }
 
+  async getJob(externalJobId: string) {
+    if (externalJobId === this.job.external_job_id) {
+      return { external_job: structuredClone(this.job) };
+    }
+    if (externalJobId === this.wrongJob.external_job_id) {
+      return { external_job: structuredClone(this.wrongJob) };
+    }
+    throw new AppError(404, 'NOT_FOUND', `External job ${externalJobId} not found.`);
+  }
+
   async getJobByIdempotencyKey(idempotencyKey: string) {
     if (this.job.idempotency_key !== idempotencyKey) {
       throw new AppError(404, 'NOT_FOUND', `External job ${idempotencyKey} not found.`);
@@ -221,17 +243,21 @@ class FakeExperimentExecution {
     return { external_job: structuredClone(this.job) };
   }
 
-  async syncJob(_externalJobId: string, _input: SyncExternalTrainingJobRequest) {
+  async syncJob(externalJobId: string, _input: SyncExternalTrainingJobRequest) {
+    this.syncJobIds.push(externalJobId);
     this.job = {
       ...this.job,
-      job_status: 'running',
+      job_status: this.nextSyncStatus,
       last_synced_at: NOW,
+      completed_at: ['succeeded', 'failed', 'cancelled'].includes(this.nextSyncStatus) ? NOW : null,
       updated_at: NOW,
     };
+    this.nextSyncStatus = 'running';
     return { external_job: structuredClone(this.job) };
   }
 
-  async collectJob(_externalJobId: string, _input: CollectExternalTrainingJobRequest) {
+  async collectJob(externalJobId: string, _input: CollectExternalTrainingJobRequest) {
+    this.collectJobIds.push(externalJobId);
     this.job = {
       ...this.job,
       job_status: 'succeeded',
@@ -247,7 +273,8 @@ class FakeExperimentExecution {
     return { external_job: structuredClone(this.job) };
   }
 
-  async cancelJob(_externalJobId: string, input: CancelExternalTrainingJobRequest) {
+  async cancelJob(externalJobId: string, input: CancelExternalTrainingJobRequest) {
+    this.cancelJobIds.push(externalJobId);
     this.job = {
       ...this.job,
       job_status: input.reason === 'still cancelling' ? 'cancelling' : 'cancelled',
@@ -612,10 +639,54 @@ test('sync records non-final monitor intake without trusted run evidence', async
   assert.equal(synced.monitor_intake?.run_status, 'running');
   assert.equal(synced.monitor_intake?.trust_status, 'trusted');
   assert.equal(synced.run_evidence_unit, null);
+  assert.equal(synced.terminal_evidence_recorded, false);
+  assert.deepEqual(synced.handoff.recommended_next_actions, ['sync_live_experiment_run']);
+});
+
+test('sync observes terminal external status without creating evidence and recommends finalization', async () => {
+  const { service, execution } = await makeHarness();
+  await service.submitLiveExperimentRun(PROJECT_ID, WORK_ORDER_ID, {
+    idempotency_key: 'work_order_attempt_001',
+  });
+  execution.nextSyncStatus = 'succeeded';
+
+  const synced = await service.syncLiveExperimentRun(PROJECT_ID, WORK_ORDER_ID, EXTERNAL_JOB_ID, {});
+
+  assert.equal(synced.run_evidence_unit, null);
+  assert.equal(synced.terminal_evidence_recorded, false);
+  assert.deepEqual(synced.handoff.recommended_next_actions, ['collect_live_experiment_run']);
+  assert.match(synced.handoff.notes[0] ?? '', /Terminal external job status observed/);
+});
+
+test('blocks wrong external job before sync collect or cancel side effects', async () => {
+  const { service, execution } = await makeHarness();
+  await service.submitLiveExperimentRun(PROJECT_ID, WORK_ORDER_ID, {
+    idempotency_key: 'work_order_attempt_001',
+  });
+
+  await assertRejectsWithCode(
+    () => service.syncLiveExperimentRun(PROJECT_ID, WORK_ORDER_ID, WRONG_EXTERNAL_JOB_ID, {}),
+    'GATE_CONSTRAINT_FAILED',
+  );
+  await assertRejectsWithCode(
+    () => service.collectLiveExperimentRun(PROJECT_ID, WORK_ORDER_ID, WRONG_EXTERNAL_JOB_ID, {}),
+    'GATE_CONSTRAINT_FAILED',
+  );
+  await assertRejectsWithCode(
+    () => service.cancelLiveExperimentRun(PROJECT_ID, WORK_ORDER_ID, WRONG_EXTERNAL_JOB_ID, {
+      reason: 'wrong job',
+      idempotency_key: 'cancel_wrong_job_001',
+    }),
+    'GATE_CONSTRAINT_FAILED',
+  );
+
+  assert.deepEqual(execution.syncJobIds, []);
+  assert.deepEqual(execution.collectJobIds, []);
+  assert.deepEqual(execution.cancelJobIds, []);
 });
 
 test('collect creates target-specific trace and trusted run evidence from stored result hashes', async () => {
-  const { service } = await makeHarness();
+  const { service, execution } = await makeHarness();
   await service.submitLiveExperimentRun(PROJECT_ID, WORK_ORDER_ID, {
     idempotency_key: 'work_order_attempt_001',
   });
@@ -628,6 +699,13 @@ test('collect creates target-specific trace and trusted run evidence from stored
   assert.equal(collected.trace_manifest?.target_ref.ref_type, 'run_evidence_unit');
   assert.equal(collected.trace_manifest?.target_ref.ref_id, collected.run_evidence_unit?.run_evidence_unit_id);
   assert.equal(collected.trace_manifest?.trace_status, 'complete');
+  assert.equal(collected.terminal_evidence_recorded, true);
+
+  const repeated = await service.collectLiveExperimentRun(PROJECT_ID, WORK_ORDER_ID, EXTERNAL_JOB_ID, {});
+  assert.equal(repeated.outcome, 'already_recorded');
+  assert.equal(repeated.run_evidence_unit?.run_evidence_unit_id, collected.run_evidence_unit?.run_evidence_unit_id);
+  assert.equal(repeated.terminal_evidence_recorded, true);
+  assert.equal(execution.collectJobIds.length, 1);
 });
 
 test('cancel records non-final status without trusted run evidence while external job is cancelling', async () => {
@@ -644,10 +722,11 @@ test('cancel records non-final status without trusted run evidence while externa
   assert.equal(cancelled.outcome, 'cancel_requested');
   assert.equal(cancelled.monitor_intake?.run_status, 'running');
   assert.equal(cancelled.run_evidence_unit, null);
+  assert.equal(cancelled.terminal_evidence_recorded, false);
 });
 
 test('cancel finalizes trusted cancelled run evidence with target-specific trace', async () => {
-  const { service } = await makeHarness();
+  const { service, execution } = await makeHarness();
   await service.submitLiveExperimentRun(PROJECT_ID, WORK_ORDER_ID, {
     idempotency_key: 'work_order_attempt_001',
   });
@@ -663,6 +742,16 @@ test('cancel finalizes trusted cancelled run evidence with target-specific trace
   assert.equal(cancelled.run_evidence_unit?.failure_summary, 'human stopped expensive run');
   assert.equal(cancelled.trace_manifest?.target_ref.ref_type, 'run_evidence_unit');
   assert.equal(cancelled.trace_manifest?.target_ref.ref_id, cancelled.run_evidence_unit?.run_evidence_unit_id);
+  assert.equal(cancelled.terminal_evidence_recorded, true);
+
+  const repeated = await service.cancelLiveExperimentRun(PROJECT_ID, WORK_ORDER_ID, EXTERNAL_JOB_ID, {
+    reason: 'human stopped expensive run',
+    idempotency_key: 'cancel_attempt_001',
+  });
+  assert.equal(repeated.outcome, 'already_recorded');
+  assert.equal(repeated.run_evidence_unit?.run_evidence_unit_id, cancelled.run_evidence_unit?.run_evidence_unit_id);
+  assert.equal(repeated.terminal_evidence_recorded, true);
+  assert.equal(execution.cancelJobIds.length, 1);
 });
 
 test('route wiring validates submit payload and delegates live experiment submit', async () => {

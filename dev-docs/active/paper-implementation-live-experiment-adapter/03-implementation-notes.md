@@ -25,3 +25,10 @@
 - Added repository methods for idempotent harness lookup and run evidence lookup by external job using existing columnized/indexed fields.
 - Added REST endpoints under `live-experiment-runs` and wired them through the existing PaperImplementation controller.
 - Final collect/cancel evidence uses preallocated run evidence identity, target-specific `TraceManifest`, and existing `recordRunMonitorIntake`; no result interpretation, claim, dossier, or writing packet authority is created.
+
+## 2026-05-25 - Live Adapter Side-Effect Hardening
+- Added read-only `getJob` preflight to `sync`, `collect`, and `cancel` before calling side-effectful experiment-foundation operations.
+- Preflight now checks that the route `external_job_id` resolves to the WorkOrder harness `external_job_ref/hash`; wrong external jobs are blocked before sync/collect/cancel side effects.
+- Added `terminal_evidence_recorded` to the live experiment response contract so schedulers and UI can distinguish monitor-only updates from final trusted evidence.
+- `sync` remains monitor-only, but terminal external statuses now recommend collect/cancel finalization rather than another sync loop.
+- `collect` and `cancel` return existing trusted `RunEvidenceUnit` before repeating external side effects, preserving retry idempotency.
