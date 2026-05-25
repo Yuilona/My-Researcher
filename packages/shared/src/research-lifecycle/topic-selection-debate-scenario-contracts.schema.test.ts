@@ -4,6 +4,7 @@ import Fastify from 'fastify';
 import {
   createTopicSelectionV1aGenerateNeedCandidateDebateScenarioContract,
   topicSelectionDebateScenarioContractSchema,
+  topicSelectionV1aGenerateNeedCandidateDebateExecutionPlanSchema,
 } from './topic-selection-debate-scenario-contracts.js';
 
 async function validatesBody(schema: Record<string, unknown>, body: unknown): Promise<boolean> {
@@ -59,4 +60,38 @@ test('topic-selection debate scenario contract schema rejects fallback and provi
   slot.temperature = 0.2;
 
   assert.equal(await validatesBody(topicSelectionDebateScenarioContractSchema, contract), false);
+});
+
+test('topic-selection debate execution plan schema accepts slot and instance specs', async () => {
+  const plan = {
+    default: {
+      execution_mode: 'provider_llm',
+      model_option_id: 'topic-selection.need-discovery.arbiter-final.v1.openai-balanced',
+    },
+    slots: {
+      'explorer.round_1_discovery': {
+        execution_mode: 'provider_llm',
+        model_option_id: 'topic-selection.need-discovery.explorer.v1.dashscope-thinking-budget',
+      },
+    },
+    instances: {
+      'explorer.round_1_discovery#explorer_2': {
+        execution_mode: 'codex_assisted',
+      },
+    },
+  };
+
+  assert.equal(await validatesBody(topicSelectionV1aGenerateNeedCandidateDebateExecutionPlanSchema, plan), true);
+});
+
+test('topic-selection debate execution plan schema rejects unknown slot specs', async () => {
+  const plan = {
+    slots: {
+      'grounding_auditor.round_1_discovery': {
+        execution_mode: 'provider_llm',
+      },
+    },
+  };
+
+  assert.equal(await validatesBody(topicSelectionV1aGenerateNeedCandidateDebateExecutionPlanSchema, plan), false);
 });

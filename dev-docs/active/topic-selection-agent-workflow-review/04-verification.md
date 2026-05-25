@@ -72,6 +72,112 @@
   - N6 same-attempt input hash drift fails with `VERSION_CONFLICT` before context compilation, provider/Codex/debate invocation, or authority writes.
   - N7/N8/N9 exact replay/idempotency tests remain green in the same focused suite.
 
+## 2026-05-24 v1a Combined Provider-Path Stability
+- Update: ran the combined provider-backed canary for all model-participating v1a nodes in one flow: N5 evidence extraction, N6 generate-need-candidate, and N7 validate-need-adjudication recommendation.
+- Command:
+  - `set -a; source ./.env.local; set +a; TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-combined-provider-stability-20260524-01 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=single_agent TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-combined-provider-stability-20260524-01`.
+- Provider-call continuity:
+  - Harness LLM call count was exactly `3`.
+  - Call 1: stage `harness build-evidence-map`, profile `topic-selection.evidence-map-extraction.single-agent.v1`, schema `TopicSelectionEvidenceMapExtractionDraft@v1`.
+  - Call 2: stage `harness generate-need-candidate`, profile `topic-selection.generate-need-candidate.single-agent.v1`, schema `topic_selection_ranked_candidate_draft_batch`.
+  - Call 3: stage `harness validate-need-adjudication`, profile `topic-selection.need-adjudication.single-agent.v1`, schema `TopicSelectionNeedAdjudicationRecommendationPacket@v1`.
+- Persisted-chain evidence:
+  - DB readback: a custom Prisma readback against `.env.local` confirmed EvidenceMap unit counts, candidate count, selected-candidate adjudication/validated-need links, support-packet residual risks, adjudication residual risks, and v1b bundle risk/gap carry-forward.
+  - Resource sample set `resource_sample_set_73c1ab77-9715-4be7-9f0e-cfce7d137d35` was `ready_with_warning` with `CONTEXT_CAP_APPLIED`.
+  - N5 persisted EvidenceMap `evidence_map_50253033-339c-40a4-9bec-220790e3783a` with 4 EvidenceUnits: 1 support, 1 challenge, 1 baseline, and 1 context.
+  - N6 persisted 5 NeedCandidates; selected candidate `need_candidate_3d9075ae4e4ad6c28ec2dc93` carried role-correct evidence refs plus `METHOD_FAMILY_COVERAGE_GAP`.
+  - N7 produced support packet `validation_packet_f20f28f1-c90b-4b12-8317-93fc3a2d6fb5` and adjudication `need_adjudication_94367b53-352f-40d6-97d9-4617f8cabca6`; residual risk refs were retained.
+  - N8/N9 completed through validated need `validated_need_ed17dad3-a09e-4ff1-b5cb-ff4eca31b3be` and v1b input bundle `v1b_input_bundle_7b57ee48-2e4f-4f88-b563-04541095f208`.
+  - The v1b bundle preserved residual risk refs and gap codes, including `METHOD_FAMILY_COVERAGE_GAP`.
+- Continuity result:
+  - N5 provider output was materialized by deterministic authority code before N6 consumption.
+  - N6 provider output passed deterministic admission and persisted bounded candidates before N7 consumption.
+  - N7 provider recommendation did not erase residual risks or method-family warnings; the authority chain carried them to N9.
+  - No fallback provider path, hidden retry path, or mode-specific handoff shape was observed in this run.
+
+## 2026-05-24 v1a Provider-Path Depth And N7 Negative Canary
+- Update: broadened the combined provider path from 4 to 8 literature samples and added a provider-backed N7 negative canary.
+- First 8-literature command:
+  - `set -a; source ./.env.local; set +a; TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-combined-provider-depth-8lit-20260524-01 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=8 TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=single_agent TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: failed safely at the harness assertion layer after N5 produced only 7 EvidenceUnits for 8 selected literature refs.
+- Fix:
+  - N5 materialization now blocks with `EVIDENCE_UNIT_MISSING_FOR_INPUT_LITERATURE` when any `literature_record` in `SearchRunHandoff.evidence_map_input_refs` has no draft unit.
+  - The provider extraction prompt/context now makes full source-candidate coverage explicit.
+  - Added a WorkflowHarness unit test proving incomplete extraction blocks before EvidenceMap/EvidenceUnit authority writes.
+- Verification command:
+  - `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 74 tests passed.
+- Verification command:
+  - `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- 8-literature rerun command:
+  - `set -a; source ./.env.local; set +a; TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-combined-provider-depth-8lit-20260524-02 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=8 TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=single_agent TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-combined-provider-depth-8lit-20260524-02`.
+- DB readback:
+  - EvidenceMap `evidence_map_76c2479a-0d94-4416-864d-b0dd6dd2cb07` had 8 units: 2 support, 2 challenge, 2 baseline, 2 context.
+  - All 8 selected literature ids were covered: `LIT-0025`, `LIT-0027`, `LIT-0028`, `LIT-0058`, `LIT-0096`, `LIT-0104`, `LIT-0106`, `LIT-0107`.
+  - N6 persisted 3 NeedCandidates; selected candidate `need_candidate_73b5097c21282c58dc2a7fc9` carried `METHOD_FAMILY_COVERAGE_GAP`.
+  - N7 validated with 3 residual/accepted risk refs; N9 v1b bundle carried the same risk refs and `METHOD_FAMILY_COVERAGE_GAP`.
+- N7 provider negative command:
+  - `set -a; source ./.env.local; set +a; TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-n7-provider-negative-clean-validate-20260524-01 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_EXECUTION_MODE=none TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=single_agent TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_NEGATIVE_PROBE=clean_validate TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed as a negative canary; artifact dir `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-n7-provider-negative-clean-validate-20260524-01`.
+- N7 negative evidence:
+  - Exactly 1 provider call occurred at `harness validate-need-adjudication`.
+  - Provider output was routed through the normal `TopicSelectionNeedAdjudicationRecommendationPacket@v1` schema path.
+  - N7 blocked with `RESIDUAL_RISK_DROPPED`.
+  - DB readback confirmed support packet residual risk count `3`, open gaps including `METHOD_FAMILY_COVERAGE_GAP`, and zero Adjudication, ValidatedNeed, or v1b bundle authority writes for the selected candidate.
+- N7 provider method-gap negative command:
+  - `set -a; source ./.env.local; set +a; TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-n7-provider-negative-method-gap-20260524-01 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_EXECUTION_MODE=none TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=single_agent TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_NEGATIVE_PROBE=method_gap_drop TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed as a negative canary; artifact dir `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-n7-provider-negative-method-gap-20260524-01`.
+- N7 method-gap negative evidence:
+  - Exactly 1 provider call occurred at `harness validate-need-adjudication`.
+  - The provider recommendation preserved 3 residual risk refs and 3 accepted risk refs but returned empty `gap_codes` and `required_actions`.
+  - N7 blocked with `METHOD_FAMILY_COVERAGE_GAP_DROPPED`.
+  - DB readback confirmed support packet residual risk count `3`, open gaps including `METHOD_FAMILY_COVERAGE_GAP`, and zero Adjudication, ValidatedNeed, or v1b bundle authority writes for the selected candidate.
+- Guardrail unit coverage:
+  - `diagnostic_prompt_appendix` is accepted only in `run_mode=acceptance`, so provider-negative probes cannot drift into product-mode adjudication calls.
+
+## 2026-05-24 v1a Provider Breadth And Mixed N6 Debate Canary
+- Update: executed both agreed provider-depth directions in order: a 12-literature combined provider run, then a mixed N6 debate/provider run.
+- 12-literature command:
+  - `set -a; source ./.env.local; set +a; TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-combined-provider-depth-12lit-20260524-01 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=12 TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=single_agent TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-combined-provider-depth-12lit-20260524-01`.
+- 12-literature DB readback:
+  - EvidenceMap `evidence_map_52a03151-e828-42f6-b631-fcb196f1dfdb` had 12 units with role counts 3 support, 3 challenge, 3 baseline, 3 context.
+  - All 12 selected literature ids were covered.
+  - N6 persisted 3 NeedCandidates; selected candidate `need_candidate_ca5ee714494ab00a61528b91` carried `METHOD_FAMILY_COVERAGE_GAP`.
+  - N7 preserved 4 residual risk refs and gap codes; N9 v1b bundle carried residual risks and `METHOD_FAMILY_COVERAGE_GAP`.
+- First mixed N6 debate/provider attempt:
+  - Run `v1a-mixed-n6-debate-provider-20260524-02` failed safely at N6 admission.
+  - Failure reason: provider-backed `arbiter.final_synthesis` produced a schema-valid candidate draft that placed baseline/challenge/context EvidenceUnits into `support_unit_refs`; deterministic admission rejected it with `ROLE_BUNDLE_EVIDENCE_ROLE_MISMATCH` and blocked with `NO_ADMISSIBLE_NEED_CANDIDATE`.
+  - Authority behavior: no NeedCandidate persistence occurred for the malformed draft.
+- Fix:
+  - N6 single-agent and debate arbiter prompts now include explicit `role_ref_constraints` derived from `arbiter_context.evidence_ref_table`.
+  - The constraints list allowed refs per role-bundle field and keep conflict/strength refs out of role bundles.
+  - Added unit assertions that provider prompt payloads carry the role-specific allowed ref lists.
+  - Added partial generate-need-candidate artifact capture on failed harness assertions to preserve block/admission diagnostics.
+- Verification command:
+  - `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-generate-need-candidate-orchestrator-adapter-service.unit.test.ts src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts`
+- Result: passed; 19 tests passed.
+- Mixed N6 debate/provider rerun command:
+  - `set -a; source ./.env.local; set +a; TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-mixed-n6-debate-provider-20260524-03 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=multi_agent_debate TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_EXECUTION_MODE=codex_assisted TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-mixed-n6-debate-provider-20260524-03`.
+- Mixed-chain provider evidence:
+  - Harness LLM call count was exactly `5`: N5 evidence extraction, N6 deep critic, N6 arbiter issue frame, N6 arbiter final synthesis, and N7 adjudication.
+  - N6 debate status was `succeeded`; 3 role invocations were recorded because explorer used `codex_assisted` and the other debate slots used `provider_llm`.
+  - N6 persisted 3 NeedCandidates and emitted `METHOD_FAMILY_COVERAGE_GAP`.
+- Mixed-chain DB readback:
+  - EvidenceMap `evidence_map_7b184adf-d02e-457e-b78a-9b48d617524c` had 4 units with 1 support, 1 challenge, 1 baseline, and 1 context.
+  - Selected candidate `need_candidate_225367ac7cefd4d2d31175f5` had one role-bundle ref per field and every ref matched its EvidenceMap authority role.
+  - N7 preserved 2 residual risk refs and accepted risk refs; N9 v1b bundle carried residual risks and `METHOD_FAMILY_COVERAGE_GAP`.
+- Replay smoke command:
+  - `set -a; source ./.env.local; set +a; TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-replay-smoke-post-role-ref-constraints-20260524 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_6f5d9bb8-5dd5-489d-984f-70c1816d3c6d TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 pnpm topic-selection:v1a-harness-replay-smoke`
+- Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-replay-smoke-post-role-ref-constraints-20260524`.
+- Replay evidence:
+  - N6-N9 exact replay returned replay provenance, preserved authority counts, and kept harness LLM call count at `0 -> 0`.
+  - N6-N9 input hash drift blocked with `REPLAY_INPUT_HASH_MISMATCH`; authority counts stayed unchanged and harness LLM call count stayed `0 -> 0`.
+
 ## Matrix Acceptance Checks
 - Every topic-selection workflow node has one row in `06-workflow-matrix.md`.
 - The matrix contains the complete D-11 canonical node list before executor classification work begins.
@@ -1198,3 +1304,148 @@ Close criteria:
 - Result: passed; N1-N9 completed, N6 ran as `multi_agent_debate`, persisted 3 `NeedCandidate` records, N7 advanced, N8 confirmed, and N9 published `v1b_input_bundle_87e47cba-7c0e-4ffd-8286-3d8e33681dac`.
 - Artifact dir: `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-replay-boundary-canary-20260524`.
 - Coverage: real local DB, existing resource sample set `resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c`, deterministic resource sampling mode, mixed debate slot provenance, selected literature role balance, all v1a node handoffs, and final v1a-to-v1b bundle publication.
+
+## 2026-05-24 N6-N9 Real-DB Replay Smoke
+- Update: added and ran `topic-selection.v1a.replay-idempotency.real-db-smoke.v1`.
+- Command: `node --check .ai/scripts/topic-selection-v1a-harness-e2e.mjs`
+- Result: passed.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-replay-smoke-real-db-20260524-04 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 pnpm topic-selection:v1a-harness-replay-smoke`
+- Result: passed.
+- Artifact dir: `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-replay-smoke-real-db-20260524-04`.
+- Exact replay evidence: N6-N9 returned replay provenance; NeedCandidate, readiness assessment, support packet, adjudication result, human decision, ValidatedNeed, v1b input bundle, and artifact counts stayed unchanged; harness LLM call count stayed `0 -> 0`.
+- Drift evidence: changing `policy_version` on each N6-N9 replay input produced `REPLAY_INPUT_HASH_MISMATCH`; authority counts stayed unchanged; harness LLM call count stayed `0 -> 0`; N7-N9 recorded blocked trace artifacts as expected while N6 threw `VERSION_CONFLICT` before trace creation.
+- Naming check: replay run now reports `scenario_id=topic-selection.v1a.replay-idempotency.real-db-smoke.v1` and `scenario_type=real_db_replay_smoke`.
+
+## 2026-05-24 v1a Real Provider Canary
+- Update: ran the first small-sample `real_provider_canary` for v1a model-like nodes.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-real-provider-canary-20260524-01 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=single_agent TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed.
+- Artifact dir: `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-real-provider-canary-20260524-01`.
+- Provider evidence: summary reports `scenario_id=topic-selection.provider-stability.v1`, `scenario_type=real_provider_canary`, provider `openai`, model `gpt-5.4-mini`, and exactly two harness LLM gateway calls.
+- Covered provider nodes: `topic-selection.generate-need-candidate.single-agent.v1` emitted `topic_selection_ranked_candidate_draft_batch`; `topic-selection.need-adjudication.single-agent.v1` emitted `TopicSelectionNeedAdjudicationRecommendationPacket@v1`.
+- Flow evidence: 4-literature deterministic sample, N6 persisted 4 `NeedCandidate` records, N7 advanced, N8 confirmed, and N9 published `v1b_input_bundle_a19da84b-f000-449f-ae34-1d92c6be20a4`.
+
+## 2026-05-24 v1a Output Quality Closure Verification
+- Update: verified deterministic N6/N7 quality gates, warning carry-forward, projection rank metadata, and statement cleanup.
+- Command: `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-candidate-draft-admission-service.unit.test.ts src/services/topic-selection-generate-need-candidate-orchestrator-adapter-service.unit.test.ts src/services/topic-selection-need-validation-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 107 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `node --check .ai/scripts/topic-selection-v1a-harness-e2e.mjs`
+- Result: passed.
+- Command: `node --check .ai/scripts/topic-selection-real-e2e.mjs`
+- Result: passed.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Coverage: role-bundle non-evidence refs reject before authority writes; wrong-role evidence units reject; conflict/strength refs are accepted only in dedicated arrays; method-family coverage gap emits warning and persists into candidate gap codes; rank mapping stays projection-only and affects projection hash; support packets carry challenge/conflict residual risks by default; N7 blocks dropped residual risk; N7 carries residual-risk and method-family warnings on validate handoff; N7 blocks clean validate when method-family coverage gap is not carried; E2E scripts parse after statement helper cleanup.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-output-quality-canary-20260524-01 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=provider_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=single_agent TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed.
+- Artifact dir: `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-output-quality-canary-20260524-01`.
+- Real-provider evidence: 4-literature deterministic resource sample, exactly two provider calls, N6 persisted 3 candidates, N6 emitted `METHOD_FAMILY_COVERAGE_GAP`, N7 advanced with `METHOD_FAMILY_COVERAGE_GAP` and `VALIDATE_WITH_RESIDUAL_RISK`, N8 confirmed, and N9 published `v1b_input_bundle_e77f0a58-4a70-4f60-8399-d80a7f1f40cd`.
+
+## 2026-05-24 v1a Full-Flow Quality Matrix And N4-N5 Role Closure Verification
+- Update: added v1a quality matrix and closed the N4->N5 coverage-role handoff gap.
+- Command: `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 71 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared exec node --test --loader ts-node/esm src/research-lifecycle/topic-selection-search-resource-contracts.schema.test.ts src/research-lifecycle/topic-selection-evidence-map-contracts.schema.test.ts`
+- Result: passed; 11 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck`
+- Result: passed.
+- Command: `node --check .ai/scripts/topic-selection-v1a-harness-e2e.mjs`
+- Result: passed.
+- Command: `node --check .ai/scripts/topic-selection-real-e2e.mjs`
+- Result: passed.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.
+- Coverage: `TopicSelectionSearchRunHandoff@v1` now carries `coverage_role_expectations`; N4 handoff exposes SearchPlan-derived row role expectations; N5 materialization includes the expectations in `input_refs_hash`; mismatched coverage row role blocks with `COVERAGE_ROW_ROLE_MISMATCH` before EvidenceMap authority writes; existing support/challenge conflict review now uses explicit matching challenge coverage row semantics.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-role-handoff-quality-20260524-02 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed.
+- Artifact dir: `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-role-handoff-quality-20260524-02`.
+- E2E evidence: N1-N9 completed on real local DB with deterministic mock resource sampling and zero LLM calls; N4 emitted SearchRun handoff, N5 materialized four EvidenceUnits, N6 carried `METHOD_FAMILY_COVERAGE_GAP`, N7 advanced with `METHOD_FAMILY_COVERAGE_GAP` and `VALIDATE_WITH_RESIDUAL_RISK`, N8 confirmed, and N9 published `v1b_input_bundle_b2176f20-bf74-403c-b833-debb92b258fe`.
+- Fix evidence: the first E2E attempt `v1a-role-handoff-quality-20260524-01` correctly blocked at N7 because the old mocked recommendation fixture dropped `METHOD_FAMILY_COVERAGE_GAP`; the script fixture now carries support-packet open gaps into `gap_codes` and `required_actions`.
+
+## 2026-05-24 N3-N6 Method-Family Target Closure Verification
+- Update: closed N3 coverage richness by making SearchPlan blueprint method-family targets explicit and carrying them through N4/N5 into N6 admission warnings.
+- Command: `pnpm --filter @paper-engineering-assistant/shared exec node --test --loader ts-node/esm src/research-lifecycle/topic-selection-search-resource-contracts.schema.test.ts src/research-lifecycle/topic-selection-evidence-map-contracts.schema.test.ts`
+- Result: passed; 12 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-candidate-draft-admission-service.unit.test.ts src/services/topic-selection-generate-need-candidate-orchestrator-adapter-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 93 tests passed.
+- Command: `node --check .ai/scripts/topic-selection-v1a-harness-e2e.mjs`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared typecheck`
+- Result: passed.
+- Command: `node --check .ai/scripts/topic-selection-real-e2e.mjs`
+- Result: passed.
+- First E2E command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-method-targets-20260524-01 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 pnpm topic-selection:v1a-harness-e2e`
+- Result: failed on a false order-drift assertion while the handoff preserved the same method target set.
+- Fix: compare `method_family_targets` by normalized set rather than raw array order.
+- Successful E2E command: `source ./.env.local && TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-method-targets-20260524-02 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed.
+- Artifact dir: `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-method-targets-20260524-02`.
+- E2E evidence: N1-N9 completed on real local DB with deterministic mock resource sampling and zero LLM calls; N3 persisted SearchPlan target method families, N4/N5 preserved them in handoffs, N6 emitted `METHOD_FAMILY_COVERAGE_GAP` against the target set, N7 advanced with `METHOD_FAMILY_COVERAGE_GAP` and `VALIDATE_WITH_RESIDUAL_RISK`, N8 confirmed, and N9 published `v1b_input_bundle_d67bf3b6-a91c-4f11-bbe2-d2154d24d20c`.
+
+## 2026-05-24 N5 Provider-Backed Evidence Extraction Canary Verification
+- Update: enabled N5 provider-backed extraction in the v1a harness while keeping N5 single-agent and preserving the materialization gate as the only authority path.
+- Command: `node --check .ai/scripts/topic-selection-v1a-harness-e2e.mjs`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts`
+- Result: passed; 73 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-n5-model-like-mock-20260524-01 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_EXECUTION_MODE=mocked_llm pnpm topic-selection:v1a-harness-e2e`
+- Result: passed.
+- Artifact dir: `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-n5-model-like-mock-20260524-01`.
+- Mocked N5 evidence: N1-N9 completed on real local DB; N5 used `mocked_llm` input through `TopicSelectionEvidenceMapExtractionDraft@v1`, created four EvidenceUnits, and continued to v1b bundle publication with zero provider calls.
+- First provider command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-n5-provider-canary-20260524-01 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: failed safely before EvidenceMap authority writes.
+- Failure evidence: provider rejected the strict schema because `properties.evidence_map_id=false` style forbidden fields are not accepted by strict provider structured outputs. N5 recorded an agent audit artifact, materialization blocked with `MISSING_EVIDENCE_MAP_EXTRACTION_DRAFT`, and no EvidenceMap/EvidenceUnit authority refs were created.
+- Fix: provider request schema projection now removes `false` property schemas before calling provider while retaining original local Ajv validation.
+- Follow-up command: `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-agent-orchestrator-service.unit.test.ts`
+- Result: passed; 6 tests passed.
+- Successful provider command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-n5-provider-canary-20260524-02 TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_REAL_LITERATURE_LIMIT=4 TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_EXECUTION_MODE=provider_llm TOPIC_SELECTION_REAL_PROVIDER_ID=openai TOPIC_SELECTION_REAL_MODEL_ID=gpt-5.4-mini TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS=240000 pnpm topic-selection:v1a-harness-e2e`
+- Result: passed.
+- Artifact dir: `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-n5-provider-canary-20260524-02`.
+- Provider evidence: exactly one provider call at `harness build-evidence-map` with schema `TopicSelectionEvidenceMapExtractionDraft@v1`; N5 created four source-claim EvidenceUnits with support/challenge/baseline/context roles, manual locators, no N5 warning/blocker codes, and N1-N9 completed to `v1b_input_bundle_c7d18d90-a8a3-4b99-8f61-3319b97c87e8`.
+- Output-quality spot check: persisted EvidenceUnits used `source_claim` attribution, role-specific manual locators, and source statements copied from source candidates; N6/N7 still carried `METHOD_FAMILY_COVERAGE_GAP` and `VALIDATE_WITH_RESIDUAL_RISK` as expected.
+
+## 2026-05-24 Unified LLM Execution Object Verification
+- Update: added shared `TopicSelectionAgentExecutionSpec`, debate `execution_plan`, centralized OpenAI/DashScope provider runtime mapping, explicit `gpt-5.5` quality/deep-reasoning profile options, and WorkflowHarness alignment for N5/N6/N7/N8 model-like call sites.
+- Command: `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/llm-gateway.unit.test.ts src/services/topic-selection-model-profile-registry-service.unit.test.ts src/services/topic-selection-agent-orchestrator-service.unit.test.ts src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts`
+- Result: passed; 34 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared exec node --test --loader ts-node/esm src/research-lifecycle/topic-selection-agent-profile-contracts.schema.test.ts src/research-lifecycle/topic-selection-debate-scenario-contracts.schema.test.ts src/research-lifecycle/topic-selection-agent-invocation-contracts.schema.test.ts`
+- Result: passed; 11 tests passed.
+- Command: `node --check .ai/scripts/topic-selection-v1a-harness-e2e.mjs`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts src/services/topic-selection-generate-need-candidate-orchestrator-adapter-service.unit.test.ts`
+- Result: passed; 85 tests passed.
+- Initial smoke command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-execution-plan-smoke-20260524-01 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=multi_agent_debate TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=mocked_llm pnpm topic-selection:v1a-harness-e2e`
+- Result: failed safely at N6 because the canonical slot execution plan selected provider-style default instance count and required `mocked_outputs.explorer[1]`.
+- Fix: the debate loop now preserves fixture-count behavior for `mocked_llm` and `codex_assisted` slots unless explicit instance specs request multiple instances; provider slots keep contract default instance counts.
+- Successful smoke command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-execution-plan-smoke-20260524-02 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=multi_agent_debate TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=mocked_llm pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-execution-plan-smoke-20260524-02`.
+- Smoke evidence: all N1-N9 nodes completed, N6 debate status was `succeeded`, `debate_role_invocation_count=3`, provider call count stayed zero, and N9 published `v1b_input_bundle_3a54a221-7b7f-4ddb-b324-5d7c34950156`.
+- Follow-up smoke command after N5/N7/N8 `execution_spec` alignment: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-execution-plan-smoke-20260524-03 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=multi_agent_debate TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=mocked_llm pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-execution-plan-smoke-20260524-03`; summary records N6 `debate_execution_plan`, N7 `harness_adjudication_execution_spec`, and zero provider calls.
+
+## 2026-05-25 SO-03 Implementation Sync Verification
+- Scope: model profile registry timeout/name sync, v1a harness named debate profile materialization, and instance-level provider/Codex override behavior. Follow-up review fixed standard `openai-balanced` timeout alignment from 60s to the DMP-12 180s registry value before rerunning these checks.
+- Command: `node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts src/services/topic-selection-agent-orchestrator-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts` from `apps/backend/`.
+- Result: passed; 103 tests passed.
+- Command: `node --test --loader ts-node/esm src/research-lifecycle/topic-selection-debate-scenario-contracts.schema.test.ts` from `packages/shared/`.
+- Result: passed; 4 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`.
+- Result: passed.
+- Command: `node --check .ai/scripts/topic-selection-v1a-harness-e2e.mjs`.
+- Result: passed.
+- Negative harness startup probe: named profile plus legacy slot env correctly fails before workflow execution with `cannot be combined with legacy debate slot env overrides`.
+- Cleanup: removed the accidental failed canary artifact created while probing script import behavior; no failed SO-03 canary artifact is retained as evidence.

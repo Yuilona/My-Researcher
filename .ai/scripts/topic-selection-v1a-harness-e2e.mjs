@@ -36,6 +36,7 @@ import { TopicSelectionPersistNeedCandidateBatchService } from '../../apps/backe
 import { TopicSelectionSearchResourceService } from '../../apps/backend/src/services/topic-selection-search-resource-service.ts';
 import { TopicSelectionWorkflowHarnessService } from '../../apps/backend/src/services/topic-selection-workflow-harness-service.ts';
 import {
+  TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_CONTEXT_PACKET_SCHEMA_VERSION,
   TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_DRAFT_SCHEMA_VERSION,
 } from '../../packages/shared/src/research-lifecycle/topic-selection-evidence-map-contracts.ts';
 import {
@@ -59,6 +60,11 @@ const DEFAULT_HARNESS_AGENT_EXECUTION_MODE = normalizeExecutionMode(
     ?? process.env.TOPIC_SELECTION_REAL_V1A_GENERATE_EXECUTION_MODE,
   'mocked_llm',
 );
+const EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE = normalizeEvidenceExtractionExecutionMode(
+  process.env.TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_EXECUTION_MODE,
+  'none',
+);
+const EVIDENCE_MAP_EXTRACTION_MODEL_OPTION_ID = evidenceMapExtractionModelOptionId();
 const GENERATE_NEED_CANDIDATE_EXECUTION_MODE = normalizeExecutionMode(
   process.env.TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE,
   DEFAULT_HARNESS_AGENT_EXECUTION_MODE,
@@ -67,46 +73,67 @@ const GENERATE_NEED_CANDIDATE_EXECUTOR_KIND = normalizeGenerateExecutorKind(
   process.env.TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND,
   GENERATE_NEED_CANDIDATE_EXECUTION_MODE === 'codex_assisted' ? 'codex_assisted' : 'single_agent',
 );
-const DEBATE_SLOT_EXECUTION_MODES = {
-  'explorer.round_1_discovery': normalizeExecutionMode(
-    process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_EXECUTION_MODE,
-    'codex_assisted',
-  ),
-  'deep_critic.round_1_discovery': normalizeExecutionMode(
-    process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_EXECUTION_MODE,
-    'provider_llm',
-  ),
-  'arbiter.issue_framing': normalizeExecutionMode(
-    process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_EXECUTION_MODE,
-    'provider_llm',
-  ),
-  'arbiter.final_synthesis': normalizeExecutionMode(
-    process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_EXECUTION_MODE,
-    'provider_llm',
-  ),
-};
+const GENERATE_NEED_CANDIDATE_MODEL_OPTION_ID = v1aGenerateModelOptionId();
+const DEBATE_SLOT_IDS = [
+  'explorer.round_1_discovery',
+  'deep_critic.round_1_discovery',
+  'arbiter.issue_framing',
+  'arbiter.final_synthesis',
+];
 const DEBATE_SLOT_PROFILE_IDS = {
   'explorer.round_1_discovery': TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
   'deep_critic.round_1_discovery': TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID,
   'arbiter.issue_framing': TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FRAMING_PROFILE_ID,
   'arbiter.final_synthesis': TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID,
 };
+const DEBATE_EXECUTION_PROFILE = normalizeDebateExecutionProfile(
+  process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXECUTION_PROFILE,
+);
+const DEBATE_SLOT_EXECUTION_MODES = buildDebateSlotExecutionModes();
 const DEBATE_SLOT_MODEL_OPTION_OVERRIDES = buildDebateSlotModelOptionOverrides();
+const DEBATE_EXECUTION_PLAN = buildDebateExecutionPlan();
 const NEED_ADJUDICATION_EXECUTION_MODE = normalizeExecutionMode(
   process.env.TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE,
   DEFAULT_HARNESS_AGENT_EXECUTION_MODE,
 );
+const NEED_ADJUDICATION_MODEL_OPTION_ID = needAdjudicationModelOptionId();
+const NEED_ADJUDICATION_NEGATIVE_PROBE = normalizeNeedAdjudicationNegativeProbe(
+  process.env.TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_NEGATIVE_PROBE,
+);
+const RUN_REPLAY_SMOKE = process.env.TOPIC_SELECTION_V1A_HARNESS_REPLAY_SMOKE === '1';
+const HARNESS_USES_PROVIDER = EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE === 'provider_llm'
+  || GENERATE_NEED_CANDIDATE_EXECUTION_MODE === 'provider_llm'
+  || NEED_ADJUDICATION_EXECUTION_MODE === 'provider_llm'
+  || debateExecutionPlanUsesProvider(DEBATE_EXECUTION_PLAN);
 const RUN_ID = process.env.TOPIC_SELECTION_V1A_HARNESS_RUN_ID
   ?? process.env.TOPIC_SELECTION_REAL_RUN_ID
   ?? uniqueId('v1a-harness-e2e');
 const SCENARIO_ID = process.env.TOPIC_SELECTION_WORKFLOW_SCENARIO_ID?.trim()
   || process.env.TOPIC_SELECTION_REAL_SCENARIO_ID?.trim()
-  || 'topic-selection.real-e2e.canary.v1';
+  || (NEED_ADJUDICATION_NEGATIVE_PROBE
+    ? 'topic-selection.provider-negative.validate-need-adjudication.v1'
+    : RUN_REPLAY_SMOKE
+    ? 'topic-selection.v1a.replay-idempotency.real-db-smoke.v1'
+    : HARNESS_USES_PROVIDER
+      ? 'topic-selection.provider-stability.v1'
+    : 'topic-selection.real-e2e.canary.v1');
+const SCENARIO_TYPE = RUN_REPLAY_SMOKE
+  ? 'real_db_replay_smoke'
+  : NEED_ADJUDICATION_NEGATIVE_PROBE
+    ? 'real_provider_negative_canary'
+  : HARNESS_USES_PROVIDER
+    ? 'real_provider_canary'
+    : 'real_db_harness_smoke';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 const ARTIFACT_DIR = path.join(REPO_ROOT, '.ai/.tmp/topic-selection-v1a-harness-e2e', RUN_ID);
 const ROLE_ORDER = ['support', 'challenge', 'baseline', 'context'];
+const TOPIC_METHOD_FAMILY_TARGETS = [
+  'retrieval_augmented_generation',
+  'fine_tuning',
+  'hybrid_adaptation',
+];
 const MOCK_RESOURCE_RISK_PATTERN =
   /poison|adversarial|attack|leak|hallucination|conflict|verification|source verification|failure|robust|safety/u;
 
@@ -132,6 +159,17 @@ function normalizeExecutionMode(value, fallback) {
   throw new Error(`Unsupported v1a harness execution mode: ${value}`);
 }
 
+function normalizeEvidenceExtractionExecutionMode(value, fallback) {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return fallback;
+  }
+  if (['none', 'mocked_llm', 'codex_assisted', 'provider_llm'].includes(normalized)) {
+    return normalized;
+  }
+  throw new Error(`Unsupported v1a harness evidence extraction execution mode: ${value}`);
+}
+
 function normalizeGenerateExecutorKind(value, fallback) {
   const normalized = value?.trim();
   if (!normalized) {
@@ -148,6 +186,28 @@ function normalizeOptionalString(value) {
   return normalized || null;
 }
 
+function normalizeNeedAdjudicationNegativeProbe(value) {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized === 'clean_validate' || normalized === 'method_gap_drop') {
+    return normalized;
+  }
+  throw new Error(`Unsupported validate-need-adjudication negative probe: ${value}`);
+}
+
+function normalizeDebateExecutionProfile(value) {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized === 'mixed-cost-control' || normalized === 'provider-diverse-deep') {
+    return normalized;
+  }
+  throw new Error(`Unsupported debate execution profile: ${value}`);
+}
+
 function debateSlotModelOptionEnv(slotId) {
   return {
     'explorer.round_1_discovery': process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_MODEL_OPTION_ID,
@@ -162,13 +222,53 @@ function debateSlotDefaultModelOptionId(slotId) {
   if (!profileId) {
     throw new Error(`Unsupported debate slot for model option selection: ${slotId}`);
   }
+  return defaultProviderModelOptionId(profileId);
+}
+
+function defaultProviderModelOptionId(profileId) {
   return PROVIDER_ID === 'dashscope'
-    ? `${profileId}.dashscope-budget`
+    ? `${profileId}.dashscope-thinking-budget`
     : `${profileId}.openai-balanced`;
+}
+
+function singleAgentExecutionSpec(executionMode, modelOptionId) {
+  if (executionMode === 'none' || executionMode === 'deterministic_parser') {
+    return null;
+  }
+  return {
+    execution_mode: executionMode,
+    ...(modelOptionId ? { model_option_id: modelOptionId } : {}),
+  };
+}
+
+function providerModelOptionIdFor(profileId, executionMode, envName) {
+  const envOverride = normalizeOptionalString(process.env[envName]);
+  if (executionMode !== 'provider_llm') {
+    if (envOverride) {
+      throw new Error(`${envName} requires provider_llm execution mode.`);
+    }
+    return null;
+  }
+  return envOverride ?? defaultProviderModelOptionId(profileId);
+}
+
+function evidenceMapExtractionModelOptionId() {
+  return providerModelOptionIdFor(
+    TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
+    EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE,
+    'TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_MODEL_OPTION_ID',
+  );
 }
 
 function buildDebateSlotModelOptionOverrides() {
   if (GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate') {
+    return null;
+  }
+  if (
+    DEBATE_EXECUTION_PROFILE
+    || normalizeOptionalString(process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXECUTION_PLAN_JSON)
+  ) {
+    assertNoLegacyDebateSlotEnv('named debate execution profile or execution_plan JSON');
     return null;
   }
   const overrides = {};
@@ -185,11 +285,197 @@ function buildDebateSlotModelOptionOverrides() {
   return Object.keys(overrides).length > 0 ? overrides : null;
 }
 
+function buildDebateSlotExecutionModes() {
+  if (DEBATE_EXECUTION_PROFILE === 'mixed-cost-control') {
+    return {
+      'explorer.round_1_discovery': 'codex_assisted',
+      'deep_critic.round_1_discovery': 'codex_assisted',
+      'arbiter.issue_framing': 'codex_assisted',
+      'arbiter.final_synthesis': 'provider_llm',
+    };
+  }
+  if (DEBATE_EXECUTION_PROFILE === 'provider-diverse-deep') {
+    return {
+      'explorer.round_1_discovery': 'codex_assisted',
+      'deep_critic.round_1_discovery': 'provider_llm',
+      'arbiter.issue_framing': 'codex_assisted',
+      'arbiter.final_synthesis': 'provider_llm',
+    };
+  }
+  return {
+    'explorer.round_1_discovery': normalizeExecutionMode(
+      process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_EXECUTION_MODE,
+      'codex_assisted',
+    ),
+    'deep_critic.round_1_discovery': normalizeExecutionMode(
+      process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_EXECUTION_MODE,
+      'provider_llm',
+    ),
+    'arbiter.issue_framing': normalizeExecutionMode(
+      process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_EXECUTION_MODE,
+      'provider_llm',
+    ),
+    'arbiter.final_synthesis': normalizeExecutionMode(
+      process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_EXECUTION_MODE,
+      'provider_llm',
+    ),
+  };
+}
+
+function legacyDebateSlotEnvNames() {
+  return [
+    'TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_EXECUTION_MODE',
+    'TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_EXECUTION_MODE',
+    'TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_EXECUTION_MODE',
+    'TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_EXECUTION_MODE',
+    'TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_MODEL_OPTION_ID',
+    'TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_MODEL_OPTION_ID',
+    'TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_MODEL_OPTION_ID',
+    'TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_MODEL_OPTION_ID',
+  ];
+}
+
+function activeLegacyDebateSlotEnvNames() {
+  return legacyDebateSlotEnvNames().filter((envName) => normalizeOptionalString(process.env[envName]));
+}
+
+function assertNoLegacyDebateSlotEnv(owner) {
+  const activeNames = activeLegacyDebateSlotEnvNames();
+  if (activeNames.length > 0) {
+    throw new Error(`${owner} cannot be combined with legacy debate slot env overrides: ${activeNames.join(', ')}`);
+  }
+}
+
+function buildDebateExecutionPlan() {
+  if (GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate') {
+    return null;
+  }
+  const envJson = normalizeOptionalString(process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXECUTION_PLAN_JSON);
+  if (DEBATE_EXECUTION_PROFILE && envJson) {
+    throw new Error('TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXECUTION_PROFILE cannot be combined with TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXECUTION_PLAN_JSON.');
+  }
+  if (DEBATE_EXECUTION_PROFILE) {
+    assertNoLegacyDebateSlotEnv(`debate execution profile ${DEBATE_EXECUTION_PROFILE}`);
+    return buildNamedDebateExecutionPlan(DEBATE_EXECUTION_PROFILE);
+  }
+  if (envJson) {
+    assertNoLegacyDebateSlotEnv('debate execution_plan JSON');
+    return JSON.parse(envJson);
+  }
+  const slots = {};
+  for (const [slotId, executionMode] of Object.entries(DEBATE_SLOT_EXECUTION_MODES)) {
+    slots[slotId] = {
+      execution_mode: executionMode,
+      ...(executionMode === 'provider_llm' && DEBATE_SLOT_MODEL_OPTION_OVERRIDES?.[slotId]
+        ? { model_option_id: DEBATE_SLOT_MODEL_OPTION_OVERRIDES[slotId] }
+        : {}),
+    };
+  }
+  return { slots };
+}
+
+function buildNamedDebateExecutionPlan(profile) {
+  if (profile === 'mixed-cost-control') {
+    return {
+      slots: {
+        'explorer.round_1_discovery': { execution_mode: 'codex_assisted' },
+        'deep_critic.round_1_discovery': { execution_mode: 'codex_assisted' },
+        'arbiter.issue_framing': { execution_mode: 'codex_assisted' },
+        'arbiter.final_synthesis': {
+          execution_mode: 'provider_llm',
+          model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID}.openai-quality`,
+        },
+      },
+    };
+  }
+  if (profile === 'provider-diverse-deep') {
+    return {
+      slots: {
+        'explorer.round_1_discovery': { execution_mode: 'codex_assisted' },
+        'deep_critic.round_1_discovery': {
+          execution_mode: 'provider_llm',
+          model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID}.openai-deep-reasoning`,
+        },
+        'arbiter.issue_framing': { execution_mode: 'codex_assisted' },
+        'arbiter.final_synthesis': {
+          execution_mode: 'provider_llm',
+          model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID}.openai-deep-reasoning`,
+        },
+      },
+      instances: {
+        'explorer.round_1_discovery#explorer_2': {
+          execution_mode: 'provider_llm',
+          model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.openai-quality`,
+        },
+        'explorer.round_1_discovery#explorer_3': {
+          execution_mode: 'provider_llm',
+          model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.dashscope-thinking-budget`,
+        },
+        'deep_critic.round_1_discovery#deep_critic_2': { execution_mode: 'codex_assisted' },
+      },
+    };
+  }
+  throw new Error(`Unsupported named debate execution profile: ${profile}`);
+}
+
+function debateExecutionSpec(slotId, agentInstanceId = null) {
+  if (GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate') {
+    return null;
+  }
+  const instanceKey = agentInstanceId ? `${slotId}#${agentInstanceId}` : null;
+  return (instanceKey ? DEBATE_EXECUTION_PLAN?.instances?.[instanceKey] : null)
+    ?? DEBATE_EXECUTION_PLAN?.slots?.[slotId]
+    ?? DEBATE_EXECUTION_PLAN?.default
+    ?? {
+      execution_mode: DEBATE_SLOT_EXECUTION_MODES[slotId],
+      ...(DEBATE_SLOT_MODEL_OPTION_OVERRIDES?.[slotId]
+        ? { model_option_id: DEBATE_SLOT_MODEL_OPTION_OVERRIDES[slotId] }
+        : {}),
+    };
+}
+
+function debateExecutionPlanUsesProvider(plan) {
+  if (!plan) {
+    return false;
+  }
+  const specs = [
+    plan.default,
+    ...Object.values(plan.slots ?? {}),
+    ...Object.values(plan.instances ?? {}),
+  ].filter(Boolean);
+  return specs.some((spec) => spec.execution_mode === 'provider_llm');
+}
+
+function plannedDebateInstanceCount(slotId) {
+  const prefix = `${slotId}#`;
+  let count = 0;
+  for (const key of Object.keys(DEBATE_EXECUTION_PLAN?.instances ?? {})) {
+    if (!key.startsWith(prefix)) {
+      continue;
+    }
+    const match = key.slice(prefix.length).match(/_(\d+)$/u);
+    count = Math.max(count, Number.parseInt(match?.[1] ?? '0', 10));
+  }
+  return count;
+}
+
 if (
   GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
-  && DEBATE_SLOT_EXECUTION_MODES['arbiter.final_synthesis'] === 'codex_assisted'
+  && debateExecutionSpec('arbiter.final_synthesis')?.execution_mode === 'codex_assisted'
 ) {
   throw new Error('topic-selection v1a debate final synthesis must be provider_llm or mocked_llm; codex_assisted is not allowed.');
+}
+if (
+  GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate'
+  && DEBATE_EXECUTION_PROFILE
+) {
+  throw new Error('TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXECUTION_PROFILE requires generate executor kind multi_agent_debate.');
+}
+if (
+  GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate'
+  && normalizeOptionalString(process.env.TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXECUTION_PLAN_JSON)
+) {
+  throw new Error('TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXECUTION_PLAN_JSON requires generate executor kind multi_agent_debate.');
 }
 if (
   GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'codex_assisted'
@@ -239,7 +525,45 @@ function normalizeText(value) {
 
 function snippet(value, maxLength = 420) {
   const text = normalizeText(value);
-  return text.length <= maxLength ? text : `${text.slice(0, maxLength - 1)}...`;
+  if (text.length <= maxLength) {
+    return text;
+  }
+  const limit = Math.max(1, maxLength - 3);
+  const boundaryWindow = text.slice(0, limit);
+  const sentenceBoundary = Math.max(
+    boundaryWindow.lastIndexOf('. '),
+    boundaryWindow.lastIndexOf('? '),
+    boundaryWindow.lastIndexOf('! '),
+  );
+  if (sentenceBoundary >= Math.floor(limit * 0.55)) {
+    return `${boundaryWindow.slice(0, sentenceBoundary + 1).trim()}...`;
+  }
+  const wordBoundary = boundaryWindow.lastIndexOf(' ');
+  const end = wordBoundary >= Math.floor(limit * 0.65) ? wordBoundary : limit;
+  return `${boundaryWindow.slice(0, end).trim()}...`;
+}
+
+function stripLeadingTitle(title, value) {
+  const text = normalizeText(value);
+  const normalizedTitle = normalizeText(title);
+  if (!normalizedTitle) {
+    return text;
+  }
+  const lowerText = text.toLowerCase();
+  const lowerTitle = normalizedTitle.toLowerCase();
+  if (lowerText === lowerTitle) {
+    return '';
+  }
+  for (const separator of [':', '--', '-', '|']) {
+    const prefix = `${lowerTitle}${separator}`;
+    if (lowerText.startsWith(prefix)) {
+      return text.slice(normalizedTitle.length + separator.length).trim();
+    }
+  }
+  if (lowerText.startsWith(`${lowerTitle} `)) {
+    return text.slice(normalizedTitle.length).trim();
+  }
+  return text;
 }
 
 function parseJsonMessage(request, key) {
@@ -333,7 +657,6 @@ function assignResourceRole(entry, role) {
   }[role];
   entry.draft.role_scores = roleScores(role);
   entry.draft.classification_rationale = `Deterministic mock assigned ${role} to satisfy role-balanced v1a harness coverage.`;
-  entry.draft.method_families = role === 'support' ? ['fine_tuning'] : entry.draft.method_families;
 }
 
 function forceRoleCoverage(entries, roleTargets) {
@@ -399,6 +722,37 @@ class DeterministicResourceSamplingLlmGateway {
   }
 }
 
+class CountingLlmGateway {
+  constructor(delegate) {
+    this.delegate = delegate;
+    this.calls = [];
+  }
+
+  get callCount() {
+    return this.calls.length;
+  }
+
+  snapshot() {
+    return {
+      call_count: this.callCount,
+      calls: this.calls.map((call) => ({ ...call })),
+    };
+  }
+
+  async createStructuredOutput(request) {
+    this.calls.push({
+      stage: currentStage,
+      schema_name: request.schemaName ?? null,
+      provider_id: request.model?.providerId ?? null,
+      model_id: request.model?.modelId ?? null,
+      profile_id: request.model?.profileId ?? null,
+      prompt_template_id: request.prompt?.promptTemplateId ?? null,
+      prompt_template_version: request.prompt?.version ?? null,
+    });
+    return this.delegate.createStructuredOutput(request);
+  }
+}
+
 function makeSamplingLlmGateway() {
   if (USE_MOCK_RESOURCE_SAMPLING) {
     return new DeterministicResourceSamplingLlmGateway();
@@ -412,7 +766,14 @@ function makeSamplingLlmGateway() {
 function makeHarnessLlmGateway() {
   const debateNeedsProvider = GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
     && Object.values(DEBATE_SLOT_EXECUTION_MODES).includes('provider_llm');
-  if ([GENERATE_NEED_CANDIDATE_EXECUTION_MODE, NEED_ADJUDICATION_EXECUTION_MODE].includes('provider_llm') || debateNeedsProvider) {
+  if (
+    [
+      EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE,
+      GENERATE_NEED_CANDIDATE_EXECUTION_MODE,
+      NEED_ADJUDICATION_EXECUTION_MODE,
+    ].includes('provider_llm')
+    || debateNeedsProvider
+  ) {
     return new BackendLlmGateway({
       defaultTimeoutMs: LLM_TIMEOUT_MS,
       defaultMaxRetries: LLM_MAX_RETRIES,
@@ -562,6 +923,7 @@ async function loadSampledResources(prisma, sampleResult) {
       evidencePolarity: item.evidence_polarity,
       classificationRationale: item.classification_rationale,
       samplingGuardrails: item.guardrail_codes,
+      methodFamilies: item.method_families ?? [],
       title: row.literature.title,
       year: row.literature.year,
       abstractText: row.literature.abstractText,
@@ -587,6 +949,7 @@ function summarizeSelectedLiterature(selectedResources) {
     sample_rank: resource.sampleRank,
     evidence_polarity: resource.evidencePolarity,
     sampling_guardrails: resource.samplingGuardrails,
+    method_families: resource.methodFamilies,
     title: resource.title,
     year: resource.year,
     activation_score: resource.activationScore,
@@ -651,6 +1014,15 @@ function roleCoverageExpectation(selectedResources) {
   }, {});
 }
 
+function methodFamilyCounts(selectedResources) {
+  return selectedResources.reduce((counts, resource) => {
+    for (const family of resource.methodFamilies ?? []) {
+      counts[family] = (counts[family] ?? 0) + 1;
+    }
+    return counts;
+  }, {});
+}
+
 function buildSearchPlanBlueprint(input) {
   const coverageIntents = buildCoverageIntents(input.selectedResources);
   return {
@@ -678,8 +1050,10 @@ function buildSearchPlanBlueprint(input) {
     coverage_strategy: {
       breadth: 'role_balanced_small_sample',
       sequencing: ROLE_ORDER,
+      method_family_targets: TOPIC_METHOD_FAMILY_TARGETS,
     },
     role_coverage_expectation: roleCoverageExpectation(input.selectedResources),
+    method_family_targets: TOPIC_METHOD_FAMILY_TARGETS,
     policy_version: 'v1',
     output_schema_version: 'v1',
   };
@@ -694,7 +1068,13 @@ function firstRefByRole(coverageRowIntentRefs, coverageRowIntents, role) {
 }
 
 function sourceStatement(resource) {
-  return `${resource.title}: ${snippet(resource.keyContentDigest ?? resource.abstractText, 520)}`;
+  const title = normalizeText(resource.title);
+  const body = sourceStatementBody(resource, 520);
+  return title && body ? `${title}: ${body}` : title || body;
+}
+
+function sourceStatementBody(resource, maxLength = 420) {
+  return snippet(stripLeadingTitle(resource.title, resource.keyContentDigest ?? resource.abstractText), maxLength);
 }
 
 function buildSearchRunBundle(input) {
@@ -781,6 +1161,7 @@ function buildSearchRunBundle(input) {
 
 function buildEvidenceMapExtractionDraft(input) {
   const inputRefsHash = input.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(input.searchRunHandoff);
+  const producerKind = input.producerKind ?? 'fixture';
   const coverageRowRefByRole = new Map(input.searchRunHandoff.coverage_row_intent_refs.map((rowRef) => {
     const role = input.coverageRowIntents.find((row) => row.coverage_row_intent_id === rowRef.ref_id)
       ?.expected_evidence_role;
@@ -813,7 +1194,7 @@ function buildEvidenceMapExtractionDraft(input) {
     }),
     source_statement: sourceStatement(resource),
     source_attribution_kind: 'source_claim',
-    normalized_statement: snippet(resource.keyContentDigest ?? resource.abstractText, 360),
+    normalized_statement: sourceStatementBody(resource, 360),
     interpretation_payload: {
       role_hint: resource.evidenceRole,
       evidence_polarity: resource.evidencePolarity,
@@ -830,7 +1211,7 @@ function buildEvidenceMapExtractionDraft(input) {
     search_plan_ref: input.searchRunHandoff.search_plan_ref,
     literature_resource_pool_snapshot_ref: input.searchRunHandoff.literature_resource_pool_snapshot_ref,
     literature_snapshot_hash: input.searchRunHandoff.literature_snapshot_hash,
-    producer_kind: 'fixture',
+    producer_kind: producerKind,
     profile_id: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
     input_refs_hash: inputRefsHash,
     draft_units: draftUnits,
@@ -863,6 +1244,122 @@ function buildEvidenceMapExtractionDraft(input) {
     policy_version: 'v1',
     output_schema_version: 'v1',
   };
+}
+
+function buildEvidenceMapExtractionContextPacket(input) {
+  const inputRefsHash = input.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(input.searchRunHandoff);
+  const coverageRowRefByRole = new Map((input.searchRunHandoff.coverage_role_expectations ?? []).map((entry) => [
+    entry.expected_evidence_role,
+    entry.coverage_row_intent_ref,
+  ]));
+  const sourceCandidates = input.selectedResources.map((resource, index) => ({
+    candidate_key: `${resource.evidenceRole}-${index + 1}-${resource.id}`,
+    expected_evidence_role: resource.evidenceRole,
+    coverage_row_intent_ref: coverageRowRefByRole.get(resource.evidenceRole) ?? null,
+    literature_ref: resource.literatureRef,
+    source_refs: [resource.sourceRef],
+    locator: manualLocator({
+      titleCardId: input.titleCardId,
+      literatureRef: resource.literatureRef,
+      sourceRef: resource.sourceRef,
+      key: `${resource.evidenceRole}-${resource.id}-${RUN_ID}`,
+      label: `${resource.evidenceRole}: ${resource.title}`,
+    }),
+    source_statement: sourceStatement(resource),
+    normalized_statement: sourceStatementBody(resource, 360),
+    source_attribution_kind: 'source_claim',
+    evidence_polarity: resource.evidencePolarity,
+    role_hint: resource.evidenceRole,
+    title: resource.title,
+    sample_item_id: resource.sampleItemId,
+  }));
+  return {
+    schema_version: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_CONTEXT_PACKET_SCHEMA_VERSION,
+    node_id: 'topic-selection.v1a.build-evidence-map.v1',
+    workflow_run_id: input.workflowRunId,
+    node_attempt_id: input.nodeAttemptId,
+    context_family: 'evidence_extraction_context',
+    input_refs: uniqueFunctionalRefs([
+      input.searchRunHandoff.search_run_ref,
+      input.searchRunHandoff.search_plan_ref,
+      input.searchRunHandoff.literature_resource_pool_snapshot_ref,
+      ...input.searchRunHandoff.coverage_row_intent_refs,
+      ...input.searchRunHandoff.evidence_map_input_refs,
+      ...input.searchRunHandoff.coverage_binding_refs,
+      ...input.searchRunHandoff.coverage_assessment_refs,
+    ]),
+    input_refs_hash: inputRefsHash,
+    search_run_handoff_hash: inputRefsHash,
+    context_compiler_version: 'v1a-harness-evidence-extraction-context-v1',
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    execution_mode: input.executionMode,
+    profile_id: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
+    cache_key: [
+      'topic-selection.evidence-map-extraction',
+      input.searchRunHandoff.search_run_ref.ref_id,
+      inputRefsHash,
+      input.executionMode,
+      'v1',
+    ].join(':'),
+    cache_hit: false,
+    redaction_policy: 'topic_selection_evidence_map_extraction_context_redaction_v1',
+    payload: {
+      search_run_handoff_summary: {
+        search_run_ref: input.searchRunHandoff.search_run_ref,
+        search_plan_ref: input.searchRunHandoff.search_plan_ref,
+        literature_resource_pool_snapshot_ref: input.searchRunHandoff.literature_resource_pool_snapshot_ref,
+        literature_snapshot_hash: input.searchRunHandoff.literature_snapshot_hash,
+        method_family_targets: input.searchRunHandoff.method_family_targets ?? [],
+        coverage_role_expectations: input.searchRunHandoff.coverage_role_expectations,
+        coverage_summary: input.searchRunHandoff.coverage_summary,
+        source_health_summary: input.searchRunHandoff.source_health_summary,
+      },
+      source_candidates: sourceCandidates,
+      materialization_rules: [
+        'Produce TopicSelectionEvidenceMapExtractionDraft@v1 only.',
+        'Create at least one draft_unit per source_candidate; omitted source candidates block materialization.',
+        'Copy literature_ref, source_refs, locator, and coverage_row_intent_ref exactly from source_candidates.',
+        'evidence_role must equal expected_evidence_role for the cited coverage_row_intent_ref.',
+        'source_statement must be source-grounded text from source_candidate.source_statement.',
+        'source_attribution_kind must be source_claim, counter_evidence, or human_judgment; never llm_inference.',
+        'Do not include hidden reasoning, raw provider logs, raw search logs, or authority record ids.',
+      ],
+      allowed_outputs: [
+        'draft_units',
+        'draft_links',
+        'draft_clusters',
+        'draft_patterns',
+        'draft_conflicts',
+        'warning_codes',
+      ],
+      forbidden_outputs: [
+        'evidence_map_id',
+        'evidence_unit_id',
+        'hidden_reasoning',
+        'raw_provider_response',
+        'raw_provider_logs',
+        'raw_search_log_authority_refs',
+      ],
+    },
+    created_at: new Date().toISOString(),
+  };
+}
+
+function uniqueFunctionalRefs(refs) {
+  const seen = new Set();
+  const unique = [];
+  for (const candidate of refs) {
+    if (!candidate) {
+      continue;
+    }
+    const signature = refSignature(candidate);
+    if (!seen.has(signature)) {
+      seen.add(signature);
+      unique.push(candidate);
+    }
+  }
+  return unique;
 }
 
 function evidenceUnitRefsByRole(evidenceMapRecords, role, titleCardId) {
@@ -1018,19 +1515,50 @@ function buildDebateCodexResponses(input) {
     return null;
   }
   const responses = {};
-  if (DEBATE_SLOT_EXECUTION_MODES['explorer.round_1_discovery'] === 'codex_assisted') {
-    responses.explorer = [{
-      operator_label: 'codex-v1a-harness-debate-explorer',
-      output: buildDebateExplorerNotes(input),
-    }];
+  const explorerCount = Math.max(1, plannedDebateInstanceCount('explorer.round_1_discovery'));
+  const explorerResponses = [];
+  for (let index = 0; index < explorerCount; index += 1) {
+    const agentInstanceId = `explorer_${index + 1}`;
+    if (debateExecutionSpec('explorer.round_1_discovery', agentInstanceId)?.execution_mode !== 'codex_assisted') {
+      explorerResponses.push(null);
+      continue;
+    }
+    const output = buildDebateExplorerNotes(input);
+    output.agent_instance_id = agentInstanceId;
+    explorerResponses.push({
+      operator_label: `codex-v1a-harness-debate-${agentInstanceId}`,
+      output,
+    });
   }
-  if (DEBATE_SLOT_EXECUTION_MODES['deep_critic.round_1_discovery'] === 'codex_assisted') {
-    responses.deep_critic = [{
-      operator_label: 'codex-v1a-harness-debate-deep-critic',
-      output: buildDebateDeepCriticNotes(input),
-    }];
+  while (explorerResponses.at(-1) === null) {
+    explorerResponses.pop();
   }
-  if (DEBATE_SLOT_EXECUTION_MODES['arbiter.issue_framing'] === 'codex_assisted') {
+  if (explorerResponses.some(Boolean)) {
+    responses.explorer = explorerResponses;
+  }
+
+  const deepCriticCount = Math.max(1, plannedDebateInstanceCount('deep_critic.round_1_discovery'));
+  const deepCriticResponses = [];
+  for (let index = 0; index < deepCriticCount; index += 1) {
+    const agentInstanceId = `deep_critic_${index + 1}`;
+    if (debateExecutionSpec('deep_critic.round_1_discovery', agentInstanceId)?.execution_mode !== 'codex_assisted') {
+      deepCriticResponses.push(null);
+      continue;
+    }
+    const output = buildDebateDeepCriticNotes(input);
+    output.agent_instance_id = agentInstanceId;
+    deepCriticResponses.push({
+      operator_label: `codex-v1a-harness-debate-${agentInstanceId}`,
+      output,
+    });
+  }
+  while (deepCriticResponses.at(-1) === null) {
+    deepCriticResponses.pop();
+  }
+  if (deepCriticResponses.some(Boolean)) {
+    responses.deep_critic = deepCriticResponses;
+  }
+  if (debateExecutionSpec('arbiter.issue_framing')?.execution_mode === 'codex_assisted') {
     responses.arbiter_issue_frame = {
       operator_label: 'codex-v1a-harness-debate-issue-frame',
       output: buildDebateMockedIssueFrame(input),
@@ -1043,7 +1571,9 @@ function buildDebateMockedOutputs(input) {
   if (GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate') {
     return null;
   }
-  const allSlotsMocked = Object.values(DEBATE_SLOT_EXECUTION_MODES).every((mode) => mode === 'mocked_llm');
+  const allSlotsMocked = DEBATE_SLOT_IDS.every((slotId) =>
+    debateExecutionSpec(slotId)?.execution_mode === 'mocked_llm',
+  );
   if (!allSlotsMocked) {
     return null;
   }
@@ -1071,10 +1601,9 @@ function assertSupportedDebateSlotFixtures() {
   if (GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate') {
     return;
   }
-  const mockedSlots = Object.entries(DEBATE_SLOT_EXECUTION_MODES)
-    .filter(([, mode]) => mode === 'mocked_llm')
-    .map(([slotId]) => slotId);
-  if (mockedSlots.length > 0 && mockedSlots.length < Object.keys(DEBATE_SLOT_EXECUTION_MODES).length) {
+  const mockedSlots = DEBATE_SLOT_IDS
+    .filter((slotId) => debateExecutionSpec(slotId)?.execution_mode === 'mocked_llm');
+  if (mockedSlots.length > 0 && mockedSlots.length < DEBATE_SLOT_IDS.length) {
     throw new Error(`Mixed mocked_llm debate slots are not supported by this E2E script: ${mockedSlots.join(', ')}`);
   }
 }
@@ -1084,6 +1613,11 @@ function buildGenerateExplorationPayload(input) {
     counts[role] = input.evidenceMapRecords.evidence_units.filter((unit) => unit.evidence_role === role).length;
     return counts;
   }, {});
+  const familyCounts = methodFamilyCounts(input.selectedResources);
+  const methodFamilyTargets = input.evidenceMapHandoff?.method_family_targets
+    ?? input.searchRunHandoff?.method_family_targets
+    ?? input.searchPlanBlueprint?.method_family_targets
+    ?? [];
   return {
     topic_scope: {
       title_card_id: input.titleCardId,
@@ -1101,10 +1635,14 @@ function buildGenerateExplorationPayload(input) {
       sample_set_id: input.resourceSampleSetId,
       selected_literature_count: input.selectedResources.length,
       role_counts: roleCounts,
+      method_family_counts: familyCounts,
+      covered_method_families: Object.keys(familyCounts).sort(),
+      topic_method_family_targets: methodFamilyTargets,
     },
     search_coverage_digest: {
       search_run_id: input.searchRunRef.ref_id,
       coverage: 'role_balanced_v1a_harness_sample',
+      method_family_targets: methodFamilyTargets,
     },
     sibling_candidate_digest: {
       candidate_count: 0,
@@ -1171,23 +1709,74 @@ function buildGenerateArbiterPayload(input) {
 
 function v1aGenerateModelOptionId() {
   if (GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate') {
+    const envOverride = normalizeOptionalString(process.env.TOPIC_SELECTION_V1A_HARNESS_GENERATE_MODEL_OPTION_ID);
+    if (envOverride) {
+      throw new Error('TOPIC_SELECTION_V1A_HARNESS_GENERATE_MODEL_OPTION_ID is for single-agent generate-need-candidate only; use debate execution_plan or slot model option env vars for debate.');
+    }
     return null;
   }
-  if (GENERATE_NEED_CANDIDATE_EXECUTION_MODE !== 'provider_llm') {
-    return null;
-  }
-  return PROVIDER_ID === 'dashscope'
-    ? `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.dashscope-budget`
-    : `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.openai-balanced`;
+  return providerModelOptionIdFor(
+    TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
+    GENERATE_NEED_CANDIDATE_EXECUTION_MODE,
+    'TOPIC_SELECTION_V1A_HARNESS_GENERATE_MODEL_OPTION_ID',
+  );
 }
 
 function needAdjudicationModelOptionId() {
-  if (NEED_ADJUDICATION_EXECUTION_MODE !== 'provider_llm') {
-    return null;
+  return providerModelOptionIdFor(
+    TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
+    NEED_ADJUDICATION_EXECUTION_MODE,
+    'TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_MODEL_OPTION_ID',
+  );
+}
+
+function needAdjudicationNegativeProbeInstruction() {
+  if (NEED_ADJUDICATION_NEGATIVE_PROBE === 'clean_validate') {
+    return [
+      'Diagnostic provider-negative conformance probe.',
+      'For this acceptance-only probe, intentionally return a schema-valid but policy-invalid clean validate packet.',
+      'Preserve workflow_run_id, node_attempt_id, need_candidate_ref, validation_support_packet_ref, readiness_assessment_ref, profile_id, policy_version, and output_schema_version exactly.',
+      'Set final_decision to validate, but set residual_risk_refs, accepted_risk_refs, gap_codes, and required_actions to empty arrays even when the support packet contains residual risks or METHOD_FAMILY_COVERAGE_GAP.',
+      'Do not choose return_to_candidate, request_searchplan_recheck, reject, park, or merge.',
+    ].join(' ');
   }
-  return PROVIDER_ID === 'dashscope'
-    ? `${TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID}.dashscope-budget`
-    : `${TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID}.openai-balanced`;
+  if (NEED_ADJUDICATION_NEGATIVE_PROBE === 'method_gap_drop') {
+    return [
+      'Diagnostic provider-negative conformance probe.',
+      'For this acceptance-only probe, intentionally return a schema-valid but policy-invalid validate packet that carries risks but drops method-family coverage follow-up.',
+      'Preserve workflow_run_id, node_attempt_id, need_candidate_ref, validation_support_packet_ref, readiness_assessment_ref, profile_id, policy_version, and output_schema_version exactly.',
+      'Set final_decision to validate.',
+      'Copy every support_packet.residual_risk_refs item exactly into residual_risk_refs and accepted_risk_refs.',
+      'Set gap_codes and required_actions to empty arrays even when support_packet.open_gap_codes contains METHOD_FAMILY_COVERAGE_GAP.',
+      'Do not mention METHOD_FAMILY_COVERAGE_GAP, method-family, fine-tuning, hybrid, or coverage gap in rationale or required_actions.',
+      'Do not choose return_to_candidate, request_searchplan_recheck, reject, park, or merge.',
+    ].join(' ');
+  }
+  return null;
+}
+
+function needAdjudicationNegativeProbeExpectation() {
+  if (NEED_ADJUDICATION_NEGATIVE_PROBE === 'clean_validate') {
+    return {
+      status: 'blocked',
+      route_outcome: 'blocked',
+      final_decision: 'validate',
+      error_code: 'GATE_CONSTRAINT_FAILED',
+      blocker_codes: ['RESIDUAL_RISK_DROPPED'],
+      adjudication_created: false,
+    };
+  }
+  if (NEED_ADJUDICATION_NEGATIVE_PROBE === 'method_gap_drop') {
+    return {
+      status: 'blocked',
+      route_outcome: 'blocked',
+      final_decision: 'validate',
+      error_code: 'GATE_CONSTRAINT_FAILED',
+      blocker_codes: ['METHOD_FAMILY_COVERAGE_GAP_DROPPED'],
+      adjudication_created: false,
+    };
+  }
+  return null;
 }
 
 async function runGenerateNeedCandidate(runtime, input) {
@@ -1217,7 +1806,7 @@ async function runGenerateNeedCandidate(runtime, input) {
     rankedBatch,
   };
   const debateFinalUsesProvider = GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
-    && DEBATE_SLOT_EXECUTION_MODES['arbiter.final_synthesis'] === 'provider_llm';
+    && debateExecutionSpec('arbiter.final_synthesis')?.execution_mode === 'provider_llm';
   const topicScopeRef = ref('topic_scope', TOPIC_ID, input.titleCardId);
   const resourceSampleSetRef = ref('resource_sample_set', input.resourceSampleSetId, input.titleCardId);
   const harnessInput = {
@@ -1238,6 +1827,9 @@ async function runGenerateNeedCandidate(runtime, input) {
     output_schema_version: 'v1',
     profile_id: TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
     execution_mode: GENERATE_NEED_CANDIDATE_EXECUTION_MODE,
+    execution_spec: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+      ? null
+      : singleAgentExecutionSpec(GENERATE_NEED_CANDIDATE_EXECUTION_MODE, GENERATE_NEED_CANDIDATE_MODEL_OPTION_ID),
     run_mode: GENERATE_NEED_CANDIDATE_EXECUTION_MODE === 'provider_llm' ? 'product' : 'acceptance',
     executor_kind: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND,
     exploration_payload: buildGenerateExplorationPayload({
@@ -1251,12 +1843,11 @@ async function runGenerateNeedCandidate(runtime, input) {
       conflictRef,
     }),
     debate_loop_id: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate' ? debateLoopId : null,
-    debate_slot_execution_overrides: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
-      ? DEBATE_SLOT_EXECUTION_MODES
+    debate_execution_plan: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+      ? DEBATE_EXECUTION_PLAN
       : null,
-    debate_slot_model_option_overrides: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
-      ? DEBATE_SLOT_MODEL_OPTION_OVERRIDES
-      : null,
+    debate_slot_execution_overrides: null,
+    debate_slot_model_option_overrides: null,
     debate_mocked_outputs: buildDebateMockedOutputs(debateFixtureInput),
     debate_codex_responses: buildDebateCodexResponses(debateFixtureInput),
     mocked_output: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND !== 'multi_agent_debate'
@@ -1273,7 +1864,7 @@ async function runGenerateNeedCandidate(runtime, input) {
         output: rankedBatch,
       }
       : null,
-    model_option_id: v1aGenerateModelOptionId(),
+    model_option_id: GENERATE_NEED_CANDIDATE_MODEL_OPTION_ID,
     current_round_index: 1,
     remaining_round_budget: 0,
     persist_admitted_candidates: true,
@@ -1301,13 +1892,25 @@ async function runGenerateNeedCandidate(runtime, input) {
     created_by: 'system',
   };
   const result = await runtime.workflowHarness.runGenerateNeedCandidateScenario(harnessInput);
-  assertScenarioPassed(result, 'generate-need-candidate');
+  try {
+    assertScenarioPassed(result, 'generate-need-candidate');
+  } catch (error) {
+    await writeJson('02-v1a-harness.partial-generate-need-candidate.json', {
+      run_id: RUN_ID,
+      current_stage: 'harness generate-need-candidate',
+      harness_input: harnessInput,
+      result,
+      error: sanitizeError(error),
+    });
+    throw error;
+  }
   const persisted = result.adapter_result.persist_need_candidate_batch_result?.persisted_candidates ?? [];
   if (persisted.length === 0) {
     throw new Error('generate-need-candidate harness did not persist any NeedCandidate.');
   }
   return {
     result,
+    harnessInput,
     persistedCandidates: persisted,
   };
 }
@@ -1344,6 +1947,13 @@ async function prepareValidationInputs(runtime, candidates, titleCardId) {
   });
   const workflowRunId = `workflow_run_validate_need_adjudication_${RUN_ID}`;
   const nodeAttemptId = `node_attempt_validate_need_adjudication_${RUN_ID}`;
+  const openGapCodes = supportPacket.open_gap_codes ?? [];
+  const requiredActions = [
+    'route result according to deterministic node policy',
+    ...(openGapCodes.includes('METHOD_FAMILY_COVERAGE_GAP')
+      ? ['carry METHOD_FAMILY_COVERAGE_GAP into v1b intake and require method-family coverage follow-up']
+      : []),
+  ];
   const recommendationPacket = {
     schema_version: TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION,
     workflow_run_id: workflowRunId,
@@ -1361,8 +1971,8 @@ async function prepareValidationInputs(runtime, candidates, titleCardId) {
     final_decision: 'validate',
     rationale:
       'The role-balanced support packet is sufficient to validate a bounded, reviewer-auditable need for v1b handoff.',
-    required_actions: ['route result according to deterministic node policy'],
-    gap_codes: [],
+    required_actions: requiredActions,
+    gap_codes: openGapCodes,
     accepted_risk_refs: [],
     residual_risk_refs: supportPacket.residual_risk_refs,
     rejected_reason: null,
@@ -1389,7 +1999,10 @@ async function prepareValidationInputs(runtime, candidates, titleCardId) {
 }
 
 async function runValidateNeedAdjudication(runtime, input) {
-  const result = await runtime.workflowHarness.runValidateNeedAdjudicationScenario({
+  const negativeProbeInstruction = needAdjudicationNegativeProbeInstruction();
+  const negativeProbeExpectation = needAdjudicationNegativeProbeExpectation();
+  const isNegativeProbe = negativeProbeInstruction !== null && negativeProbeExpectation !== null;
+  const harnessInput = {
     scenario_id: SCENARIO_ID,
     scenario_case_id: `v1a-harness-validate-need-adjudication-${RUN_ID}`,
     title_card_id: input.titleCardId,
@@ -1414,7 +2027,10 @@ async function runValidateNeedAdjudication(runtime, input) {
     readiness_packet_mode: 'consume_explicit_ref',
     support_packet_mode: 'consume_explicit_ref',
     execution_mode: NEED_ADJUDICATION_EXECUTION_MODE,
-    run_mode: NEED_ADJUDICATION_EXECUTION_MODE === 'provider_llm' ? 'product' : 'acceptance',
+    execution_spec: singleAgentExecutionSpec(NEED_ADJUDICATION_EXECUTION_MODE, NEED_ADJUDICATION_MODEL_OPTION_ID),
+    run_mode: isNegativeProbe
+      ? 'acceptance'
+      : NEED_ADJUDICATION_EXECUTION_MODE === 'provider_llm' ? 'product' : 'acceptance',
     executor_kind: NEED_ADJUDICATION_EXECUTION_MODE === 'codex_assisted' ? 'codex_assisted' : 'single_agent',
     profile_id: TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
     mocked_output: NEED_ADJUDICATION_EXECUTION_MODE === 'mocked_llm'
@@ -1429,21 +2045,23 @@ async function runValidateNeedAdjudication(runtime, input) {
         output: input.recommendationPacket,
       }
       : null,
-    model_option_id: needAdjudicationModelOptionId(),
+    model_option_id: NEED_ADJUDICATION_MODEL_OPTION_ID,
+    diagnostic_prompt_appendix: negativeProbeInstruction,
     adjudication_actor: { actor_type: 'human', actor_id: 'v1a-harness-reviewer' },
     fixture_human_decision: NEED_ADJUDICATION_EXECUTION_MODE !== 'provider_llm',
     policy_version: 'v1',
     output_schema_version: 'v1',
-    expectations: {
+    expectations: isNegativeProbe ? negativeProbeExpectation : {
       status: 'ready',
       route_outcome: 'advance_to_human_confirmation',
       final_decision: 'validate',
       adjudication_created: true,
     },
     created_by: 'system',
-  });
+  };
+  const result = await runtime.workflowHarness.runValidateNeedAdjudicationScenario(harnessInput);
   assertScenarioPassed(result, 'validate-need-adjudication');
-  return result;
+  return { result, harnessInput };
 }
 
 function humanConfirmationInput(supportPacket) {
@@ -1463,7 +2081,7 @@ function humanConfirmationInput(supportPacket) {
 }
 
 async function runHumanConfirmNeed(runtime, input) {
-  const result = await runtime.workflowHarness.runHumanConfirmNeedScenario({
+  const harnessInput = {
     scenario_id: SCENARIO_ID,
     scenario_case_id: `v1a-harness-human-confirm-need-${RUN_ID}`,
     title_card_id: input.titleCardId,
@@ -1484,6 +2102,7 @@ async function runHumanConfirmNeed(runtime, input) {
     reserved_validated_need_ref: input.validateResult.node_result.reserved_validated_need_ref,
     confirmation_input: humanConfirmationInput(input.supportPacket),
     execution_mode: 'deterministic_parser',
+    execution_spec: null,
     profile_id: TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
     policy_version: 'v1',
     output_schema_version: 'v1',
@@ -1494,9 +2113,10 @@ async function runHumanConfirmNeed(runtime, input) {
       v1b_bundle_created: false,
     },
     created_by: 'system',
-  });
+  };
+  const result = await runtime.workflowHarness.runHumanConfirmNeedScenario(harnessInput);
   assertScenarioPassed(result, 'human-confirm-need');
-  return result;
+  return { result, harnessInput };
 }
 
 async function runPublishV1bInputBundle(runtime, input) {
@@ -1506,7 +2126,7 @@ async function runPublishV1bInputBundle(runtime, input) {
   const memorySuggestions = await runtime.needValidation.listCandidateMemorySuggestionsByNeedCandidateId(
     input.candidate.need_candidate_id,
   );
-  const result = await runtime.workflowHarness.runPublishV1bInputBundleScenario({
+  const harnessInput = {
     scenario_id: SCENARIO_ID,
     scenario_case_id: `v1a-harness-publish-v1b-input-bundle-${RUN_ID}`,
     title_card_id: input.titleCardId,
@@ -1542,9 +2162,280 @@ async function runPublishV1bInputBundle(runtime, input) {
       bundle_published: true,
     },
     created_by: 'system',
-  });
+  };
+  const result = await runtime.workflowHarness.runPublishV1bInputBundleScenario(harnessInput);
   assertScenarioPassed(result, 'publish-v1b-input-bundle');
-  return result;
+  return { result, harnessInput };
+}
+
+async function replayAuthorityCounts(prisma, titleCardId) {
+  const [
+    needCandidateCount,
+    readinessAssessmentCount,
+    supportPacketCount,
+    adjudicationResultCount,
+    humanDecisionCount,
+    validatedNeedCount,
+    v1bInputBundleCount,
+    artifactRefCount,
+  ] = await Promise.all([
+    prisma.topicSelectionNeedCandidate.count({ where: { titleCardId } }),
+    prisma.topicSelectionNeedCandidateReadinessAssessment.count({ where: { titleCardId } }),
+    prisma.topicSelectionValidationDecisionSupportPacket.count({ where: { titleCardId } }),
+    prisma.topicSelectionValidateNeedAdjudicationResult.count({ where: { titleCardId } }),
+    prisma.topicSelectionHumanConfirmedDecision.count({ where: { titleCardId } }),
+    prisma.topicSelectionValidatedNeed.count({ where: { titleCardId } }),
+    prisma.topicSelectionV1aToV1bInputBundle.count({ where: { titleCardId } }),
+    prisma.topicSelectionArtifactRef.count({ where: { titleCardId } }),
+  ]);
+  return {
+    need_candidate_count: needCandidateCount,
+    readiness_assessment_count: readinessAssessmentCount,
+    validation_support_packet_count: supportPacketCount,
+    adjudication_result_count: adjudicationResultCount,
+    human_decision_count: humanDecisionCount,
+    validated_need_count: validatedNeedCount,
+    v1b_input_bundle_count: v1bInputBundleCount,
+    artifact_ref_count: artifactRefCount,
+  };
+}
+
+function authorityOnlyCounts(counts) {
+  const { artifact_ref_count: _artifactRefCount, ...authorityCounts } = counts;
+  return authorityCounts;
+}
+
+function assertReplayProvenance(label, value) {
+  assert.equal(value?.replayed, true, `${label} did not return replay provenance.`);
+}
+
+function assertNoCountDrift(label, before, after) {
+  assert.deepEqual(after, before, `${label} changed authority counts.`);
+}
+
+function sameRefs(left, right) {
+  if (
+    left && right
+    && typeof left === 'object'
+    && typeof right === 'object'
+    && ('ref_id' in left || 'ref_id' in right)
+  ) {
+    return refSignature(left) === refSignature(right);
+  }
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+}
+
+function refSignature(value) {
+  if (!value || typeof value !== 'object') {
+    return JSON.stringify(value ?? null);
+  }
+  return [
+    value.ref_type ?? '',
+    value.ref_id ?? '',
+    value.version_id ?? '',
+    value.title_card_id ?? '',
+  ].join(':');
+}
+
+function sameRefSet(left, right) {
+  const leftSignatures = (left ?? []).map(refSignature).sort();
+  const rightSignatures = (right ?? []).map(refSignature).sort();
+  return JSON.stringify(leftSignatures) === JSON.stringify(rightSignatures);
+}
+
+function sameStringSet(left, right) {
+  const normalize = (values) => (values ?? [])
+    .filter((value) => typeof value === 'string' && value.trim().length > 0)
+    .map((value) => value.trim())
+    .sort();
+  return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
+}
+
+function compactReplayResult(label, result, original) {
+  if (label === 'generate_need_candidate') {
+    const replayRefs = result.adapter_result.persist_need_candidate_batch_result?.persisted_candidate_refs ?? [];
+    const originalRefs = original.result.adapter_result.persist_need_candidate_batch_result?.persisted_candidate_refs ?? [];
+    assertReplayProvenance(label, result.adapter_result.replay_provenance);
+    assert.equal(sameRefSet(replayRefs, originalRefs), true, `${label} replay candidate refs drifted.`);
+    return {
+      replayed: true,
+      scenario_status: result.scenario_status,
+      persisted_candidate_ref_count: replayRefs.length,
+      same_persisted_candidate_refs: true,
+    };
+  }
+  assertReplayProvenance(label, result.node_result.replay_provenance);
+  if (label === 'validate_need_adjudication') {
+    assert.equal(
+      sameRefs(result.node_result.adjudication_result_ref, original.result.node_result.adjudication_result_ref),
+      true,
+      `${label} replay adjudication_result_ref drifted.`,
+    );
+    assert.equal(
+      sameRefs(result.node_result.reserved_validated_need_ref, original.result.node_result.reserved_validated_need_ref),
+      true,
+      `${label} replay reserved_validated_need_ref drifted.`,
+    );
+  }
+  if (label === 'human_confirm_need') {
+    assert.equal(
+      sameRefs(result.node_result.validated_need_ref, original.result.node_result.validated_need_ref),
+      true,
+      `${label} replay validated_need_ref drifted.`,
+    );
+    assert.equal(
+      sameRefs(result.node_result.human_decision_ref, original.result.node_result.human_decision_ref),
+      true,
+      `${label} replay human_decision_ref drifted.`,
+    );
+  }
+  if (label === 'publish_v1b_input_bundle') {
+    assert.equal(
+      sameRefs(result.node_result.v1b_input_bundle_ref, original.result.node_result.v1b_input_bundle_ref),
+      true,
+      `${label} replay v1b_input_bundle_ref drifted.`,
+    );
+  }
+  return {
+    replayed: true,
+    scenario_status: result.scenario_status,
+    node_status: result.node_result.status,
+    route_outcome: result.node_result.route_outcome ?? null,
+    blocker_codes: result.node_result.blocker_codes ?? [],
+    warning_codes: result.node_result.warning_codes ?? [],
+    source_trace_artifact_ref: result.node_result.replay_provenance.source_trace_artifact_ref,
+  };
+}
+
+async function expectReplayInputHashMismatch(label, run) {
+  try {
+    const result = await run();
+    const nodeResult = result.node_result ?? null;
+    const blockerCodes = nodeResult?.blocker_codes ?? result.adapter_result?.blocker_codes ?? [];
+    assert.ok(
+      blockerCodes.includes('REPLAY_INPUT_HASH_MISMATCH'),
+      `${label} drift did not include REPLAY_INPUT_HASH_MISMATCH: ${JSON.stringify(blockerCodes)}`,
+    );
+    return {
+      mode: 'blocked_result',
+      scenario_status: result.scenario_status,
+      node_status: nodeResult?.status ?? result.adapter_result?.status ?? null,
+      blocker_codes: blockerCodes,
+      error_code: nodeResult?.error_code ?? result.adapter_result?.error_code ?? null,
+    };
+  } catch (error) {
+    assert.equal(error?.errorCode, 'VERSION_CONFLICT', `${label} drift threw unexpected error.`);
+    assert.deepEqual(error?.details?.blocker_codes, ['REPLAY_INPUT_HASH_MISMATCH']);
+    return {
+      mode: 'thrown',
+      error_code: error.errorCode,
+      status_code: error.statusCode ?? null,
+      blocker_codes: error.details?.blocker_codes ?? [],
+    };
+  }
+}
+
+async function runN6ToN9ReplaySmoke(input) {
+  const {
+    runtime,
+    prisma,
+    harnessLlmGateway,
+    titleCardId,
+    generateNeedCandidate,
+    validateNeed,
+    humanConfirmNeed,
+    publishV1bInputBundle,
+  } = input;
+
+  currentStage = 'harness n6-n9 exact replay smoke';
+  const exactCountsBefore = await replayAuthorityCounts(prisma, titleCardId);
+  const exactLlmCallsBefore = harnessLlmGateway.callCount;
+  const generateReplay = await runtime.workflowHarness.runGenerateNeedCandidateScenario(
+    generateNeedCandidate.harnessInput,
+  );
+  const validateReplay = await runtime.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeed.harnessInput,
+  );
+  const humanReplay = await runtime.workflowHarness.runHumanConfirmNeedScenario(
+    humanConfirmNeed.harnessInput,
+  );
+  const publishReplay = await runtime.workflowHarness.runPublishV1bInputBundleScenario(
+    publishV1bInputBundle.harnessInput,
+  );
+  const exactCountsAfter = await replayAuthorityCounts(prisma, titleCardId);
+  const exactLlmCallsAfter = harnessLlmGateway.callCount;
+  assertNoCountDrift('N6-N9 exact replay', exactCountsBefore, exactCountsAfter);
+  assert.equal(
+    exactLlmCallsAfter,
+    exactLlmCallsBefore,
+    'N6-N9 exact replay invoked the harness LLM gateway.',
+  );
+
+  currentStage = 'harness n6-n9 replay drift smoke';
+  const driftAuthorityCountsBefore = authorityOnlyCounts(await replayAuthorityCounts(prisma, titleCardId));
+  const driftLlmCallsBefore = harnessLlmGateway.callCount;
+  const drift = {
+    generate_need_candidate: await expectReplayInputHashMismatch('generate_need_candidate', () =>
+      runtime.workflowHarness.runGenerateNeedCandidateScenario({
+        ...generateNeedCandidate.harnessInput,
+        policy_version: 'v1-replay-drift',
+      })
+    ),
+    validate_need_adjudication: await expectReplayInputHashMismatch('validate_need_adjudication', () =>
+      runtime.workflowHarness.runValidateNeedAdjudicationScenario({
+        ...validateNeed.harnessInput,
+        policy_version: 'v1-replay-drift',
+      })
+    ),
+    human_confirm_need: await expectReplayInputHashMismatch('human_confirm_need', () =>
+      runtime.workflowHarness.runHumanConfirmNeedScenario({
+        ...humanConfirmNeed.harnessInput,
+        policy_version: 'v1-replay-drift',
+      })
+    ),
+    publish_v1b_input_bundle: await expectReplayInputHashMismatch('publish_v1b_input_bundle', () =>
+      runtime.workflowHarness.runPublishV1bInputBundleScenario({
+        ...publishV1bInputBundle.harnessInput,
+        policy_version: 'v1-replay-drift',
+      })
+    ),
+  };
+  const driftCountsAfter = await replayAuthorityCounts(prisma, titleCardId);
+  assertNoCountDrift(
+    'N6-N9 replay input-hash drift',
+    driftAuthorityCountsBefore,
+    authorityOnlyCounts(driftCountsAfter),
+  );
+  assert.equal(
+    harnessLlmGateway.callCount,
+    driftLlmCallsBefore,
+    'N6-N9 replay input-hash drift invoked the harness LLM gateway.',
+  );
+
+  return {
+    status: 'passed',
+    replay_scope: 'N6-N9',
+    exact_replay: {
+      db_counts_before: exactCountsBefore,
+      db_counts_after: exactCountsAfter,
+      llm_call_count_before: exactLlmCallsBefore,
+      llm_call_count_after: exactLlmCallsAfter,
+      nodes: {
+        generate_need_candidate: compactReplayResult('generate_need_candidate', generateReplay, generateNeedCandidate),
+        validate_need_adjudication: compactReplayResult('validate_need_adjudication', validateReplay, validateNeed),
+        human_confirm_need: compactReplayResult('human_confirm_need', humanReplay, humanConfirmNeed),
+        publish_v1b_input_bundle: compactReplayResult('publish_v1b_input_bundle', publishReplay, publishV1bInputBundle),
+      },
+    },
+    input_hash_drift: {
+      authority_counts_before: driftAuthorityCountsBefore,
+      authority_counts_after: authorityOnlyCounts(driftCountsAfter),
+      artifact_ref_delta: driftCountsAfter.artifact_ref_count - exactCountsAfter.artifact_ref_count,
+      llm_call_count_before: driftLlmCallsBefore,
+      llm_call_count_after: harnessLlmGateway.callCount,
+      nodes: drift,
+    },
+  };
 }
 
 function assertScenarioPassed(result, label) {
@@ -1604,7 +2495,7 @@ function sanitizeError(error) {
   };
 }
 
-async function runV1aHarness(app, runtime, selectedResources, resourceSample) {
+async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedResources, resourceSample) {
   const titleCardId = await createTitleCardFixture(app, selectedResources);
   const resourceSampleSetRef = ref('resource_sample_set', resourceSample.sample_set.resource_sample_set_id, titleCardId);
   selectedResources.forEach((resource) => {
@@ -1703,25 +2594,69 @@ async function runV1aHarness(app, runtime, selectedResources, resourceSample) {
     created_by: 'system',
   });
   assertScenarioPassed(searchRun, 'record-search-run');
+  if (!sameStringSet(searchRun.node_result.downstream_handoff?.method_family_targets, blueprint.method_family_targets)) {
+    throw new Error('record-search-run handoff did not preserve SearchPlan method_family_targets.');
+  }
 
   currentStage = 'harness build-evidence-map';
+  const evidenceMapWorkflowRunId = `workflow_run_build_evidence_map_${RUN_ID}`;
+  const evidenceMapNodeAttemptId = `node_attempt_build_evidence_map_${RUN_ID}`;
+  const evidenceMapProducerKind = {
+    none: 'fixture',
+    mocked_llm: 'mocked_llm',
+    codex_assisted: 'codex_assisted',
+    provider_llm: 'provider_llm',
+  }[EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE];
   const evidenceMapDraft = buildEvidenceMapExtractionDraft({
     titleCardId,
     selectedResources,
     coverageRowIntents: searchPlan.node_result.coverage_row_intents,
     searchRunHandoff: searchRun.node_result.downstream_handoff,
+    searchPlanBlueprint: blueprint,
     evidenceMapMaterializer: runtime.evidenceMapMaterializer,
+    producerKind: evidenceMapProducerKind,
   });
+  const evidenceMapExtractionContext = EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE === 'none'
+    ? null
+    : buildEvidenceMapExtractionContextPacket({
+        titleCardId,
+        selectedResources,
+        searchRunHandoff: searchRun.node_result.downstream_handoff,
+        evidenceMapMaterializer: runtime.evidenceMapMaterializer,
+        executionMode: EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE,
+        workflowRunId: evidenceMapWorkflowRunId,
+        nodeAttemptId: evidenceMapNodeAttemptId,
+      });
   const evidenceMap = await runtime.workflowHarness.runBuildEvidenceMapScenario({
     scenario_id: SCENARIO_ID,
     scenario_case_id: `v1a-harness-build-evidence-map-${RUN_ID}`,
     title_card_id: titleCardId,
-    workflow_run_id: `workflow_run_build_evidence_map_${RUN_ID}`,
-    node_attempt_id: `node_attempt_build_evidence_map_${RUN_ID}`,
+    workflow_run_id: evidenceMapWorkflowRunId,
+    node_attempt_id: evidenceMapNodeAttemptId,
     search_run_handoff: searchRun.node_result.downstream_handoff,
-    extraction_draft: evidenceMapDraft,
-    execution_mode: 'none',
+    extraction_draft: EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE === 'none' ? evidenceMapDraft : null,
+    extraction_context_packet: evidenceMapExtractionContext,
+    execution_mode: EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE,
+    execution_spec: singleAgentExecutionSpec(
+      EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE,
+      EVIDENCE_MAP_EXTRACTION_MODEL_OPTION_ID,
+    ),
+    run_mode: EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE === 'provider_llm' ? 'product' : 'acceptance',
     profile_id: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
+    model_option_id: EVIDENCE_MAP_EXTRACTION_MODEL_OPTION_ID,
+    mocked_output: EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE === 'mocked_llm'
+      ? {
+          fixture_id: `fixture_evidence_map_extraction_${RUN_ID}`,
+          output: evidenceMapDraft,
+        }
+      : null,
+    codex_response: EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE === 'codex_assisted'
+      ? {
+          output: evidenceMapDraft,
+          operator_label: 'v1a-harness-codex-assisted-evidence-extraction',
+          response_source: 'operator_supplied',
+        }
+      : null,
     policy_version: 'v1',
     output_schema_version: 'v1',
     expectations: {
@@ -1733,6 +2668,20 @@ async function runV1aHarness(app, runtime, selectedResources, resourceSample) {
     created_by: 'system',
   });
   assertScenarioPassed(evidenceMap, 'build-evidence-map');
+  if (EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE !== 'none') {
+    if (evidenceMap.node_result.agent_invocation_status !== 'succeeded') {
+      throw new Error(`EvidenceMap extraction agent did not succeed: ${evidenceMap.node_result.error_code}`);
+    }
+  }
+  if (EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE === 'provider_llm') {
+    const evidenceExtractionCalls = harnessLlmGateway.snapshot().calls.filter((call) =>
+      call.stage === 'harness build-evidence-map'
+      && call.schema_name === 'TopicSelectionEvidenceMapExtractionDraft@v1',
+    );
+    if (evidenceExtractionCalls.length !== 1) {
+      throw new Error(`Expected exactly one provider-backed EvidenceMap extraction call, got ${evidenceExtractionCalls.length}.`);
+    }
+  }
 
   currentStage = 'harness generate-need-candidate';
   const generateNeedCandidate = await runGenerateNeedCandidate(runtime, {
@@ -1740,6 +2689,9 @@ async function runV1aHarness(app, runtime, selectedResources, resourceSample) {
     selectedResources,
     resourceSampleSetId: resourceSample.sample_set.resource_sample_set_id,
     evidenceMapRecords: evidenceMap.node_result.evidence_map_records,
+    evidenceMapHandoff: evidenceMap.node_result.downstream_handoff,
+    searchRunHandoff: searchRun.node_result.downstream_handoff,
+    searchPlanBlueprint: blueprint,
     searchRunRef: searchRun.node_result.search_run_ref,
     searchPlanRef: searchPlan.node_result.search_plan_ref,
     literatureSnapshotRef: snapshot.node_result.literature_resource_pool_snapshot_ref,
@@ -1763,20 +2715,70 @@ async function runV1aHarness(app, runtime, selectedResources, resourceSample) {
     nodeAttemptId: validationInputs.nodeAttemptId,
   });
 
+  if (NEED_ADJUDICATION_NEGATIVE_PROBE) {
+    return {
+      title_card_id: titleCardId,
+      topic_seed_id: topicSeed.node_result.topic_seed_ref.ref_id,
+      literature_resource_pool_snapshot_id: snapshot.node_result.literature_resource_pool_snapshot_ref.ref_id,
+      search_plan_id: searchPlan.node_result.search_plan_ref.ref_id,
+      search_run_id: searchRun.node_result.search_run_ref.ref_id,
+      evidence_map_id: evidenceMap.node_result.evidence_map_ref.ref_id,
+      need_candidate_id: candidate.need_candidate_id,
+      validated_need_id: null,
+      v1b_input_bundle_id: null,
+      replay_smoke: null,
+      nodes: {
+        create_topic_seed: compactNode(topicSeed),
+        snapshot_literature_resource_pool: compactNode(snapshot),
+        create_search_plan: compactNode(searchPlan),
+        record_search_run: compactNode(searchRun),
+        build_evidence_map: compactNode(evidenceMap),
+        generate_need_candidate: compactGenerateNode(generateNeedCandidate),
+        validate_need_adjudication: compactNode(validateNeed.result),
+        human_confirm_need: null,
+        publish_v1b_input_bundle: null,
+      },
+      full_results: {
+        create_topic_seed: topicSeed,
+        snapshot_literature_resource_pool: snapshot,
+        create_search_plan: searchPlan,
+        record_search_run: searchRun,
+        build_evidence_map: evidenceMap,
+        generate_need_candidate: generateNeedCandidate.result,
+        validate_need_adjudication: validateNeed.result,
+        human_confirm_need: null,
+        publish_v1b_input_bundle: null,
+      },
+    };
+  }
+
   currentStage = 'harness human-confirm-need';
   const humanConfirmNeed = await runHumanConfirmNeed(runtime, {
     titleCardId,
     candidate,
     supportPacket: validationInputs.supportPacket,
-    validateResult: validateNeed,
+    validateResult: validateNeed.result,
   });
 
   currentStage = 'harness publish-v1b-input-bundle';
   const publishV1bInputBundle = await runPublishV1bInputBundle(runtime, {
     titleCardId,
     candidate,
-    humanConfirmResult: humanConfirmNeed,
+    humanConfirmResult: humanConfirmNeed.result,
   });
+
+  const replaySmoke = RUN_REPLAY_SMOKE
+    ? await runN6ToN9ReplaySmoke({
+      runtime,
+      prisma,
+      harnessLlmGateway,
+      titleCardId,
+      generateNeedCandidate,
+      validateNeed,
+      humanConfirmNeed,
+      publishV1bInputBundle,
+    })
+    : null;
 
   return {
     title_card_id: titleCardId,
@@ -1786,8 +2788,9 @@ async function runV1aHarness(app, runtime, selectedResources, resourceSample) {
     search_run_id: searchRun.node_result.search_run_ref.ref_id,
     evidence_map_id: evidenceMap.node_result.evidence_map_ref.ref_id,
     need_candidate_id: candidate.need_candidate_id,
-    validated_need_id: humanConfirmNeed.node_result.validated_need_ref.ref_id,
-    v1b_input_bundle_id: publishV1bInputBundle.node_result.v1b_input_bundle_ref.ref_id,
+    validated_need_id: humanConfirmNeed.result.node_result.validated_need_ref.ref_id,
+    v1b_input_bundle_id: publishV1bInputBundle.result.node_result.v1b_input_bundle_ref.ref_id,
+    replay_smoke: replaySmoke,
     nodes: {
       create_topic_seed: compactNode(topicSeed),
       snapshot_literature_resource_pool: compactNode(snapshot),
@@ -1795,9 +2798,9 @@ async function runV1aHarness(app, runtime, selectedResources, resourceSample) {
       record_search_run: compactNode(searchRun),
       build_evidence_map: compactNode(evidenceMap),
       generate_need_candidate: compactGenerateNode(generateNeedCandidate),
-      validate_need_adjudication: compactNode(validateNeed),
-      human_confirm_need: compactNode(humanConfirmNeed),
-      publish_v1b_input_bundle: compactNode(publishV1bInputBundle),
+      validate_need_adjudication: compactNode(validateNeed.result),
+      human_confirm_need: compactNode(humanConfirmNeed.result),
+      publish_v1b_input_bundle: compactNode(publishV1bInputBundle.result),
     },
     full_results: {
       create_topic_seed: topicSeed,
@@ -1806,9 +2809,9 @@ async function runV1aHarness(app, runtime, selectedResources, resourceSample) {
       record_search_run: searchRun,
       build_evidence_map: evidenceMap,
       generate_need_candidate: generateNeedCandidate.result,
-      validate_need_adjudication: validateNeed,
-      human_confirm_need: humanConfirmNeed,
-      publish_v1b_input_bundle: publishV1bInputBundle,
+      validate_need_adjudication: validateNeed.result,
+      human_confirm_need: humanConfirmNeed.result,
+      publish_v1b_input_bundle: publishV1bInputBundle.result,
     },
   };
 }
@@ -1817,9 +2820,11 @@ await fs.mkdir(ARTIFACT_DIR, { recursive: true });
 
 const prisma = new PrismaClient();
 let app;
+let harnessLlmGateway;
 
 try {
-  const runtime = makeWorkflowHarness(prisma, makeHarnessLlmGateway());
+  harnessLlmGateway = new CountingLlmGateway(makeHarnessLlmGateway());
+  const runtime = makeWorkflowHarness(prisma, harnessLlmGateway);
   app = buildApp({
     topicSelectionResourceSamplingLlmGateway: makeSamplingLlmGateway(),
   });
@@ -1858,13 +2863,16 @@ try {
     selected_literature: selectedLiterature,
   });
 
-  const v1aHarness = await runV1aHarness(app, runtime, selectedResources, resourceSample);
+  const v1aHarness = await runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedResources, resourceSample);
   await writeJson('02-v1a-harness.json', v1aHarness);
+  if (v1aHarness.replay_smoke) {
+    await writeJson('03-v1a-replay-smoke.json', v1aHarness.replay_smoke);
+  }
 
   const summary = {
     status: 'passed',
     scenario_id: SCENARIO_ID,
-    scenario_type: 'v1a_full_workflow_harness_e2e',
+    scenario_type: SCENARIO_TYPE,
     run_id: RUN_ID,
     artifact_dir: ARTIFACT_DIR,
     topic_id: TOPIC_ID,
@@ -1872,15 +2880,38 @@ try {
     model_id: MODEL_ID,
     resource_sampling_mode: USE_MOCK_RESOURCE_SAMPLING ? 'deterministic_mock' : 'provider',
     harness_agent_execution_mode: DEFAULT_HARNESS_AGENT_EXECUTION_MODE,
+    harness_evidence_extraction_execution_mode: EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE,
+    harness_evidence_extraction_model_option_id: EVIDENCE_MAP_EXTRACTION_MODEL_OPTION_ID,
+    harness_evidence_extraction_execution_spec: singleAgentExecutionSpec(
+      EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE,
+      EVIDENCE_MAP_EXTRACTION_MODEL_OPTION_ID,
+    ),
     harness_generate_execution_mode: GENERATE_NEED_CANDIDATE_EXECUTION_MODE,
     harness_generate_executor_kind: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND,
+    harness_generate_model_option_id: GENERATE_NEED_CANDIDATE_MODEL_OPTION_ID,
+    harness_generate_execution_spec: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+      ? null
+      : singleAgentExecutionSpec(GENERATE_NEED_CANDIDATE_EXECUTION_MODE, GENERATE_NEED_CANDIDATE_MODEL_OPTION_ID),
+    replay_smoke_enabled: RUN_REPLAY_SMOKE,
     debate_slot_execution_modes: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
       ? DEBATE_SLOT_EXECUTION_MODES
       : null,
     debate_slot_model_option_overrides: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
       ? DEBATE_SLOT_MODEL_OPTION_OVERRIDES
       : null,
+    debate_execution_profile: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+      ? DEBATE_EXECUTION_PROFILE
+      : null,
+    debate_execution_plan: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+      ? DEBATE_EXECUTION_PLAN
+      : null,
     harness_adjudication_execution_mode: NEED_ADJUDICATION_EXECUTION_MODE,
+    harness_adjudication_model_option_id: NEED_ADJUDICATION_MODEL_OPTION_ID,
+    harness_adjudication_execution_spec: singleAgentExecutionSpec(
+      NEED_ADJUDICATION_EXECUTION_MODE,
+      NEED_ADJUDICATION_MODEL_OPTION_ID,
+    ),
+    harness_adjudication_negative_probe: NEED_ADJUDICATION_NEGATIVE_PROBE,
     resource_sample_source: EXISTING_RESOURCE_SAMPLE_SET_ID ? 'existing_sample_set' : 'created_in_run',
     resource_sample_set_id: resourceSample.sample_set.resource_sample_set_id,
     resource_sample_status: resourceSample.sample_set.status,
@@ -1897,6 +2928,8 @@ try {
     need_candidate_id: v1aHarness.need_candidate_id,
     validated_need_id: v1aHarness.validated_need_id,
     v1b_input_bundle_id: v1aHarness.v1b_input_bundle_id,
+    replay_smoke: v1aHarness.replay_smoke,
+    harness_llm_gateway: harnessLlmGateway.snapshot(),
     nodes: v1aHarness.nodes,
   };
   await writeJson('90-summary.json', summary);
@@ -1905,7 +2938,7 @@ try {
   const failure = {
     status: 'failed',
     scenario_id: SCENARIO_ID,
-    scenario_type: 'v1a_full_workflow_harness_e2e',
+    scenario_type: SCENARIO_TYPE,
     run_id: RUN_ID,
     artifact_dir: ARTIFACT_DIR,
     topic_id: TOPIC_ID,
@@ -1913,15 +2946,39 @@ try {
     provider_id: PROVIDER_ID,
     model_id: MODEL_ID,
     harness_agent_execution_mode: DEFAULT_HARNESS_AGENT_EXECUTION_MODE,
+    harness_evidence_extraction_execution_mode: EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE,
+    harness_evidence_extraction_model_option_id: EVIDENCE_MAP_EXTRACTION_MODEL_OPTION_ID,
+    harness_evidence_extraction_execution_spec: singleAgentExecutionSpec(
+      EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE,
+      EVIDENCE_MAP_EXTRACTION_MODEL_OPTION_ID,
+    ),
     harness_generate_execution_mode: GENERATE_NEED_CANDIDATE_EXECUTION_MODE,
     harness_generate_executor_kind: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND,
+    harness_generate_model_option_id: GENERATE_NEED_CANDIDATE_MODEL_OPTION_ID,
+    harness_generate_execution_spec: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+      ? null
+      : singleAgentExecutionSpec(GENERATE_NEED_CANDIDATE_EXECUTION_MODE, GENERATE_NEED_CANDIDATE_MODEL_OPTION_ID),
+    replay_smoke_enabled: RUN_REPLAY_SMOKE,
     debate_slot_execution_modes: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
       ? DEBATE_SLOT_EXECUTION_MODES
       : null,
     debate_slot_model_option_overrides: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
       ? DEBATE_SLOT_MODEL_OPTION_OVERRIDES
       : null,
+    debate_execution_profile: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+      ? DEBATE_EXECUTION_PROFILE
+      : null,
+    debate_execution_plan: GENERATE_NEED_CANDIDATE_EXECUTOR_KIND === 'multi_agent_debate'
+      ? DEBATE_EXECUTION_PLAN
+      : null,
     harness_adjudication_execution_mode: NEED_ADJUDICATION_EXECUTION_MODE,
+    harness_adjudication_model_option_id: NEED_ADJUDICATION_MODEL_OPTION_ID,
+    harness_adjudication_execution_spec: singleAgentExecutionSpec(
+      NEED_ADJUDICATION_EXECUTION_MODE,
+      NEED_ADJUDICATION_MODEL_OPTION_ID,
+    ),
+    harness_adjudication_negative_probe: NEED_ADJUDICATION_NEGATIVE_PROBE,
+    harness_llm_gateway: harnessLlmGateway?.snapshot?.() ?? null,
     error: sanitizeError(error),
   };
   await writeJson('90-summary.json', failure);

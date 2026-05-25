@@ -45,6 +45,12 @@ export type TopicSelectionPersistNeedCandidateBatchResult = {
   command: TopicSelectionPersistNeedCandidateBatchCommand;
   persisted_candidates: TopicSelectionNeedCandidateRecord[];
   persisted_candidate_refs: TopicSelectionFunctionalRef[];
+  candidate_pool_projection_entries: Array<{
+    need_candidate_ref: TopicSelectionFunctionalRef;
+    draft_id: string;
+    rank: number;
+    normalized_candidate_key: string;
+  }>;
   candidate_pool_projection_ref: TopicSelectionFunctionalRef;
   candidate_pool_projection_hash: string;
   replayed: boolean;
@@ -97,6 +103,10 @@ export class TopicSelectionPersistNeedCandidateBatchService {
         }
         return {
           ...draft,
+          gap_codes: this.uniqueStrings([
+            ...draft.gap_codes,
+            ...result.reason_codes.filter((code) => code === 'METHOD_FAMILY_COVERAGE_GAP'),
+          ]),
           normalized_candidate_key: result.normalized_candidate_key,
           source_admission_decision_ref: this.ref(
             'candidate_draft_admission_result',
@@ -290,11 +300,21 @@ export class TopicSelectionPersistNeedCandidateBatchService {
     replayed: boolean,
   ): TopicSelectionPersistNeedCandidateBatchResult {
     const persistedCandidateRefs = persisted.map((candidate) => this.candidateRef(candidate));
+    const projectionEntries = command.admitted_drafts.map((draft, index) => ({
+      need_candidate_ref: persistedCandidateRefs[index] ?? this.ref(
+        'need_candidate',
+        `need_candidate_${this.shortHash(`${command.idempotency_key}:${draft.draft_id}`, 24)}`,
+        persisted[0]?.title_card_id ?? command.evidence_map_ref.title_card_id ?? null,
+      ),
+      draft_id: draft.draft_id,
+      rank: draft.rank,
+      normalized_candidate_key: draft.normalized_candidate_key,
+    }));
     const projectionHash = this.hash({
       workflow_run_id: command.workflow_run_id,
       node_attempt_id: command.node_attempt_id,
       persisted_candidate_refs: persistedCandidateRefs,
-      normalized_candidate_keys: command.admitted_drafts.map((draft) => draft.normalized_candidate_key).sort(),
+      candidate_pool_projection_entries: projectionEntries,
     });
     return {
       schema_version: 'v1',
@@ -302,6 +322,7 @@ export class TopicSelectionPersistNeedCandidateBatchService {
       command,
       persisted_candidates: persisted,
       persisted_candidate_refs: persistedCandidateRefs,
+      candidate_pool_projection_entries: projectionEntries,
       candidate_pool_projection_ref: this.ref(
         'candidate_pool_projection',
         `candidate_pool_projection_${this.shortHash(projectionHash, 24)}`,
@@ -493,5 +514,19 @@ export class TopicSelectionPersistNeedCandidateBatchService {
       result.push(ref);
     }
     return result;
+  }
+
+  private uniqueStrings(values: string[]): string[] {
+    const seen = new Set<string>();
+    const unique: string[] = [];
+    for (const value of values) {
+      const normalized = value.trim();
+      if (!normalized || seen.has(normalized)) {
+        continue;
+      }
+      seen.add(normalized);
+      unique.push(normalized);
+    }
+    return unique;
   }
 }

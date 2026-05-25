@@ -75,9 +75,13 @@ import type {
   TopicSelectionNeedDiscoveryDebateMockedOutputs,
 } from './topic-selection-need-discovery-debate-loop-service.js';
 import type {
+  TopicSelectionV1aGenerateNeedCandidateDebateExecutionPlan,
   TopicSelectionV1aGenerateNeedCandidateDebateSlotExecutionOverrides,
   TopicSelectionV1aGenerateNeedCandidateDebateSlotModelOptionOverrides,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-debate-scenario-contracts';
+import type {
+  TopicSelectionAgentExecutionSpec,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-profile-contracts';
 import type {
   TopicSelectionCoverageIntentType,
   TopicSelectionCoverageAssessmentRecord,
@@ -92,6 +96,7 @@ import type {
   TopicSelectionSearchPlanBlueprintCoverageIntent,
   TopicSelectionSearchPlanBlueprintOrigin,
   TopicSelectionSearchPlanRecord,
+  TopicSelectionSearchRunCoverageRoleExpectation,
   TopicSelectionSearchRunHandoff,
   TopicSelectionSearchRunLoopbackSignal,
   TopicSelectionSearchRunRecord,
@@ -554,6 +559,7 @@ export type TopicSelectionWorkflowHarnessBuildEvidenceMapInput = {
   extraction_context_packet_ref?: TopicSelectionFunctionalRef | null;
   extraction_draft?: TopicSelectionEvidenceMapExtractionDraft | null;
   execution_mode: TopicSelectionEvidenceMapExtractionExecutionMode;
+  execution_spec?: TopicSelectionAgentExecutionSpec | null;
   run_mode?: TopicSelectionAgentRunMode;
   executor_kind?: TopicSelectionExecutorKind;
   profile_id?: string | null;
@@ -638,6 +644,7 @@ export type TopicSelectionWorkflowHarnessValidateNeedAdjudicationExpectation = {
   final_decision?: TopicSelectionNeedAdjudicationDecision | null;
   error_code?: string | null;
   blocker_codes?: string[];
+  warning_codes?: string[];
   review_reason_codes?: string[];
   adjudication_created?: boolean | null;
 };
@@ -659,12 +666,14 @@ export type TopicSelectionWorkflowHarnessValidateNeedAdjudicationInput = {
   readiness_packet_mode?: TopicSelectionWorkflowHarnessValidateNeedAdjudicationPacketMode;
   support_packet_mode?: TopicSelectionWorkflowHarnessValidateNeedAdjudicationPacketMode;
   execution_mode: TopicSelectionAgentExecutionMode;
+  execution_spec?: TopicSelectionAgentExecutionSpec | null;
   run_mode?: TopicSelectionAgentRunMode;
   executor_kind?: TopicSelectionExecutorKind;
   profile_id?: string | null;
   mocked_output?: TopicSelectionMockedAgentOutput<TopicSelectionNeedAdjudicationRecommendationPacket> | null;
   codex_response?: TopicSelectionCodexAssistedAgentOutput<TopicSelectionNeedAdjudicationRecommendationPacket> | null;
   model_option_id?: string | null;
+  diagnostic_prompt_appendix?: string | null;
   adjudication_actor?: TopicSelectionActorRef | null;
   fixture_human_decision?: boolean;
   policy_version: string;
@@ -688,6 +697,7 @@ export type TopicSelectionWorkflowHarnessValidateNeedAdjudicationNodeInput = {
   readiness_packet_mode: TopicSelectionWorkflowHarnessValidateNeedAdjudicationPacketMode;
   support_packet_mode: TopicSelectionWorkflowHarnessValidateNeedAdjudicationPacketMode;
   execution_mode: TopicSelectionAgentExecutionMode;
+  execution_spec: TopicSelectionAgentExecutionSpec | null;
   profile_id: string;
   policy_version: string;
   output_schema_version: string;
@@ -759,6 +769,7 @@ export type TopicSelectionWorkflowHarnessHumanConfirmNeedInput = {
   reserved_validated_need_ref: TopicSelectionFunctionalRef;
   confirmation_input: HumanConfirmationInput;
   execution_mode?: TopicSelectionWorkflowHarnessHumanConfirmNeedExecutionMode;
+  execution_spec?: TopicSelectionAgentExecutionSpec | null;
   run_mode?: TopicSelectionAgentRunMode;
   executor_kind?: TopicSelectionExecutorKind;
   profile_id?: string | null;
@@ -782,6 +793,7 @@ export type TopicSelectionWorkflowHarnessHumanConfirmNeedNodeInput = {
   reserved_validated_need_ref: TopicSelectionFunctionalRef;
   confirmation_input: HumanConfirmationInput;
   execution_mode: TopicSelectionWorkflowHarnessHumanConfirmNeedExecutionMode;
+  execution_spec: TopicSelectionAgentExecutionSpec | null;
   run_mode: TopicSelectionAgentRunMode;
   executor_kind: TopicSelectionExecutorKind;
   model_option_id: string | null;
@@ -1045,8 +1057,10 @@ export type TopicSelectionWorkflowHarnessGenerateNeedCandidateInput = {
   execution_mode: TopicSelectionAgentExecutionMode;
   run_mode: TopicSelectionAgentRunMode;
   executor_kind?: TopicSelectionExecutorKind;
+  execution_spec?: TopicSelectionAgentExecutionSpec | null;
   debate_loop_id?: string | null;
   debate_policy_id?: string | null;
+  debate_execution_plan?: TopicSelectionV1aGenerateNeedCandidateDebateExecutionPlan | null;
   debate_slot_execution_overrides?: TopicSelectionV1aGenerateNeedCandidateDebateSlotExecutionOverrides | null;
   debate_slot_model_option_overrides?: TopicSelectionV1aGenerateNeedCandidateDebateSlotModelOptionOverrides | null;
   debate_mocked_outputs?: TopicSelectionNeedDiscoveryDebateMockedOutputs | null;
@@ -1473,6 +1487,8 @@ export class TopicSelectionWorkflowHarnessService {
     let errorMessage = validation.error_message;
     let blockerCodes = validation.blocker_codes;
     let coverageMatrixSummary: Record<string, unknown> | null = null;
+    let coverageRoleExpectations: TopicSelectionSearchRunCoverageRoleExpectation[] = [];
+    let methodFamilyTargets: string[] = [];
 
     if (!validation.blocked && input.bundle) {
       try {
@@ -1484,6 +1500,9 @@ export class TopicSelectionWorkflowHarnessService {
         riskAcceptances = created.risk_acceptances;
         const matrix = await searchResources.getCoverageMatrix(input.bundle.search_plan_ref.ref_id);
         coverageMatrixSummary = matrix.summary;
+        coverageRoleExpectations = this.searchRunCoverageRoleExpectations(input.bundle, matrix.rows);
+        const searchPlan = await searchResources.getSearchPlanById(input.bundle.search_plan_ref.ref_id);
+        methodFamilyTargets = this.methodFamilyTargetsFromSearchPlan(searchPlan);
       } catch (error) {
         if (!(error instanceof AppError)) {
           throw error;
@@ -1517,6 +1536,8 @@ export class TopicSelectionWorkflowHarnessService {
           coverageAssessmentRefs,
           observations,
           riskAcceptances,
+          coverageRoleExpectations,
+          methodFamilyTargets,
         })
       : null;
     const loopbackSignal = searchRun && searchRunRef && input.bundle && !consumableForEvidenceMap
@@ -1840,7 +1861,7 @@ export class TopicSelectionWorkflowHarnessService {
         recommendationPacket = recommendation.packet;
         recommendationPacketRef = recommendation.packet_ref;
         agentInvocationAuditRef = recommendation.agent_invocation_audit_ref;
-        const gate = this.validateNeedAdjudicationRecommendationGate(input, candidate, recommendationPacket);
+        const gate = this.validateNeedAdjudicationRecommendationGate(input, candidate, supportPacket, recommendationPacket);
         if (gate.status !== 'ready') {
           nodeResult = this.validateNeedAdjudicationBlockedResult(input, {
             candidate,
@@ -1857,6 +1878,7 @@ export class TopicSelectionWorkflowHarnessService {
             requiredActions: recommendationPacket.required_actions,
             acceptedRiskRefs: recommendationPacket.accepted_risk_refs,
             residualRiskRefs: recommendationPacket.residual_risk_refs,
+            warningCodes: this.validateNeedAdjudicationWarningCodes(readiness, supportPacket, recommendationPacket),
           });
         } else {
           const adjudication = await needValidation.adjudicateNeed({
@@ -1910,7 +1932,7 @@ export class TopicSelectionWorkflowHarnessService {
             final_decision: adjudicationResult.final_decision,
             required_actions: adjudicationResult.required_actions,
             blocker_codes: [],
-            warning_codes: [],
+            warning_codes: this.validateNeedAdjudicationWarningCodes(readiness, supportPacket, recommendationPacket),
             review_reason_codes: [],
             accepted_risk_refs: adjudicationResult.accepted_risk_refs,
             residual_risk_refs: adjudicationResult.residual_risk_refs,
@@ -2397,9 +2419,11 @@ export class TopicSelectionWorkflowHarnessService {
       node_input: nodeInput,
       run_mode: input.run_mode,
       executor_kind: input.executor_kind,
+      execution_spec: input.execution_spec ?? null,
       model_option_id: input.model_option_id ?? null,
       debate_loop_id: input.debate_loop_id ?? null,
       debate_policy_id: input.debate_policy_id ?? null,
+      debate_execution_plan: input.debate_execution_plan ?? null,
       debate_slot_execution_overrides: input.debate_slot_execution_overrides ?? null,
       debate_slot_model_option_overrides: input.debate_slot_model_option_overrides ?? null,
       debate_mocked_outputs: input.debate_mocked_outputs ?? null,
@@ -2498,6 +2522,9 @@ export class TopicSelectionWorkflowHarnessService {
     const existingTraceRef = this.ref('artifact_ref', matching.artifact_ref_id, matching.title_card_id ?? input.title_card_id);
     const adapterResult: TopicSelectionGenerateNeedCandidateOrchestratorAdapterResult = {
       ...existingPayload.adapter_result,
+      warning_codes: existingPayload.adapter_result.warning_codes
+        ?? existingPayload.adapter_result.invocation_result?.warning_codes
+        ?? [],
       replay_provenance: {
         replayed: true,
         source_workflow_run_id: existingPayload.workflow_run_id,
@@ -3014,6 +3041,7 @@ export class TopicSelectionWorkflowHarnessService {
         workflow_run_id: input.workflow_run_id,
         node_attempt_id: input.node_attempt_id,
         execution_mode: executionMode,
+        execution_spec: input.execution_spec ?? null,
         executor_kind: input.executor_kind ?? 'single_agent',
         run_mode: input.run_mode ?? 'acceptance',
         profile_id: input.profile_id ?? TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
@@ -3912,6 +3940,7 @@ export class TopicSelectionWorkflowHarnessService {
       workflow_run_id: input.workflow_run_id,
       node_attempt_id: input.node_attempt_id,
       execution_mode: input.execution_mode,
+      execution_spec: input.execution_spec ?? null,
       executor_kind: input.executor_kind ?? 'single_agent',
       run_mode: input.run_mode ?? 'acceptance',
       profile_id: nodeInput.profile_id,
@@ -3959,6 +3988,7 @@ export class TopicSelectionWorkflowHarnessService {
   private validateNeedAdjudicationRecommendationGate(
     input: TopicSelectionWorkflowHarnessValidateNeedAdjudicationInput,
     candidate: TopicSelectionNeedCandidateRecord,
+    supportPacket: TopicSelectionValidationDecisionSupportPacketRecord,
     packet: TopicSelectionNeedAdjudicationRecommendationPacket,
   ): {
     status: 'ready' | 'blocked' | 'require_human_review';
@@ -4037,6 +4067,36 @@ export class TopicSelectionWorkflowHarnessService {
         error_message: 'park requires rationale or required_actions.',
       };
     }
+    if (decision === 'validate') {
+      const coveredRiskKeys = new Set([
+        ...packet.residual_risk_refs.map((ref) => this.refIdentity(ref)),
+        ...packet.accepted_risk_refs.map((ref) => this.refIdentity(ref)),
+      ]);
+      const droppedResidualRisks = supportPacket.residual_risk_refs.filter((ref) =>
+        !coveredRiskKeys.has(this.refIdentity(ref)),
+      );
+      if (droppedResidualRisks.length > 0) {
+        return {
+          status: 'blocked',
+          blocker_codes: ['RESIDUAL_RISK_DROPPED'],
+          review_reason_codes: [],
+          error_code: 'GATE_CONSTRAINT_FAILED',
+          error_message: 'validate must carry or explicitly accept support packet residual risks.',
+        };
+      }
+      if (
+        supportPacket.open_gap_codes.includes('METHOD_FAMILY_COVERAGE_GAP')
+        && !this.adjudicationPacketCarriesMethodFamilyGap(packet)
+      ) {
+        return {
+          status: 'blocked',
+          blocker_codes: ['METHOD_FAMILY_COVERAGE_GAP_DROPPED'],
+          review_reason_codes: [],
+          error_code: 'GATE_CONSTRAINT_FAILED',
+          error_message: 'validate must carry method-family coverage gaps into required_actions.',
+        };
+      }
+    }
     if (NEED_ADJUDICATION_HIGH_RISK_DECISIONS.has(decision)
       && !this.hasHumanOrHybridAcceptance(input)) {
       return {
@@ -4056,6 +4116,31 @@ export class TopicSelectionWorkflowHarnessService {
     };
   }
 
+  private validateNeedAdjudicationWarningCodes(
+    readiness: TopicSelectionNeedCandidateReadinessAssessmentRecord,
+    supportPacket: TopicSelectionValidationDecisionSupportPacketRecord,
+    packet: TopicSelectionNeedAdjudicationRecommendationPacket | null,
+  ): string[] {
+    return this.uniqueStrings([
+      ...readiness.warnings.map((warning) => warning.code),
+      ...supportPacket.open_gap_codes.filter((code) => code === 'METHOD_FAMILY_COVERAGE_GAP'),
+      ...(packet?.final_decision === 'validate' && supportPacket.residual_risk_refs.length > 0
+        ? ['VALIDATE_WITH_RESIDUAL_RISK']
+        : []),
+    ]);
+  }
+
+  private adjudicationPacketCarriesMethodFamilyGap(
+    packet: TopicSelectionNeedAdjudicationRecommendationPacket,
+  ): boolean {
+    if (packet.gap_codes.includes('METHOD_FAMILY_COVERAGE_GAP')) {
+      return true;
+    }
+    return packet.required_actions.some((action) =>
+      /METHOD_FAMILY_COVERAGE_GAP|method[- ]family|coverage gap|fine[- ]tuning|hybrid/i.test(action),
+    );
+  }
+
   private needAdjudicationMessages(
     input: TopicSelectionWorkflowHarnessValidateNeedAdjudicationInput,
     candidate: TopicSelectionNeedCandidateRecord,
@@ -4069,6 +4154,9 @@ export class TopicSelectionWorkflowHarnessService {
           'Produce TopicSelectionNeedAdjudicationRecommendationPacket@v1 only.',
           'Do not include route_outcome, next_node_id, DB status fields, authority ids to create, hidden reasoning, or workflow commands.',
           'Use the validation support packet as frozen truth; do not invent evidence, risks, merge targets, or recheck refs.',
+          'If residual_risk_refs or METHOD_FAMILY_COVERAGE_GAP are present, validate must carry those risks in residual_risk_refs or accepted_risk_refs and include required_actions for follow-up.',
+          'Do not return clean validate by dropping support-packet residual risks or coverage warnings.',
+          ...(input.diagnostic_prompt_appendix?.trim() ? [input.diagnostic_prompt_appendix.trim()] : []),
         ].join('\n'),
       },
       {
@@ -4153,6 +4241,7 @@ export class TopicSelectionWorkflowHarnessService {
       readiness_packet_mode: input.readiness_packet_mode ?? 'create_fresh',
       support_packet_mode: input.support_packet_mode ?? 'create_fresh',
       execution_mode: input.execution_mode,
+      execution_spec: input.execution_spec ?? null,
       profile_id: input.profile_id ?? TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
       policy_version: input.policy_version,
       output_schema_version: input.output_schema_version,
@@ -4168,6 +4257,7 @@ export class TopicSelectionWorkflowHarnessService {
       run_mode: input.run_mode ?? 'acceptance',
       executor_kind: input.executor_kind ?? 'single_agent',
       model_option_id: input.model_option_id ?? null,
+      diagnostic_prompt_appendix: input.diagnostic_prompt_appendix ?? null,
       adjudication_actor: input.adjudication_actor ?? null,
       fixture_human_decision: input.fixture_human_decision ?? false,
       mocked_output_hash: input.mocked_output ? this.hash(input.mocked_output) : null,
@@ -4193,6 +4283,7 @@ export class TopicSelectionWorkflowHarnessService {
       requiredActions?: string[];
       acceptedRiskRefs?: TopicSelectionFunctionalRef[];
       residualRiskRefs?: TopicSelectionFunctionalRef[];
+      warningCodes?: string[];
       duplicateAdjudicationRef?: TopicSelectionFunctionalRef | null;
       reservedValidatedNeedRef?: TopicSelectionFunctionalRef | null;
     },
@@ -4224,7 +4315,7 @@ export class TopicSelectionWorkflowHarnessService {
       final_decision: details.finalDecision ?? null,
       required_actions: details.requiredActions ?? [],
       blocker_codes: details.blockerCodes ?? [],
-      warning_codes: [],
+      warning_codes: details.warningCodes ?? [],
       review_reason_codes: details.reviewReasonCodes ?? [],
       accepted_risk_refs: details.acceptedRiskRefs ?? [],
       residual_risk_refs: details.residualRiskRefs ?? details.supportPacket?.residual_risk_refs ?? [],
@@ -4306,6 +4397,16 @@ export class TopicSelectionWorkflowHarnessService {
         'ValidateNeedAdjudication review reason codes must include expected scenario reasons.',
         expectations.review_reason_codes,
         nodeResult.review_reason_codes,
+      ));
+    }
+    if (expectations.warning_codes) {
+      const missing = expectations.warning_codes.filter((code) => !nodeResult.warning_codes.includes(code));
+      assertions.push(this.assertion(
+        'expected_warning_codes',
+        missing.length === 0,
+        'ValidateNeedAdjudication warning codes must include expected scenario warnings.',
+        expectations.warning_codes,
+        nodeResult.warning_codes,
       ));
     }
     if (expectations.adjudication_created !== undefined && expectations.adjudication_created !== null) {
@@ -4416,6 +4517,14 @@ export class TopicSelectionWorkflowHarnessService {
     }
     if (!['mocked_llm', 'codex_assisted', 'provider_llm'].includes(input.execution_mode)) {
       throw new AppError(400, 'INVALID_PAYLOAD', 'execution_mode is invalid.');
+    }
+    this.assertSingleAgentExecutionSpec({
+      execution_mode: input.execution_mode,
+      execution_spec: input.execution_spec ?? null,
+      model_option_id: input.model_option_id ?? null,
+    });
+    if (input.diagnostic_prompt_appendix?.trim() && (input.run_mode ?? 'acceptance') !== 'acceptance') {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'diagnostic_prompt_appendix is allowed only in acceptance mode.');
     }
     if ((input.readiness_packet_mode ?? 'create_fresh') === 'consume_explicit_ref' && !input.readiness_assessment_ref) {
       throw new AppError(400, 'INVALID_PAYLOAD', 'readiness_assessment_ref is required when consuming explicit readiness.');
@@ -4638,6 +4747,7 @@ export class TopicSelectionWorkflowHarnessService {
       workflow_run_id: input.workflow_run_id,
       node_attempt_id: input.node_attempt_id,
       execution_mode: input.execution_mode,
+      execution_spec: input.execution_spec ?? null,
       executor_kind: input.executor_kind ?? 'single_agent',
       run_mode: input.run_mode ?? 'acceptance',
       profile_id: nodeInput.profile_id,
@@ -4678,6 +4788,8 @@ export class TopicSelectionWorkflowHarnessService {
         content: [
           'Produce TopicSelectionEvidenceMapExtractionDraft@v1 only.',
           'Use source-grounded EvidenceUnits and never include hidden reasoning or raw provider logs.',
+          'Create at least one draft_unit for every literature_record in search_run_handoff.evidence_map_input_refs; missing source-candidate coverage blocks materialization.',
+          'If an EvidenceUnit cites coverage_row_intent_ref, evidence_role must match search_run_handoff.coverage_role_expectations.',
           'Do not write authority records; the deterministic materialization gate owns persistence.',
         ].join('\n'),
       },
@@ -4794,6 +4906,7 @@ export class TopicSelectionWorkflowHarnessService {
       },
       issue_summary: issueSummary,
       source_refs_hash: this.hash(input.records.evidence_units.flatMap((unit) => unit.source_refs)),
+      method_family_targets: input.input.search_run_handoff?.method_family_targets ?? [],
       policy_version: input.input.policy_version,
       output_schema_version: input.input.output_schema_version,
     };
@@ -5393,10 +5506,11 @@ export class TopicSelectionWorkflowHarnessService {
     if (!this.isStringArray(blueprint.must_check_constraints)
       || !this.isStringArray(blueprint.exclusion_rules)
       || !this.isPlainRecord(blueprint.coverage_strategy)
-      || !this.isPlainRecord(blueprint.role_coverage_expectation)) {
+      || !this.isPlainRecord(blueprint.role_coverage_expectation)
+      || !this.isNonEmptyStringArray(blueprint.method_family_targets)) {
       return this.blockedSearchPlanValidation(
         'INVALID_PAYLOAD',
-        'SearchPlan blueprint constraints, exclusions, strategy, and role expectations are malformed.',
+        'SearchPlan blueprint constraints, exclusions, strategy, role expectations, and method-family targets are malformed.',
         ['MALFORMED_SEARCH_PLAN_BLUEPRINT'],
       );
     }
@@ -5943,6 +6057,8 @@ export class TopicSelectionWorkflowHarnessService {
     coverageAssessmentRefs: TopicSelectionFunctionalRef[];
     observations: TopicSelectionCoverageExecutionObservationRecord[];
     riskAcceptances: TopicSelectionCoverageRiskAcceptanceRecord[];
+    coverageRoleExpectations: TopicSelectionSearchRunCoverageRoleExpectation[];
+    methodFamilyTargets: string[];
   }): TopicSelectionSearchRunHandoff {
     return {
       schema_version: TOPIC_SELECTION_SEARCH_RUN_HANDOFF_SCHEMA_VERSION,
@@ -5951,6 +6067,8 @@ export class TopicSelectionWorkflowHarnessService {
       literature_resource_pool_snapshot_ref: input.searchRun.literature_snapshot_ref,
       literature_snapshot_hash: input.bundle.expected_literature_snapshot_hash,
       coverage_row_intent_refs: this.searchRunCoverageRowRefs(input.bundle),
+      coverage_role_expectations: input.coverageRoleExpectations,
+      method_family_targets: input.methodFamilyTargets,
       evidence_map_input_refs: input.bundle.evidence_map_input_refs,
       coverage_binding_refs: input.evidenceBindingRefs,
       coverage_assessment_refs: input.coverageAssessmentRefs,
@@ -6191,6 +6309,45 @@ export class TopicSelectionWorkflowHarnessService {
     ]);
   }
 
+  private searchRunCoverageRoleExpectations(
+    bundle: TopicSelectionSearchRunRecordBundle,
+    rows: Array<{ coverage_row_intent: TopicSelectionCoverageRowIntentRecord }>,
+  ): TopicSelectionSearchRunCoverageRoleExpectation[] {
+    const refsByKey = new Map(
+      this.searchRunCoverageRowRefs(bundle).map((ref) => [this.refIdentity(ref), ref] as const),
+    );
+    return rows
+      .filter((row) => refsByKey.has(this.refIdentity(this.ref(
+        'coverage_row_intent',
+        row.coverage_row_intent.coverage_row_intent_id,
+        row.coverage_row_intent.title_card_id ?? bundle.title_card_ref.ref_id,
+      ))))
+      .map((row) => {
+        const rowRef = this.ref(
+          'coverage_row_intent',
+          row.coverage_row_intent.coverage_row_intent_id,
+          row.coverage_row_intent.title_card_id ?? bundle.title_card_ref.ref_id,
+        );
+        return {
+          coverage_row_intent_ref: refsByKey.get(this.refIdentity(rowRef)) ?? rowRef,
+          expected_evidence_role: row.coverage_row_intent.expected_evidence_role,
+        };
+      })
+      .sort((left, right) =>
+        left.coverage_row_intent_ref.ref_id.localeCompare(right.coverage_row_intent_ref.ref_id));
+  }
+
+  private methodFamilyTargetsFromSearchPlan(searchPlan: TopicSelectionSearchPlanRecord | null): string[] {
+    const targets = searchPlan?.coverage_strategy.method_family_targets;
+    if (!Array.isArray(targets)) {
+      return [];
+    }
+    return this.uniqueStrings(targets
+      .filter((target): target is string => typeof target === 'string' && target.trim().length > 0)
+      .map((target) => target.trim()))
+      .sort((left, right) => left.localeCompare(right));
+  }
+
   private searchRunCoverageSummary(
     bundle: TopicSelectionSearchRunRecordBundle,
     observations: TopicSelectionCoverageExecutionObservationRecord[],
@@ -6291,10 +6448,12 @@ export class TopicSelectionWorkflowHarnessService {
       output_schema_version: input.output_schema_version,
       profile_id: input.profile_id,
       execution_mode: input.execution_mode,
+      execution_spec: input.execution_spec ?? null,
       run_mode: input.run_mode,
       executor_kind: input.executor_kind ?? 'single_agent',
       debate_loop_id: input.debate_loop_id ?? null,
       debate_policy_id: input.debate_policy_id ?? null,
+      debate_execution_plan: input.debate_execution_plan ?? null,
       debate_slot_execution_overrides: input.debate_slot_execution_overrides ?? null,
       debate_slot_model_option_overrides: input.debate_slot_model_option_overrides ?? null,
       debate_mocked_outputs_hash: input.debate_mocked_outputs ? this.hash(input.debate_mocked_outputs) : null,
@@ -6527,7 +6686,7 @@ export class TopicSelectionWorkflowHarnessService {
         ...this.adapterArtifactRefs(input.adapterResult),
       ]),
       authority_refs: input.adapterResult.persist_need_candidate_batch_result?.persisted_candidate_refs ?? [],
-      warning_codes: input.adapterResult.invocation_result.warning_codes,
+      warning_codes: input.adapterResult.warning_codes,
       blocker_codes: input.adapterResult.blocker_codes,
       assertions: input.assertions,
       created_at: this.now(),
@@ -6836,6 +6995,25 @@ export class TopicSelectionWorkflowHarnessService {
     this.assertNonEmpty(input.node_attempt_id, 'node_attempt_id');
   }
 
+  private assertSingleAgentExecutionSpec(input: {
+    execution_mode: TopicSelectionAgentExecutionMode;
+    execution_spec?: TopicSelectionAgentExecutionSpec | null;
+    model_option_id?: string | null;
+  }): void {
+    const spec = input.execution_spec;
+    const modelOptionId = input.model_option_id?.trim() || null;
+    if (spec && spec.execution_mode !== input.execution_mode) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'execution_spec.execution_mode must match execution_mode.');
+    }
+    const specModelOptionId = spec?.model_option_id?.trim() || null;
+    if (modelOptionId && specModelOptionId && modelOptionId !== specModelOptionId) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'execution_spec.model_option_id must match model_option_id.');
+    }
+    if (input.execution_mode !== 'provider_llm' && (modelOptionId || specModelOptionId)) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'model_option_id requires execution_mode=provider_llm.');
+    }
+  }
+
   private assertBuildEvidenceMapScenarioInput(input: TopicSelectionWorkflowHarnessBuildEvidenceMapInput): void {
     this.assertNonEmpty(input.scenario_id, 'scenario_id');
     this.assertNonEmpty(input.title_card_id, 'title_card_id');
@@ -6857,6 +7035,20 @@ export class TopicSelectionWorkflowHarnessService {
     }
     if (input.execution_mode === 'none' && !input.extraction_draft) {
       throw new AppError(400, 'INVALID_PAYLOAD', 'execution_mode=none requires extraction_draft.');
+    }
+    if (input.execution_mode === 'none') {
+      if (input.execution_spec) {
+        throw new AppError(400, 'INVALID_PAYLOAD', 'execution_spec is only allowed for model-like evidence extraction.');
+      }
+      if (input.model_option_id?.trim()) {
+        throw new AppError(400, 'INVALID_PAYLOAD', 'model_option_id requires model-like evidence extraction.');
+      }
+    } else {
+      this.assertSingleAgentExecutionSpec({
+        execution_mode: input.execution_mode,
+        execution_spec: input.execution_spec ?? null,
+        model_option_id: input.model_option_id ?? null,
+      });
     }
     if (input.execution_mode !== 'none' && !input.extraction_context_packet) {
       throw new AppError(400, 'INVALID_PAYLOAD', 'model-like evidence extraction requires extraction_context_packet.');
@@ -6930,6 +7122,20 @@ export class TopicSelectionWorkflowHarnessService {
     if (!['deterministic_parser', 'mocked_llm', 'codex_assisted', 'provider_llm'].includes(executionMode)) {
       throw new AppError(400, 'INVALID_PAYLOAD', 'execution_mode is invalid.');
     }
+    if (executionMode === 'deterministic_parser') {
+      if (input.execution_spec) {
+        throw new AppError(400, 'INVALID_PAYLOAD', 'execution_spec is only allowed for model-like human confirmation review.');
+      }
+      if (input.model_option_id?.trim()) {
+        throw new AppError(400, 'INVALID_PAYLOAD', 'model_option_id requires model-like human confirmation review.');
+      }
+    } else {
+      this.assertSingleAgentExecutionSpec({
+        execution_mode: executionMode,
+        execution_spec: input.execution_spec ?? null,
+        model_option_id: input.model_option_id ?? null,
+      });
+    }
   }
 
   private humanConfirmNeedNodeInput(
@@ -6946,6 +7152,7 @@ export class TopicSelectionWorkflowHarnessService {
       reserved_validated_need_ref: input.reserved_validated_need_ref,
       confirmation_input: input.confirmation_input,
       execution_mode: input.execution_mode ?? 'codex_assisted',
+      execution_spec: input.execution_spec ?? null,
       run_mode: input.run_mode ?? 'acceptance',
       executor_kind: input.executor_kind ?? 'single_agent',
       model_option_id: input.model_option_id ?? null,

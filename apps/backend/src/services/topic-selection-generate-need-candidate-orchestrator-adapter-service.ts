@@ -24,7 +24,10 @@ import {
   type TopicSelectionMockedAgentOutput,
   TopicSelectionAgentOrchestratorService,
 } from './topic-selection-agent-orchestrator-service.js';
-import { TopicSelectionCandidateDraftAdmissionService } from './topic-selection-candidate-draft-admission-service.js';
+import {
+  TopicSelectionCandidateDraftAdmissionService,
+  type TopicSelectionCandidateDraftEvidenceRoleRefEntry,
+} from './topic-selection-candidate-draft-admission-service.js';
 import { TopicSelectionNeedDiscoveryArtifactBoundaryService } from './topic-selection-need-discovery-artifact-boundary-service.js';
 import { TopicSelectionNeedDiscoveryContextCompilerService } from './topic-selection-need-discovery-context-compiler-service.js';
 import {
@@ -34,9 +37,13 @@ import {
   type TopicSelectionNeedDiscoveryDebateMockedOutputs,
 } from './topic-selection-need-discovery-debate-loop-service.js';
 import type {
+  TopicSelectionV1aGenerateNeedCandidateDebateExecutionPlan,
   TopicSelectionV1aGenerateNeedCandidateDebateSlotExecutionOverrides,
   TopicSelectionV1aGenerateNeedCandidateDebateSlotModelOptionOverrides,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-debate-scenario-contracts';
+import type {
+  TopicSelectionAgentExecutionSpec,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-profile-contracts';
 import {
   TopicSelectionPersistNeedCandidateBatchService,
   type TopicSelectionPersistNeedCandidateBatchResult,
@@ -66,9 +73,11 @@ export type TopicSelectionGenerateNeedCandidateOrchestratorAdapterInput = {
   node_input: TopicSelectionGenerateNeedCandidateNodeInput;
   run_mode: TopicSelectionAgentRunMode;
   executor_kind?: TopicSelectionExecutorKind;
+  execution_spec?: TopicSelectionAgentExecutionSpec | null;
   model_option_id?: string | null;
   debate_loop_id?: string | null;
   debate_policy_id?: string | null;
+  debate_execution_plan?: TopicSelectionV1aGenerateNeedCandidateDebateExecutionPlan | null;
   debate_slot_execution_overrides?: TopicSelectionV1aGenerateNeedCandidateDebateSlotExecutionOverrides | null;
   debate_slot_model_option_overrides?: TopicSelectionV1aGenerateNeedCandidateDebateSlotModelOptionOverrides | null;
   debate_mocked_outputs?: TopicSelectionNeedDiscoveryDebateMockedOutputs | null;
@@ -110,6 +119,7 @@ export type TopicSelectionGenerateNeedCandidateOrchestratorAdapterResult = {
     source_trace_artifact_ref: TopicSelectionFunctionalRef;
     input_hash: string;
   } | null;
+  warning_codes: string[];
   blocker_codes: string[];
   error_code?: string | null;
 };
@@ -189,6 +199,7 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
         debate_loop_id: input.debate_loop_id ?? null,
         debate_policy_id: input.debate_policy_id ?? null,
         round_index: input.current_round_index ?? 1,
+        execution_plan: input.debate_execution_plan ?? null,
         slot_execution_overrides: input.debate_slot_execution_overrides ?? null,
         slot_model_option_overrides: input.debate_slot_model_option_overrides ?? null,
         mocked_outputs: input.debate_mocked_outputs ?? null,
@@ -205,6 +216,7 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
         workflow_run_id: input.node_input.workflow_run_id,
         node_attempt_id: input.node_input.node_attempt_id,
         execution_mode: input.node_input.execution_mode,
+        execution_spec: input.execution_spec ?? null,
         executor_kind: input.executor_kind ?? 'single_agent',
         run_mode: input.run_mode,
         profile_id: input.node_input.profile_id,
@@ -252,6 +264,7 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
         invocation_result: invocationResult,
         debate_result: debateResult,
         blocker_codes: invocationResult.blocker_codes,
+        warning_codes: invocationResult.warning_codes,
         error_code: invocationResult.error_code ?? 'AGENT_INVOCATION_BLOCKED',
       };
     }
@@ -302,6 +315,10 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
         invocation_result: invocationResult,
         debate_result: debateResult,
         blocker_codes: minimumSchemaValidationReport.blocking_reason_codes,
+        warning_codes: this.uniqueStrings([
+          ...invocationResult.warning_codes,
+          ...minimumSchemaValidationReport.warning_codes,
+        ]),
         error_code: 'INVALID_RANKED_CANDIDATE_DRAFT_BATCH',
       };
     }
@@ -328,6 +345,9 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
       ranked_candidate_draft_batch: rankedCandidateDraftBatch,
       minimum_validation_report: minimumSchemaValidationReport,
       resolvable_refs: this.contextResolvableRefs(input.node_input, explorationContext, arbiterContext),
+      evidence_role_ref_entries: this.evidenceRoleRefEntries(arbiterContext),
+      method_family_counts: this.methodFamilyCounts(explorationContext),
+      method_family_targets: this.methodFamilyTargets(explorationContext),
       candidate_pool_entries: this.candidatePoolEntries(arbiterContext),
       max_persisted_candidates: minimumSchemaValidationReport.max_persisted_candidates,
       remaining_round_budget: input.remaining_round_budget ?? 0,
@@ -409,6 +429,11 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
       invocation_result: invocationResult,
       debate_result: debateResult,
       blocker_codes: blockerCodes,
+      warning_codes: this.adapterWarningCodes(
+        invocationResult.warning_codes,
+        minimumSchemaValidationReport.warning_codes,
+        candidateDraftAdmissionReport,
+      ),
       error_code: this.errorCodeForRoutingDecision(supplementalRoundRoutingDecision, candidateDraftAdmissionReport),
     };
   }
@@ -545,6 +570,10 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
           'Use only the supplied refs and context packets.',
           'The candidate_pool_digest and sibling_candidate_digest describe existing sibling candidates for duplicate awareness only; an empty pool means there are no known duplicates, not that generation should stop.',
           'Generate new candidate drafts from the evidence signals, evidence_ref_table, resource sample digest, and challenge prompts.',
+          'Role bundle refs must be role-specific evidence_unit refs only: support_unit_refs use support units, challenge_unit_refs use challenge units, baseline_unit_refs use baseline units, and context_unit_refs use context units.',
+          'Before returning, check every role-bundle ref against role_ref_constraints; if a role has no allowed evidence_unit refs, return an empty array for that role rather than borrowing another role.',
+          'Do not use baseline, challenge, or context units in support_unit_refs to mean they support the written argument; EvidenceMap role is authoritative.',
+          'Do not place evidence_conflict/evidence_conflict_set or evidence_strength_assessment refs in the role bundle; put them only in conflict_refs or strength_assessment_refs.',
           'Do not create NeedCandidate, ValidatedNeed, TopicQuestionContract, SearchPlan, or any authority record.',
           'Do not include hidden reasoning, raw transcripts, provider logs, credentials, or secrets.',
           'Return only the structured output matching the ranked candidate draft batch schema.',
@@ -577,6 +606,9 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
             candidate_pool_digest_role: 'existing_sibling_candidates_for_duplicate_awareness',
             empty_candidate_pool_meaning: 'no known duplicate candidates; still generate new drafts from evidence',
             generation_source: 'evidence signals and refs, not pre-existing candidate pool entries',
+            role_bundle_ref_rule: 'support/challenge/baseline/context_unit_refs accept only evidence_unit refs whose EvidenceMap role matches the field name',
+            role_ref_constraints: this.roleRefConstraints(arbiterContext),
+            strength_conflict_ref_rule: 'evidence_strength_assessment refs belong in strength_assessment_refs; evidence_conflict/evidence_conflict_set refs belong in conflict_refs',
           },
         }),
       },
@@ -628,6 +660,153 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
       .filter((entry): entry is { normalized_candidate_key: string; candidate_ref: TopicSelectionFunctionalRef } =>
         Boolean(entry),
       );
+  }
+
+  private evidenceRoleRefEntries(
+    arbiterContext: TopicSelectionNeedDiscoveryContextPacket,
+  ): TopicSelectionCandidateDraftEvidenceRoleRefEntry[] {
+    if (arbiterContext.context_family !== 'arbiter_context') {
+      return [];
+    }
+    const table = arbiterContext.payload.evidence_ref_table;
+    if (!Array.isArray(table)) {
+      return [];
+    }
+    return table
+      .map((entry) => {
+        if (!this.isRecord(entry) || typeof entry.role !== 'string') {
+          return null;
+        }
+        const evidenceRef = this.readFunctionalRef(entry.evidence_ref);
+        if (!evidenceRef) {
+          return null;
+        }
+        return {
+          evidence_ref: evidenceRef,
+          role: entry.role,
+        };
+      })
+      .filter((entry): entry is TopicSelectionCandidateDraftEvidenceRoleRefEntry => Boolean(entry));
+  }
+
+  private roleRefConstraints(arbiterContext: TopicSelectionNeedDiscoveryContextPacket): Record<string, unknown> {
+    const empty = {
+      support_unit_refs: [],
+      challenge_unit_refs: [],
+      baseline_unit_refs: [],
+      context_unit_refs: [],
+      conflict_refs: [],
+      strength_assessment_refs: [],
+      hard_rules: [
+        'Each role-bundle field may contain only refs from the same-named allowed list.',
+        'If no allowed refs exist for a role-bundle field, return an empty array for that field.',
+        'Do not duplicate an evidence_unit into a different role field.',
+      ],
+    };
+    if (arbiterContext.context_family !== 'arbiter_context') {
+      return empty;
+    }
+    const constraints: Record<string, TopicSelectionFunctionalRef[]> = {
+      support_unit_refs: [],
+      challenge_unit_refs: [],
+      baseline_unit_refs: [],
+      context_unit_refs: [],
+      conflict_refs: [],
+      strength_assessment_refs: [],
+    };
+    const table = arbiterContext.payload.evidence_ref_table;
+    if (!Array.isArray(table)) {
+      return empty;
+    }
+    for (const entry of table) {
+      if (!this.isRecord(entry)) {
+        continue;
+      }
+      const evidenceRef = this.readFunctionalRef(entry.evidence_ref);
+      if (!evidenceRef) {
+        continue;
+      }
+      const role = typeof entry.evidence_role === 'string'
+        ? entry.evidence_role
+        : typeof entry.role === 'string'
+          ? entry.role
+          : null;
+      if (
+        evidenceRef.ref_type === 'evidence_unit'
+        && (role === 'support' || role === 'challenge' || role === 'baseline' || role === 'context')
+      ) {
+        constraints[`${role}_unit_refs`]?.push(evidenceRef);
+        continue;
+      }
+      if (evidenceRef.ref_type === 'evidence_conflict' || evidenceRef.ref_type === 'evidence_conflict_set') {
+        constraints.conflict_refs?.push(evidenceRef);
+        continue;
+      }
+      if (evidenceRef.ref_type === 'evidence_strength_assessment') {
+        constraints.strength_assessment_refs?.push(evidenceRef);
+      }
+    }
+    return {
+      support_unit_refs: this.uniqueRefs(constraints.support_unit_refs ?? []),
+      challenge_unit_refs: this.uniqueRefs(constraints.challenge_unit_refs ?? []),
+      baseline_unit_refs: this.uniqueRefs(constraints.baseline_unit_refs ?? []),
+      context_unit_refs: this.uniqueRefs(constraints.context_unit_refs ?? []),
+      conflict_refs: this.uniqueRefs(constraints.conflict_refs ?? []),
+      strength_assessment_refs: this.uniqueRefs(constraints.strength_assessment_refs ?? []),
+      hard_rules: empty.hard_rules,
+    };
+  }
+
+  private methodFamilyCounts(
+    explorationContext: TopicSelectionNeedDiscoveryContextPacket,
+  ): Record<string, number> {
+    if (explorationContext.context_family !== 'exploration_context') {
+      return {};
+    }
+    const digest = explorationContext.payload.resource_sample_digest;
+    if (!this.isRecord(digest) || !this.isRecord(digest.method_family_counts)) {
+      return {};
+    }
+    return Object.entries(digest.method_family_counts).reduce<Record<string, number>>((counts, [family, value]) => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        counts[family] = value;
+      }
+      return counts;
+    }, {});
+  }
+
+  private methodFamilyTargets(
+    explorationContext: TopicSelectionNeedDiscoveryContextPacket,
+  ): string[] {
+    if (explorationContext.context_family !== 'exploration_context') {
+      return [];
+    }
+    const resourceDigest = explorationContext.payload.resource_sample_digest;
+    const searchDigest = explorationContext.payload.search_coverage_digest;
+    const targets = this.isRecord(searchDigest) && Array.isArray(searchDigest.method_family_targets)
+      ? searchDigest.method_family_targets
+      : this.isRecord(resourceDigest) && Array.isArray(resourceDigest.topic_method_family_targets)
+        ? resourceDigest.topic_method_family_targets
+        : [];
+    return this.uniqueStrings(targets
+      .filter((target): target is string => typeof target === 'string' && target.trim().length > 0)
+      .map((target) => target.trim()));
+  }
+
+  private adapterWarningCodes(
+    invocationWarnings: string[],
+    minimumValidationWarnings: string[],
+    admissionReport: TopicSelectionCandidateDraftAdmissionReport,
+  ): string[] {
+    return this.uniqueStrings([
+      ...invocationWarnings,
+      ...minimumValidationWarnings,
+      ...admissionReport.draft_results.flatMap((result) =>
+        result.decision === 'admit'
+          ? result.reason_codes.filter((code) => code === 'METHOD_FAMILY_COVERAGE_GAP')
+          : [],
+      ),
+    ]);
   }
 
   private debateArtifactRefs(

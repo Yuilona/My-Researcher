@@ -241,6 +241,7 @@ export interface TopicSelectionSearchPlanBlueprint {
   exclusion_rules: string[];
   coverage_strategy: Record<string, unknown>;
   role_coverage_expectation: Record<string, unknown>;
+  method_family_targets: string[];
   policy_version: string;
   output_schema_version: string;
 }
@@ -380,6 +381,11 @@ export interface TopicSelectionSearchRunRecordBundle {
   output_schema_version: string;
 }
 
+export interface TopicSelectionSearchRunCoverageRoleExpectation {
+  coverage_row_intent_ref: TopicSelectionFunctionalRef;
+  expected_evidence_role: TopicSelectionEvidenceRole;
+}
+
 export interface TopicSelectionSearchRunHandoff {
   schema_version: typeof TOPIC_SELECTION_SEARCH_RUN_HANDOFF_SCHEMA_VERSION;
   search_run_ref: TopicSelectionFunctionalRef;
@@ -387,6 +393,8 @@ export interface TopicSelectionSearchRunHandoff {
   literature_resource_pool_snapshot_ref: TopicSelectionFunctionalRef;
   literature_snapshot_hash: string;
   coverage_row_intent_refs: TopicSelectionFunctionalRef[];
+  coverage_role_expectations: TopicSelectionSearchRunCoverageRoleExpectation[];
+  method_family_targets: string[];
   evidence_map_input_refs: TopicSelectionFunctionalRef[];
   coverage_binding_refs: TopicSelectionFunctionalRef[];
   coverage_assessment_refs: TopicSelectionFunctionalRef[];
@@ -570,6 +578,7 @@ export const topicSelectionSearchPlanBlueprintSchema = {
     'exclusion_rules',
     'coverage_strategy',
     'role_coverage_expectation',
+    'method_family_targets',
     'policy_version',
     'output_schema_version',
   ],
@@ -594,6 +603,7 @@ export const topicSelectionSearchPlanBlueprintSchema = {
     exclusion_rules: stringArray,
     coverage_strategy: objectPayload,
     role_coverage_expectation: objectPayload,
+    method_family_targets: nonEmptyStringArray,
     policy_version: stringId,
     output_schema_version: stringId,
   },
@@ -1087,6 +1097,8 @@ export const topicSelectionSearchRunHandoffSchema = {
     'literature_resource_pool_snapshot_ref',
     'literature_snapshot_hash',
     'coverage_row_intent_refs',
+    'coverage_role_expectations',
+    'method_family_targets',
     'evidence_map_input_refs',
     'coverage_binding_refs',
     'coverage_assessment_refs',
@@ -1104,6 +1116,19 @@ export const topicSelectionSearchRunHandoffSchema = {
     literature_resource_pool_snapshot_ref: topicSelectionFunctionalRefSchema,
     literature_snapshot_hash: stringId,
     coverage_row_intent_refs: functionalRefArray,
+    coverage_role_expectations: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['coverage_row_intent_ref', 'expected_evidence_role'],
+        properties: {
+          coverage_row_intent_ref: topicSelectionFunctionalRefSchema,
+          expected_evidence_role: { enum: [...TOPIC_SELECTION_EVIDENCE_ROLES] },
+        },
+      },
+    },
+    method_family_targets: stringArray,
     evidence_map_input_refs: functionalRefArray,
     coverage_binding_refs: functionalRefArray,
     coverage_assessment_refs: functionalRefArray,

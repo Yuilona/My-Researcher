@@ -26,6 +26,7 @@
     "test": "pnpm --filter @paper-engineering-assistant/shared test && pnpm --filter @paper-engineering-assistant/backend test",
     "topic-selection:real-e2e": "node --env-file=.env.local --loader ./apps/backend/node_modules/ts-node/esm.mjs .ai/scripts/topic-selection-real-e2e.mjs",
     "topic-selection:v1a-harness-e2e": "node --env-file=.env.local --loader ./apps/backend/node_modules/ts-node/esm.mjs .ai/scripts/topic-selection-v1a-harness-e2e.mjs",
+    "topic-selection:v1a-harness-replay-smoke": "TOPIC_SELECTION_V1A_HARNESS_REPLAY_SMOKE=1 node --env-file=.env.local --loader ./apps/backend/node_modules/ts-node/esm.mjs .ai/scripts/topic-selection-v1a-harness-e2e.mjs",
     "topic-selection:v1a-harness-negative-e2e": "node --env-file=.env.local .ai/scripts/topic-selection-v1a-harness-negative-e2e.mjs",
     "topic-selection:workflow-scenario": "node --env-file=.env.local .ai/scripts/topic-selection-workflow-scenario-runner.mjs",
     "topic-selection:real-e2e:quality-gate": "node --env-file=.env.local .ai/scripts/topic-selection-workflow-scenario-runner.mjs --scenario topic-selection.real-e2e.scale-quality.v1",

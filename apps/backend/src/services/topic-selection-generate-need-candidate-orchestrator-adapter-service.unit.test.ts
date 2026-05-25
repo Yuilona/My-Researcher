@@ -42,7 +42,13 @@ class StubLlmGateway {
   }
 }
 
-async function makeHarness(executionMode: 'mocked_llm' | 'codex_assisted' | 'provider_llm') {
+async function makeHarness(
+  executionMode: 'mocked_llm' | 'codex_assisted' | 'provider_llm',
+  overrides: {
+    exploration_payload?: TopicSelectionNeedDiscoveryExplorationContextPayload;
+    arbiter_payload?: TopicSelectionNeedDiscoveryArbiterContextPayload;
+  } = {},
+) {
   const repository = new InMemoryTopicSelectionControlPlaneRepository();
   let sequence = 0;
   const controlPlane = new TopicSelectionControlPlaneService(repository, {
@@ -89,8 +95,8 @@ async function makeHarness(executionMode: 'mocked_llm' | 'codex_assisted' | 'pro
     output_schema_version: 'v1',
     profile_id: TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
     execution_mode: executionMode,
-    exploration_payload: explorationPayload(),
-    arbiter_payload: arbiterPayload(),
+    exploration_payload: overrides.exploration_payload ?? explorationPayload(),
+    arbiter_payload: overrides.arbiter_payload ?? arbiterPayload(),
   });
 
   return {
@@ -143,9 +149,17 @@ function explorationPayload(): TopicSelectionNeedDiscoveryExplorationContextPayl
     resource_sample_digest: {
       sample_set_id: 'sample_set_001',
       role_counts: { support: 2, challenge: 1, baseline: 1 },
+      method_family_counts: {
+        retrieval_augmented_generation: 1,
+        fine_tuning: 1,
+        risk_analysis: 1,
+      },
+      covered_method_families: ['fine_tuning', 'retrieval_augmented_generation', 'risk_analysis'],
+      topic_method_family_targets: ['retrieval_augmented_generation', 'fine_tuning', 'hybrid_adaptation'],
     },
     search_coverage_digest: {
       coverage: 'partial',
+      method_family_targets: ['retrieval_augmented_generation', 'fine_tuning', 'hybrid_adaptation'],
     },
     sibling_candidate_digest: {
       candidate_count: 0,
@@ -307,6 +321,37 @@ test('generate-need-candidate adapter produces ranked draft batch through mocked
         llmGateway.calls[0]?.messages[1]?.content ?? '',
         /candidate_pool_digest_role/,
       );
+      const userPayload = JSON.parse(llmGateway.calls[0]?.messages[1]?.content ?? '{}') as {
+        output_constraints?: {
+          role_ref_constraints?: {
+            support_unit_refs?: TopicSelectionFunctionalRef[];
+            challenge_unit_refs?: TopicSelectionFunctionalRef[];
+            baseline_unit_refs?: TopicSelectionFunctionalRef[];
+            conflict_refs?: TopicSelectionFunctionalRef[];
+            strength_assessment_refs?: TopicSelectionFunctionalRef[];
+          };
+        };
+      };
+      assert.deepEqual(
+        userPayload.output_constraints?.role_ref_constraints?.support_unit_refs?.map((item) => item.ref_id),
+        ['support_001'],
+      );
+      assert.deepEqual(
+        userPayload.output_constraints?.role_ref_constraints?.challenge_unit_refs?.map((item) => item.ref_id),
+        ['challenge_001'],
+      );
+      assert.deepEqual(
+        userPayload.output_constraints?.role_ref_constraints?.baseline_unit_refs?.map((item) => item.ref_id),
+        ['baseline_001'],
+      );
+      assert.deepEqual(
+        userPayload.output_constraints?.role_ref_constraints?.conflict_refs?.map((item) => item.ref_id),
+        ['conflict_001'],
+      );
+      assert.deepEqual(
+        userPayload.output_constraints?.role_ref_constraints?.strength_assessment_refs?.map((item) => item.ref_id),
+        ['strength_001'],
+      );
     }
   }
 });
@@ -345,6 +390,15 @@ test('generate-need-candidate adapter optionally persists admitted drafts idempo
     'persist_need_candidate_batch_command',
   );
   assert.equal(first.persist_need_candidate_batch_result?.persisted_candidate_refs.length, 1);
+  assert.deepEqual(first.persist_need_candidate_batch_result?.candidate_pool_projection_entries.map((entry) => ({
+    draft_id: entry.draft_id,
+    rank: entry.rank,
+    normalized_candidate_key: entry.normalized_candidate_key,
+  })), [{
+    draft_id: 'draft_001',
+    rank: 1,
+    normalized_candidate_key: 'need-a-risk-aware-evaluation-workflow-for-rag-fine-tuning-existing-studies-do-not-isolate-retrieval-risk-effects-during-fine-tuning',
+  }]);
   assert.equal(replay.persist_need_candidate_batch_result?.replayed, true);
   assert.deepEqual(
     replay.persist_need_candidate_batch_result?.persisted_candidate_refs,
@@ -522,6 +576,75 @@ test('generate-need-candidate adapter blocks admission when draft refs are unres
     ),
     true,
   );
+});
+
+test('generate-need-candidate adapter blocks malformed role bundles before authority persistence', async () => {
+  const { adapter, compiledContext, needValidationRepository } = await makeHarness('mocked_llm');
+  const malformedRoleBatch = rankedBatch();
+  malformedRoleBatch.drafts[0] = {
+    ...malformedRoleBatch.drafts[0],
+    evidence_role_bundle: {
+      ...malformedRoleBatch.drafts[0].evidence_role_bundle,
+      support_unit_refs: [ref('evidence_conflict', 'conflict_001')],
+    },
+  };
+
+  const result = await adapter.generateRankedCandidateDraftBatch({
+    title_card_id: 'title_card_001',
+    workspace_id: 'workspace_001',
+    node_input: nodeInput(compiledContext),
+    run_mode: 'acceptance',
+    persist_admitted_candidates: true,
+    persistence_context: persistenceContext(),
+    mocked_output: {
+      fixture_id: 'fixture_malformed_role_bundle',
+      output: malformedRoleBatch,
+    },
+  });
+
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.persist_need_candidate_batch_result, null);
+  assert.equal(result.candidate_draft_admission_report?.draft_results[0]?.decision, 'reject_artifact_only');
+  assert.ok(result.candidate_draft_admission_report?.draft_results[0]?.blocking_reason_codes.includes('ROLE_BUNDLE_NON_EVIDENCE_REF'));
+  assert.equal((await needValidationRepository.listNeedCandidatesByTitleCardId('title_card_001')).length, 0);
+});
+
+test('generate-need-candidate adapter surfaces method-family coverage warnings into persisted candidates', async () => {
+  const gapExplorationPayload = explorationPayload();
+  gapExplorationPayload.resource_sample_digest = {
+    ...gapExplorationPayload.resource_sample_digest,
+    method_family_counts: {
+      retrieval_augmented_generation: 2,
+      risk_analysis: 1,
+    },
+    covered_method_families: ['retrieval_augmented_generation', 'risk_analysis'],
+    topic_method_family_targets: ['retrieval_augmented_generation', 'fine_tuning', 'hybrid_adaptation'],
+  };
+  gapExplorationPayload.search_coverage_digest = {
+    ...gapExplorationPayload.search_coverage_digest,
+    method_family_targets: ['retrieval_augmented_generation', 'fine_tuning', 'hybrid_adaptation'],
+  };
+  const { adapter, compiledContext } = await makeHarness('mocked_llm', {
+    exploration_payload: gapExplorationPayload,
+  });
+
+  const result = await adapter.generateRankedCandidateDraftBatch({
+    title_card_id: 'title_card_001',
+    workspace_id: 'workspace_001',
+    node_input: nodeInput(compiledContext),
+    run_mode: 'acceptance',
+    persist_admitted_candidates: true,
+    persistence_context: persistenceContext(),
+    mocked_output: {
+      fixture_id: 'fixture_method_family_gap',
+      output: rankedBatch(),
+    },
+  });
+
+  assert.equal(result.status, 'succeeded');
+  assert.ok(result.warning_codes.includes('METHOD_FAMILY_COVERAGE_GAP'));
+  assert.ok(result.candidate_draft_admission_report?.draft_results[0]?.reason_codes.includes('METHOD_FAMILY_COVERAGE_GAP'));
+  assert.ok(result.persist_need_candidate_batch_result?.persisted_candidates[0]?.gap_codes.includes('METHOD_FAMILY_COVERAGE_GAP'));
 });
 
 test('generate-need-candidate adapter routes supplementable drafts without authority persistence', async () => {

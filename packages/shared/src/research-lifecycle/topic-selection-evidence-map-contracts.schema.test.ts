@@ -44,6 +44,11 @@ function searchRunHandoff(): TopicSelectionSearchRunHandoff {
     literature_resource_pool_snapshot_ref: ref('literature_resource_pool_snapshot', 'snapshot_001', 'v1'),
     literature_snapshot_hash: 'snapshot-hash-001',
     coverage_row_intent_refs: [ref('coverage_row_intent', 'coverage_row_001')],
+    coverage_role_expectations: [{
+      coverage_row_intent_ref: ref('coverage_row_intent', 'coverage_row_001'),
+      expected_evidence_role: 'support',
+    }],
+    method_family_targets: ['retrieval_augmented_generation', 'fine_tuning'],
     evidence_map_input_refs: [
       ref('literature_record', 'lit_001'),
       ref('literature_source', 'source_001'),
@@ -240,6 +245,7 @@ test('topic-selection EvidenceMap materialization report, review package, and ha
     warning_summary: {},
     issue_summary: { ABSTRACT_ONLY_SUPPORT: 1 },
     source_refs_hash: 'source-refs-hash-001',
+    method_family_targets: ['retrieval_augmented_generation', 'fine_tuning'],
     policy_version: 'v1',
     output_schema_version: 'v1',
   };

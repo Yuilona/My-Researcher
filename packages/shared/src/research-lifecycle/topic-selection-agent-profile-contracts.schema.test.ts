@@ -35,7 +35,7 @@ function validRegistry(): TopicSelectionModelProfileRegistry {
             model_id: 'gpt-5.4-mini',
             use_when: ['default_provider_run'],
             request_policy: {
-              timeout_ms: 60000,
+              timeout_ms: 180000,
             },
             normalized_params: {
               creativity: 'medium',

@@ -919,3 +919,21 @@
 - `runGenerateNeedCandidateScenario` now checks existing discovery trace artifacts before context compilation. A matching `input_hash` returns the stored trace snapshot and adapter result; a mismatched hash fails with `VERSION_CONFLICT`.
 - The N6 discovery trace now carries the minimal replay snapshot needed by WorkflowHarness automation while remaining inside the existing control-plane artifact boundary.
 - Provider-mode replay coverage proves the second call does not hit the LLM gateway and does not create duplicate `NeedCandidate` authority rows.
+
+## 2026-05-24 Unified LLM Execution Spec And Provider Mapping
+- Added `TopicSelectionAgentExecutionSpec` as the common execution object for ordinary single-agent nodes and debate slots.
+- `TopicSelectionAgentOrchestratorService` now accepts `execution_spec` and rejects mismatches with legacy top-level `execution_mode` / `model_option_id`, preventing dual-track invocation semantics.
+- `TopicSelectionNeedDiscoveryDebateLoopService` now accepts `execution_plan` with `default`, `slots`, and repeatable-slot `instances` specs. Instance specs use keys such as `explorer.round_1_discovery#explorer_2`.
+- Legacy `slot_execution_overrides` and `slot_model_option_overrides` remain supported for compatibility, but they cannot be combined with `execution_plan`.
+- Added explicit OpenAI `gpt-5.5` model options: `openai-quality` (`reasoning_depth=medium`) and `openai-deep-reasoning` (`reasoning_depth=high`). Existing `openai-balanced` remains the default; v1a callers can now opt into stronger slots or nodes explicitly.
+- `BackendLlmGateway` now maps normalized provider intent into runtime provider payloads: OpenAI receives `reasoning.effort`, DashScope receives `extra_body.enable_thinking`.
+- The v1a harness E2E runner now builds and passes a canonical `debate_execution_plan` for N6 multi-agent debate instead of relying on legacy slot override fields.
+- N5 evidence extraction, N6 single-agent generation, N7 adjudication, and N8 semantic confirmation review now accept the same `execution_spec` pattern at the WorkflowHarness boundary; deterministic/`none` paths reject model options to avoid dual-track invocation semantics.
+
+## 2026-05-24 DeepSeek V4 Thinking Provider
+- Added `deepseek` to the LLM provider registry and config-key allow-list with `DEEPSEEK_API_KEY` and `DEEPSEEK_BASE_URL`.
+- `BackendLlmGateway` now supports DeepSeek structured Chat Completions through the same `provider_llm` path as OpenAI and DashScope.
+- DeepSeek normalized runtime mapping: `reasoning_depth=none` disables thinking; `low|medium|high` map to `reasoning_effort=high`; `xhigh` maps to `reasoning_effort=max`.
+- v1a model profile registry exposes DeepSeek only as an explicit debate-worker option for `explorer` and `deep_critic`: `<profile_id>.deepseek-v4-thinking`.
+- The DeepSeek option uses `deepseek-v4-pro`, `thinking.type=enabled`, `reasoning_effort=high`, JSON structured output, and a 180s timeout.
+- Arbiter final synthesis and ordinary single-agent nodes do not receive DeepSeek by default in this slice; this avoids changing authority boundaries before slot-level override is finalized.

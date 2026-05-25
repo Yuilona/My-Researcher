@@ -4,7 +4,10 @@ import type {
   TopicSelectionActorType,
   TopicSelectionFunctionalRef,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-control-plane-contracts';
-import type { TopicSelectionSearchRunHandoff } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-search-resource-contracts';
+import type {
+  TopicSelectionEvidenceRole,
+  TopicSelectionSearchRunHandoff,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-search-resource-contracts';
 import {
   TOPIC_SELECTION_EVIDENCE_MAP_MATERIALIZATION_REPORT_SCHEMA_VERSION,
   type TopicSelectionEvidenceMapExtractionDraft,
@@ -115,6 +118,8 @@ export class TopicSelectionEvidenceMapMaterializationService {
       literature_resource_pool_snapshot_ref: handoff.literature_resource_pool_snapshot_ref,
       literature_snapshot_hash: handoff.literature_snapshot_hash,
       coverage_row_intent_refs: handoff.coverage_row_intent_refs,
+      coverage_role_expectations: handoff.coverage_role_expectations,
+      method_family_targets: handoff.method_family_targets ?? [],
       evidence_map_input_refs: handoff.evidence_map_input_refs,
       coverage_binding_refs: handoff.coverage_binding_refs,
       coverage_assessment_refs: handoff.coverage_assessment_refs,
@@ -161,11 +166,23 @@ export class TopicSelectionEvidenceMapMaterializationService {
 
     const allowedEvidenceRefs = new Set(handoff.evidence_map_input_refs.map((ref) => this.refKey(ref)));
     const coverageRowRefs = new Set(handoff.coverage_row_intent_refs.map((ref) => this.refKey(ref)));
+    const coverageRoleExpectations = this.coverageRoleExpectationMap(handoff);
     const unitKeys = new Set<string>();
+    const unitLiteratureRefs = new Set<string>();
     const roleUnitKeysBySource = new Map<string, SourceRoleUnitKeys>();
     for (const unit of draft.draft_units) {
-      this.validateUnit(unit, allowedEvidenceRefs, coverageRowRefs, unitKeys, roleUnitKeysBySource, state);
+      this.validateUnit(
+        unit,
+        allowedEvidenceRefs,
+        coverageRowRefs,
+        coverageRoleExpectations,
+        unitKeys,
+        roleUnitKeysBySource,
+        state,
+      );
+      unitLiteratureRefs.add(this.refKey(unit.literature_ref));
     }
+    this.validateRequiredLiteratureCoverage(handoff, unitLiteratureRefs, state);
     this.validateStructuralUnitKeys(draft.draft_links, 'typed_link', unitKeys, state);
     this.validateStructuralUnitKeys(draft.draft_clusters, 'cluster', unitKeys, state);
     this.validateStructuralUnitKeys(draft.draft_patterns, 'pattern', unitKeys, state);
@@ -191,10 +208,31 @@ export class TopicSelectionEvidenceMapMaterializationService {
     }
   }
 
+  private validateRequiredLiteratureCoverage(
+    handoff: TopicSelectionSearchRunHandoff,
+    unitLiteratureRefs: Set<string>,
+    state: DraftValidationState,
+  ): void {
+    const requiredLiteratureRefs = handoff.evidence_map_input_refs
+      .filter((ref) => ref.ref_type === 'literature_record')
+      .map((ref) => this.refKey(ref));
+    const missingLiteratureRefs = requiredLiteratureRefs.filter((key) => !unitLiteratureRefs.has(key));
+    if (missingLiteratureRefs.length === 0) {
+      return;
+    }
+    this.block(
+      state,
+      'EVIDENCE_UNIT_MISSING_FOR_INPUT_LITERATURE',
+      'materialization',
+      'rerun_extraction_or_complete_evidence',
+    );
+  }
+
   private validateUnit(
     unit: TopicSelectionEvidenceMapExtractionDraftUnit,
     allowedEvidenceRefs: Set<string>,
     coverageRowRefs: Set<string>,
+    coverageRoleExpectations: Map<string, TopicSelectionEvidenceRole>,
     unitKeys: Set<string>,
     roleUnitKeysBySource: Map<string, SourceRoleUnitKeys>,
     state: DraftValidationState,
@@ -216,6 +254,18 @@ export class TopicSelectionEvidenceMapMaterializationService {
     if (unit.coverage_row_intent_ref && !coverageRowRefs.has(this.refKey(unit.coverage_row_intent_ref))) {
       this.block(state, 'COVERAGE_ROW_OUTSIDE_HANDOFF', 'lineage', 'repair_node4_handoff_or_draft');
       this.rejectUnit(state, unit.client_unit_key, 'COVERAGE_ROW_OUTSIDE_HANDOFF');
+    }
+    if (unit.coverage_row_intent_ref) {
+      const expectedRole = coverageRoleExpectations.get(this.refKey(unit.coverage_row_intent_ref));
+      if (!expectedRole) {
+        this.block(state, 'COVERAGE_ROW_ROLE_EXPECTATION_MISSING', 'lineage', 'repair_node4_handoff_or_draft');
+        this.rejectUnit(state, unit.client_unit_key, 'COVERAGE_ROW_ROLE_EXPECTATION_MISSING');
+      } else if (expectedRole === 'unknown') {
+        state.warningCodes.add('COVERAGE_ROW_ROLE_EXPECTATION_UNKNOWN');
+      } else if (expectedRole !== unit.evidence_role) {
+        this.block(state, 'COVERAGE_ROW_ROLE_MISMATCH', 'materialization', 'revise_extraction_role_or_coverage_row');
+        this.rejectUnit(state, unit.client_unit_key, 'COVERAGE_ROW_ROLE_MISMATCH');
+      }
     }
     if (!allowedEvidenceRefs.has(this.refKey(unit.literature_ref))) {
       this.block(state, 'LITERATURE_REF_OUTSIDE_HANDOFF', 'lineage', 'repair_node4_handoff_or_draft');
@@ -303,6 +353,17 @@ export class TopicSelectionEvidenceMapMaterializationService {
       baseline: new Set<string>(),
       context: new Set<string>(),
     };
+  }
+
+  private coverageRoleExpectationMap(
+    handoff: TopicSelectionSearchRunHandoff,
+  ): Map<string, TopicSelectionEvidenceRole> {
+    return new Map(
+      (handoff.coverage_role_expectations ?? []).map((entry) => [
+        this.refKey(entry.coverage_row_intent_ref),
+        entry.expected_evidence_role,
+      ]),
+    );
   }
 
   private validateStructuralUnitKeys(

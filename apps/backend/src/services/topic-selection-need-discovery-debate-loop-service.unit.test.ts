@@ -472,6 +472,50 @@ test('need-discovery debate loop uses contract defaults for provider role instan
       ?.map((summary) => summary.role),
     ['explorer', 'deep_critic'],
   );
+  const roleRefConstraints = (finalPayload.output_constraints as {
+    role_ref_constraints?: {
+      support_unit_refs?: TopicSelectionFunctionalRef[];
+      challenge_unit_refs?: TopicSelectionFunctionalRef[];
+      baseline_unit_refs?: TopicSelectionFunctionalRef[];
+      conflict_refs?: TopicSelectionFunctionalRef[];
+      strength_assessment_refs?: TopicSelectionFunctionalRef[];
+    };
+  }).role_ref_constraints;
+  assert.deepEqual(roleRefConstraints?.support_unit_refs?.map((item) => item.ref_id), ['support_001']);
+  assert.deepEqual(roleRefConstraints?.challenge_unit_refs?.map((item) => item.ref_id), ['challenge_001']);
+  assert.deepEqual(roleRefConstraints?.baseline_unit_refs?.map((item) => item.ref_id), ['baseline_001']);
+  assert.deepEqual(roleRefConstraints?.conflict_refs?.map((item) => item.ref_id), ['conflict_001']);
+  assert.deepEqual(roleRefConstraints?.strength_assessment_refs?.map((item) => item.ref_id), ['strength_001']);
+});
+
+test('need-discovery debate loop preserves mocked fixture count under canonical slot execution plan', async () => {
+  const { debateLoop, llmGateway, compiledContext } = await makeRuntime();
+  const result = await debateLoop.runNeedDiscoveryDebate({
+    workspace_id: 'workspace_001',
+    title_card_id: 'title_card_001',
+    node_input: nodeInput(compiledContext),
+    run_mode: 'acceptance',
+    exploration_context_packet: compiledContext.exploration_context_packet,
+    arbiter_context_packet: compiledContext.arbiter_context_packet,
+    debate_loop_id: 'debate_loop_001',
+    execution_plan: {
+      slots: {
+        'explorer.round_1_discovery': { execution_mode: 'mocked_llm' },
+        'deep_critic.round_1_discovery': { execution_mode: 'mocked_llm' },
+        'arbiter.issue_framing': { execution_mode: 'mocked_llm' },
+        'arbiter.final_synthesis': { execution_mode: 'mocked_llm' },
+      },
+    },
+    mocked_outputs: debateMockedOutputs({
+      explorer: [
+        { fixture_id: 'fixture_explorer_1', output: explorerNotes('explorer_1', 'angle_001') },
+      ],
+    }),
+  });
+
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.role_invocation_results.length, 3);
+  assert.equal(llmGateway.calls.length, 0);
 });
 
 test('need-discovery debate loop supports slot-level provider model option overrides', async () => {
@@ -493,7 +537,7 @@ test('need-discovery debate loop supports slot-level provider model option overr
     debate_loop_id: 'debate_loop_001',
     slot_model_option_overrides: {
       'explorer.round_1_discovery': `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.dashscope-budget`,
-      'deep_critic.round_1_discovery': `${TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID}.openai-balanced`,
+      'deep_critic.round_1_discovery': `${TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID}.deepseek-v4-thinking`,
       'arbiter.issue_framing': `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FRAMING_PROFILE_ID}.dashscope-budget`,
       'arbiter.final_synthesis': `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID}.openai-balanced`,
     },
@@ -502,14 +546,14 @@ test('need-discovery debate loop supports slot-level provider model option overr
   assert.equal(result.status, 'succeeded');
   assert.deepEqual(
     llmGateway.calls.map((call) => call.model.providerId),
-    ['dashscope', 'dashscope', 'openai', 'dashscope', 'openai'],
+    ['dashscope', 'dashscope', 'deepseek', 'dashscope', 'openai'],
   );
   assert.deepEqual(
     result.role_invocation_results.map((invocation) => invocation.provenance.model_option_id),
     [
       `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.dashscope-budget`,
       `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.dashscope-budget`,
-      `${TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID}.openai-balanced`,
+      `${TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID}.deepseek-v4-thinking`,
       `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FRAMING_PROFILE_ID}.dashscope-budget`,
     ],
   );
@@ -518,7 +562,252 @@ test('need-discovery debate loop supports slot-level provider model option overr
     `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID}.openai-balanced`,
   );
   assert.equal((llmGateway.calls[0]?.providerOverrides as { enable_thinking?: boolean }).enable_thinking, true);
-  assert.equal(Object.keys(llmGateway.calls[2]?.providerOverrides ?? {}).length, 0);
+  assert.deepEqual(llmGateway.calls[2]?.providerOverrides, {
+    thinking: { type: 'enabled' },
+    reasoning_effort: 'high',
+  });
+});
+
+test('need-discovery debate loop supports canonical execution plan with instance-level model specs', async () => {
+  const providerGateway = new ProviderDebateGateway();
+  const { debateLoop, llmGateway, compiledContext } = await makeRuntime({
+    llmGateway: providerGateway,
+    executionMode: 'provider_llm',
+  });
+  const result = await debateLoop.runNeedDiscoveryDebate({
+    workspace_id: 'workspace_001',
+    title_card_id: 'title_card_001',
+    node_input: {
+      ...nodeInput(compiledContext),
+      execution_mode: 'provider_llm',
+    },
+    run_mode: 'acceptance',
+    exploration_context_packet: compiledContext.exploration_context_packet,
+    arbiter_context_packet: compiledContext.arbiter_context_packet,
+    debate_loop_id: 'debate_loop_001',
+    execution_plan: {
+      slots: {
+        'explorer.round_1_discovery': {
+          execution_mode: 'provider_llm',
+          model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.dashscope-thinking-budget`,
+        },
+        'deep_critic.round_1_discovery': {
+          execution_mode: 'provider_llm',
+          model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID}.openai-deep-reasoning`,
+        },
+        'arbiter.issue_framing': {
+          execution_mode: 'provider_llm',
+          model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FRAMING_PROFILE_ID}.openai-quality`,
+        },
+        'arbiter.final_synthesis': {
+          execution_mode: 'provider_llm',
+          model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID}.openai-deep-reasoning`,
+        },
+      },
+      instances: {
+        'explorer.round_1_discovery#explorer_2': {
+          execution_mode: 'provider_llm',
+          model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.openai-quality`,
+        },
+      },
+    },
+  });
+
+  assert.equal(result.status, 'succeeded');
+  assert.deepEqual(
+    llmGateway.calls.map((call) => `${call.model.providerId}:${call.model.modelId}`),
+    [
+      'dashscope:qwen3.6-plus',
+      'openai:gpt-5.5',
+      'openai:gpt-5.5',
+      'openai:gpt-5.5',
+      'openai:gpt-5.5',
+    ],
+  );
+  assert.deepEqual(
+    llmGateway.calls.map((call) =>
+      (call.normalizedParams as { reasoning_depth?: string } | undefined)?.reasoning_depth,
+    ),
+    ['medium', 'medium', 'high', 'medium', 'high'],
+  );
+  assert.deepEqual(
+    result.role_invocation_results.map((invocation) => invocation.provenance.model_option_id),
+    [
+      `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.dashscope-thinking-budget`,
+      `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.openai-quality`,
+      `${TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID}.openai-deep-reasoning`,
+      `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FRAMING_PROFILE_ID}.openai-quality`,
+    ],
+  );
+  assert.equal(
+    result.final_invocation_result.provenance.model_option_id,
+    `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID}.openai-deep-reasoning`,
+  );
+});
+
+test('need-discovery debate loop supports mixed-cost-control profile materialization semantics', async () => {
+  const providerGateway = new ProviderDebateGateway();
+  const { debateLoop, llmGateway, compiledContext } = await makeRuntime({
+    llmGateway: providerGateway,
+    executionMode: 'provider_llm',
+  });
+  const result = await debateLoop.runNeedDiscoveryDebate({
+    workspace_id: 'workspace_001',
+    title_card_id: 'title_card_001',
+    node_input: {
+      ...nodeInput(compiledContext),
+      execution_mode: 'provider_llm',
+    },
+    run_mode: 'acceptance',
+    exploration_context_packet: compiledContext.exploration_context_packet,
+    arbiter_context_packet: compiledContext.arbiter_context_packet,
+    debate_loop_id: 'debate_loop_001',
+    execution_plan: {
+      slots: {
+        'explorer.round_1_discovery': { execution_mode: 'codex_assisted' },
+        'deep_critic.round_1_discovery': { execution_mode: 'codex_assisted' },
+        'arbiter.issue_framing': { execution_mode: 'codex_assisted' },
+        'arbiter.final_synthesis': {
+          execution_mode: 'provider_llm',
+          model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID}.openai-quality`,
+        },
+      },
+    },
+    codex_responses: {
+      explorer: [{
+        operator_label: 'codex_explorer_1',
+        output: explorerNotes('explorer_1', 'angle_codex_001'),
+      }],
+      deep_critic: [{
+        operator_label: 'codex_deep_critic_1',
+        output: deepCriticNotes(),
+      }],
+      arbiter_issue_frame: {
+        operator_label: 'codex_issue_frame',
+        output: issueFrame(),
+      },
+    },
+  });
+
+  assert.equal(result.status, 'succeeded');
+  assert.deepEqual(
+    result.role_invocation_results.map((invocation) => invocation.provenance.execution_mode),
+    ['codex_assisted', 'codex_assisted', 'codex_assisted'],
+  );
+  assert.deepEqual(
+    llmGateway.calls.map((call) => `${call.model.providerId}:${call.model.modelId}`),
+    ['openai:gpt-5.5'],
+  );
+  assert.equal(
+    result.final_invocation_result.provenance.model_option_id,
+    `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID}.openai-quality`,
+  );
+});
+
+test('need-discovery debate loop supports provider-diverse-deep profile materialization semantics', async () => {
+  const providerGateway = new ProviderDebateGateway();
+  const { debateLoop, llmGateway, compiledContext } = await makeRuntime({
+    llmGateway: providerGateway,
+    executionMode: 'provider_llm',
+  });
+  const result = await debateLoop.runNeedDiscoveryDebate({
+    workspace_id: 'workspace_001',
+    title_card_id: 'title_card_001',
+    node_input: {
+      ...nodeInput(compiledContext),
+      execution_mode: 'provider_llm',
+    },
+    run_mode: 'acceptance',
+    exploration_context_packet: compiledContext.exploration_context_packet,
+    arbiter_context_packet: compiledContext.arbiter_context_packet,
+    debate_loop_id: 'debate_loop_001',
+    execution_plan: {
+      slots: {
+        'explorer.round_1_discovery': { execution_mode: 'codex_assisted' },
+        'deep_critic.round_1_discovery': {
+          execution_mode: 'provider_llm',
+          model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID}.openai-deep-reasoning`,
+        },
+        'arbiter.issue_framing': { execution_mode: 'codex_assisted' },
+        'arbiter.final_synthesis': {
+          execution_mode: 'provider_llm',
+          model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID}.openai-deep-reasoning`,
+        },
+      },
+      instances: {
+        'explorer.round_1_discovery#explorer_2': {
+          execution_mode: 'provider_llm',
+          model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.openai-quality`,
+        },
+        'explorer.round_1_discovery#explorer_3': {
+          execution_mode: 'provider_llm',
+          model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.dashscope-thinking-budget`,
+        },
+        'deep_critic.round_1_discovery#deep_critic_2': { execution_mode: 'codex_assisted' },
+      },
+    },
+    codex_responses: {
+      explorer: [{
+        operator_label: 'codex_explorer_1',
+        output: explorerNotes('explorer_1', 'angle_codex_001'),
+      }],
+      deep_critic: [
+        null,
+        {
+          operator_label: 'codex_deep_critic_2',
+          output: {
+            ...deepCriticNotes(),
+            agent_instance_id: 'deep_critic_2',
+          },
+        },
+      ] as never,
+      arbiter_issue_frame: {
+        operator_label: 'codex_issue_frame',
+        output: issueFrame(),
+      },
+    },
+  });
+
+  assert.equal(result.status, 'succeeded');
+  assert.deepEqual(
+    result.role_invocation_results.map((invocation) => invocation.provenance.execution_mode),
+    [
+      'codex_assisted',
+      'provider_llm',
+      'provider_llm',
+      'provider_llm',
+      'codex_assisted',
+      'codex_assisted',
+    ],
+  );
+  assert.deepEqual(
+    llmGateway.calls.map((call) => `${call.model.providerId}:${call.model.modelId}`),
+    [
+      'openai:gpt-5.5',
+      'dashscope:qwen3.6-plus',
+      'openai:gpt-5.5',
+      'openai:gpt-5.5',
+    ],
+  );
+  assert.equal(
+    llmGateway.calls.some((call) => call.model.providerId === 'deepseek'),
+    false,
+  );
+  assert.deepEqual(
+    result.role_invocation_results.map((invocation) => invocation.provenance.model_option_id),
+    [
+      null,
+      `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.openai-quality`,
+      `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.dashscope-thinking-budget`,
+      `${TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID}.openai-deep-reasoning`,
+      null,
+      null,
+    ],
+  );
+  assert.equal(
+    result.final_invocation_result.provenance.model_option_id,
+    `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID}.openai-deep-reasoning`,
+  );
 });
 
 test('need-discovery debate loop supports slot-level Codex substitution while final synthesis stays provider-backed', async () => {
@@ -625,6 +914,37 @@ test('need-discovery debate loop rejects malformed slot model option override va
       slot_model_option_overrides: {
         'deep_critic.round_1_discovery': 42,
       } as never,
+    }),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
+});
+
+test('need-discovery debate loop rejects mixed execution_plan and legacy slot overrides', async () => {
+  const { debateLoop, compiledContext } = await makeRuntime({
+    executionMode: 'provider_llm',
+  });
+  await assert.rejects(
+    () => debateLoop.runNeedDiscoveryDebate({
+      workspace_id: 'workspace_001',
+      title_card_id: 'title_card_001',
+      node_input: {
+        ...nodeInput(compiledContext),
+        execution_mode: 'provider_llm',
+      },
+      run_mode: 'acceptance',
+      exploration_context_packet: compiledContext.exploration_context_packet,
+      arbiter_context_packet: compiledContext.arbiter_context_packet,
+      debate_loop_id: 'debate_loop_001',
+      execution_plan: {
+        slots: {
+          'explorer.round_1_discovery': {
+            execution_mode: 'provider_llm',
+          },
+        },
+      },
+      slot_execution_overrides: {
+        'explorer.round_1_discovery': 'codex_assisted',
+      },
     }),
     (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
   );

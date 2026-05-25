@@ -7,7 +7,7 @@ Business decisions still belong to node policies, deterministic validators, and 
 
 ## Status
 - Policy version: `v1`
-- Current locked decision: `DMP-10`
+- Current locked decision: `DMP-12`
 - Pending decisions: none
 
 ## DMP-01 Execution Mode And Provider Boundary
@@ -92,7 +92,7 @@ model_options:
     use_when:
       - default_provider_run
     request_policy:
-      timeout_ms: 60000
+      timeout_ms: 180000
     normalized_params:
       creativity: medium
       reasoning_depth: medium
@@ -101,14 +101,14 @@ model_options:
       output_format: json_schema
     provider_overrides: {}
 
-  - option_id: dashscope-budget-explorer
-    option_purpose: budget_sensitive_explicit_provider_run
+  - option_id: dashscope-thinking-budget-explorer
+    option_purpose: budget_sensitive_thinking_provider_run
     provider_id: dashscope
     model_id: qwen-model-id
     use_when:
       - budget_sensitive_manual_selection
     request_policy:
-      timeout_ms: 120000
+      timeout_ms: 300000
     normalized_params:
       creativity: medium
       reasoning_depth: medium
@@ -145,6 +145,17 @@ Provider differences MUST be isolated as follows:
 - `provider_overrides` contains provider-specific knobs.
 - Provider adapters or the LLM gateway map both layers to concrete provider API payloads.
 - Domain services, node policies, workflow harnesses, and deterministic validators MUST NOT interpret provider-specific overrides.
+
+Current v1 registered provider mapping:
+- OpenAI: Responses API for default/quality/deep-reasoning provider runs.
+- DashScope: OpenAI-compatible Chat Completions with `extra_body.enable_thinking`.
+- DeepSeek: OpenAI-compatible Chat Completions with V4 thinking controls.
+
+DeepSeek V4 thinking is allowed only as an explicit model option on debate worker profiles in v1:
+- `topic-selection.need-discovery.explorer.v1.deepseek-v4-thinking`
+- `topic-selection.need-discovery.deep-critic.v1.deepseek-v4-thinking`
+
+It is intentionally not a default provider option and not available on arbiter final synthesis in v1. This keeps DeepSeek as an alternative exploration/deep-critique source without changing the authoritative arbiter boundary.
 
 ### Selection Semantics
 `option_purpose` and `use_when` are the primary selection semantics for model options.
@@ -411,6 +422,12 @@ provider_parameter_mapping:
 
 Concrete API field names are adapter details and MUST NOT be duplicated in node policies or workflow definitions.
 
+Current executable mapping:
+- OpenAI Responses API receives `reasoning.effort` derived from `normalized_params.reasoning_depth`: `low -> low`, `medium -> medium`, `high/xhigh -> high`; `none` omits the reasoning effort field.
+- DashScope compatible-mode chat receives `extra_body.enable_thinking`, derived from `reasoning_depth !== none` and overridable only through the selected model option's `provider_overrides`.
+- `provider_overrides` remain explicit model-option data. They may override adapter-derived provider fields, but they MUST NOT appear in node policy, workflow harness business logic, deterministic validators, or persisted authority records.
+- The normalized parameter hash remains the stable cross-provider audit marker; raw provider runtime payloads are transport details and MUST NOT be persisted as decision evidence.
+
 ### Boundary
 - `DMP-06` defines normalized parameter semantics and provider mapping boundaries.
 - `DMP-02` defines where normalized parameters live inside model profiles.
@@ -656,6 +673,21 @@ Debate model invocation v1 MUST have one implementation path. Model profiles, ro
 
 The model profile registry is the SSOT for provider/model selection, provider/model options, normalized parameters, provider overrides, capability requirements, fallback policy, retry policy, audit policy, budget policy, and mock/run-mode eligibility. Workflow and node policy documents may reference profile ids and execution modes, but they MUST NOT duplicate concrete provider/model/parameter rules.
 
+All model-like nodes, including ordinary single-agent nodes and multi-agent debate slots, MUST use the same execution object semantics:
+
+```yaml
+execution_spec:
+  execution_mode: provider_llm | codex_assisted | mocked_llm
+  model_option_id: optional_profile_bound_option_for_provider_llm
+```
+
+For debate, the executable plan MAY apply this same shape at three levels:
+- `default`: inherited by slots unless overridden.
+- `slots.<slot_id>`: applies to every instance in that role/stage slot.
+- `instances.<slot_id>#<agent_instance_id>`: applies to one repeatable instance, for example `explorer.round_1_discovery#explorer_2`.
+
+For current debate execution plans, precedence is `instances > slots > default > node input`. `DMP-11` defines the generalized all-node invocation-slot precedence. Legacy `slot_execution_overrides` and `slot_model_option_overrides` are compatibility-only and MUST NOT be mixed with `execution_plan` in the same run.
+
 ### Implementation Ownership
 The implementation MUST keep these ownership boundaries:
 
@@ -719,7 +751,7 @@ implementation_ownership:
 
 ### Implementation Order
 Implementation SHOULD proceed in this order:
-- Profile registry/schema validator for DMP-01 through DMP-10.
+- Profile registry/schema validator for DMP-01 through DMP-12.
 - Shared provenance envelope contract and validator.
 - Orchestrator profile resolution and run-mode enforcement.
 - WorkflowHarness scenario wiring over the shared runtime.
@@ -729,10 +761,173 @@ Implementation SHOULD proceed in this order:
 ### Boundary
 - `DMP-10` finalizes SSOT and implementation-location rules for Debate Model Invocation Policy v1.
 - It does not implement the registry, route runner, profile validator, or multi-agent loop by itself.
-- Any implementation task must keep DMP-01 through DMP-10 as the policy baseline.
+- Any implementation task must keep DMP-01 through DMP-12 as the policy baseline.
 
 ### Rationale
 The highest long-term risk is not a missing provider option; it is two plausible invocation systems coexisting with slightly different semantics. A single SSOT and one runtime path keep single-agent workflows, debate workflows, mock harnesses, Codex-assisted runs, and provider-backed runs comparable and auditable.
 
+## DMP-11 Invocation Slot Override Boundary
+- Status: locked
+- Date: 2026-05-25
+
+### Decision
+All model-like participation points in topic selection MUST be represented as invocation slots.
+
+An invocation slot is the smallest workflow-owned call site that may produce model-like output through `mocked_llm`, `codex_assisted`, or `provider_llm`. Single-agent nodes usually have one invocation slot. Multi-agent debate nodes have role/stage slots and MAY have instance-level specs for repeatable worker roles.
+
+Deterministic nodes and deterministic subpaths MUST NOT accept invocation overrides. If a caller supplies `execution_spec`, `model_option_id`, or an execution plan to a deterministic-only path, the node MUST block with `INVALID_PAYLOAD` before any authority write.
+
+### General Override Shape
+Single-agent or bounded semantic-review slots use the shared execution object:
+
+```yaml
+execution_spec:
+  execution_mode: mocked_llm | codex_assisted | provider_llm
+  model_option_id: optional_profile_bound_option_for_provider_llm
+```
+
+Debate slots use the execution plan envelope:
+
+```yaml
+execution_plan:
+  default:
+    execution_mode: provider_llm
+  slots:
+    explorer.round_1_discovery:
+      execution_mode: provider_llm
+      model_option_id: topic-selection.need-discovery.explorer.v1.deepseek-v4-thinking
+  instances:
+    explorer.round_1_discovery#explorer_2:
+      execution_mode: codex_assisted
+```
+
+### Precedence
+Override precedence is:
+
+```text
+instance > slot > node/call-site > scenario default > profile default
+```
+
+Definitions:
+- `instance`: one repeatable role instance, such as `explorer.round_1_discovery#explorer_2`.
+- `slot`: one invocation slot, such as `explorer.round_1_discovery` or `evidence_extraction`.
+- `node/call-site`: the node-level single-agent `execution_spec` for non-debate calls.
+- `scenario default`: harness/scenario-level default execution mode for the run.
+- `profile default`: model profile registry selection when `provider_llm` has no explicit `model_option_id`.
+
+### Required Semantics
+- `execution_mode` expresses source class only; it MUST NOT encode provider, model, or provider-specific parameters.
+- `model_option_id` is legal only when the effective `execution_mode` is `provider_llm`.
+- Provider/model selection MUST resolve through the model profile registry. Workflow code, node policies, harness scripts, and routes MUST NOT branch on concrete provider/model ids for business behavior.
+- Provider-specific parameters MUST remain under model-option `provider_overrides` and be mapped only by provider adapters or `BackendLlmGateway`.
+- `codex_assisted` is an explicit execution override or default for local cost control; it is not provider fallback and cannot masquerade as provider evidence.
+- `mocked_llm` remains test/acceptance-only and cannot satisfy product-mode authority or provider-quality claims.
+- Provider failure MUST return `blocked` according to profile failure policy. It MUST NOT automatically switch provider, switch to Codex, switch to mock, or use cached non-provider output.
+- Repeatable instance overrides are allowed only for slots whose instance policy permits multiple instances. Arbiter slots and ordinary single-agent nodes MUST NOT use instance-level overrides.
+- Effective invocation identity MUST be included in replay/cache hashes: node id, slot id, instance id when present, execution mode, profile id, model option id when present, normalized params hash, prompt packet hash, and context packet hashes.
+- Artifacts and provenance MUST record the effective source class, selected profile, selected model option when applicable, provider/model identity when applicable, and whether the output came from a cache/reuse path.
+
+### Current Slot Categories
+- Deterministic-only node: no invocation slot, no override surface.
+- Single-agent semantic slot: one `execution_spec`, no instance override.
+- Human-authorized semantic-review slot: one `execution_spec` only when the human/delegation policy allows a model-like reviewer.
+- Debate worker slot: role/stage `slot_id`, optional instance-level override when the scenario contract allows multiple worker instances.
+- Debate arbiter slot: role/stage `slot_id`, slot-level override only; instance override is forbidden.
+
+### Boundary
+- `DMP-11` defines override shape and precedence for all model-like topic-selection calls.
+- Node policies and workflow matrix define whether a node has an invocation slot at all.
+- Model profile registry defines concrete provider/model options and runtime parameters.
+- `DMP-10` remains the SSOT/no-dual-track implementation rule.
+- Current v1a implementation already applies this shape to N5, N6 single-agent, N6 debate, N7, and N8; the workflow matrix must be kept aligned so it does not imply a second deterministic-only path for implemented model-like slots.
+
+### Rationale
+Without a single invocation-slot concept, provider overrides, Codex substitution, debate role selection, and harness variables can grow into separate routing systems. A single precedence rule keeps local cost control, real-provider canaries, DeepSeek worker alternatives, and future v1b/v1c LLM nodes comparable and auditable.
+
+## DMP-12 Slot Execution Profiles V1
+- Status: locked
+- Date: 2026-05-25
+
+### Decision
+Slot execution profiles MUST be named, explicit, and executable. Defaults MUST NOT contain alternatives such as `A or B`, and workflow code MUST NOT use vague selectors such as `scenario-defined` without resolving them to a concrete named profile before invocation.
+
+Named profiles are policy-level execution plans. Runtime implementation still resolves concrete provider/model/timeout through the model profile registry and the execution plan shape from `DMP-11`.
+
+### Single-Agent Defaults
+The current v1a single-agent slot defaults are:
+
+| Slot | Default execution mode | Notes |
+| --- | --- | --- |
+| N5 `evidence_extraction` | `none` | Requires caller-supplied `TopicSelectionEvidenceMapExtractionDraft@v1`; model-like extraction is explicit quality/canary upgrade. |
+| N6 `need_candidate_generation` | `codex_assisted` | Local cost-control default before deterministic admission. |
+| N7 `adjudication_recommendation` | `codex_assisted` | Provider is explicit quality/canary upgrade. |
+| N8 `confirmation_semantic_review` | `codex_assisted` | Runs only under the human/delegation boundary; provider is explicit high-risk review upgrade. |
+
+### Product-Quality Timeout Targets
+The project is local-first and personal-use, so product-quality model calls SHOULD favor quality over low latency. Smoke/connectivity timeouts MAY remain shorter and MUST NOT redefine product-quality defaults.
+
+| Option family or slot | Target timeout |
+| --- | ---: |
+| Standard provider call | 180s |
+| OpenAI `openai-quality` | 300s |
+| OpenAI `openai-deep-reasoning` | 450s |
+| DashScope thinking option | 300s |
+| DeepSeek V4 thinking option | 450s |
+| `arbiter.final_synthesis` with deep reasoning | 450s |
+| Smoke/connectivity tests | 60s-180s |
+
+These are implemented registry values for SO-03. Smoke/connectivity tests may choose shorter per-test timeouts, but they do not redefine product-quality defaults.
+
+### Codex Participation Boundary
+Codex SHOULD participate broadly for local cost control and project-aware critique, especially in explorer, deep critic, issue framing, N5 extraction, N7 recommendation, and N8 semantic review.
+
+Codex participation has additional robustness constraints:
+- Codex worker outputs MUST use the same structured output contracts as provider outputs.
+- Codex workers MUST consume frozen context packets by default and MUST NOT read live DB, mutable resource pools, harness runtime state, or repo files during the invocation.
+- If a Codex run intentionally uses repo, skill, or additional operator context, provenance MUST record `codex_context_augmented=true` and the extra context/artifact refs.
+- Codex outputs are non-authority artifacts until deterministic gates accept downstream materialization.
+- Codex MUST NOT write `NeedCandidate`, `EvidenceMap`, `ValidatedNeed`, v1b, v1c, or downstream authority records directly.
+- Codex MUST NOT be the only deep-critique anchor in a provider-quality debate profile.
+- Codex MUST NOT perform `arbiter.final_synthesis` in a run that claims provider-quality debate evidence.
+- Provider-quality final synthesis MUST remain provider-backed.
+
+### Named V1a Debate Profiles
+`mixed-cost-control` is the default recommended daily local debate profile:
+
+| Slot instance | Execution |
+| --- | --- |
+| `explorer.round_1_discovery#explorer_1` | `codex_assisted` |
+| `deep_critic.round_1_discovery#deep_critic_1` | `codex_assisted` |
+| `arbiter.issue_framing` | `codex_assisted` |
+| `arbiter.final_synthesis` | `provider_llm` with OpenAI `openai-quality` |
+
+`provider-diverse-deep` is the high-quality provider canary/review profile:
+
+| Slot instance | Execution |
+| --- | --- |
+| `explorer.round_1_discovery#explorer_1` | `codex_assisted` |
+| `explorer.round_1_discovery#explorer_2` | `provider_llm` with OpenAI `openai-quality` |
+| `explorer.round_1_discovery#explorer_3` | `provider_llm` with DashScope thinking option |
+| `deep_critic.round_1_discovery#deep_critic_1` | `provider_llm` with OpenAI `openai-deep-reasoning` |
+| `deep_critic.round_1_discovery#deep_critic_2` | `codex_assisted` |
+| `arbiter.issue_framing` | `codex_assisted` |
+| `arbiter.final_synthesis` | `provider_llm` with OpenAI `openai-deep-reasoning` |
+
+The default `provider-diverse-deep` profile uses two deep critics: OpenAI as the provider-backed anchor and Codex as the project-aware critic. DeepSeek V4 thinking is an optional manual third critic or replacement source for explorer/deep_critic, not the default deep-critic anchor.
+
+### Provider Option Naming
+DashScope debate options that use thinking are named to make thinking explicit. Canonical id suffix: `dashscope-thinking-budget`.
+
+The compatibility id suffix `dashscope-budget` remains as a legacy alias, but it MUST continue to mean DashScope/Qwen with thinking enabled. A future non-thinking DashScope option must use a separate id, such as `dashscope-fast-nonthinking`.
+
+### Boundary
+- `DMP-12` defines named slot execution profiles and product-quality timeout targets.
+- The model profile registry remains the implementation SSOT for exact option ids, model ids, normalized params, provider overrides, and timeout values.
+- `DMP-11` remains the override-shape and precedence rule.
+- SO-03 implementation sync has landed for timeout values, DashScope thinking option naming with legacy alias, and v1a harness named debate profile materialization. Tests may now assume these option names and timeout values.
+
+### Rationale
+The system should use Codex heavily where it improves project-aware exploration and critique, but it must preserve a provider-backed quality anchor for external final synthesis and provider-quality debate claims. Named profiles give the harness deterministic behavior while still allowing cost-control and high-quality canary modes.
+
 ## Pending Decisions
-- None. Debate Model Invocation Policy v1 is fully locked by `DMP-01` through `DMP-10`.
+- None. Debate Model Invocation Policy v1 is fully locked by `DMP-01` through `DMP-12`.

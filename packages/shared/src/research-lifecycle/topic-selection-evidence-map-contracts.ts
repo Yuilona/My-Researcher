@@ -542,6 +542,7 @@ export interface TopicSelectionEvidenceMapHandoff {
   warning_summary: Record<string, unknown>;
   issue_summary: Record<string, unknown>;
   source_refs_hash: string;
+  method_family_targets: string[];
   policy_version: string;
   output_schema_version: string;
 }
@@ -937,6 +938,7 @@ export const topicSelectionEvidenceMapHandoffSchema = {
     'warning_summary',
     'issue_summary',
     'source_refs_hash',
+    'method_family_targets',
     'policy_version',
     'output_schema_version',
   ],
@@ -959,6 +961,7 @@ export const topicSelectionEvidenceMapHandoffSchema = {
     warning_summary: objectPayload,
     issue_summary: objectPayload,
     source_refs_hash: stringId,
+    method_family_targets: stringArray,
     policy_version: stringId,
     output_schema_version: stringId,
   },

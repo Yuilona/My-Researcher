@@ -876,6 +876,7 @@ locked_decisions:
       - expected_snapshot_hash must equal the resolved LiteratureResourcePoolSnapshot.snapshot_hash.
       - query_intents must be present and non-empty after normalization.
       - coverage_intents must be explicitly present and non-empty after normalization.
+      - method_family_targets must be explicitly present and non-empty after normalization.
       - every coverage_intent must include coverage_key, intent_type, query, rationale, required, priority, expected_evidence_role, target_source_types, and refs.
       - target_source_types and refs may be empty arrays but must not be omitted.
     fallback_policy:
@@ -907,6 +908,7 @@ locked_decisions:
         - resolved_snapshot_hash.
         - query_intents.
         - coverage_intents.
+        - method_family_targets.
         - search_plan_ref.
         - coverage_row_intent_refs.
         - control_plane_refs.
@@ -953,6 +955,32 @@ locked_decisions:
       stable_node_result: TopicSelectionWorkflowHarnessCreateSearchPlanNodeResult
       trace_artifact: WorkflowHarnessCreateSearchPlanScenarioTrace@v1
       script_local_choreography_required: false
+  N3-D07:
+    status: locked
+    summary: SearchPlan blueprint owns topic-level method-family targets for downstream coverage-gap warnings.
+    contract_scope:
+      field: method_family_targets
+      owner_contract: TopicSelectionSearchPlanBlueprint@v1
+      contract_level: module_level_value_contract
+      persistence_location: TopicSelectionSearchPlanRecord.coverage_strategy.method_family_targets
+      db_migration_required: false
+    rationale:
+      - Method-family expectations are part of the selected topic/search strategy, not a private Node 6 heuristic.
+      - N6 can warn about uncovered mentioned method families only if N3/N4/N5 carry the intended target set forward.
+      - Keeping the field on the module-level SearchPlan blueprint avoids a second SearchPlan-blueprint shape in the WorkflowHarness script.
+    propagation_rule:
+      - Node 3 validates and freezes non-empty method_family_targets in the SearchPlan blueprint.
+      - Node 3 stores the normalized targets in SearchPlan coverage_strategy.
+      - Node 4 reads the resolved SearchPlan and emits the targets in TopicSelectionSearchRunHandoff@v1.
+      - Node 5 copies the targets into TopicSelectionEvidenceMapHandoff@v1 and includes them in the handoff/input refs hash.
+      - Node 6 compiles the targets into search_coverage_digest.method_family_targets and admission checks METHOD_FAMILY_COVERAGE_GAP against this target set.
+    dual_track_controls:
+      - Route/service compatibility may continue accepting coverage_strategy, but normalized WorkflowHarness execution requires top-level blueprint method_family_targets.
+      - Backend must not hard-code fine_tuning, hybrid, RAG, or any other method family when the SearchPlan target set is absent.
+      - Method-family target order is not semantically meaningful; replay/drift checks should compare normalized sets or hashes, not raw array order.
+    failure_semantics:
+      - Missing or empty method_family_targets blocks normalized Node 3 before SearchPlan authority creation.
+      - Malformed targets return INVALID_PAYLOAD or GATE_CONSTRAINT_FAILED according to the validation layer.
 preconditions:
   - topic_seed_id resolves under title_card_id.
   - literature_resource_pool_snapshot_id resolves under title_card_id.
@@ -963,6 +991,7 @@ preconditions:
   - SearchPlan blueprint satisfies TopicSelectionSearchPlanBlueprint@v1.
   - query_intents are non-empty after normalization.
   - coverage_intents are explicitly supplied and non-empty after normalization.
+  - method_family_targets are explicitly supplied and non-empty after normalization.
 blocking_conditions:
   - missing TopicSeed or LiteratureResourcePoolSnapshot returns NOT_FOUND.
   - TopicSeed/Snapshot/title-card lineage mismatch returns VERSION_CONFLICT.
@@ -971,6 +1000,7 @@ blocking_conditions:
   - malformed SearchPlan blueprint blocks before SearchPlan authority creation.
   - empty or blank query intent blocks with GATE_CONSTRAINT_FAILED.
   - empty or blank coverage intent blocks with GATE_CONSTRAINT_FAILED.
+  - empty or missing method_family_targets blocks before SearchPlan authority creation.
   - missing coverage intent required field blocks with INVALID_PAYLOAD before SearchPlan authority creation.
   - omitted coverage_intents in the normalized harness path blocks before SearchPlan authority creation.
   - deterministic gate topic-selection.search-plan-ready failure blocks before repository persistence.
@@ -1220,7 +1250,9 @@ normalized_input_contract:
         - search_plan_ref.
         - literature_resource_pool_snapshot_ref.
         - literature_snapshot_hash.
+        - method_family_targets copied from resolved SearchPlan coverage_strategy.
         - coverage_row_intent_refs.
+        - coverage_role_expectations derived from resolved SearchPlan coverage rows.
         - evidence_map_input_refs.
         - coverage_binding_refs.
         - coverage_assessment_refs.
@@ -1235,7 +1267,7 @@ normalized_input_contract:
         - hidden reasoning.
         - LLM notes.
         - EvidenceUnit draft.
-        - evidence_role.
+        - newly inferred evidence_role outside SearchPlan-derived coverage_role_expectations.
         - evidence_polarity.
         - evidence_strength.
         - need/value/claim semantics.
@@ -1284,6 +1316,12 @@ normalized_input_contract:
       raw_artifact_refs:
         risk: raw_log_artifact or artifact_ref could bypass Literature/Source authority and feed Node 5.
         control: block raw refs in evidence_map_input_refs, evidence_bindings literature/source refs, and downstream_handoff authority refs.
+      coverage_role_drift:
+        risk: Node 5 could reinterpret a SearchPlan coverage row as a different EvidenceUnit role.
+        control: Node 4 handoff carries coverage_role_expectations from resolved CoverageRowIntent records; Node 5 materialization blocks mismatched draft roles.
+      method_family_target_drift:
+        risk: Node 6 could warn against a hard-coded or resource-sample-only method family set instead of the SearchPlan's target method families.
+        control: Node 4 handoff carries method_family_targets from the resolved SearchPlan coverage_strategy; Node 5 and Node 6 must consume the carried targets as the authoritative coverage target set.
       snapshot_membership:
         risk: upstream search execution may discover valid new literature and accidentally attach it to SearchRun without refreshing Node 2.
         control: block snapshot-outside refs in consumable output and emit loopback_signal to acquisition/resource refresh plus Node 2/Node 3 rerun.
@@ -1534,6 +1572,7 @@ materialization_validator:
     - malformed TopicSelectionBuildEvidenceMapNodeInput@v1 or TopicSelectionEvidenceMapExtractionDraft@v1.
     - title-card, SearchRun, SearchPlan, snapshot, or input_refs_hash mismatch.
     - literature/source/locator ref outside Node 4 handoff authority refs.
+    - coverage_row_intent_ref expected role does not match the drafted evidence_role.
     - empty source_statement or missing locator.
     - source_attribution_kind=llm_inference used as source authority.
     - typed link, cluster, pattern, or conflict ref points to unknown client_unit_key.
@@ -1645,6 +1684,11 @@ extraction_execution_profile:
     keyword_extraction_fallback: false
   output_contract:
     - TopicSelectionEvidenceMapExtractionDraft@v1 only.
+  provider_schema_compatibility:
+    - Provider structured-output requests may receive an invocation-boundary projection of the shared JSON schema when a provider rejects valid local JSON Schema features.
+    - The current projection removes `properties.<forbidden_field>=false` entries before provider invocation.
+    - Local Ajv validation MUST still use the original shared schema; provider schema projection MUST NOT become a weaker product contract.
+    - Forbidden output fields remain blocked by local validation and `additionalProperties=false`.
 cache_reuse_audit_policy:
   decision_id: N5-D04
   purpose: prevent context pollution and cached response masquerading while allowing reproducible local cost control.
@@ -1806,6 +1850,7 @@ evidence_map_handoff_policy:
     - literature_resource_pool_snapshot_ref.
     - materialization_report_ref.
     - materialization_report_hash.
+    - method_family_targets.
     - need_validation_evidence_bundle_ref when available as read projection.
     - evidence_unit_count.
     - role_counts.
@@ -1836,6 +1881,7 @@ evidence_map_handoff_policy:
     - audit and verification script reads.
   node6_consumption_rule:
     - Node 6 consumes evidence_map_ref and read projections such as TopicSelectionNeedValidationEvidenceBundle.
+    - Node 6 consumes method_family_targets only as coverage-target metadata for gap warnings; it must not treat the target names as evidence facts or source claims.
     - Node 6 MUST NOT consume extraction draft, review package, raw model output, cache artifact, or audit artifact as evidence facts.
     - ready_with_warning handoff may proceed, but warnings and issue summaries become downstream sufficiency constraints rather than strong evidence.
     - WorkflowHarness may pass TopicSelectionEvidenceMapHandoff@v1 into Node 6 as transition provenance; Node 6 must validate matching EvidenceMap/SearchRun/LiteratureSnapshot refs before context compilation.
@@ -2024,6 +2070,7 @@ preconditions:
   - exploration_context and arbiter_context packets compile with source refs, compiler version, input hash, summary hash, and redaction policy.
   - shared context envelope contains node_id, workflow_run_id, node_attempt_id, context_family, input_refs, input_refs_hash, context_compiler_version, policy_version, output_schema_version, profile_id, execution_mode, cache_key, cache_hit, redaction_policy, and created_at.
   - exploration_context payload contains topic_scope, evidence_signal_digest, resource_sample_digest, search_coverage_digest, sibling_candidate_digest, decision_memory_digest, exploration_prompts, challenge_prompts, allowed_outputs, and forbidden_outputs.
+  - search_coverage_digest.method_family_targets is compiled from TopicSelectionEvidenceMapHandoff@v1 or upstream SearchPlan/SearchRun handoff, not from model output.
   - arbiter_context payload contains node_policy_ref, output_schema_ref, authority_boundary, max_persisted_candidates, deterministic_gate_checklist, role_level_summaries, candidate_pool_digest, evidence_ref_table, rejected_framing_table, unresolved_points, batch_ranking_rules, persistence_rules, and failure_rules.
 blocking_conditions:
   - missing evidence map blocks with MISSING_EVIDENCE_MAP.
@@ -2122,6 +2169,7 @@ deterministic_validators:
   - after round 3, supplemental routing must not request another round and must resolve to finalize_with_admitted_batch, block, or require_human_review.
   - schema_gate reuses RankedCandidateDraftBatch minimum schema validation and blocks malformed batches before per-draft gates.
   - reference_integrity_gate verifies all evidence_role_refs, conflict_refs, and strength_assessment_refs resolve to input evidence, resource, or search snapshots.
+  - method_family_coverage_gate compares candidate-mentioned method families against search_coverage_digest.method_family_targets and current evidence coverage; uncovered target families emit METHOD_FAMILY_COVERAGE_GAP instead of being silently cleaned.
   - scope_gate rejects or routes drafts whose candidate_need or unmet_need_statement drift outside topic scope, exclusions, or non-goals.
   - evidence_sufficiency_gate allows persistence only when a draft cites at least one support or challenge ref.
   - mechanism_sufficiency_gate rejects drafts that are only broad topics, interest statements, or pseudo-gaps without a researchable mechanism, method, system design, evaluation path, or technical lever.

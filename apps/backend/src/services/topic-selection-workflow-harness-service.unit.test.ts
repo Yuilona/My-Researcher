@@ -79,16 +79,22 @@ import {
 
 class StubLlmGateway {
   readonly calls: LlmStructuredOutputRequest[] = [];
+  private readonly outputsBySchemaName = new Map<string, unknown>();
 
   constructor(private readonly output: TopicSelectionRankedCandidateDraftBatch) {}
+
+  setOutputForSchema(schemaName: string, output: unknown): void {
+    this.outputsBySchemaName.set(schemaName, output);
+  }
 
   async createStructuredOutput<T>(
     request: LlmStructuredOutputRequest,
   ): Promise<LlmStructuredOutputResponse<T>> {
     this.calls.push(request);
+    const output = this.outputsBySchemaName.get(request.schemaName) ?? this.output;
     return {
-      parsed: this.output as T,
-      raw: { output: this.output },
+      parsed: output as T,
+      raw: { output },
       telemetry: telemetry(),
     };
   }
@@ -265,9 +271,11 @@ function explorationPayload(): TopicSelectionNeedDiscoveryExplorationContextPayl
     resource_sample_digest: {
       sample_set_id: 'sample_set_001',
       role_counts: { support: 2, challenge: 1, baseline: 1 },
+      topic_method_family_targets: ['retrieval_augmented_generation', 'fine_tuning', 'hybrid_adaptation'],
     },
     search_coverage_digest: {
       coverage: 'partial',
+      method_family_targets: ['retrieval_augmented_generation', 'fine_tuning', 'hybrid_adaptation'],
     },
     sibling_candidate_digest: {
       candidate_count: 0,
@@ -601,6 +609,7 @@ function searchPlanBlueprint(input: {
     exclusion_rules: ['exclude non-CS commentary'],
     coverage_strategy: { breadth: 'small', sequencing: ['support', 'challenge'] },
     role_coverage_expectation: { support: 1, challenge: 1 },
+    method_family_targets: ['retrieval_augmented_generation', 'fine_tuning'],
     policy_version: 'v1',
     output_schema_version: 'v1',
     ...overrides,
@@ -834,6 +843,7 @@ function evidenceMapExtractionContextPacket(input: {
   node_attempt_id: string;
   handoff: TopicSelectionSearchRunHandoff;
   input_refs_hash: string;
+  execution_mode?: 'mocked_llm' | 'codex_assisted' | 'provider_llm';
 }): TopicSelectionEvidenceMapExtractionContextPacket {
   return {
     schema_version: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_CONTEXT_PACKET_SCHEMA_VERSION,
@@ -851,7 +861,7 @@ function evidenceMapExtractionContextPacket(input: {
     context_compiler_version: 'v1',
     policy_version: 'v1',
     output_schema_version: 'v1',
-    execution_mode: 'mocked_llm',
+    execution_mode: input.execution_mode ?? 'mocked_llm',
     profile_id: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
     cache_key: 'evidence-extraction-cache-key-001',
     cache_hit: false,
@@ -918,6 +928,8 @@ function validationManualLocator(input: {
 
 async function seedValidateNeedAdjudicationRuntime(options: {
   includeContext?: boolean;
+  includeChallenge?: boolean;
+  gapCodes?: string[];
 } = {}) {
   const ctx = await seedRecordSearchRunRuntime();
   const titleCardId = ctx.titleCard.title_card_id;
@@ -986,10 +998,37 @@ async function seedValidateNeedAdjudicationRuntime(options: {
       normalized_statement: 'The candidate is scoped to local-first reviewer-facing evidence workflows.',
     });
   }
+  if (options.includeChallenge) {
+    evidenceUnits.push({
+      client_unit_key: 'challenge_ready',
+      coverage_row_intent_id: null,
+      evidence_role: 'challenge' as const,
+      literature_ref: literatureRef,
+      source_refs: [sourceRef],
+      locator: validationManualLocator({
+        title_card_id: titleCardId,
+        literature_ref: literatureRef,
+        source_ref: sourceRef,
+        manual_ref: manualLocatorRef,
+        manual_label: 'manual challenge provenance for validation fixture',
+      }),
+      source_statement: 'The same evidence notes that retrieval conflicts and source verification risks remain unresolved.',
+      normalized_statement: 'Retrieval conflict and source verification risks must be carried forward.',
+    });
+  }
   const evidenceMapRecords = await ctx.evidenceMaps.createEvidenceMapFromSearchRun({
     title_card_id: titleCardId,
     search_run_id: searchRunResult.node_result.search_run_ref.ref_id,
     evidence_units: evidenceUnits,
+    conflict_sets: options.includeChallenge
+      ? [{
+          conflict_type: 'claim_conflict',
+          severity: 'moderate',
+          support_unit_keys: ['support_ready'],
+          challenge_unit_keys: ['challenge_ready'],
+          issue_codes: ['RESIDUAL_RISK_PRESENT'],
+        }]
+      : [],
     created_by: 'system',
   });
   const candidate = await ctx.needService.createNeedCandidateFromEvidenceMap({
@@ -1001,6 +1040,7 @@ async function seedValidateNeedAdjudicationRuntime(options: {
     mechanism_summary: 'Validation lineage can be lost before v1b handoff.',
     scope_notes: 'Topic-selection v1a validation only.',
     prior_art_status: 'no_strong_solution_found',
+    gap_codes: options.gapCodes ?? [],
     created_by: 'system',
   });
   const readiness = await ctx.needService.assessCandidateReadiness({
@@ -1649,6 +1689,11 @@ test('workflow harness creates SearchPlan from a strict blueprint without fallba
   assert.equal(frozenBlueprint?.schema_version, 'TopicSelectionSearchPlanBlueprint@v1');
   assert.equal(frozenBlueprint?.expected_snapshot_hash, ctx.snapshotHash);
   assert.equal(frozenBlueprint?.coverage_intents[1]?.expected_evidence_role, 'challenge');
+  assert.deepEqual(frozenBlueprint?.method_family_targets, ['retrieval_augmented_generation', 'fine_tuning']);
+  assert.deepEqual(persisted?.coverage_strategy.method_family_targets, [
+    'fine_tuning',
+    'retrieval_augmented_generation',
+  ]);
   const rows = await ctx.searchResourceRepository.listCoverageRowIntentsBySearchPlanId(
     result.node_result.search_plan!.search_plan_id,
   );
@@ -1768,6 +1813,35 @@ test('workflow harness blocks omitted coverage intents instead of using service 
   }));
 
   assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.equal((await ctx.searchResourceRepository.listSearchPlansByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
+});
+
+test('workflow harness blocks SearchPlan blueprint without method-family targets', async () => {
+  const ctx = await seedSearchPlanRuntime();
+  const blueprint = searchPlanBlueprint({
+    title_card_id: ctx.titleCard.title_card_id,
+    topic_seed_ref: ctx.topicSeedRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_snapshot_hash: ctx.snapshotHash,
+  }, {
+    method_family_targets: [],
+  });
+
+  const result = await ctx.workflowHarness.runCreateSearchPlanScenario(searchPlanScenarioInput(blueprint, {
+    title_card_id: ctx.titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_search_plan_no_method_targets',
+    node_attempt_id: 'node_attempt_search_plan_no_method_targets',
+    expectations: {
+      status: 'blocked',
+      error_code: 'INVALID_PAYLOAD',
+      blocker_codes: ['MALFORMED_SEARCH_PLAN_BLUEPRINT'],
+      coverage_row_count: 0,
+    },
+  }));
+
+  assertScenarioPassed(result);
   assert.equal(result.node_result.status, 'blocked');
   assert.equal(result.node_result.authority_refs.length, 0);
   assert.equal((await ctx.searchResourceRepository.listSearchPlansByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
@@ -1906,6 +1980,14 @@ test('workflow harness records SearchRun and emits a Node 5 handoff for consumab
   assert.equal(result.node_result.consumable_for_evidence_map, true);
   assert.equal(result.node_result.downstream_handoff?.search_run_ref.ref_id, result.node_result.search_run_ref?.ref_id);
   assert.equal(result.node_result.downstream_handoff?.literature_snapshot_hash, ctx.snapshotHash);
+  assert.deepEqual(result.node_result.downstream_handoff?.coverage_role_expectations, [{
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    expected_evidence_role: 'support',
+  }]);
+  assert.deepEqual(result.node_result.downstream_handoff?.method_family_targets, [
+    'fine_tuning',
+    'retrieval_augmented_generation',
+  ]);
   assert.equal(result.node_result.loopback_signal, null);
   assert.equal(result.node_result.coverage_matrix_summary?.satisfied_count, 1);
   assert.equal(result.node_result.evidence_binding_refs.length, 1);
@@ -2140,6 +2222,7 @@ test('workflow harness builds EvidenceMap from a normalized extraction draft and
   assert.equal(result.node_result.downstream_handoff?.evidence_map_ref.ref_id, result.node_result.evidence_map_ref?.ref_id);
   assert.equal(result.node_result.downstream_handoff?.role_counts.support, 1);
   assert.equal(result.node_result.downstream_handoff?.abstract_only_support_count, 1);
+  assert.deepEqual(result.node_result.downstream_handoff?.method_family_targets, ctx.searchRunHandoff.method_family_targets);
   assert.equal(result.harness_trace_snapshot.payload_schema, 'WorkflowHarnessBuildEvidenceMapScenarioTrace@v1');
   assert.equal(result.node_result.authority_refs.some((ref) => ref.ref_type === 'evidence_map'), true);
   assert.equal(result.node_result.audit_refs.some((ref) => ref.ref_type === 'workflow_run'), true);
@@ -2198,6 +2281,101 @@ test('workflow harness blocks EvidenceMap materialization when draft uses llm_in
   assert.equal(result.node_result.evidence_map_ref, null);
   assert.equal(result.node_result.authority_refs.length, 0);
   assert.equal(result.node_result.downstream_handoff, null);
+  assert.equal((await ctx.evidenceRepository.listEvidenceMapsByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
+});
+
+test('workflow harness blocks incomplete EvidenceMap extraction before authority writes', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const missingLiteratureRef = refForTitleCard(
+    'literature_record',
+    'literature_missing_from_provider_output',
+    ctx.titleCard.title_card_id,
+  );
+  const handoff = {
+    ...ctx.searchRunHandoff,
+    evidence_map_input_refs: [
+      ...ctx.searchRunHandoff.evidence_map_input_refs,
+      missingLiteratureRef,
+    ],
+  };
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(handoff);
+  const draft = evidenceMapExtractionDraft({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    input_refs_hash: inputRefsHash,
+  });
+
+  const result = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff,
+    draft,
+  }, {
+    workflow_run_id: 'workflow_run_build_evidence_map_incomplete_extraction',
+    node_attempt_id: 'node_attempt_build_evidence_map_incomplete_extraction',
+    expectations: {
+      status: 'blocked',
+      materialization_status: 'blocked',
+      blocker_codes: ['EVIDENCE_UNIT_MISSING_FOR_INPUT_LITERATURE'],
+      evidence_unit_count: 0,
+      downstream_handoff_present: false,
+    },
+  }));
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'blocked');
+  assert.ok(result.node_result.blocker_codes.includes('EVIDENCE_UNIT_MISSING_FOR_INPUT_LITERATURE'));
+  assert.equal(result.node_result.evidence_map_ref, null);
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.equal((await ctx.evidenceRepository.listEvidenceMapsByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
+});
+
+test('workflow harness blocks EvidenceMap draft when coverage row role and extracted role diverge', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(ctx.searchRunHandoff);
+  const baseDraft = evidenceMapExtractionDraft({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    input_refs_hash: inputRefsHash,
+  });
+  const draft: TopicSelectionEvidenceMapExtractionDraft = {
+    ...baseDraft,
+    draft_units: [{
+      ...baseDraft.draft_units[0]!,
+      evidence_role: 'challenge',
+      interpretation_payload: { role_hint: 'challenge' },
+    }],
+  };
+
+  const result = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    draft,
+  }, {
+    workflow_run_id: 'workflow_run_build_evidence_map_role_mismatch',
+    node_attempt_id: 'node_attempt_build_evidence_map_role_mismatch',
+    expectations: {
+      status: 'blocked',
+      materialization_status: 'blocked',
+      blocker_codes: ['COVERAGE_ROW_ROLE_MISMATCH'],
+      evidence_unit_count: 0,
+      downstream_handoff_present: false,
+    },
+  }));
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'blocked');
+  assert.ok(result.node_result.blocker_codes.includes('COVERAGE_ROW_ROLE_MISMATCH'));
+  assert.deepEqual(result.node_result.materialization_report.rejection_reasons_by_client_unit_key.unit_support_001, [
+    'COVERAGE_ROW_ROLE_MISMATCH',
+  ]);
+  assert.equal(result.node_result.evidence_map_ref, null);
+  assert.equal(result.node_result.authority_refs.length, 0);
   assert.equal((await ctx.evidenceRepository.listEvidenceMapsByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
 });
 
@@ -2393,6 +2571,17 @@ test('workflow harness requires source-specific support/challenge conflict cover
   };
   const handoff: TopicSelectionSearchRunHandoff = {
     ...ctx.searchRunHandoff,
+    coverage_row_intent_refs: [
+      ...ctx.searchRunHandoff.coverage_row_intent_refs,
+      ctx.coverageRowIntentRefs[1]!,
+    ],
+    coverage_role_expectations: [
+      ...ctx.searchRunHandoff.coverage_role_expectations,
+      {
+        coverage_row_intent_ref: ctx.coverageRowIntentRefs[1]!,
+        expected_evidence_role: 'challenge',
+      },
+    ],
     evidence_map_input_refs: [
       ...ctx.searchRunHandoff.evidence_map_input_refs,
       extraSourceRef,
@@ -2412,6 +2601,7 @@ test('workflow harness requires source-specific support/challenge conflict cover
     ...supportUnit,
     client_unit_key: 'unit_challenge_same_source_001',
     evidence_role: 'challenge' as const,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[1]!,
     source_statement: 'The same paper also reports a failure mode for this approach.',
     interpretation_payload: { role_hint: 'challenge' },
   };
@@ -2419,6 +2609,7 @@ test('workflow harness requires source-specific support/challenge conflict cover
     ...supportUnit,
     client_unit_key: 'unit_challenge_other_source_001',
     evidence_role: 'challenge' as const,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[1]!,
     source_refs: [extraSourceRef],
     locator: {
       ...supportUnit.locator,
@@ -2530,6 +2721,84 @@ test('workflow harness runs mocked single-agent EvidenceMap extraction before ma
     (auditRefEntry) => auditRefEntry.ref_id === result.node_result.agent_invocation_audit_ref?.ref_id,
   ));
   assert.equal(result.node_result.downstream_handoff?.evidence_unit_count, 1);
+});
+
+test('workflow harness runs provider single-agent EvidenceMap extraction through the same materialization gate', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(ctx.searchRunHandoff);
+  const workflowRunId = 'workflow_run_build_evidence_map_provider';
+  const nodeAttemptId = 'node_attempt_build_evidence_map_provider';
+  const draft = evidenceMapExtractionDraft({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    input_refs_hash: inputRefsHash,
+  }, {
+    producer_kind: 'provider_llm',
+  });
+  ctx.llmGateway.setOutputForSchema('TopicSelectionEvidenceMapExtractionDraft@v1', draft);
+  const contextPacket = evidenceMapExtractionContextPacket({
+    workflow_run_id: workflowRunId,
+    node_attempt_id: nodeAttemptId,
+    handoff: ctx.searchRunHandoff,
+    input_refs_hash: inputRefsHash,
+    execution_mode: 'provider_llm',
+  });
+
+  const result = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    draft,
+  }, {
+    workflow_run_id: workflowRunId,
+    node_attempt_id: nodeAttemptId,
+    extraction_draft: null,
+    execution_mode: 'provider_llm',
+    execution_spec: {
+      execution_mode: 'provider_llm',
+      model_option_id: `${TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+    },
+    run_mode: 'product',
+    model_option_id: `${TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+    extraction_context_packet: contextPacket,
+    extraction_context_packet_ref: {
+      ref_type: 'artifact_ref',
+      ref_id: 'context_packet_provider_001',
+      title_card_id: ctx.titleCard.title_card_id,
+    },
+    expectations: {
+      status: 'succeeded',
+      materialization_status: 'ready_with_warning',
+      evidence_unit_count: 1,
+      downstream_handoff_present: true,
+      warning_codes: ['ABSTRACT_ONLY_SUPPORT'],
+    },
+  }));
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_input.execution_mode, 'provider_llm');
+  assert.equal(ctx.llmGateway.calls.length, 1);
+  assert.equal(ctx.llmGateway.calls[0]?.schemaName, 'TopicSelectionEvidenceMapExtractionDraft@v1');
+  assert.equal(ctx.llmGateway.calls[0]?.model.profileId, TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID);
+  assert.equal(ctx.llmGateway.calls[0]?.model.modelId, 'gpt-5.5');
+  assert.deepEqual(ctx.llmGateway.calls[0]?.normalizedParams, {
+    creativity: 'low',
+    reasoning_depth: 'high',
+    output_budget: 'large',
+    structured_output_required: true,
+    output_format: 'json_schema',
+  });
+  assert.equal(
+    Object.values(ctx.llmGateway.calls[0]?.schema.properties ?? {}).some((schemaValue) => schemaValue === false),
+    false,
+  );
+  assert.equal(result.node_result.agent_invocation_status, 'succeeded');
+  assert.equal(result.node_result.materialization_report.status, 'ready_with_warning');
+  assert.equal(result.node_result.downstream_handoff?.evidence_unit_count, 1);
+  assert.equal(result.node_result.authority_refs.some((refEntry) => refEntry.ref_type === 'evidence_map'), true);
+  assert.equal(result.node_result.blocker_codes.length, 0);
 });
 
 test('workflow harness carries a valid EvidenceMap handoff into generate-need-candidate input refs', async () => {
@@ -2723,6 +2992,148 @@ test('workflow harness runs validate-need-adjudication to a Node 8 human-confirm
   );
 });
 
+test('workflow harness runs validate-need-adjudication through canonical execution_spec', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const packet = needAdjudicationRecommendationPacket(ctx, {
+    workflow_run_id: 'workflow_run_validate_need_execution_spec',
+    node_attempt_id: 'node_attempt_validate_need_execution_spec',
+  });
+
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, packet, {
+      scenario_case_id: 'validate-need-adjudication-execution-spec',
+      workflow_run_id: 'workflow_run_validate_need_execution_spec',
+      node_attempt_id: 'node_attempt_validate_need_execution_spec',
+      execution_mode: 'mocked_llm',
+      execution_spec: {
+        execution_mode: 'mocked_llm',
+      },
+      run_mode: 'acceptance',
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.deepEqual(result.node_input.execution_spec, { execution_mode: 'mocked_llm' });
+  assert.equal(ctx.llmGateway.calls.length, 0);
+  assert.equal(result.node_result.status, 'ready');
+});
+
+test('workflow harness blocks validate-need-adjudication when validate drops residual risks', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime({ includeChallenge: true });
+  assert.ok(ctx.supportPacket);
+  assert.ok(ctx.supportPacket.residual_risk_refs.length > 0);
+  const packet = needAdjudicationRecommendationPacket(ctx, {
+    workflow_run_id: 'workflow_run_validate_need_dropped_risk',
+    node_attempt_id: 'node_attempt_validate_need_dropped_risk',
+  }, {
+    residual_risk_refs: [],
+    accepted_risk_refs: [],
+  });
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, packet, {
+      scenario_case_id: 'validate-need-adjudication-dropped-risk',
+      workflow_run_id: 'workflow_run_validate_need_dropped_risk',
+      node_attempt_id: 'node_attempt_validate_need_dropped_risk',
+      expectations: {
+        status: 'blocked',
+        blocker_codes: ['RESIDUAL_RISK_DROPPED'],
+      },
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'blocked');
+  assert.ok(result.node_result.blocker_codes.includes('RESIDUAL_RISK_DROPPED'));
+  assert.equal(
+    (await ctx.needValidationRepository.listAdjudicationResultsByNeedCandidateId(ctx.candidate.need_candidate_id)).length,
+    0,
+  );
+});
+
+test('workflow harness carries residual risk and method warnings on validate handoff', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime({
+    includeChallenge: true,
+    gapCodes: ['METHOD_FAMILY_COVERAGE_GAP'],
+  });
+  assert.ok(ctx.supportPacket);
+  const packet = needAdjudicationRecommendationPacket(ctx, {
+    workflow_run_id: 'workflow_run_validate_need_with_risk',
+    node_attempt_id: 'node_attempt_validate_need_with_risk',
+  }, {
+    required_actions: ['carry residual risks and method-family coverage gap into human confirmation'],
+    residual_risk_refs: ctx.supportPacket.residual_risk_refs,
+  });
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, packet, {
+      scenario_case_id: 'validate-need-adjudication-with-risk',
+      workflow_run_id: 'workflow_run_validate_need_with_risk',
+      node_attempt_id: 'node_attempt_validate_need_with_risk',
+      expectations: {
+        status: 'ready',
+        warning_codes: ['METHOD_FAMILY_COVERAGE_GAP', 'VALIDATE_WITH_RESIDUAL_RISK'],
+      },
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'ready');
+  assert.ok(result.node_result.warning_codes.includes('METHOD_FAMILY_COVERAGE_GAP'));
+  assert.ok(result.node_result.warning_codes.includes('VALIDATE_WITH_RESIDUAL_RISK'));
+  assert.deepEqual(result.node_result.residual_risk_refs, ctx.supportPacket.residual_risk_refs);
+});
+
+test('workflow harness blocks clean validate when method-family coverage gap is not carried', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime({
+    gapCodes: ['METHOD_FAMILY_COVERAGE_GAP'],
+  });
+  const packet = needAdjudicationRecommendationPacket(ctx, {
+    workflow_run_id: 'workflow_run_validate_need_dropped_method_gap',
+    node_attempt_id: 'node_attempt_validate_need_dropped_method_gap',
+  }, {
+    required_actions: ['route result according to deterministic node policy'],
+    gap_codes: [],
+  });
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, packet, {
+      scenario_case_id: 'validate-need-adjudication-dropped-method-gap',
+      workflow_run_id: 'workflow_run_validate_need_dropped_method_gap',
+      node_attempt_id: 'node_attempt_validate_need_dropped_method_gap',
+      expectations: {
+        status: 'blocked',
+        blocker_codes: ['METHOD_FAMILY_COVERAGE_GAP_DROPPED'],
+        warning_codes: ['METHOD_FAMILY_COVERAGE_GAP'],
+      },
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'blocked');
+  assert.ok(result.node_result.blocker_codes.includes('METHOD_FAMILY_COVERAGE_GAP_DROPPED'));
+});
+
+test('workflow harness allows diagnostic adjudication prompts only in acceptance mode', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const packet = needAdjudicationRecommendationPacket(ctx, {
+    workflow_run_id: 'workflow_run_validate_need_diagnostic_product_guard',
+    node_attempt_id: 'node_attempt_validate_need_diagnostic_product_guard',
+  });
+
+  await assert.rejects(
+    () => ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+      validateNeedAdjudicationScenarioInput(ctx, packet, {
+        execution_mode: 'provider_llm',
+        run_mode: 'product',
+        mocked_output: null,
+        diagnostic_prompt_appendix: 'Diagnostic negative probe must not run in product mode.',
+      }),
+    ),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && /diagnostic_prompt_appendix/.test(error.message),
+  );
+});
+
 test('workflow harness runs human-confirm-need and materializes reserved ValidatedNeed without v1b bundle', async () => {
   const ctx = await seedValidateNeedAdjudicationRuntime();
   const validateResult = await runValidateNeedForHumanConfirm(ctx);
@@ -2742,6 +3153,7 @@ test('workflow harness runs human-confirm-need and materializes reserved Validat
   assert.equal(result.node_input.run_mode, 'acceptance');
   assert.equal(result.node_input.executor_kind, 'single_agent');
   assert.equal(result.node_input.model_option_id, null);
+  assert.equal(result.node_input.execution_spec, null);
   const bundles = await ctx.needValidationRepository.listV1aToV1bInputBundlesByValidatedNeedId(
     result.node_result.validated_need_ref!.ref_id,
   );
@@ -3489,7 +3901,7 @@ test('workflow harness rejects changed generate-need-candidate input for an exis
   await assert.rejects(
     () => workflowHarness.runGenerateNeedCandidateScenario({
       ...input,
-      model_option_id: `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.dashscope-budget`,
+      model_option_id: `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.dashscope-thinking-budget`,
     }),
     (error: unknown) => error instanceof AppError && error.errorCode === 'VERSION_CONFLICT',
   );

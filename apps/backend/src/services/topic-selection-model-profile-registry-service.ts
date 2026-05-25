@@ -68,9 +68,9 @@ export interface ResolveTopicSelectionModelProfileInput {
   model_option_id?: string | null;
 }
 
-type RegisteredProviderId = 'openai' | 'dashscope';
+type RegisteredProviderId = 'openai' | 'dashscope' | 'deepseek';
 
-const REGISTERED_PROVIDER_IDS: RegisteredProviderId[] = ['openai', 'dashscope'];
+const REGISTERED_PROVIDER_IDS: RegisteredProviderId[] = ['openai', 'dashscope', 'deepseek'];
 
 const DEFAULT_RUN_MODE_ELIGIBILITY: TopicSelectionModelProfileRunModeEligibility = {
   mocked_llm: ['test', 'acceptance'],
@@ -100,6 +100,11 @@ export const TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FRAMING_PROFILE_ID =
 export const TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID =
   'topic-selection.need-discovery.arbiter-final.v1' as const;
 
+const DEBATE_WORKER_DEEPSEEK_ELIGIBLE_PROFILE_IDS = new Set<string>([
+  TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
+  TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID,
+]);
+
 function normalizedParams(
   overrides: Partial<TopicSelectionModelOption['normalized_params']> = {},
 ): TopicSelectionModelOption['normalized_params'] {
@@ -114,7 +119,7 @@ function normalizedParams(
 }
 
 function providerOptions(profileKey: string): TopicSelectionModelOption[] {
-  return [
+  const options: TopicSelectionModelOption[] = [
     {
       option_id: `${profileKey}.openai-balanced`,
       option_purpose: 'default_balanced_provider_run',
@@ -122,7 +127,7 @@ function providerOptions(profileKey: string): TopicSelectionModelOption[] {
       model_id: 'gpt-5.4-mini',
       use_when: ['default_provider_run'],
       request_policy: {
-        timeout_ms: 60000,
+        timeout_ms: 180000,
       },
       normalized_params: normalizedParams(),
       provider_overrides: {},
@@ -131,13 +136,66 @@ function providerOptions(profileKey: string): TopicSelectionModelOption[] {
       },
     },
     {
-      option_id: `${profileKey}.dashscope-budget`,
-      option_purpose: 'budget_sensitive_explicit_provider_run',
+      option_id: `${profileKey}.openai-quality`,
+      option_purpose: 'quality_sensitive_explicit_provider_run',
+      provider_id: 'openai',
+      model_id: 'gpt-5.5',
+      use_when: ['quality_sensitive_manual_selection'],
+      request_policy: {
+        timeout_ms: 300000,
+      },
+      normalized_params: normalizedParams({
+        reasoning_depth: 'medium',
+        output_budget: 'large',
+      }),
+      provider_overrides: {},
+      capability_degrade_policy: {
+        allow_optional_degrade: false,
+      },
+    },
+    {
+      option_id: `${profileKey}.openai-deep-reasoning`,
+      option_purpose: 'deep_reasoning_explicit_provider_run',
+      provider_id: 'openai',
+      model_id: 'gpt-5.5',
+      use_when: ['deep_reasoning_manual_selection'],
+      request_policy: {
+        timeout_ms: 450000,
+      },
+      normalized_params: normalizedParams({
+        reasoning_depth: 'high',
+        output_budget: 'large',
+      }),
+      provider_overrides: {},
+      capability_degrade_policy: {
+        allow_optional_degrade: false,
+      },
+    },
+    {
+      option_id: `${profileKey}.dashscope-thinking-budget`,
+      option_purpose: 'budget_sensitive_thinking_provider_run',
       provider_id: 'dashscope',
       model_id: 'qwen3.6-plus',
-      use_when: ['budget_sensitive_manual_selection'],
+      use_when: ['budget_sensitive_manual_selection', 'thinking_budget_manual_selection'],
       request_policy: {
-        timeout_ms: 120000,
+        timeout_ms: 300000,
+      },
+      normalized_params: normalizedParams(),
+      provider_overrides: {
+        enable_thinking: true,
+      },
+      capability_degrade_policy: {
+        allow_optional_degrade: false,
+      },
+    },
+    {
+      option_id: `${profileKey}.dashscope-budget`,
+      option_purpose: 'legacy_budget_sensitive_thinking_provider_run',
+      provider_id: 'dashscope',
+      model_id: 'qwen3.6-plus',
+      use_when: ['legacy_budget_sensitive_manual_selection'],
+      request_policy: {
+        timeout_ms: 300000,
       },
       normalized_params: normalizedParams(),
       provider_overrides: {
@@ -148,6 +206,32 @@ function providerOptions(profileKey: string): TopicSelectionModelOption[] {
       },
     },
   ];
+
+  if (DEBATE_WORKER_DEEPSEEK_ELIGIBLE_PROFILE_IDS.has(profileKey)) {
+    options.push({
+      option_id: `${profileKey}.deepseek-v4-thinking`,
+      option_purpose: 'alternative_debate_worker_thinking_provider_run',
+      provider_id: 'deepseek',
+      model_id: 'deepseek-v4-pro',
+      use_when: ['alternative_explorer_deep_critic_manual_selection'],
+      request_policy: {
+        timeout_ms: 450000,
+      },
+      normalized_params: normalizedParams({
+        reasoning_depth: 'high',
+        output_budget: 'large',
+      }),
+      provider_overrides: {
+        thinking: { type: 'enabled' },
+        reasoning_effort: 'high',
+      },
+      capability_degrade_policy: {
+        allow_optional_degrade: false,
+      },
+    });
+  }
+
+  return options;
 }
 
 function profileBase(input: {

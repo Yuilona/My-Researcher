@@ -362,7 +362,10 @@ export class TopicSelectionNeedValidationService {
     ]);
     const blockers = this.readinessBlockers(candidate, bundle, roleBundle, openRecheckRefs, strongUnresolvedChallengeRefs);
     const strengthGapCodes = strength?.gap_codes ?? [];
-    const warnings = this.readinessWarnings(strengthGapCodes);
+    const warnings = this.readinessWarnings(this.uniqueStrings([
+      ...strengthGapCodes,
+      ...this.readinessWarningGapCodes(candidate.gap_codes),
+    ]));
     const recommendation = this.readinessRecommendation(blockers);
     const readinessId = this.idFactory('need_readiness');
     const readinessRef = this.ref('need_candidate_readiness', readinessId, candidate.title_card_id);
@@ -504,6 +507,15 @@ export class TopicSelectionNeedValidationService {
       this.assertReadinessLineage(candidate, bundle, readiness);
     }
     const roleBundle = this.resolveRoleBundleFromCurrentBundle(candidate.evidence_role_bundle, bundle);
+    const conflictRefs = this.uniqueRefs([
+      ...bundle.conflict_set_refs,
+      ...candidate.conflict_refs,
+    ]);
+    const residualRiskRefs = input.residual_risk_refs ?? this.uniqueRefs([
+      ...candidate.accepted_risk_refs,
+      ...roleBundle.challenge_unit_refs,
+      ...conflictRefs,
+    ]);
     const supportPacketId = this.idFactory('validation_packet');
     const supportPacketRef = this.ref('validation_decision_support_packet', supportPacketId, candidate.title_card_id);
     const requiredHumanChecks = input.required_human_checks ?? [
@@ -525,7 +537,7 @@ export class TopicSelectionNeedValidationService {
       bundle.search_plan_ref,
       bundle.literature_snapshot_ref,
       ...this.flattenRoleBundle(roleBundle),
-      ...bundle.conflict_set_refs,
+      ...conflictRefs,
       ...candidate.strength_assessment_refs,
       ...coverageRefs,
       ...(readiness ? [this.ref('need_candidate_readiness', readiness.readiness_assessment_id, candidate.title_card_id)] : []),
@@ -551,7 +563,7 @@ export class TopicSelectionNeedValidationService {
       input_snapshot_id: inputSnapshot.input_snapshot_id,
       output_summary: {
         required_human_check_count: requiredHumanChecks.length,
-        residual_risk_count: (input.residual_risk_refs ?? candidate.accepted_risk_refs).length,
+        residual_risk_count: residualRiskRefs.length,
       },
       artifacts: [
         {
@@ -619,13 +631,13 @@ export class TopicSelectionNeedValidationService {
         ? this.ref('need_candidate_readiness', readiness.readiness_assessment_id, candidate.title_card_id)
         : null,
       evidence_role_bundle: roleBundle,
-      conflict_refs: bundle.conflict_set_refs,
+      conflict_refs: conflictRefs,
       strength_assessment_refs: this.uniqueRefs([
         ...candidate.strength_assessment_refs,
         ...(readiness?.strength_assessment_ref ? [readiness.strength_assessment_ref] : []),
       ]),
       coverage_refs: coverageRefs,
-      residual_risk_refs: input.residual_risk_refs ?? candidate.accepted_risk_refs,
+      residual_risk_refs: residualRiskRefs,
       open_gap_codes: candidate.gap_codes,
       required_human_checks: requiredHumanChecks,
       prior_art_status: candidate.prior_art_status,
@@ -1475,9 +1487,13 @@ export class TopicSelectionNeedValidationService {
   private readinessWarnings(gapCodes: string[]): TopicSelectionGateIssue[] {
     return gapCodes.map((code) => ({
       code,
-      message: `Evidence strength assessment reported ${code}.`,
+      message: `NeedCandidate readiness reported ${code}.`,
       severity: 'warning',
     }));
+  }
+
+  private readinessWarningGapCodes(gapCodes: string[]): string[] {
+    return gapCodes.filter((code) => code === 'METHOD_FAMILY_COVERAGE_GAP');
   }
 
   private readinessRecommendation(blockers: TopicSelectionGateIssue[]): TopicSelectionNeedReadinessRecommendation {

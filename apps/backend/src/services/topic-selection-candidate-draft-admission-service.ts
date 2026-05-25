@@ -17,11 +17,19 @@ export type TopicSelectionCandidateDraftAdmissionPoolEntry = {
   candidate_ref: TopicSelectionFunctionalRef;
 };
 
+export type TopicSelectionCandidateDraftEvidenceRoleRefEntry = {
+  evidence_ref: TopicSelectionFunctionalRef;
+  role: 'support' | 'challenge' | 'baseline' | 'context' | string;
+};
+
 export type TopicSelectionCandidateDraftAdmissionInput = {
   node_input: TopicSelectionGenerateNeedCandidateNodeInput;
   ranked_candidate_draft_batch: TopicSelectionRankedCandidateDraftBatch;
   minimum_validation_report: TopicSelectionRankedCandidateDraftBatchMinimumValidationReport;
   resolvable_refs: TopicSelectionFunctionalRef[];
+  evidence_role_ref_entries?: TopicSelectionCandidateDraftEvidenceRoleRefEntry[];
+  method_family_counts?: Record<string, number>;
+  method_family_targets?: string[];
   candidate_pool_entries?: TopicSelectionCandidateDraftAdmissionPoolEntry[];
   max_persisted_candidates?: number | null;
   remaining_round_budget?: number | null;
@@ -33,10 +41,22 @@ type DraftAdmissionDecisionInput = {
   normalizedCandidateKey: string;
   duplicateRefs: TopicSelectionFunctionalRef[];
   unresolvedRefs: TopicSelectionFunctionalRef[];
+  roleBundleViolations: string[];
+  methodCoverageWarningCodes: string[];
   remainingRoundBudget: number;
 };
 
 const INVALID_BATCH_CODE = 'INVALID_RANKED_CANDIDATE_DRAFT_BATCH';
+const ROLE_BUNDLE_NON_EVIDENCE_REF = 'ROLE_BUNDLE_NON_EVIDENCE_REF';
+const ROLE_BUNDLE_EVIDENCE_ROLE_MISMATCH = 'ROLE_BUNDLE_EVIDENCE_ROLE_MISMATCH';
+const METHOD_FAMILY_COVERAGE_GAP = 'METHOD_FAMILY_COVERAGE_GAP';
+
+const ROLE_BUNDLE_FIELDS = [
+  ['support', 'support_unit_refs'],
+  ['challenge', 'challenge_unit_refs'],
+  ['baseline', 'baseline_unit_refs'],
+  ['context', 'context_unit_refs'],
+] as const;
 
 export class TopicSelectionCandidateDraftAdmissionService {
   createAdmissionReport(input: TopicSelectionCandidateDraftAdmissionInput): TopicSelectionCandidateDraftAdmissionReport {
@@ -51,6 +71,7 @@ export class TopicSelectionCandidateDraftAdmissionService {
       ...input.node_input.resource_snapshot_refs,
       ...input.resolvable_refs,
     ]);
+    const roleByRefKey = this.evidenceRoleByRefKey(input.evidence_role_ref_entries ?? []);
     const candidatePool = new Map(
       (input.candidate_pool_entries ?? []).map((entry) => [entry.normalized_candidate_key, entry.candidate_ref]),
     );
@@ -59,12 +80,20 @@ export class TopicSelectionCandidateDraftAdmissionService {
       const normalizedCandidateKey = this.normalizedCandidateKey(draft);
       const duplicateRefs = this.duplicateRefs(draft, normalizedCandidateKey, firstDraftByKey, candidatePool);
       const unresolvedRefs = this.unresolvedRefs(draft, allowedRefs);
+      const roleBundleViolations = this.roleBundleViolations(draft, roleByRefKey);
+      const methodCoverageWarningCodes = this.methodCoverageWarningCodes(
+        draft,
+        input.method_family_counts ?? {},
+        input.method_family_targets ?? [],
+      );
       const decision = this.decideDraft({
         draft,
         index,
         normalizedCandidateKey,
         duplicateRefs,
         unresolvedRefs,
+        roleBundleViolations,
+        methodCoverageWarningCodes,
         remainingRoundBudget: input.remaining_round_budget ?? 0,
       });
       if (!firstDraftByKey.has(normalizedCandidateKey)) {
@@ -101,6 +130,18 @@ export class TopicSelectionCandidateDraftAdmissionService {
       return this.result(input, 'reject_artifact_only', ['UNRESOLVED_CANDIDATE_DRAFT_REFS'], {
         blockingReasonCodes: ['UNRESOLVED_CANDIDATE_DRAFT_REFS'],
         duplicateRefs: [],
+        refCounts,
+      });
+    }
+    if (input.roleBundleViolations.length > 0) {
+      if (input.remainingRoundBudget > 0) {
+        return this.result(input, 'return_for_supplemental_round', input.roleBundleViolations, {
+          refCounts,
+          supplementalQuestions: [this.roleBundleSupplementalQuestion(input.draft)],
+        });
+      }
+      return this.result(input, 'reject_artifact_only', input.roleBundleViolations, {
+        blockingReasonCodes: input.roleBundleViolations,
         refCounts,
       });
     }
@@ -142,7 +183,7 @@ export class TopicSelectionCandidateDraftAdmissionService {
         requiredHumanReviewPoints: this.humanReviewPoints(input.draft),
       });
     }
-    return this.result(input, 'admit', ['grounded'], {
+    return this.result(input, 'admit', this.uniqueStrings(['grounded', ...input.methodCoverageWarningCodes]), {
       admittedDraftRef: this.ref('candidate_draft', input.draft.draft_id),
       refCounts,
     });
@@ -241,6 +282,84 @@ export class TopicSelectionCandidateDraftAdmissionService {
     return [];
   }
 
+  private evidenceRoleByRefKey(
+    entries: TopicSelectionCandidateDraftEvidenceRoleRefEntry[],
+  ): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const entry of entries) {
+      if (entry.evidence_ref.ref_type === 'evidence_unit' && entry.role.trim()) {
+        map.set(this.refKey(entry.evidence_ref), entry.role);
+      }
+    }
+    return map;
+  }
+
+  private roleBundleViolations(
+    draft: TopicSelectionNeedCandidateDraft,
+    roleByRefKey: Map<string, string>,
+  ): string[] {
+    const violations: string[] = [];
+    for (const [expectedRole, fieldName] of ROLE_BUNDLE_FIELDS) {
+      for (const ref of draft.evidence_role_bundle[fieldName]) {
+        if (ref.ref_type !== 'evidence_unit') {
+          violations.push(ROLE_BUNDLE_NON_EVIDENCE_REF);
+          continue;
+        }
+        const actualRole = roleByRefKey.get(this.refKey(ref));
+        if (actualRole && actualRole !== expectedRole) {
+          violations.push(ROLE_BUNDLE_EVIDENCE_ROLE_MISMATCH);
+        }
+      }
+    }
+    return this.uniqueStrings(violations);
+  }
+
+  private roleBundleSupplementalQuestion(draft: TopicSelectionNeedCandidateDraft): string {
+    return [
+      'Rebuild role bundle for draft',
+      draft.draft_id,
+      'so support/challenge/baseline/context refs cite evidence_unit refs from matching EvidenceMap roles.',
+      'Keep evidence_conflict/evidence_conflict_set refs in conflict_refs and evidence_strength_assessment refs in strength_assessment_refs only.',
+    ].join(' ');
+  }
+
+  private methodCoverageWarningCodes(
+    draft: TopicSelectionNeedCandidateDraft,
+    methodFamilyCounts: Record<string, number>,
+    methodFamilyTargets: string[],
+  ): string[] {
+    if (Object.keys(methodFamilyCounts).length === 0 && methodFamilyTargets.length === 0) {
+      return [];
+    }
+    const targetSet = new Set(methodFamilyTargets);
+    const mentionedFamilies = this.mentionedMethodFamilies(draft)
+      .filter((family) => targetSet.size === 0 || targetSet.has(family));
+    const missing = mentionedFamilies.filter((family) => (methodFamilyCounts[family] ?? 0) <= 0);
+    return missing.length > 0 ? [METHOD_FAMILY_COVERAGE_GAP] : [];
+  }
+
+  private mentionedMethodFamilies(draft: TopicSelectionNeedCandidateDraft): string[] {
+    const text = normalizeWhitespace([
+      draft.candidate_need,
+      draft.unmet_need_statement,
+      draft.mechanism_summary ?? '',
+      draft.scope_notes ?? '',
+      draft.non_goal_notes ?? '',
+      JSON.stringify(draft.mechanism_payload ?? {}),
+    ].join(' ')).toLowerCase();
+    const families: string[] = [];
+    if (/\brag\b|retrieval[- ]?augmented|retrieval augmentation/.test(text)) {
+      families.push('retrieval_augmented_generation');
+    }
+    if (/fine[- ]?tuning|finetun|lora|adapter/.test(text)) {
+      families.push('fine_tuning');
+    }
+    if (/\bhybrid\b|combined retrieval|retrieval[- ]?plus/.test(text)) {
+      families.push('hybrid_adaptation');
+    }
+    return this.uniqueStrings(families);
+  }
+
   private mechanismIsInsufficient(draft: TopicSelectionNeedCandidateDraft): boolean {
     const text = normalizeWhitespace([
       draft.candidate_need,
@@ -328,6 +447,20 @@ export class TopicSelectionCandidateDraftAdmissionService {
       }
       seen.add(key);
       unique.push(ref);
+    }
+    return unique;
+  }
+
+  private uniqueStrings(values: string[]): string[] {
+    const seen = new Set<string>();
+    const unique: string[] = [];
+    for (const value of values) {
+      const normalized = value.trim();
+      if (!normalized || seen.has(normalized)) {
+        continue;
+      }
+      seen.add(normalized);
+      unique.push(normalized);
     }
     return unique;
   }

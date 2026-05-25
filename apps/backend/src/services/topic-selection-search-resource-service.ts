@@ -443,6 +443,10 @@ export class TopicSelectionSearchResourceService {
     return this.repository.findLiteratureResourcePoolSnapshotById(snapshotId);
   }
 
+  async getSearchPlanById(searchPlanId: string): Promise<TopicSelectionSearchPlanRecord | null> {
+    return this.repository.findSearchPlanById(searchPlanId);
+  }
+
   async createSearchPlan(input: CreateSearchPlanInput): Promise<{
     search_plan: TopicSelectionSearchPlanRecord;
     coverage_row_intents: TopicSelectionCoverageRowIntentRecord[];
@@ -466,6 +470,7 @@ export class TopicSelectionSearchResourceService {
       literatureSnapshot.snapshot_version,
     );
     const coverageInputs = this.normalizeCoverageIntents(input.query_intents, input.coverage_intents);
+    const coverageStrategy = this.searchPlanCoverageStrategy(input.coverage_strategy ?? {}, input.search_plan_blueprint ?? null);
     const inputSnapshot = await this.controlPlane.compileInputSnapshot({
       workspace_id: input.workspace_id ?? null,
       title_card_id: input.title_card_id,
@@ -476,7 +481,7 @@ export class TopicSelectionSearchResourceService {
         query_intents: input.query_intents,
         must_check_constraints: input.must_check_constraints ?? [],
         exclusion_rules: input.exclusion_rules ?? [],
-        coverage_strategy: input.coverage_strategy ?? {},
+        coverage_strategy: coverageStrategy,
         coverage_intents: coverageInputs,
       },
       policy_version: input.policy_version_id ?? null,
@@ -542,7 +547,7 @@ export class TopicSelectionSearchResourceService {
       query_intents: input.query_intents,
       must_check_constraints: input.must_check_constraints ?? [],
       exclusion_rules: input.exclusion_rules ?? [],
-      coverage_strategy: input.coverage_strategy ?? {},
+      coverage_strategy: coverageStrategy,
       input_snapshot_id: inputSnapshot.input_snapshot_id,
       workflow_run_id: workflow.workflow_run.workflow_run_id,
       gate_result_id: gate.readiness_gate_result_id,
@@ -839,6 +844,28 @@ export class TopicSelectionSearchResourceService {
       priority: index,
       expected_evidence_role: 'support',
     }));
+  }
+
+  private searchPlanCoverageStrategy(
+    coverageStrategy: Record<string, unknown>,
+    blueprint: TopicSelectionSearchPlanBlueprint | null,
+  ): Record<string, unknown> {
+    const normalized = { ...coverageStrategy };
+    const methodFamilyTargets = this.normalizedStringArray(blueprint?.method_family_targets ?? normalized.method_family_targets);
+    if (methodFamilyTargets.length > 0) {
+      normalized.method_family_targets = methodFamilyTargets;
+    }
+    return normalized;
+  }
+
+  private normalizedStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return [...new Set(value
+      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      .map((item) => item.trim()))]
+      .sort((left, right) => left.localeCompare(right));
   }
 
   private searchPlanBlockers(

@@ -5,12 +5,15 @@ import type {
   TopicSelectionFunctionalRef,
 } from './topic-selection-control-plane-contracts.js';
 import {
+  TOPIC_SELECTION_SEARCH_PLAN_BLUEPRINT_SCHEMA_VERSION,
   TOPIC_SELECTION_SEARCH_RUN_HANDOFF_SCHEMA_VERSION,
   TOPIC_SELECTION_SEARCH_RUN_LOOPBACK_SIGNAL_SCHEMA_VERSION,
   TOPIC_SELECTION_SEARCH_RUN_RECORD_BUNDLE_SCHEMA_VERSION,
+  type TopicSelectionSearchPlanBlueprint,
   type TopicSelectionSearchRunHandoff,
   type TopicSelectionSearchRunLoopbackSignal,
   type TopicSelectionSearchRunRecordBundle,
+  topicSelectionSearchPlanBlueprintSchema,
   topicSelectionSearchRunHandoffSchema,
   topicSelectionSearchRunLoopbackSignalSchema,
   topicSelectionSearchRunRecordBundleSchema,
@@ -22,6 +25,42 @@ function ref(refType: string, refId: string, versionId: string | null = null): T
     ref_id: refId,
     version_id: versionId,
     title_card_id: 'title_card_001',
+  };
+}
+
+function validSearchPlanBlueprint(): TopicSelectionSearchPlanBlueprint {
+  return {
+    schema_version: TOPIC_SELECTION_SEARCH_PLAN_BLUEPRINT_SCHEMA_VERSION,
+    blueprint_origin: 'workflow_scenario_fixture',
+    blueprint_provenance_refs: [],
+    title_card_ref: ref('title_card', 'title_card_001'),
+    topic_seed_ref: ref('topic_seed', 'topic_seed_001', 'v1'),
+    literature_resource_pool_snapshot_ref: ref('literature_resource_pool_snapshot', 'snapshot_001', 'v1'),
+    expected_snapshot_hash: 'snapshot-hash-001',
+    plan_version: 'v1',
+    parent_search_plan_ref: null,
+    recheck_request_ref: null,
+    query_intents: ['RAG fine-tuning evidence'],
+    coverage_intents: [{
+      coverage_key: 'support-method',
+      intent_type: 'support',
+      query: 'RAG fine-tuning evidence',
+      rationale: 'Find method evidence.',
+      required: true,
+      priority: 1,
+      expected_evidence_role: 'support',
+      target_source_types: ['paper'],
+      refs: [],
+    }],
+    must_check_constraints: [],
+    exclusion_rules: [],
+    coverage_strategy: {
+      method_family_targets: ['retrieval_augmented_generation', 'fine_tuning'],
+    },
+    role_coverage_expectation: { support: 1 },
+    method_family_targets: ['retrieval_augmented_generation', 'fine_tuning'],
+    policy_version: 'v1',
+    output_schema_version: 'v1',
   };
 }
 
@@ -87,6 +126,11 @@ function validHandoff(): TopicSelectionSearchRunHandoff {
     literature_resource_pool_snapshot_ref: ref('literature_resource_pool_snapshot', 'snapshot_001', 'v1'),
     literature_snapshot_hash: 'snapshot-hash-001',
     coverage_row_intent_refs: [ref('coverage_row_intent', 'coverage_row_001')],
+    coverage_role_expectations: [{
+      coverage_row_intent_ref: ref('coverage_row_intent', 'coverage_row_001'),
+      expected_evidence_role: 'support',
+    }],
+    method_family_targets: ['retrieval_augmented_generation', 'fine_tuning'],
     evidence_map_input_refs: [ref('literature_record', 'lit_001')],
     coverage_binding_refs: [ref('coverage_evidence_binding', 'binding_001')],
     coverage_assessment_refs: [ref('coverage_assessment', 'assessment_001')],
@@ -133,6 +177,19 @@ async function validatesBody(schema: Record<string, unknown>, body: unknown): Pr
     await app.close();
   }
 }
+
+test('topic-selection SearchPlan blueprint schema requires method-family targets', async () => {
+  assert.equal(await validatesBody(topicSelectionSearchPlanBlueprintSchema, validSearchPlanBlueprint()), true);
+
+  const withoutTargets = { ...validSearchPlanBlueprint() } as Record<string, unknown>;
+  delete withoutTargets.method_family_targets;
+  assert.equal(await validatesBody(topicSelectionSearchPlanBlueprintSchema, withoutTargets), false);
+
+  assert.equal(await validatesBody(topicSelectionSearchPlanBlueprintSchema, {
+    ...validSearchPlanBlueprint(),
+    method_family_targets: [],
+  }), false);
+});
 
 test('topic-selection SearchRun bundle schema accepts normalized Node 4 input', async () => {
   assert.equal(await validatesBody(topicSelectionSearchRunRecordBundleSchema, validBundle()), true);

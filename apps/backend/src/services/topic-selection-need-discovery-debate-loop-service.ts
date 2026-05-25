@@ -24,6 +24,7 @@ import {
   TOPIC_SELECTION_V1A_GENERATE_NEED_CANDIDATE_NODE_ID,
   type TopicSelectionDebateInstancePolicy,
   type TopicSelectionDebateRoleStageSlot,
+  type TopicSelectionV1aGenerateNeedCandidateDebateExecutionPlan,
   type TopicSelectionV1aGenerateNeedCandidateDebateSlotExecutionOverrides,
   type TopicSelectionV1aGenerateNeedCandidateDebateSlotId,
   type TopicSelectionV1aGenerateNeedCandidateDebateSlotModelOptionOverrides,
@@ -40,6 +41,9 @@ import {
   type TopicSelectionMockedAgentOutput,
   TopicSelectionAgentOrchestratorService,
 } from './topic-selection-agent-orchestrator-service.js';
+import type {
+  TopicSelectionAgentExecutionSpec,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-profile-contracts';
 import { TopicSelectionNeedDiscoveryArtifactBoundaryService } from './topic-selection-need-discovery-artifact-boundary-service.js';
 const NEED_DISCOVERY_DEBATE_CONTRACT =
   createTopicSelectionV1aGenerateNeedCandidateDebateScenarioContract();
@@ -87,6 +91,7 @@ export type TopicSelectionNeedDiscoveryDebateLoopInput = {
   debate_loop_id?: string | null;
   debate_policy_id?: string | null;
   round_index?: number | null;
+  execution_plan?: TopicSelectionV1aGenerateNeedCandidateDebateExecutionPlan | null;
   slot_execution_overrides?: TopicSelectionV1aGenerateNeedCandidateDebateSlotExecutionOverrides | null;
   slot_model_option_overrides?: TopicSelectionV1aGenerateNeedCandidateDebateSlotModelOptionOverrides | null;
   mocked_outputs?: TopicSelectionNeedDiscoveryDebateMockedOutputs | null;
@@ -122,6 +127,10 @@ type CompletedRoleInvocationRecord<T> = {
   output: T;
   invocation: TopicSelectionAgentInvocationResult<T>;
   artifact: TopicSelectionGenerateNeedCandidateArtifactRefEntry;
+};
+
+type ResolvedAgentExecutionSpec = Required<Pick<TopicSelectionAgentExecutionSpec, 'execution_mode'>> & {
+  model_option_id: string | null;
 };
 
 export class TopicSelectionNeedDiscoveryDebateLoopService {
@@ -252,10 +261,9 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
   ): Promise<Array<RoleInvocationRecord<TopicSelectionNeedDiscoveryExplorerNotes>>> {
     const outputs = input.mocked_outputs?.explorer ?? [];
     const codexResponses = input.codex_responses?.explorer ?? [];
-    const executionMode = this.slotExecutionMode(input, EXPLORER_SLOT);
-    const modelOptionId = this.slotModelOptionId(input, EXPLORER_SLOT, executionMode);
     const instanceCount = this.instanceCount(
-      executionMode,
+      input,
+      EXPLORER_SLOT,
       'explorer',
       outputs.length,
       codexResponses.length,
@@ -264,8 +272,9 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     const records: Array<RoleInvocationRecord<TopicSelectionNeedDiscoveryExplorerNotes>> = [];
     for (let index = 0; index < instanceCount; index += 1) {
       const agentInstanceId = `explorer_${index + 1}`;
+      const executionSpec = this.resolvedExecutionSpec(input, EXPLORER_SLOT, agentInstanceId);
       const invocation = await this.dependencies.agentOrchestrator.invokeStructuredOutput<TopicSelectionNeedDiscoveryExplorerNotes>({
-        ...this.baseInvocation(input, debateLoopId, debatePolicyId, roundIndex, 'explorer', 'round_1_discovery', agentInstanceId, executionMode, modelOptionId),
+        ...this.baseInvocation(input, debateLoopId, debatePolicyId, roundIndex, 'explorer', 'round_1_discovery', agentInstanceId, executionSpec),
         profile_id: EXPLORER_SLOT.profile_id,
         output_contract: EXPLORER_SLOT.output_contract,
         prompt: {
@@ -275,8 +284,8 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
         schema_name: EXPLORER_SLOT.schema_name,
         schema: topicSelectionNeedDiscoveryExplorerNotesSchema as unknown as Record<string, unknown>,
         messages: this.roleMessages(input, 'explorer', 'Explore grounded candidate need angles.'),
-        mocked_output: this.mockedRoleOutput(executionMode, outputs[index], `explorer[${index}]`),
-        codex_response: this.codexRoleResponse(executionMode, codexResponses[index], `explorer[${index}]`),
+        mocked_output: this.mockedRoleOutput(executionSpec.execution_mode, outputs[index], `explorer[${index}]`),
+        codex_response: this.codexRoleResponse(executionSpec.execution_mode, codexResponses[index], `explorer[${index}]`),
       });
       const artifact = invocation.structured_output
         ? await this.recordRoleOutput(input, invocation, EXPLORER_SLOT.output_contract, invocation.structured_output)
@@ -298,10 +307,9 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
   ): Promise<Array<RoleInvocationRecord<TopicSelectionNeedDiscoveryDeepCriticNotes>>> {
     const outputs = input.mocked_outputs?.deep_critic ?? [];
     const codexResponses = input.codex_responses?.deep_critic ?? [];
-    const executionMode = this.slotExecutionMode(input, DEEP_CRITIC_SLOT);
-    const modelOptionId = this.slotModelOptionId(input, DEEP_CRITIC_SLOT, executionMode);
     const instanceCount = this.instanceCount(
-      executionMode,
+      input,
+      DEEP_CRITIC_SLOT,
       'deep_critic',
       outputs.length,
       codexResponses.length,
@@ -310,8 +318,9 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     const records: Array<RoleInvocationRecord<TopicSelectionNeedDiscoveryDeepCriticNotes>> = [];
     for (let index = 0; index < instanceCount; index += 1) {
       const agentInstanceId = `deep_critic_${index + 1}`;
+      const executionSpec = this.resolvedExecutionSpec(input, DEEP_CRITIC_SLOT, agentInstanceId);
       const invocation = await this.dependencies.agentOrchestrator.invokeStructuredOutput<TopicSelectionNeedDiscoveryDeepCriticNotes>({
-        ...this.baseInvocation(input, debateLoopId, debatePolicyId, roundIndex, 'deep_critic', 'round_1_discovery', agentInstanceId, executionMode, modelOptionId),
+        ...this.baseInvocation(input, debateLoopId, debatePolicyId, roundIndex, 'deep_critic', 'round_1_discovery', agentInstanceId, executionSpec),
         profile_id: DEEP_CRITIC_SLOT.profile_id,
         output_contract: DEEP_CRITIC_SLOT.output_contract,
         prompt: {
@@ -321,8 +330,8 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
         schema_name: DEEP_CRITIC_SLOT.schema_name,
         schema: topicSelectionNeedDiscoveryDeepCriticNotesSchema as unknown as Record<string, unknown>,
         messages: this.roleMessages(input, 'deep_critic', 'Stress-test candidate value, pseudo-gap risk, and missing evidence.'),
-        mocked_output: this.mockedRoleOutput(executionMode, outputs[index], `deep_critic[${index}]`),
-        codex_response: this.codexRoleResponse(executionMode, codexResponses[index], `deep_critic[${index}]`),
+        mocked_output: this.mockedRoleOutput(executionSpec.execution_mode, outputs[index], `deep_critic[${index}]`),
+        codex_response: this.codexRoleResponse(executionSpec.execution_mode, codexResponses[index], `deep_critic[${index}]`),
       });
       const artifact = invocation.structured_output
         ? await this.recordRoleOutput(input, invocation, DEEP_CRITIC_SLOT.output_contract, invocation.structured_output)
@@ -345,8 +354,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     roleLevelSummaries: TopicSelectionNeedDiscoveryRoleLevelSummary[];
     parentInvocationAttemptIds: string[];
   }): Promise<RoleInvocationRecord<TopicSelectionNeedDiscoveryDebateIssueFrame>> {
-    const executionMode = this.slotExecutionMode(input.input, ISSUE_FRAME_SLOT);
-    const modelOptionId = this.slotModelOptionId(input.input, ISSUE_FRAME_SLOT, executionMode);
+    const executionSpec = this.resolvedExecutionSpec(input.input, ISSUE_FRAME_SLOT, 'arbiter_issue_frame');
     const invocation = await this.dependencies.agentOrchestrator.invokeStructuredOutput<TopicSelectionNeedDiscoveryDebateIssueFrame>({
       ...this.baseInvocation(
         input.input,
@@ -356,8 +364,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
         'arbiter',
         'issue_framing',
         'arbiter_issue_frame',
-        executionMode,
-        modelOptionId,
+        executionSpec,
         input.parentInvocationAttemptIds,
       ),
       profile_id: ISSUE_FRAME_SLOT.profile_id,
@@ -373,8 +380,8 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
       }, {
         role_level_summaries: input.roleLevelSummaries,
       }),
-      mocked_output: this.mockedRoleOutput(executionMode, input.input.mocked_outputs?.arbiter_issue_frame, 'arbiter_issue_frame'),
-      codex_response: this.codexRoleResponse(executionMode, input.input.codex_responses?.arbiter_issue_frame, 'arbiter_issue_frame'),
+      mocked_output: this.mockedRoleOutput(executionSpec.execution_mode, input.input.mocked_outputs?.arbiter_issue_frame, 'arbiter_issue_frame'),
+      codex_response: this.codexRoleResponse(executionSpec.execution_mode, input.input.codex_responses?.arbiter_issue_frame, 'arbiter_issue_frame'),
     });
     const artifact = invocation.structured_output
       ? await this.recordRoleOutput(input.input, invocation, ISSUE_FRAME_SLOT.output_contract, invocation.structured_output)
@@ -397,8 +404,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     roleLevelSummaries: TopicSelectionNeedDiscoveryRoleLevelSummary[];
     parentInvocationAttemptIds: string[];
   }): Promise<TopicSelectionAgentInvocationResult<TopicSelectionRankedCandidateDraftBatch>> {
-    const executionMode = this.slotExecutionMode(input.input, FINAL_SYNTHESIS_SLOT);
-    const modelOptionId = this.slotModelOptionId(input.input, FINAL_SYNTHESIS_SLOT, executionMode);
+    const executionSpec = this.resolvedExecutionSpec(input.input, FINAL_SYNTHESIS_SLOT, 'arbiter_final');
     return this.dependencies.agentOrchestrator.invokeStructuredOutput<TopicSelectionRankedCandidateDraftBatch>({
       ...this.baseInvocation(
         input.input,
@@ -408,8 +414,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
         'arbiter',
         'final_synthesis',
         'arbiter_final',
-        executionMode,
-        modelOptionId,
+        executionSpec,
         input.parentInvocationAttemptIds,
         {
           arbiter_issue_frame_ref: input.issueFrameRef,
@@ -430,8 +435,8 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
         issue_frame: input.issueFrame,
         role_level_summaries: input.roleLevelSummaries,
       }),
-      mocked_output: this.mockedRoleOutput(executionMode, input.input.mocked_outputs?.arbiter_final, 'arbiter_final'),
-      codex_response: this.codexRoleResponse(executionMode, input.input.codex_responses?.arbiter_final, 'arbiter_final'),
+      mocked_output: this.mockedRoleOutput(executionSpec.execution_mode, input.input.mocked_outputs?.arbiter_final, 'arbiter_final'),
+      codex_response: this.codexRoleResponse(executionSpec.execution_mode, input.input.codex_responses?.arbiter_final, 'arbiter_final'),
     });
   }
 
@@ -443,8 +448,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     role: 'explorer' | 'deep_critic' | 'arbiter',
     stage: string,
     agentInstanceId: string,
-    executionMode: TopicSelectionAgentExecutionMode,
-    modelOptionId: string | null,
+    executionSpec: ResolvedAgentExecutionSpec,
     parentInvocationAttemptIds: string[] = [],
     refs: {
       role_level_summary_ref?: TopicSelectionFunctionalRef | null;
@@ -460,10 +464,14 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
       workflow_run_id: input.node_input.workflow_run_id,
       node_attempt_id: input.node_input.node_attempt_id,
       invocation_attempt_id: invocationAttemptId,
-      execution_mode: executionMode,
+      execution_mode: executionSpec.execution_mode,
+      execution_spec: {
+        execution_mode: executionSpec.execution_mode,
+        ...(executionSpec.model_option_id ? { model_option_id: executionSpec.model_option_id } : {}),
+      },
       executor_kind: 'multi_agent_debate' as const,
       run_mode: input.run_mode,
-      model_option_id: modelOptionId,
+      model_option_id: executionSpec.model_option_id,
       input_refs: this.inputRefs(input.node_input),
       context_packet_refs: [
         input.node_input.exploration_context_ref,
@@ -693,13 +701,16 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
   }
 
   private instanceCount(
-    executionMode: TopicSelectionAgentExecutionMode,
+    input: TopicSelectionNeedDiscoveryDebateLoopInput,
+    slot: TopicSelectionDebateRoleStageSlot,
     fieldName: 'explorer' | 'deep_critic',
     mockedCount: number,
     codexCount: number,
     instancePolicy: TopicSelectionDebateInstancePolicy,
   ): number {
-    if (executionMode === 'mocked_llm') {
+    const slotExecutionMode = this.slotLevelExecutionSpec(input, slot).execution_mode;
+    const plannedCount = this.plannedInstanceCount(input, slot);
+    if (plannedCount === 0 && slotExecutionMode === 'mocked_llm') {
       if (mockedCount < instancePolicy.min_instances) {
         throw new AppError(
           400,
@@ -716,7 +727,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
       }
       return mockedCount;
     }
-    if (executionMode === 'codex_assisted') {
+    if (plannedCount === 0 && slotExecutionMode === 'codex_assisted') {
       if (codexCount < instancePolicy.min_instances) {
         throw new AppError(
           400,
@@ -733,7 +744,27 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
       }
       return codexCount;
     }
-    return instancePolicy.default_instances;
+    const count = Math.max(
+      instancePolicy.default_instances,
+      mockedCount,
+      codexCount,
+      plannedCount,
+    );
+    if (count < instancePolicy.min_instances) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        `${slot.slot_id} must include at least ${instancePolicy.min_instances} role invocation(s).`,
+      );
+    }
+    if (count > instancePolicy.max_instances) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        `${slot.slot_id} must include at most ${instancePolicy.max_instances} role invocation(s).`,
+      );
+    }
+    return count;
   }
 
   private mockedRoleOutput<T>(
@@ -802,6 +833,10 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
         content: [
           instruction,
           'Use arbiter context, role-level summaries, and referenced artifacts only.',
+          'If producing a ranked candidate draft batch, role bundle refs must be role-specific evidence_unit refs only: support_unit_refs use support units, challenge_unit_refs use challenge units, baseline_unit_refs use baseline units, and context_unit_refs use context units.',
+          'Before returning a ranked candidate draft batch, check every role-bundle ref against role_ref_constraints; if a role has no allowed evidence_unit refs, return an empty array for that role rather than borrowing another role.',
+          'Do not use baseline, challenge, or context units in support_unit_refs to mean they support the written argument; EvidenceMap role is authoritative.',
+          'Do not place evidence_conflict/evidence_conflict_set or evidence_strength_assessment refs in the role bundle; put them only in conflict_refs or strength_assessment_refs.',
           'Do not write authority objects or include hidden reasoning.',
         ].join(' '),
       },
@@ -812,9 +847,96 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
           arbiter_context: input.arbiter_context_packet.payload,
           refs,
           debate_payloads: debatePayloads,
+          output_constraints: {
+            role_bundle_ref_rule: 'support/challenge/baseline/context_unit_refs accept only evidence_unit refs whose EvidenceMap role matches the field name',
+            role_ref_constraints: this.roleRefConstraints(input.arbiter_context_packet),
+            strength_conflict_ref_rule: 'evidence_strength_assessment refs belong in strength_assessment_refs; evidence_conflict/evidence_conflict_set refs belong in conflict_refs',
+          },
         }),
       },
     ];
+  }
+
+  private roleRefConstraints(arbiterContext: TopicSelectionNeedDiscoveryContextPacket): Record<string, unknown> {
+    const empty = {
+      support_unit_refs: [],
+      challenge_unit_refs: [],
+      baseline_unit_refs: [],
+      context_unit_refs: [],
+      conflict_refs: [],
+      strength_assessment_refs: [],
+      hard_rules: [
+        'Each role-bundle field may contain only refs from the same-named allowed list.',
+        'If no allowed refs exist for a role-bundle field, return an empty array for that field.',
+        'Do not duplicate an evidence_unit into a different role field.',
+      ],
+    };
+    if (arbiterContext.context_family !== 'arbiter_context') {
+      return empty;
+    }
+    const constraints: Record<string, TopicSelectionFunctionalRef[]> = {
+      support_unit_refs: [],
+      challenge_unit_refs: [],
+      baseline_unit_refs: [],
+      context_unit_refs: [],
+      conflict_refs: [],
+      strength_assessment_refs: [],
+    };
+    const table = arbiterContext.payload.evidence_ref_table;
+    if (!Array.isArray(table)) {
+      return empty;
+    }
+    for (const entry of table) {
+      if (!this.isRecord(entry)) {
+        continue;
+      }
+      const evidenceRef = this.readFunctionalRef(entry.evidence_ref);
+      if (!evidenceRef) {
+        continue;
+      }
+      const role = typeof entry.evidence_role === 'string'
+        ? entry.evidence_role
+        : typeof entry.role === 'string'
+          ? entry.role
+          : null;
+      if (
+        evidenceRef.ref_type === 'evidence_unit'
+        && (role === 'support' || role === 'challenge' || role === 'baseline' || role === 'context')
+      ) {
+        constraints[`${role}_unit_refs`]?.push(evidenceRef);
+        continue;
+      }
+      if (evidenceRef.ref_type === 'evidence_conflict' || evidenceRef.ref_type === 'evidence_conflict_set') {
+        constraints.conflict_refs?.push(evidenceRef);
+        continue;
+      }
+      if (evidenceRef.ref_type === 'evidence_strength_assessment') {
+        constraints.strength_assessment_refs?.push(evidenceRef);
+      }
+    }
+    return {
+      support_unit_refs: this.uniqueRefs(constraints.support_unit_refs ?? []),
+      challenge_unit_refs: this.uniqueRefs(constraints.challenge_unit_refs ?? []),
+      baseline_unit_refs: this.uniqueRefs(constraints.baseline_unit_refs ?? []),
+      context_unit_refs: this.uniqueRefs(constraints.context_unit_refs ?? []),
+      conflict_refs: this.uniqueRefs(constraints.conflict_refs ?? []),
+      strength_assessment_refs: this.uniqueRefs(constraints.strength_assessment_refs ?? []),
+      hard_rules: empty.hard_rules,
+    };
+  }
+
+  private readFunctionalRef(value: unknown): TopicSelectionFunctionalRef | null {
+    if (!this.isRecord(value)) {
+      return null;
+    }
+    if (typeof value.ref_type !== 'string' || typeof value.ref_id !== 'string') {
+      return null;
+    }
+    return value as unknown as TopicSelectionFunctionalRef;
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value && typeof value === 'object' && !Array.isArray(value));
   }
 
   private inputRefs(input: TopicSelectionGenerateNeedCandidateNodeInput): TopicSelectionFunctionalRef[] {
@@ -864,6 +986,8 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
   }
 
   private assertInput(input: TopicSelectionNeedDiscoveryDebateLoopInput): void {
+    this.assertNoMixedExecutionPlanAndLegacyOverrides(input);
+    this.assertExecutionPlan(input);
     this.assertKnownSlotExecutionOverrides(input);
     this.assertSlotModelOptionOverrides(input);
     if (input.exploration_context_packet.context_family !== 'exploration_context') {
@@ -888,12 +1012,51 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     }
   }
 
-  private slotExecutionMode(
+  private resolvedExecutionSpec(
     input: TopicSelectionNeedDiscoveryDebateLoopInput,
     slot: TopicSelectionDebateRoleStageSlot,
-  ): TopicSelectionAgentExecutionMode {
+    agentInstanceId: string,
+  ): ResolvedAgentExecutionSpec {
+    const slotSpec = this.slotLevelExecutionSpec(input, slot);
+    const instanceSpec = input.execution_plan?.instances?.[this.executionPlanInstanceKey(slot, agentInstanceId)] ?? null;
+    const executionMode = instanceSpec?.execution_mode ?? slotSpec.execution_mode;
+    const instanceModelOptionId = instanceSpec?.model_option_id?.trim() ?? null;
+    const modelOptionId = executionMode === 'provider_llm'
+      ? instanceModelOptionId ?? slotSpec.model_option_id ?? null
+      : instanceModelOptionId;
+    this.assertSlotExecutionSpec(input, slot, executionMode, modelOptionId);
+    return {
+      execution_mode: executionMode,
+      model_option_id: executionMode === 'provider_llm' ? modelOptionId : null,
+    };
+  }
+
+  private slotLevelExecutionSpec(
+    input: TopicSelectionNeedDiscoveryDebateLoopInput,
+    slot: TopicSelectionDebateRoleStageSlot,
+  ): ResolvedAgentExecutionSpec {
     const slotId = slot.slot_id as TopicSelectionV1aGenerateNeedCandidateDebateSlotId;
-    const executionMode = input.slot_execution_overrides?.[slotId] ?? input.node_input.execution_mode;
+    const executionPlanSpec = input.execution_plan?.slots?.[slotId]
+      ?? input.execution_plan?.default
+      ?? null;
+    const legacyExecutionMode = input.slot_execution_overrides?.[slotId] ?? input.node_input.execution_mode;
+    const executionMode = executionPlanSpec?.execution_mode ?? legacyExecutionMode;
+    const modelOptionId = executionPlanSpec?.model_option_id?.trim()
+      ?? this.legacySlotModelOptionId(input, slotId, executionMode)
+      ?? null;
+    this.assertSlotExecutionSpec(input, slot, executionMode, modelOptionId);
+    return {
+      execution_mode: executionMode,
+      model_option_id: executionMode === 'provider_llm' ? modelOptionId : null,
+    };
+  }
+
+  private assertSlotExecutionSpec(
+    input: TopicSelectionNeedDiscoveryDebateLoopInput,
+    slot: TopicSelectionDebateRoleStageSlot,
+    executionMode: TopicSelectionAgentExecutionMode,
+    modelOptionId: string | null,
+  ): void {
     if (!slot.allowed_execution_modes.includes(executionMode)) {
       throw new AppError(
         400,
@@ -918,21 +1081,58 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
         `${slot.slot_id} does not allow codex_assisted in run_mode=${input.run_mode}.`,
       );
     }
-    return executionMode;
+    if (executionMode !== 'provider_llm' && modelOptionId) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        `${slot.slot_id} model_option_id requires execution_mode=provider_llm.`,
+      );
+    }
   }
 
-  private slotModelOptionId(
+  private legacySlotModelOptionId(
     input: TopicSelectionNeedDiscoveryDebateLoopInput,
-    slot: TopicSelectionDebateRoleStageSlot,
+    slotId: TopicSelectionV1aGenerateNeedCandidateDebateSlotId,
     executionMode: TopicSelectionAgentExecutionMode,
   ): string | null {
     if (executionMode !== 'provider_llm') {
       return null;
     }
-    const slotId = slot.slot_id as TopicSelectionV1aGenerateNeedCandidateDebateSlotId;
     return input.slot_model_option_overrides?.[slotId]?.trim()
       || input.model_option_id?.trim()
       || null;
+  }
+
+  private plannedInstanceCount(
+    input: TopicSelectionNeedDiscoveryDebateLoopInput,
+    slot: TopicSelectionDebateRoleStageSlot,
+  ): number {
+    const instanceSpecs = input.execution_plan?.instances ?? {};
+    const prefix = `${slot.slot_id}#`;
+    let count = 0;
+    for (const key of Object.keys(instanceSpecs)) {
+      if (!key.startsWith(prefix)) {
+        continue;
+      }
+      const instanceId = key.slice(prefix.length);
+      const match = instanceId.match(/_(\d+)$/u);
+      if (!match) {
+        throw new AppError(
+          400,
+          'INVALID_PAYLOAD',
+          `debate execution instance key must end with a numeric instance id: ${key}.`,
+        );
+      }
+      count = Math.max(count, Number.parseInt(match[1] ?? '0', 10));
+    }
+    return count;
+  }
+
+  private executionPlanInstanceKey(
+    slot: TopicSelectionDebateRoleStageSlot,
+    agentInstanceId: string,
+  ): string {
+    return `${slot.slot_id}#${agentInstanceId}`;
   }
 
   private assertKnownSlotExecutionOverrides(
@@ -944,6 +1144,93 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
       if (!knownSlotIds.has(slotId)) {
         throw new AppError(400, 'INVALID_PAYLOAD', `Unknown debate slot execution override: ${slotId}.`);
       }
+    }
+  }
+
+  private assertNoMixedExecutionPlanAndLegacyOverrides(
+    input: TopicSelectionNeedDiscoveryDebateLoopInput,
+  ): void {
+    if (
+      input.execution_plan
+      && (
+        input.slot_execution_overrides
+        || input.slot_model_option_overrides
+      )
+    ) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'execution_plan cannot be combined with legacy slot execution/model option overrides.',
+      );
+    }
+  }
+
+  private assertExecutionPlan(
+    input: TopicSelectionNeedDiscoveryDebateLoopInput,
+  ): void {
+    const executionPlan = input.execution_plan;
+    if (!executionPlan) {
+      return;
+    }
+    if (typeof executionPlan !== 'object' || Array.isArray(executionPlan)) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'execution_plan must be an object.');
+    }
+    const knownSlotIds = new Set(NEED_DISCOVERY_DEBATE_CONTRACT.role_stage_slots.map((slot) => slot.slot_id));
+    for (const slotId of Object.keys(executionPlan.slots ?? {})) {
+      if (!knownSlotIds.has(slotId)) {
+        throw new AppError(400, 'INVALID_PAYLOAD', `Unknown debate execution plan slot: ${slotId}.`);
+      }
+      const spec = executionPlan.slots?.[slotId as TopicSelectionV1aGenerateNeedCandidateDebateSlotId];
+      this.assertExecutionSpecShape(spec, `execution_plan.slots.${slotId}`);
+    }
+    for (const [key, spec] of Object.entries(executionPlan.instances ?? {})) {
+      const [slotId, agentInstanceId] = key.split('#');
+      if (!slotId || !agentInstanceId || !knownSlotIds.has(slotId)) {
+        throw new AppError(400, 'INVALID_PAYLOAD', `Unknown debate execution plan instance: ${key}.`);
+      }
+      const slot = roleStageSlot(slotId);
+      if (slot.instance_policy.max_instances === 1) {
+        throw new AppError(
+          400,
+          'INVALID_PAYLOAD',
+          `debate execution plan instances are only allowed for repeatable slots: ${key}.`,
+        );
+      }
+      if (!agentInstanceId.match(/_(\d+)$/u)) {
+        throw new AppError(
+          400,
+          'INVALID_PAYLOAD',
+          `debate execution instance key must end with a numeric instance id: ${key}.`,
+        );
+      }
+      this.assertExecutionSpecShape(spec, `execution_plan.instances.${key}`);
+    }
+    this.assertExecutionSpecShape(executionPlan.default ?? null, 'execution_plan.default', false);
+  }
+
+  private assertExecutionSpecShape(
+    spec: TopicSelectionAgentExecutionSpec | null | undefined,
+    path: string,
+    required = true,
+  ): void {
+    if (!spec) {
+      if (required) {
+        throw new AppError(400, 'INVALID_PAYLOAD', `${path} must define an execution spec.`);
+      }
+      return;
+    }
+    if (typeof spec !== 'object' || Array.isArray(spec)) {
+      throw new AppError(400, 'INVALID_PAYLOAD', `${path} must be an object.`);
+    }
+    if (!['mocked_llm', 'codex_assisted', 'provider_llm'].includes(spec.execution_mode)) {
+      throw new AppError(400, 'INVALID_PAYLOAD', `${path}.execution_mode is invalid.`);
+    }
+    if (
+      spec.model_option_id !== undefined
+      && spec.model_option_id !== null
+      && (typeof spec.model_option_id !== 'string' || !spec.model_option_id.trim())
+    ) {
+      throw new AppError(400, 'INVALID_PAYLOAD', `${path}.model_option_id must be a non-empty string.`);
     }
   }
 
@@ -963,7 +1250,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
         throw new AppError(400, 'INVALID_PAYLOAD', `${slotId} model_option_id override must be a non-empty string.`);
       }
       const slot = roleStageSlot(slotId);
-      const executionMode = this.slotExecutionMode(input, slot);
+      const executionMode = this.slotLevelExecutionSpec(input, slot).execution_mode;
       if (executionMode !== 'provider_llm') {
         throw new AppError(
           400,

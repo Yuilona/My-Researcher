@@ -698,7 +698,7 @@ function v1aGenerateModelOptionId() {
     return null;
   }
   return PROVIDER_ID === 'dashscope'
-    ? `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.dashscope-budget`
+    ? `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.dashscope-thinking-budget`
     : `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.openai-balanced`;
 }
 
@@ -723,7 +723,45 @@ function normalizeText(value) {
 
 function snippet(value, maxLength = 420) {
   const text = normalizeText(value);
-  return text.length <= maxLength ? text : `${text.slice(0, maxLength - 1)}...`;
+  if (text.length <= maxLength) {
+    return text;
+  }
+  const limit = Math.max(1, maxLength - 3);
+  const boundaryWindow = text.slice(0, limit);
+  const sentenceBoundary = Math.max(
+    boundaryWindow.lastIndexOf('. '),
+    boundaryWindow.lastIndexOf('? '),
+    boundaryWindow.lastIndexOf('! '),
+  );
+  if (sentenceBoundary >= Math.floor(limit * 0.55)) {
+    return `${boundaryWindow.slice(0, sentenceBoundary + 1).trim()}...`;
+  }
+  const wordBoundary = boundaryWindow.lastIndexOf(' ');
+  const end = wordBoundary >= Math.floor(limit * 0.65) ? wordBoundary : limit;
+  return `${boundaryWindow.slice(0, end).trim()}...`;
+}
+
+function stripLeadingTitle(title, value) {
+  const text = normalizeText(value);
+  const normalizedTitle = normalizeText(title);
+  if (!normalizedTitle) {
+    return text;
+  }
+  const lowerText = text.toLowerCase();
+  const lowerTitle = normalizedTitle.toLowerCase();
+  if (lowerText === lowerTitle) {
+    return '';
+  }
+  for (const separator of [':', '--', '-', '|']) {
+    const prefix = `${lowerTitle}${separator}`;
+    if (lowerText.startsWith(prefix)) {
+      return text.slice(normalizedTitle.length + separator.length).trim();
+    }
+  }
+  if (lowerText.startsWith(`${lowerTitle} `)) {
+    return text.slice(normalizedTitle.length).trim();
+  }
+  return text;
 }
 
 function metadataBucket(resource) {
@@ -969,7 +1007,9 @@ function firstByRole(selectedResources, role) {
 }
 
 function sourceStatement(resource) {
-  return `${resource.title}: ${snippet(resource.keyContentDigest ?? resource.abstractText, 520)}`;
+  const title = normalizeText(resource.title);
+  const body = snippet(stripLeadingTitle(title, resource.keyContentDigest ?? resource.abstractText), 520);
+  return title && body ? `${title}: ${body}` : title || body;
 }
 
 function evidenceUnitRefsByRole(evidenceMap, role, titleCardId) {

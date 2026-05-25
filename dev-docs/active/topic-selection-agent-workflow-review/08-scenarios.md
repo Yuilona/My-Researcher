@@ -15,6 +15,17 @@ This file is the scenario registry for T-089. Scenarios describe acceptance orch
 - `artifact_expectations`
 - `business_semantics_source`
 
+## Test Tier Naming
+Use these tier names in verification notes and script summaries to avoid mixing DB, harness, and provider evidence.
+
+| Tier | Meaning | Provider requirement |
+|---|---|---|
+| `unit_mocked_dependencies` | Service or contract tests with in-memory/mocked dependencies. | none |
+| `harness_mocked_llm` | WorkflowHarness execution with deterministic mocked or Codex-supplied structured outputs. | none |
+| `real_db_harness_smoke` | Local real DB plus WorkflowHarness, using existing resource/sample authorities and controlled model-like outputs. | none unless the scenario explicitly sets `provider_llm` |
+| `real_db_replay_smoke` | Local real DB replay/idempotency check over existing durable traces and authorities. | none |
+| `real_provider_canary` | Small, explicit-cost run against registered provider LLMs to test structured output quality, latency, telemetry, and failure shape. | provider credentials required |
+
 ## Registry
 
 ### `topic-selection.real-e2e.canary.v1`
@@ -22,7 +33,7 @@ This file is the scenario registry for T-089. Scenarios describe acceptance orch
 scenario_id: topic-selection.real-e2e.canary.v1
 status: partial_runner_migrated
 purpose: Full-chain small-sample happy path from resource sampling through PaperProject intake.
-scenario_type: real_e2e_canary
+scenario_type: real_db_harness_smoke
 execution_modes: [codex_assisted, mocked_llm, provider_llm]
 covered_nodes:
   - topic-selection.resource-sampling.create-sample-set.v1
@@ -49,6 +60,25 @@ fixtures_or_data_source: real resource pool sample such as ai-rag-finetuning-202
 assertion_scope: happy-path authority creation, handoff refs, bridge intake idempotency, hash stability, and artifact generation
 artifact_expectations: real-e2e summary with scenario_id, harness run summary for generate-need-candidate, node traces, redacted prompt/response packets where model-like execution occurs, authority refs, and selected evidence refs
 business_semantics_source: 06-workflow-matrix.md + 07-node-policies.md
+```
+
+### `topic-selection.v1a.replay-idempotency.real-db-smoke.v1`
+```yaml
+scenario_id: topic-selection.v1a.replay-idempotency.real-db-smoke.v1
+status: runner_migrated
+purpose: Verify N6-N9 exact replay and input-hash drift blocking against local real DB traces and authorities.
+scenario_type: real_db_replay_smoke
+execution_modes: [mocked_llm, codex_assisted, provider_llm]
+covered_nodes:
+  - topic-selection.v1a.generate-need-candidate.v1
+  - topic-selection.v1a.validate-need-adjudication.v1
+  - topic-selection.v1a.human-confirm-need.v1
+  - topic-selection.v1a.publish-v1b-input-bundle.v1
+fixtures_or_data_source: v1a harness run over a local real DB and existing or newly created ResourceSampleSet
+assertion_scope: same `workflow_run_id + node_attempt_id + input_hash` returns replay provenance with no authority writes and no model invocation; changed input hash blocks with `REPLAY_INPUT_HASH_MISMATCH` and no authority writes
+artifact_expectations: `03-v1a-replay-smoke.json` plus summary fields showing exact replay counts, LLM call count stability, drift blocker codes, and artifact deltas
+business_semantics_source: 07-node-policies.md Current v1a Replay / Idempotency Matrix
+runner: `pnpm topic-selection:v1a-harness-replay-smoke`
 ```
 
 ### `topic-selection.real-e2e.scale-quality.v1`
@@ -112,9 +142,9 @@ business_semantics_source: 06-workflow-matrix.md + 07-node-policies.md
 ### `topic-selection.provider-stability.v1`
 ```yaml
 scenario_id: topic-selection.provider-stability.v1
-status: planned_migration
+status: partial_runner_migrated
 purpose: Exercise real provider execution for model-like nodes without changing default provider-required policy.
-scenario_type: provider_stability
+scenario_type: real_provider_canary
 execution_modes: [provider_llm]
 covered_nodes:
   - topic-selection.resource-sampling.create-sample-set.v1
@@ -124,10 +154,13 @@ covered_nodes:
   - topic-selection.v1b.form-topic-question-contract.v1
   - topic-selection.v1b.assess-topic-value.v1
   - topic-selection.v1c.generate-promotion-support.v1
-fixtures_or_data_source: real resource sample plus provider credentials from local environment
+fixtures_or_data_source: real or deterministic resource sample plus provider credentials from local environment
 assertion_scope: structured output validity, retry/escalation behavior, provider telemetry capture, provenance separation, and guardrail consistency
 artifact_expectations: provider prompt/response packet refs, telemetry summaries, schema validation reports, and node-level audit refs
 business_semantics_source: 06-workflow-matrix.md + 07-node-policies.md
+current_runner_coverage:
+  - v1a harness canary covers provider-backed `generate-need-candidate` and `validate-need-adjudication`.
+  - v1b/v1c provider-backed nodes remain planned coverage and must not be inferred from the v1a canary.
 ```
 
 ### `topic-selection.downstream.feedback-recheck.v1`

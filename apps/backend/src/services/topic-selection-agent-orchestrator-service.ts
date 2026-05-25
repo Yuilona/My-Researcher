@@ -13,6 +13,7 @@ import type {
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-need-validation-contracts';
 import {
   TOPIC_SELECTION_AGENT_RUN_MODES,
+  type TopicSelectionAgentExecutionSpec,
   type TopicSelectionAgentRunMode,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-profile-contracts';
 import {
@@ -96,6 +97,7 @@ export type TopicSelectionAgentInvocationRequest<T> = {
   node_attempt_id: string;
   invocation_attempt_id?: string | null;
   execution_mode: TopicSelectionAgentExecutionMode;
+  execution_spec?: TopicSelectionAgentExecutionSpec | null;
   executor_kind: TopicSelectionExecutorKind;
   run_mode: TopicSelectionAgentRunMode;
   profile_id: string;
@@ -168,11 +170,12 @@ export class TopicSelectionAgentOrchestratorService {
   async invokeStructuredOutput<T>(
     input: TopicSelectionAgentInvocationRequest<T>,
   ): Promise<TopicSelectionAgentInvocationResult<T>> {
-    this.assertInvocationInput(input);
-    const resolvedProfile = this.resolveInvocationProfile(input);
-    const source = await this.executeSource(input, resolvedProfile);
+    const effectiveInput = this.effectiveInvocationInput(input);
+    this.assertInvocationInput(effectiveInput);
+    const resolvedProfile = this.resolveInvocationProfile(effectiveInput);
+    const source = await this.executeSource(effectiveInput, resolvedProfile);
     if (source.output === null) {
-      return this.buildResult(input, {
+      return this.buildResult(effectiveInput, {
         status: 'blocked',
         structuredOutput: null,
         provenance: source.provenance,
@@ -184,7 +187,7 @@ export class TopicSelectionAgentOrchestratorService {
 
     const forbiddenPath = this.findForbiddenOutputPath(source.output);
     if (forbiddenPath) {
-      return this.buildResult(input, {
+      return this.buildResult(effectiveInput, {
         status: 'blocked',
         structuredOutput: null,
         provenance: source.provenance,
@@ -194,9 +197,9 @@ export class TopicSelectionAgentOrchestratorService {
       });
     }
 
-    const validation = this.validateStructuredOutput(input.schema_name, input.schema, source.output);
+    const validation = this.validateStructuredOutput(effectiveInput.schema_name, effectiveInput.schema, source.output);
     if (!validation.valid) {
-      return this.buildResult(input, {
+      return this.buildResult(effectiveInput, {
         status: 'blocked',
         structuredOutput: null,
         provenance: source.provenance,
@@ -206,7 +209,7 @@ export class TopicSelectionAgentOrchestratorService {
       });
     }
 
-    return this.buildResult(input, {
+    return this.buildResult(effectiveInput, {
       status: 'succeeded',
       structuredOutput: source.output,
       provenance: source.provenance,
@@ -214,6 +217,35 @@ export class TopicSelectionAgentOrchestratorService {
       blockerCodes: [],
       errorCode: null,
     });
+  }
+
+  private effectiveInvocationInput<T>(
+    input: TopicSelectionAgentInvocationRequest<T>,
+  ): TopicSelectionAgentInvocationRequest<T> {
+    const spec = input.execution_spec;
+    if (!spec) {
+      return input;
+    }
+    if (input.execution_mode !== spec.execution_mode) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'execution_spec.execution_mode must match execution_mode.');
+    }
+    const specModelOptionId = spec.model_option_id?.trim() || null;
+    const inputModelOptionId = input.model_option_id?.trim() || null;
+    if (inputModelOptionId && specModelOptionId && inputModelOptionId !== specModelOptionId) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'execution_spec.model_option_id must match model_option_id.');
+    }
+    if (spec.execution_mode !== 'provider_llm' && (specModelOptionId || inputModelOptionId)) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'model_option_id requires execution_mode=provider_llm.');
+    }
+    return {
+      ...input,
+      execution_mode: spec.execution_mode,
+      model_option_id: specModelOptionId ?? inputModelOptionId,
+      execution_spec: {
+        execution_mode: spec.execution_mode,
+        ...(specModelOptionId ? { model_option_id: specModelOptionId } : {}),
+      },
+    };
   }
 
   private async executeSource<T>(
@@ -354,7 +386,7 @@ export class TopicSelectionAgentOrchestratorService {
         prompt: input.prompt,
         messages: input.messages,
         schemaName: input.schema_name,
-        schema: input.schema,
+        schema: this.providerCompatibleSchema(input.schema),
         policy: requestPolicy,
         normalizedParams: resolvedProfile.selected_model_option?.normalized_params,
         providerOverrides: resolvedProfile.selected_model_option?.provider_overrides,
@@ -435,6 +467,27 @@ export class TopicSelectionAgentOrchestratorService {
         validation: this.providerFailureValidationSummary(llmError),
       };
     }
+  }
+
+  private providerCompatibleSchema(schema: Record<string, unknown>): Record<string, unknown> {
+    return this.removeFalsePropertySchemas(schema) as Record<string, unknown>;
+  }
+
+  private removeFalsePropertySchemas(value: unknown, parentKey: string | null = null): unknown {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.removeFalsePropertySchemas(item));
+    }
+    if (!value || typeof value !== 'object') {
+      return value;
+    }
+    const output: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value)) {
+      if (parentKey === 'properties' && child === false) {
+        continue;
+      }
+      output[key] = this.removeFalsePropertySchemas(child, key);
+    }
+    return output;
   }
 
   private async buildResult<T>(
@@ -748,6 +801,6 @@ export class TopicSelectionAgentOrchestratorService {
   }
 
   private isProviderId(value: string): value is LlmModelRef['providerId'] {
-    return value === 'openai' || value === 'dashscope';
+    return value === 'openai' || value === 'dashscope' || value === 'deepseek';
   }
 }

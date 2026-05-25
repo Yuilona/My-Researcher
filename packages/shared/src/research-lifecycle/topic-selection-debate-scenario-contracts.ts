@@ -4,6 +4,8 @@ import {
 } from './topic-selection-need-validation-contracts.js';
 import {
   TOPIC_SELECTION_AGENT_RUN_MODES,
+  topicSelectionAgentExecutionSpecSchema,
+  type TopicSelectionAgentExecutionSpec,
   type TopicSelectionAgentRunMode,
 } from './topic-selection-agent-profile-contracts.js';
 
@@ -313,6 +315,57 @@ export type TopicSelectionV1aGenerateNeedCandidateDebateSlotExecutionOverrides =
 
 export type TopicSelectionV1aGenerateNeedCandidateDebateSlotModelOptionOverrides =
   Partial<Record<TopicSelectionV1aGenerateNeedCandidateDebateSlotId, string>>;
+
+export type TopicSelectionV1aGenerateNeedCandidateDebateSlotExecutionPlan =
+  Partial<Record<TopicSelectionV1aGenerateNeedCandidateDebateSlotId, TopicSelectionAgentExecutionSpec>>;
+
+export type TopicSelectionV1aGenerateNeedCandidateDebateInstanceExecutionPlan =
+  Record<string, TopicSelectionAgentExecutionSpec>;
+
+export interface TopicSelectionV1aGenerateNeedCandidateDebateExecutionPlan {
+  default?: TopicSelectionAgentExecutionSpec | null;
+  slots?: TopicSelectionV1aGenerateNeedCandidateDebateSlotExecutionPlan | null;
+  instances?: TopicSelectionV1aGenerateNeedCandidateDebateInstanceExecutionPlan | null;
+}
+
+const v1aDebateSlotExecutionPlanProperties = Object.fromEntries(
+  TOPIC_SELECTION_V1A_GENERATE_NEED_CANDIDATE_DEBATE_SLOT_IDS.map((slotId) => [
+    slotId,
+    topicSelectionAgentExecutionSpecSchema,
+  ]),
+) as Record<TopicSelectionV1aGenerateNeedCandidateDebateSlotId, typeof topicSelectionAgentExecutionSpecSchema>;
+
+export const topicSelectionV1aGenerateNeedCandidateDebateExecutionPlanSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    default: {
+      anyOf: [topicSelectionAgentExecutionSpecSchema, { type: 'null' }],
+    },
+    slots: {
+      anyOf: [
+        {
+          type: 'object',
+          propertyNames: {
+            enum: [...TOPIC_SELECTION_V1A_GENERATE_NEED_CANDIDATE_DEBATE_SLOT_IDS],
+          },
+          additionalProperties: false,
+          properties: v1aDebateSlotExecutionPlanProperties,
+        },
+        { type: 'null' },
+      ],
+    },
+    instances: {
+      anyOf: [
+        {
+          type: 'object',
+          additionalProperties: topicSelectionAgentExecutionSpecSchema,
+        },
+        { type: 'null' },
+      ],
+    },
+  },
+} as const;
 
 export function createTopicSelectionV1aGenerateNeedCandidateDebateScenarioContract(): TopicSelectionDebateScenarioContract {
   return {

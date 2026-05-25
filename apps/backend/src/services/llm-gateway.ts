@@ -1,4 +1,8 @@
 import type { LiteratureContentProcessingSettingsService } from './literature-content-processing-settings-service.js';
+import type {
+  TopicSelectionModelProfileNormalizedParams,
+  TopicSelectionModelProfileReasoningDepth,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-profile-contracts';
 
 export type LlmGatewayErrorCode =
   | 'AuthError'
@@ -21,7 +25,7 @@ export type LlmExecutionContext = {
 };
 
 export type LlmModelRef = {
-  providerId: 'openai' | 'dashscope';
+  providerId: 'openai' | 'dashscope' | 'deepseek';
   modelId: string;
   profileId?: string;
 };
@@ -98,7 +102,7 @@ export type LlmStructuredOutputRequest = {
   schemaName: string;
   schema: Record<string, unknown>;
   policy?: LlmRequestPolicy;
-  normalizedParams?: object;
+  normalizedParams?: TopicSelectionModelProfileNormalizedParams | object;
   providerOverrides?: Record<string, unknown>;
 };
 
@@ -423,6 +427,7 @@ export class BackendLlmGateway {
     signal: AbortSignal,
   ): Promise<Record<string, unknown>> {
     if (request.model.providerId === 'openai') {
+      const runtimeOptions = this.openAiRuntimeOptions(request);
       const response = await this.fetchProvider('https://api.openai.com/v1/responses', {
         method: 'POST',
         headers: {
@@ -434,6 +439,7 @@ export class BackendLlmGateway {
         body: JSON.stringify({
           model: request.model.modelId,
           input: request.messages,
+          ...runtimeOptions,
           text: {
             format: {
               type: 'json_schema',
@@ -447,25 +453,124 @@ export class BackendLlmGateway {
       return this.readJsonResponse(response);
     }
 
-    const response = await this.fetchProvider(`${this.resolveDashScopeBaseUrl()}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      signal,
-      body: JSON.stringify({
-        model: request.model.modelId,
-        messages: withJsonObjectInstruction(request.messages, request.schemaName, request.schema),
-        response_format: { type: 'json_object' },
-        extra_body: {
-          enable_thinking: true,
-          ...(request.providerOverrides ?? {}),
+    if (request.model.providerId === 'dashscope') {
+      const dashScopeRuntimeOptions = this.dashScopeRuntimeOptions(request);
+      const response = await this.fetchProvider(`${this.resolveDashScopeBaseUrl()}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Authorization: `Bearer ${apiKey}`,
         },
-      }),
+        signal,
+        body: JSON.stringify({
+          model: request.model.modelId,
+          messages: withJsonObjectInstruction(request.messages, request.schemaName, request.schema),
+          response_format: { type: 'json_object' },
+          extra_body: {
+            ...dashScopeRuntimeOptions,
+            ...(request.providerOverrides ?? {}),
+          },
+        }),
+      });
+      return this.readJsonResponse(response);
+    }
+
+    if (request.model.providerId === 'deepseek') {
+      const deepSeekRuntimeOptions = this.deepSeekRuntimeOptions(request);
+      const response = await this.fetchProvider(`${this.resolveDeepSeekBaseUrl()}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        signal,
+        body: JSON.stringify({
+          model: request.model.modelId,
+          messages: withJsonObjectInstruction(request.messages, request.schemaName, request.schema),
+          response_format: { type: 'json_object' },
+          ...deepSeekRuntimeOptions,
+          ...(request.providerOverrides ?? {}),
+        }),
+      });
+      return this.readJsonResponse(response);
+    }
+
+    throw new LlmGatewayError('InvalidRequestError', `Structured output is not implemented for provider ${request.model.providerId}.`, {
+      retryable: false,
     });
-    return this.readJsonResponse(response);
+  }
+
+  private openAiRuntimeOptions(request: LlmStructuredOutputRequest): Record<string, unknown> {
+    return {
+      ...this.openAiNormalizedRuntimeOptions(request.normalizedParams),
+      ...(request.providerOverrides ?? {}),
+    };
+  }
+
+  private openAiNormalizedRuntimeOptions(normalizedParams: unknown): Record<string, unknown> {
+    const reasoningDepth = this.normalizedReasoningDepth(normalizedParams);
+    const effort = this.openAiReasoningEffort(reasoningDepth);
+    return effort
+      ? { reasoning: { effort } }
+      : {};
+  }
+
+  private openAiReasoningEffort(
+    reasoningDepth: TopicSelectionModelProfileReasoningDepth | null,
+  ): 'low' | 'medium' | 'high' | null {
+    if (reasoningDepth === 'low') {
+      return 'low';
+    }
+    if (reasoningDepth === 'medium') {
+      return 'medium';
+    }
+    if (reasoningDepth === 'high' || reasoningDepth === 'xhigh') {
+      return 'high';
+    }
+    return null;
+  }
+
+  private dashScopeRuntimeOptions(request: LlmStructuredOutputRequest): Record<string, unknown> {
+    const reasoningDepth = this.normalizedReasoningDepth(request.normalizedParams);
+    return {
+      enable_thinking: reasoningDepth !== 'none',
+    };
+  }
+
+  private deepSeekRuntimeOptions(request: LlmStructuredOutputRequest): Record<string, unknown> {
+    const reasoningDepth = this.normalizedReasoningDepth(request.normalizedParams);
+    const effort = this.deepSeekReasoningEffort(reasoningDepth);
+    return {
+      thinking: { type: reasoningDepth === 'none' ? 'disabled' : 'enabled' },
+      ...(effort ? { reasoning_effort: effort } : {}),
+    };
+  }
+
+  private deepSeekReasoningEffort(
+    reasoningDepth: TopicSelectionModelProfileReasoningDepth | null,
+  ): 'high' | 'max' | null {
+    if (reasoningDepth === 'none' || reasoningDepth === null) {
+      return null;
+    }
+    return reasoningDepth === 'xhigh' ? 'max' : 'high';
+  }
+
+  private normalizedReasoningDepth(
+    normalizedParams: unknown,
+  ): TopicSelectionModelProfileReasoningDepth | null {
+    if (!isRecord(normalizedParams)) {
+      return null;
+    }
+    const value = normalizedParams.reasoning_depth;
+    return value === 'none'
+      || value === 'low'
+      || value === 'medium'
+      || value === 'high'
+      || value === 'xhigh'
+      ? value
+      : null;
   }
 
   private async resolveOpenAIApiKey(): Promise<string> {
@@ -497,15 +602,38 @@ export class BackendLlmGateway {
     return apiKey;
   }
 
+  private async resolveDeepSeekApiKey(): Promise<string> {
+    const settings = this.options.settingsService as (LiteratureContentProcessingSettingsService & {
+      resolveDeepSeekProviderApiKey?: () => Promise<string | null>;
+    }) | undefined;
+    const apiKey = await settings?.resolveDeepSeekProviderApiKey?.()
+      ?? process.env.DEEPSEEK_API_KEY?.trim()
+      ?? '';
+    if (!apiKey) {
+      throw new LlmGatewayError('AuthError', 'DeepSeek API key is not configured.', { retryable: false });
+    }
+    return apiKey;
+  }
+
   private async resolveProviderApiKey(providerId: LlmModelRef['providerId']): Promise<string> {
-    return providerId === 'dashscope'
-      ? this.resolveDashScopeApiKey()
-      : this.resolveOpenAIApiKey();
+    if (providerId === 'dashscope') {
+      return this.resolveDashScopeApiKey();
+    }
+    if (providerId === 'deepseek') {
+      return this.resolveDeepSeekApiKey();
+    }
+    return this.resolveOpenAIApiKey();
   }
 
   private resolveDashScopeBaseUrl(): string {
     const value = process.env.DASHSCOPE_BASE_URL?.trim()
       || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+    return value.replace(/\/+$/u, '');
+  }
+
+  private resolveDeepSeekBaseUrl(): string {
+    const value = process.env.DEEPSEEK_BASE_URL?.trim()
+      || 'https://api.deepseek.com';
     return value.replace(/\/+$/u, '');
   }
 

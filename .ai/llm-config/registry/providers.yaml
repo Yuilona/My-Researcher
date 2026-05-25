@@ -32,3 +32,20 @@ providers:
       timeout_ms: 120000
       max_retries: 1
       supports_streaming: false
+  - provider_id: deepseek
+    display_name: DeepSeek
+    auth:
+      type: api_key
+      credential_ref_required: true
+      credential_ref: literature_content_processing.deepseek
+      env_fallback_key: DEEPSEEK_API_KEY
+    endpoints:
+      openai_compatible_base_url: https://api.deepseek.com
+    capabilities:
+      - chat_completions
+      - json_object
+      - thinking
+    defaults:
+      timeout_ms: 180000
+      max_retries: 1
+      supports_streaming: false

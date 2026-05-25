@@ -743,3 +743,40 @@ Minimum close criteria:
 - Result: passed; 760 tests, 759 passed, 1 skipped, 0 failed. The temporary schema was dropped after the run.
 - Command: `git diff --check`
 - Result: passed.
+
+## 2026-05-24 Unified LLM Execution Spec Verification
+- Update: added canonical `TopicSelectionAgentExecutionSpec`, provider runtime mapping, explicit OpenAI `gpt-5.5` quality/deep-reasoning model options, debate `execution_plan` support with instance-level specs, and WorkflowHarness alignment for N5/N6/N7/N8 model-like call sites.
+- Command: `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/llm-gateway.unit.test.ts src/services/topic-selection-model-profile-registry-service.unit.test.ts src/services/topic-selection-agent-orchestrator-service.unit.test.ts src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts`
+- Result: passed; 34 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/shared exec node --test --loader ts-node/esm src/research-lifecycle/topic-selection-agent-profile-contracts.schema.test.ts src/research-lifecycle/topic-selection-debate-scenario-contracts.schema.test.ts src/research-lifecycle/topic-selection-agent-invocation-contracts.schema.test.ts`
+- Result: passed; 11 tests passed.
+- Command: `node --check .ai/scripts/topic-selection-v1a-harness-e2e.mjs`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts src/services/topic-selection-generate-need-candidate-orchestrator-adapter-service.unit.test.ts`
+- Result: passed; 85 tests passed.
+- Initial smoke command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-execution-plan-smoke-20260524-01 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=multi_agent_debate TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=mocked_llm pnpm topic-selection:v1a-harness-e2e`
+- Result: failed safely at N6 because the canonical slot execution plan selected provider-style default instance count and required `mocked_outputs.explorer[1]`.
+- Fix: the debate loop now preserves fixture-count behavior for `mocked_llm` and `codex_assisted` slots unless explicit instance specs request multiple instances; provider slots keep contract default instance counts.
+- Successful smoke command: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-execution-plan-smoke-20260524-02 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=multi_agent_debate TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=mocked_llm pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-execution-plan-smoke-20260524-02`.
+- Smoke evidence: all N1-N9 nodes completed, N6 debate status was `succeeded`, `debate_role_invocation_count=3`, provider call count stayed zero, and N9 published `v1b_input_bundle_3a54a221-7b7f-4ddb-b324-5d7c34950156`.
+- Follow-up smoke command after N5/N7/N8 `execution_spec` alignment: `TOPIC_SELECTION_V1A_HARNESS_RUN_ID=v1a-execution-plan-smoke-20260524-03 TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID=resource_sample_set_cb98a17a-196d-4750-833c-b25d3cf0950c TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1 TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTOR_KIND=multi_agent_debate TOPIC_SELECTION_V1A_HARNESS_DEBATE_EXPLORER_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_EXECUTION_MODE=mocked_llm TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE=mocked_llm pnpm topic-selection:v1a-harness-e2e`
+- Result: passed; artifact dir `.ai/.tmp/topic-selection-v1a-harness-e2e/v1a-execution-plan-smoke-20260524-03`; summary records N6 `debate_execution_plan`, N7 `harness_adjudication_execution_spec`, and zero provider calls.
+
+## 2026-05-24 DeepSeek V4 Thinking Provider Verification
+- Command: `node .ai/skills/workflows/llm/llm-engineering/scripts/check-llm-config-keys.mjs && node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs`
+- Result: passed; provider registry has 3 providers and DeepSeek env keys are allow-listed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/llm-gateway.unit.test.ts src/services/topic-selection-model-profile-registry-service.unit.test.ts src/services/topic-selection-agent-orchestrator-service.unit.test.ts src/services/topic-selection-need-discovery-debate-loop-service.unit.test.ts`
+- Result: passed; 35 tests passed.
+- Command: `pnpm --filter @paper-engineering-assistant/backend typecheck`
+- Result: passed.
+- Command: `node --check .ai/scripts/topic-selection-v1a-harness-e2e.mjs`
+- Result: passed.
+- Command: DeepSeek V4 thinking connectivity smoke using `.env.local`, `deepseek-v4-pro`, `thinking.type=enabled`, and `reasoning_effort=high`.
+- Result: passed; parsed JSON `{ "ok": true, "provider": "deepseek" }`, telemetry `provider_id=deepseek`, `model_id=deepseek-v4-pro`, `request_count=1`, `input_tokens=114`, `output_tokens=46`, `total_tokens=160`.
+- Command: `git diff --check`
+- Result: passed.
+- Command: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- Result: passed.

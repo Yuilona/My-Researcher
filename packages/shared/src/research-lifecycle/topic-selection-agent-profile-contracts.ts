@@ -72,6 +72,11 @@ export interface TopicSelectionModelProfileNormalizedParams {
   output_format: TopicSelectionModelProfileOutputFormat;
 }
 
+export interface TopicSelectionAgentExecutionSpec {
+  execution_mode: TopicSelectionAgentExecutionMode;
+  model_option_id?: string | null;
+}
+
 export interface TopicSelectionModelProfileRequestPolicy {
   timeout_ms?: number;
 }
@@ -198,6 +203,18 @@ export const topicSelectionModelProfileNormalizedParamsSchema = {
     output_budget: { enum: [...TOPIC_SELECTION_MODEL_PROFILE_OUTPUT_BUDGETS] },
     structured_output_required: { type: 'boolean' },
     output_format: { enum: [...TOPIC_SELECTION_MODEL_PROFILE_OUTPUT_FORMATS] },
+  },
+} as const;
+
+export const topicSelectionAgentExecutionSpecSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['execution_mode'],
+  properties: {
+    execution_mode: { enum: [...TOPIC_SELECTION_AGENT_EXECUTION_MODES] },
+    model_option_id: {
+      anyOf: [stringId, { type: 'null' }],
+    },
   },
 } as const;
 

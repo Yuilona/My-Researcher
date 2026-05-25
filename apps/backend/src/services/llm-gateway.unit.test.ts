@@ -7,7 +7,8 @@ function createSettingsService(): LiteratureContentProcessingSettingsService {
   return {
     resolveOpenAIProviderApiKey: async () => 'sk-test',
     resolveDashScopeProviderApiKey: async () => 'sk-dashscope-test',
-  } as LiteratureContentProcessingSettingsService;
+    resolveDeepSeekProviderApiKey: async () => 'sk-deepseek-test',
+  } as unknown as LiteratureContentProcessingSettingsService;
 }
 
 test('LLM gateway maps structured Responses output and telemetry', async () => {
@@ -38,6 +39,13 @@ test('LLM gateway maps structured Responses output and telemetry', async () => {
       required: ['ok'],
       properties: { ok: { type: 'boolean' } },
     },
+    normalizedParams: {
+      creativity: 'medium',
+      reasoning_depth: 'high',
+      output_budget: 'medium',
+      structured_output_required: true,
+      output_format: 'json_schema',
+    },
   });
 
   assert.equal(response.parsed.ok, true);
@@ -48,6 +56,66 @@ test('LLM gateway maps structured Responses output and telemetry', async () => {
   assert.equal(response.telemetry.output_tokens, 7);
   assert.equal(response.telemetry.total_tokens, 18);
   assert.equal(calls[0]?.model, 'gpt-test');
+  assert.deepEqual(calls[0]?.reasoning, { effort: 'high' });
+});
+
+test('LLM gateway maps OpenAI normalized reasoning depth to Responses effort and allows provider override', async () => {
+  const calls: Array<Record<string, unknown>> = [];
+  const gateway = new BackendLlmGateway({
+    settingsService: createSettingsService(),
+    fetchImpl: (async (_input, init) => {
+      calls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response(JSON.stringify({
+        output_text: JSON.stringify({ ok: true }),
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch,
+  });
+
+  await gateway.createStructuredOutput<{ ok: boolean }>({
+    executionContext: { feature: 'test', operation: 'structured' },
+    model: { providerId: 'openai', modelId: 'gpt-test', profileId: 'test-profile' },
+    prompt: { promptTemplateId: 'test-prompt', version: 'v1' },
+    messages: [{ role: 'user', content: 'return ok' }],
+    schemaName: 'ok_schema',
+    schema: {
+      type: 'object',
+      properties: { ok: { type: 'boolean' } },
+    },
+    normalizedParams: {
+      creativity: 'medium',
+      reasoning_depth: 'medium',
+      output_budget: 'medium',
+      structured_output_required: true,
+      output_format: 'json_schema',
+    },
+  });
+  await gateway.createStructuredOutput<{ ok: boolean }>({
+    executionContext: { feature: 'test', operation: 'structured' },
+    model: { providerId: 'openai', modelId: 'gpt-test', profileId: 'test-profile' },
+    prompt: { promptTemplateId: 'test-prompt', version: 'v1' },
+    messages: [{ role: 'user', content: 'return ok' }],
+    schemaName: 'ok_schema',
+    schema: {
+      type: 'object',
+      properties: { ok: { type: 'boolean' } },
+    },
+    normalizedParams: {
+      creativity: 'medium',
+      reasoning_depth: 'xhigh',
+      output_budget: 'medium',
+      structured_output_required: true,
+      output_format: 'json_schema',
+    },
+    providerOverrides: {
+      reasoning: { effort: 'low' },
+    },
+  });
+
+  assert.deepEqual(calls[0]?.reasoning, { effort: 'medium' });
+  assert.deepEqual(calls[1]?.reasoning, { effort: 'low' });
 });
 
 test('LLM gateway normalizes OpenAI structured output schemas to strict objects', async () => {
@@ -256,6 +324,13 @@ test('LLM gateway maps DashScope chat completion JSON output and telemetry', asy
     messages: [{ role: 'user', content: 'return ok' }],
     schemaName: 'ok_schema',
     schema: { type: 'object', properties: { ok: { type: 'boolean' } } },
+    normalizedParams: {
+      creativity: 'medium',
+      reasoning_depth: 'none',
+      output_budget: 'medium',
+      structured_output_required: true,
+      output_format: 'json_schema',
+    },
     providerOverrides: { enable_thinking: false },
   });
 
@@ -273,6 +348,65 @@ test('LLM gateway maps DashScope chat completion JSON output and telemetry', asy
   assert.match(messages[0]?.content ?? '', /\bJSON\b/);
   assert.match(messages[0]?.content ?? '', /schema_name: ok_schema/);
   assert.match(messages[0]?.content ?? '', /"ok"/);
+  assert.equal(messages[1]?.content, 'return ok');
+});
+
+test('LLM gateway maps DeepSeek V4 thinking chat completion JSON output and telemetry', async () => {
+  const calls: Array<{ input: string; body: Record<string, unknown> }> = [];
+  const gateway = new BackendLlmGateway({
+    settingsService: createSettingsService(),
+    fetchImpl: (async (input, init) => {
+      calls.push({
+        input: String(input),
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+      });
+      return new Response(JSON.stringify({
+        choices: [
+          {
+            message: {
+              reasoning_content: 'internal reasoning must not be parsed as structured output',
+              content: JSON.stringify({ ok: true }),
+            },
+          },
+        ],
+        usage: { prompt_tokens: 17, completion_tokens: 9, total_tokens: 26 },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch,
+  });
+
+  const response = await gateway.createStructuredOutput<{ ok: boolean }>({
+    executionContext: { feature: 'test', operation: 'deepseek-structured' },
+    model: { providerId: 'deepseek', modelId: 'deepseek-v4-pro', profileId: 'debate-worker' },
+    prompt: { promptTemplateId: 'test-prompt', version: 'v1' },
+    messages: [{ role: 'user', content: 'return ok' }],
+    schemaName: 'ok_schema',
+    schema: { type: 'object', properties: { ok: { type: 'boolean' } } },
+    normalizedParams: {
+      creativity: 'medium',
+      reasoning_depth: 'high',
+      output_budget: 'large',
+      structured_output_required: true,
+      output_format: 'json_schema',
+    },
+  });
+
+  assert.equal(response.parsed.ok, true);
+  assert.equal(response.telemetry.provider_id, 'deepseek');
+  assert.equal(response.telemetry.model_id, 'deepseek-v4-pro');
+  assert.equal(response.telemetry.input_tokens, 17);
+  assert.equal(response.telemetry.output_tokens, 9);
+  assert.equal(calls[0]?.input, 'https://api.deepseek.com/chat/completions');
+  assert.equal(calls[0]?.body.model, 'deepseek-v4-pro');
+  assert.deepEqual(calls[0]?.body.response_format, { type: 'json_object' });
+  assert.deepEqual(calls[0]?.body.thinking, { type: 'enabled' });
+  assert.equal(calls[0]?.body.reasoning_effort, 'high');
+  assert.equal(calls[0]?.body.extra_body, undefined);
+  const messages = calls[0]?.body.messages as Array<{ role: string; content: string }>;
+  assert.equal(messages[0]?.role, 'system');
+  assert.match(messages[0]?.content ?? '', /schema_name: ok_schema/);
   assert.equal(messages[1]?.content, 'return ok');
 });
 

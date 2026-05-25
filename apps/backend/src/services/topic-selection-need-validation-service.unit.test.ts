@@ -565,6 +565,28 @@ test('support packet creation rejects readiness assessment from a different Need
   assert.equal(firstPacket.readiness_assessment_id, firstReadiness.readiness_assessment_id);
 });
 
+test('support packet carries challenge and conflict refs as default residual risks', async () => {
+  const ctx = await createCandidateFixture({ includeChallenge: true });
+  const readiness = await ctx.needService.assessCandidateReadiness({
+    need_candidate_id: ctx.candidate.need_candidate_id,
+  });
+  const packet = await ctx.needService.createValidationDecisionSupportPacket({
+    need_candidate_id: ctx.candidate.need_candidate_id,
+    readiness_assessment_id: readiness.readiness_assessment_id,
+    created_by: 'system',
+  });
+  const explicitPacket = await ctx.needService.createValidationDecisionSupportPacket({
+    need_candidate_id: ctx.candidate.need_candidate_id,
+    readiness_assessment_id: readiness.readiness_assessment_id,
+    residual_risk_refs: [],
+    created_by: 'system',
+  });
+
+  assert.ok(packet.residual_risk_refs.some((item) => item.ref_type === 'evidence_unit'));
+  assert.ok(packet.residual_risk_refs.some((item) => item.ref_type === 'evidence_conflict_set'));
+  assert.deepEqual(explicitPacket.residual_risk_refs, []);
+});
+
 test('adjudication rejects stale support packet lineage before persistence', async () => {
   const ctx = await createReadyPacketFixture();
   const packet = await ctx.needValidationRepository.findValidationDecisionSupportPacketById(

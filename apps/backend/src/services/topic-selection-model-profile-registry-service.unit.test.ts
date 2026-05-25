@@ -7,6 +7,9 @@ import {
   TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID,
+  TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID,
+  TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
   TopicSelectionModelProfileRegistryService,
 } from './topic-selection-model-profile-registry-service.js';
 import type {
@@ -65,16 +68,104 @@ test('model profile registry validates default DMP v1 profiles and resolves prov
   assert.equal(confirmationReview.selected_model_option?.normalized_params.reasoning_depth, 'high');
 
   const resolved = service.resolveProfile({
-    profile_id: 'topic-selection.need-discovery.explorer.v1',
+    profile_id: TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
     execution_mode: 'provider_llm',
     run_mode: 'product',
   });
 
   assert.equal(resolved.profile.role_family, 'explorer');
   assert.equal(resolved.selected_model_option?.provider_id, 'openai');
+  assert.equal(resolved.selected_model_option?.model_id, 'gpt-5.4-mini');
   assert.equal(resolved.selected_model_option?.use_when.includes('default_provider_run'), true);
+  assert.equal(resolved.selected_model_option?.request_policy?.timeout_ms, 180000);
   assert.match(resolved.profile_hash, /^[a-f0-9]{64}$/);
   assert.match(resolved.normalized_params_hash ?? '', /^[a-f0-9]{64}$/);
+
+  const quality = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.openai-quality`,
+  });
+  assert.equal(quality.selected_model_option?.model_id, 'gpt-5.5');
+  assert.equal(quality.selected_model_option?.normalized_params.reasoning_depth, 'medium');
+  assert.equal(quality.selected_model_option?.request_policy?.timeout_ms, 300000);
+
+  const deepReasoning = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID}.openai-deep-reasoning`,
+  });
+  assert.equal(deepReasoning.selected_model_option?.model_id, 'gpt-5.5');
+  assert.equal(deepReasoning.selected_model_option?.normalized_params.reasoning_depth, 'high');
+  assert.equal(deepReasoning.selected_model_option?.request_policy?.timeout_ms, 450000);
+
+  const dashscopeThinking = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.dashscope-thinking-budget`,
+  });
+  assert.equal(dashscopeThinking.selected_model_option?.provider_id, 'dashscope');
+  assert.equal(dashscopeThinking.selected_model_option?.model_id, 'qwen3.6-plus');
+  assert.equal(dashscopeThinking.selected_model_option?.request_policy?.timeout_ms, 300000);
+  assert.deepEqual(dashscopeThinking.selected_model_option?.provider_overrides, {
+    enable_thinking: true,
+  });
+  assert.equal(
+    dashscopeThinking.selected_model_option?.use_when.includes('thinking_budget_manual_selection'),
+    true,
+  );
+
+  const legacyDashscopeBudget = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.dashscope-budget`,
+  });
+  assert.equal(legacyDashscopeBudget.selected_model_option?.provider_id, 'dashscope');
+  assert.equal(legacyDashscopeBudget.selected_model_option?.request_policy?.timeout_ms, 300000);
+  assert.deepEqual(legacyDashscopeBudget.selected_model_option?.provider_overrides, {
+    enable_thinking: true,
+  });
+  assert.equal(
+    legacyDashscopeBudget.selected_model_option?.use_when.includes('legacy_budget_sensitive_manual_selection'),
+    true,
+  );
+
+  const deepSeekExplorer = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.deepseek-v4-thinking`,
+  });
+  assert.equal(deepSeekExplorer.selected_model_option?.provider_id, 'deepseek');
+  assert.equal(deepSeekExplorer.selected_model_option?.model_id, 'deepseek-v4-pro');
+  assert.equal(deepSeekExplorer.selected_model_option?.normalized_params.reasoning_depth, 'high');
+  assert.equal(deepSeekExplorer.selected_model_option?.request_policy?.timeout_ms, 450000);
+  assert.deepEqual(deepSeekExplorer.selected_model_option?.provider_overrides, {
+    thinking: { type: 'enabled' },
+    reasoning_effort: 'high',
+  });
+
+  const deepSeekDeepCritic = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID}.deepseek-v4-thinking`,
+  });
+  assert.equal(deepSeekDeepCritic.selected_model_option?.provider_id, 'deepseek');
+
+  const arbiterFinal = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+  });
+  assert.equal(
+    arbiterFinal.profile.model_options.some((option) => option.provider_id === 'deepseek'),
+    false,
+  );
 });
 
 test('model profile registry enforces run-mode and role profile execution eligibility', () => {
@@ -82,7 +173,7 @@ test('model profile registry enforces run-mode and role profile execution eligib
 
   assert.throws(
     () => service.resolveProfile({
-      profile_id: 'topic-selection.need-discovery.explorer.v1',
+      profile_id: TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
       execution_mode: 'mocked_llm',
       run_mode: 'product',
     }),
@@ -91,7 +182,7 @@ test('model profile registry enforces run-mode and role profile execution eligib
 
   assert.throws(
     () => service.resolveProfile({
-      profile_id: 'topic-selection.need-discovery.arbiter-final.v1',
+      profile_id: TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID,
       execution_mode: 'codex_assisted',
       run_mode: 'acceptance',
     }),

@@ -106,8 +106,18 @@ function resolvableRefs(): TopicSelectionFunctionalRef[] {
     ref('evidence_unit', 'support_001'),
     ref('evidence_unit', 'challenge_001'),
     ref('evidence_unit', 'baseline_001'),
+    ref('evidence_unit', 'context_001'),
     ref('evidence_conflict', 'conflict_001'),
     ref('evidence_strength_assessment', 'strength_001'),
+  ];
+}
+
+function evidenceRoleRefEntries() {
+  return [
+    { evidence_ref: ref('evidence_unit', 'support_001'), role: 'support' },
+    { evidence_ref: ref('evidence_unit', 'challenge_001'), role: 'challenge' },
+    { evidence_ref: ref('evidence_unit', 'baseline_001'), role: 'baseline' },
+    { evidence_ref: ref('evidence_unit', 'context_001'), role: 'context' },
   ];
 }
 
@@ -118,6 +128,7 @@ test('candidate draft admission admits grounded non-duplicate drafts', () => {
     ranked_candidate_draft_batch: batch,
     minimum_validation_report: validMinimumReport(batch),
     resolvable_refs: resolvableRefs(),
+    evidence_role_ref_entries: evidenceRoleRefEntries(),
     max_persisted_candidates: 5,
   });
 
@@ -130,6 +141,119 @@ test('candidate draft admission admits grounded non-duplicate drafts', () => {
   assert.equal(report.draft_results[0].resolved_ref_counts.support, 1);
   assert.equal(report.draft_results[0].resolved_ref_counts.challenge, 1);
   assert.equal(report.draft_results[0].normalized_candidate_key?.startsWith('need-a-risk-aware'), true);
+});
+
+test('candidate draft admission rejects non-evidence refs inside role bundles before persistence', () => {
+  const batch = rankedBatch();
+  batch.drafts[0] = {
+    ...batch.drafts[0],
+    evidence_role_bundle: {
+      ...batch.drafts[0].evidence_role_bundle,
+      support_unit_refs: [ref('evidence_conflict', 'conflict_001')],
+    },
+  };
+
+  const rejected = admission.createAdmissionReport({
+    node_input: nodeInput(),
+    ranked_candidate_draft_batch: batch,
+    minimum_validation_report: validMinimumReport(batch),
+    resolvable_refs: resolvableRefs(),
+    evidence_role_ref_entries: evidenceRoleRefEntries(),
+    remaining_round_budget: 0,
+    max_persisted_candidates: 5,
+  });
+  const supplement = admission.createAdmissionReport({
+    node_input: nodeInput(),
+    ranked_candidate_draft_batch: batch,
+    minimum_validation_report: validMinimumReport(batch),
+    resolvable_refs: resolvableRefs(),
+    evidence_role_ref_entries: evidenceRoleRefEntries(),
+    remaining_round_budget: 1,
+    max_persisted_candidates: 5,
+  });
+
+  assert.equal(rejected.draft_results[0].decision, 'reject_artifact_only');
+  assert.ok(rejected.draft_results[0].blocking_reason_codes.includes('ROLE_BUNDLE_NON_EVIDENCE_REF'));
+  assert.equal(supplement.draft_results[0].decision, 'return_for_supplemental_round');
+  assert.match(supplement.draft_results[0].supplemental_questions[0] ?? '', /evidence_unit refs/);
+});
+
+test('candidate draft admission rejects evidence units placed under the wrong role bundle', () => {
+  const batch = rankedBatch();
+  batch.drafts[0] = {
+    ...batch.drafts[0],
+    evidence_role_bundle: {
+      ...batch.drafts[0].evidence_role_bundle,
+      support_unit_refs: [ref('evidence_unit', 'context_001')],
+    },
+  };
+
+  const report = admission.createAdmissionReport({
+    node_input: nodeInput(),
+    ranked_candidate_draft_batch: batch,
+    minimum_validation_report: validMinimumReport(batch),
+    resolvable_refs: resolvableRefs(),
+    evidence_role_ref_entries: evidenceRoleRefEntries(),
+    max_persisted_candidates: 5,
+  });
+
+  assert.equal(report.valid_draft_count, 0);
+  assert.equal(report.draft_results[0].decision, 'reject_artifact_only');
+  assert.ok(report.draft_results[0].blocking_reason_codes.includes('ROLE_BUNDLE_EVIDENCE_ROLE_MISMATCH'));
+});
+
+test('candidate draft admission allows conflict and strength refs only in dedicated arrays', () => {
+  const batch = rankedBatch();
+  const report = admission.createAdmissionReport({
+    node_input: nodeInput(),
+    ranked_candidate_draft_batch: batch,
+    minimum_validation_report: validMinimumReport(batch),
+    resolvable_refs: resolvableRefs(),
+    evidence_role_ref_entries: evidenceRoleRefEntries(),
+    max_persisted_candidates: 5,
+  });
+
+  assert.equal(report.draft_results[0].decision, 'admit');
+  assert.deepEqual(report.draft_results[0].blocking_reason_codes, []);
+});
+
+test('candidate draft admission emits method-family coverage warning without rejecting grounded drafts', () => {
+  const batch = rankedBatch();
+  const report = admission.createAdmissionReport({
+    node_input: nodeInput(),
+    ranked_candidate_draft_batch: batch,
+    minimum_validation_report: validMinimumReport(batch),
+    resolvable_refs: resolvableRefs(),
+    evidence_role_ref_entries: evidenceRoleRefEntries(),
+    method_family_counts: {
+      retrieval_augmented_generation: 2,
+      risk_analysis: 1,
+    },
+    method_family_targets: ['retrieval_augmented_generation', 'fine_tuning', 'hybrid_adaptation'],
+    max_persisted_candidates: 5,
+  });
+
+  assert.equal(report.draft_results[0].decision, 'admit');
+  assert.ok(report.draft_results[0].reason_codes.includes('METHOD_FAMILY_COVERAGE_GAP'));
+});
+
+test('candidate draft admission ignores non-target method-family mentions for coverage warnings', () => {
+  const batch = rankedBatch();
+  const report = admission.createAdmissionReport({
+    node_input: nodeInput(),
+    ranked_candidate_draft_batch: batch,
+    minimum_validation_report: validMinimumReport(batch),
+    resolvable_refs: resolvableRefs(),
+    evidence_role_ref_entries: evidenceRoleRefEntries(),
+    method_family_counts: {
+      retrieval_augmented_generation: 2,
+    },
+    method_family_targets: ['retrieval_augmented_generation'],
+    max_persisted_candidates: 5,
+  });
+
+  assert.equal(report.draft_results[0].decision, 'admit');
+  assert.equal(report.draft_results[0].reason_codes.includes('METHOD_FAMILY_COVERAGE_GAP'), false);
 });
 
 test('candidate draft admission converts duplicate normalized keys to merge hints', () => {

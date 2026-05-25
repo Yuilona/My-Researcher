@@ -1276,3 +1276,107 @@
 - N1-N5 remain deterministic or append-only authority materialization nodes with hash, lineage, version, and blocked-result guards; automated retries should use fresh `node_attempt_id` values unless a future policy and code slice adds durable replay lookup.
 - N6-N9 are the current exact-replay nodes. They use `workflow_run_id + node_attempt_id + input_hash` and block input drift before model invocation or authority writes.
 - Full-chain E2E replay must account for this split: same-run replay can be asserted at N6-N9, while N1-N5 are currently verified through deterministic outputs, append-only audit trails, and explicit lineage/currentness checks.
+
+## 2026-05-24 N6-N9 Real-DB Replay Smoke
+- Added `TOPIC_SELECTION_V1A_HARNESS_REPLAY_SMOKE=1` support to `.ai/scripts/topic-selection-v1a-harness-e2e.mjs`.
+- Added package script `pnpm topic-selection:v1a-harness-replay-smoke`.
+- The replay smoke reuses the normal v1a harness path, then replays N6-N9 with the same `workflow_run_id + node_attempt_id + input_hash`.
+- Exact replay asserts replay provenance, stable persisted refs, no authority count changes, no artifact count changes, and no harness LLM gateway calls.
+- Input-hash drift mutates `policy_version` for N6-N9 and asserts `REPLAY_INPUT_HASH_MISMATCH`, unchanged authority counts, and no model invocation.
+- Scenario registry naming was clarified: current full-chain harness evidence is `real_db_harness_smoke`; N6-N9 replay evidence is `real_db_replay_smoke`; true provider quality evidence remains `real_provider_canary`.
+
+## 2026-05-24 Real Provider Canary Classification
+- Updated `.ai/scripts/topic-selection-v1a-harness-e2e.mjs` so any run using provider-backed N6/N7 or provider-backed debate slots reports `scenario_type=real_provider_canary`.
+- Provider canary default scenario id is now `topic-selection.provider-stability.v1` when provider-backed harness nodes are enabled and no explicit scenario id is supplied.
+- The first migrated provider canary scope is v1a only: `generate-need-candidate` and `validate-need-adjudication`; v1b/v1c provider nodes remain planned coverage.
+
+## 2026-05-24 v1a Output Quality Closure
+- Implemented N6 role-aware admission gates without changing `NeedCandidate` authority schema or adding DB migration.
+- `support/challenge/baseline/context_unit_refs` now reject non-`evidence_unit` refs and reject evidence units placed under a mismatched EvidenceMap role.
+- `evidence_strength_assessment` refs remain valid only in `strength_assessment_refs`; `evidence_conflict/evidence_conflict_set` refs remain valid only in `conflict_refs`.
+- Invalid role bundles use deterministic failure semantics: supplemental round when budget remains; otherwise `reject_artifact_only`; no backend auto-rewrite or silent cleaning.
+- Added method-family coverage digest plumbing from harness sample context into N6 admission. If a candidate mentions an uncovered family such as `fine_tuning` or `hybrid_adaptation`, admission emits `METHOD_FAMILY_COVERAGE_GAP` while still allowing otherwise grounded candidates.
+- Persisted `NeedCandidate` records keep rank out of authority data. Rank is recorded in `candidate_pool_projection_entries` with `{need_candidate_ref, draft_id, rank, normalized_candidate_key}` and included in the projection hash.
+- N7 support packets now default residual risks from accepted risks, challenge evidence refs, and conflict refs unless the caller explicitly supplies a stricter residual-risk set.
+- N7 validate recommendations are blocked with `RESIDUAL_RISK_DROPPED` if they drop support-packet residual risks; validate with residual risk emits `VALIDATE_WITH_RESIDUAL_RISK`.
+- N7 validates with `METHOD_FAMILY_COVERAGE_GAP` only when required actions carry the gap forward; clean validate with a method-family gap is blocked.
+- Polished real/harness EvidenceMap statement generation: duplicated title prefixes are stripped from digest text, snippets prefer sentence boundaries, and normalized statements use the same cleaned source text.
+
+## 2026-05-24 v1a Full-Flow Quality Matrix And N4-N5 Role Closure
+- Added `09-v1a-quality-matrix.md` to track v1a node quality closure separately from automation callability.
+- Tightened the N4->N5 contract by adding `coverage_role_expectations` to `TopicSelectionSearchRunHandoff@v1`; the values are derived from resolved SearchPlan `CoverageRowIntent.expected_evidence_role`, not newly inferred by Node 4.
+- Updated N5 EvidenceMap materialization so any draft unit with a `coverage_row_intent_ref` must match the handoff's expected evidence role, otherwise the node blocks with `COVERAGE_ROW_ROLE_MISMATCH` before EvidenceMap authority writes.
+- Included `coverage_role_expectations` in the SearchRun handoff input refs hash so stale extraction drafts cannot replay across role-expectation changes.
+- Updated the N5 extraction prompt constraint to tell model-like producers that cited coverage rows and drafted evidence roles must match, while keeping deterministic materialization as the authority gate.
+- Updated the v1a harness E2E N7 fixture so mocked validate recommendations carry support-packet `open_gap_codes` such as `METHOD_FAMILY_COVERAGE_GAP` into `gap_codes` and `required_actions`, matching the current N7 carry-forward gate.
+
+## 2026-05-24 N3-N6 Method-Family Target Closure
+- Promoted `method_family_targets` into `TopicSelectionSearchPlanBlueprint@v1` so method-family coverage expectations are owned by SearchPlan, not by N6 heuristics.
+- Stored normalized method targets in the existing SearchPlan `coverage_strategy` JSON field; no DB migration or authority-schema fork was required.
+- Added `getSearchPlanById` to the search-resource service so the WorkflowHarness can resolve SearchPlan method targets through the service boundary instead of reading repository internals.
+- Propagated method targets through `TopicSelectionSearchRunHandoff@v1` and `TopicSelectionEvidenceMapHandoff@v1`; EvidenceMap handoff hashing now includes the target set.
+- Updated N6 candidate admission and the generate adapter so `METHOD_FAMILY_COVERAGE_GAP` compares candidate-mentioned method families against the SearchPlan target set when available, while preserving the old resource-sample fallback only for compatibility.
+- Updated the real/harness E2E script to seed topic-level method targets, assert N4 handoff preservation by normalized set comparison, and compile the targets into both resource-sample and search-coverage digests for N6.
+
+## 2026-05-24 N5 Provider-Backed Evidence Extraction Canary
+- Extended `.ai/scripts/topic-selection-v1a-harness-e2e.mjs` with `TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_EXECUTION_MODE=none|mocked_llm|codex_assisted|provider_llm`.
+- The default remains `none`, preserving existing deterministic fixture behavior; model-like modes still enter only through `runBuildEvidenceMapScenario` and `TopicSelectionEvidenceMapExtractionDraft@v1`.
+- Added a frozen `TopicSelectionEvidenceMapExtractionContextPacket@v1` builder for the harness script, carrying source candidates, exact refs, coverage-role expectations, method targets, and materialization rules.
+- Added mocked/codex/provider N5 invocation wiring without adding a second EvidenceMap persistence path. EvidenceMap authority writes still go through `TopicSelectionEvidenceMapMaterializationService` and `TopicSelectionEvidenceMapService.createEvidenceMapFromSearchRun`.
+- Added provider-mode unit coverage proving N5 provider output is sent through the same materialization gate and that provider request schemas do not contain strict-unsupported `properties: { field: false }` entries.
+- Added a provider-compatible schema projection in `TopicSelectionAgentOrchestratorService` that removes `false` property schemas only for provider requests. Local Ajv validation still uses the original schema, so forbidden output fields remain blocked.
+- Real provider canary now verifies a single N5 provider call can produce four source-claim EvidenceUnits and continue the automated N1->N9 flow with N6/N7 mocked.
+
+## 2026-05-24 Unified LLM Execution Object
+- Locked `TopicSelectionAgentExecutionSpec` as the shared execution object for all model-like topic-selection nodes: `execution_mode` plus optional provider-bound `model_option_id`.
+- Single-agent nodes consume the same spec through `TopicSelectionAgentOrchestratorService.execution_spec`; mismatches against legacy top-level fields block with `INVALID_PAYLOAD`.
+- Multi-agent debate now consumes `execution_plan` with `default`, `slots`, and repeatable-slot `instances`, so the same role can run multiple provider/Codex instances without inventing role-specific provider lists.
+- Instance keys use `<slot_id>#<agent_instance_id>`, for example `explorer.round_1_discovery#explorer_2`; single-instance arbiter slots should use slot-level specs.
+- Legacy `slot_execution_overrides` / `slot_model_option_overrides` remain only for compatibility and cannot be mixed with `execution_plan`.
+- Provider mapping is centralized in `BackendLlmGateway`: OpenAI maps normalized `reasoning_depth` to `reasoning.effort`; DashScope maps it to `extra_body.enable_thinking`.
+- Added explicit `gpt-5.5` model options (`openai-quality`, `openai-deep-reasoning`) without changing current defaults, so v1a node alignment can choose stronger models intentionally.
+- N5, N6 single-agent, N7, and N8 model-like WorkflowHarness call sites now pass canonical `execution_spec`; N6 multi-agent passes `debate_execution_plan`. `none` and `deterministic_parser` paths reject provider model options instead of silently ignoring them.
+
+## 2026-05-25 SO-01 Invocation Slot Override Boundary
+- Locked `DMP-11` as the unified slot-level override rule for all model-like topic-selection calls.
+- Every LLM/Codex/mock participation point is now an invocation slot. Single-agent nodes use one `execution_spec`; debate uses `execution_plan.default`, `execution_plan.slots`, and repeatable-worker `execution_plan.instances`.
+- General precedence is `instance > slot > node/call-site > scenario default > profile default`.
+- `model_option_id` remains legal only when the effective mode is `provider_llm`; deterministic-only paths must block any execution spec or provider option instead of ignoring it.
+- Provider failure remains blocked, not automatic provider switch, Codex substitution, mock substitution, or cached non-provider reuse.
+- Repeatable instance overrides are limited to debate worker slots whose instance policy permits multiple instances. Arbiter slots and ordinary single-agent nodes use slot/node-level override only.
+- Current v1a implementation already follows this shape for N5, N6 single-agent, N6 debate, N7, and N8. The next alignment step is to update the invocation slot map so matrix/policy docs do not imply N5 is pure deterministic when its implemented authority node includes an optional semantic extraction slot.
+
+## 2026-05-25 SO-02 Invocation Slot Map
+- Locked the first cross-node invocation slot map in `06-workflow-matrix.md`.
+- Corrected the N5 matrix row from pure `deterministic/none` to `single_agent_semantic_extraction + deterministic_gate`, matching the implemented `evidence_extraction` slot and the existing deterministic EvidenceMap materialization boundary.
+- Current implemented v1a model-like slots are:
+  - N5 `evidence_extraction`;
+  - N6 `need_candidate_generation`;
+  - N6 debate `explorer.round_1_discovery`, `deep_critic.round_1_discovery`, `arbiter.issue_framing`, and `arbiter.final_synthesis`;
+  - N7 `adjudication_recommendation`;
+  - N8 `confirmation_semantic_review`.
+- Resource sampling classification remains policy-ready and provider/Codex capable, with debate conditional on its node policy.
+- v1b/v1c model-like slots are reserved as planned semantics only until their runtime normalization slices land; the slot map must not be read as implementation-complete for those stages.
+- This change is documentation alignment only. No runtime path, provider mapping, DB schema, or authority writer changed.
+
+## 2026-05-25 SO-03 Slot Execution Profiles
+- Locked `DMP-12` as the named slot execution profile policy for v1a debate and model-like defaults.
+- Removed ambiguous defaults: no `A or B` defaults and no unresolved `scenario-defined` selection. Debate runs must resolve to a named profile before invocation.
+- Single-agent defaults are N5 `evidence_extraction=none`, N6 single-agent generation `codex_assisted`, N7 recommendation `codex_assisted`, and N8 semantic review `codex_assisted`.
+- Product-quality timeout targets are longer than current smoke values: OpenAI quality 300s, OpenAI deep reasoning 450s, DashScope thinking 300s, DeepSeek V4 thinking 450s, and deep final synthesis 450s. Current code may still carry older timeout values until a follow-up implementation sync.
+- Codex is allowed and encouraged as explorer, deep critic, issue framing, N5 extraction, N7 recommendation, and N8 semantic review because it is strong at project-aware and policy-aware critique.
+- Codex robustness boundary: frozen context by default, no live DB/repo/harness-state reads during invocation unless recorded as `codex_context_augmented=true`, no direct authority writes, and no provider-quality final synthesis.
+- `mixed-cost-control` profile: Codex explorer, Codex deep critic, Codex issue framing, and OpenAI `openai-quality` final synthesis.
+- `provider-diverse-deep` profile: Codex explorer, OpenAI quality explorer, DashScope thinking explorer, OpenAI deep-reasoning deep critic, Codex deep critic, Codex issue framing, and OpenAI deep-reasoning final synthesis.
+- DeepSeek V4 thinking remains available as optional manual explorer/deep-critic contrast or `deep_critic_3`, but it is not the default deep-critic anchor; OpenAI remains the provider-backed deep-critic anchor for provider-quality debate.
+- DashScope thinking canonical option name is `dashscope-thinking-budget`; compatibility id `dashscope-budget` remains only as a thinking-enabled legacy alias.
+- Superseded by the implementation sync below: timeout updates, DashScope option rename/alias handling, and named profile materialization are now implemented.
+
+## 2026-05-25 SO-03 Implementation Sync
+- Updated the v1a model profile registry product-quality timeouts: standard OpenAI `openai-balanced=180000`, OpenAI `openai-quality=300000`, OpenAI `openai-deep-reasoning=450000`, DashScope thinking `300000`, and DeepSeek V4 thinking `450000`.
+- Added canonical DashScope thinking option id `<profile_id>.dashscope-thinking-budget`; retained `<profile_id>.dashscope-budget` only as a legacy thinking-enabled alias.
+- Materialized v1a harness debate profiles:
+  - `mixed-cost-control`: Codex explorer, Codex deep critic, Codex issue framing, and OpenAI `openai-quality` final synthesis.
+  - `provider-diverse-deep`: Codex/OpenAI/DashScope explorer instances, OpenAI/Codex deep critic instances, Codex issue framing, and OpenAI `openai-deep-reasoning` final synthesis.
+- Harness named profiles reject legacy per-slot env overrides to avoid dual-track configuration semantics.
+- Fixed instance-level execution resolution so a Codex instance under a provider-backed slot does not inherit the slot provider `model_option_id`; explicit model options on non-provider instances remain invalid.

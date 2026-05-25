@@ -214,7 +214,7 @@ test('agent orchestrator normalizes mocked, codex, and provider execution onto o
     modelId: 'gpt-5.4-mini',
     profileId: TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
   });
-  assert.equal(providerGateway.calls[0]!.policy?.timeoutMs, 60000);
+  assert.equal(providerGateway.calls[0]!.policy?.timeoutMs, 180000);
   assert.equal(providerGateway.calls[0]!.policy?.maxRetries, 1);
   assert.deepEqual(providerGateway.calls[0]!.normalizedParams, {
     creativity: 'medium',
@@ -310,13 +310,67 @@ test('agent orchestrator enforces profile output contract and explicit provider 
     ...baseInvocation(),
     execution_mode: 'provider_llm',
     run_mode: 'product',
-    model_option_id: `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.dashscope-budget`,
+    model_option_id: `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.dashscope-thinking-budget`,
   });
 
   assert.equal(dashscope.status, 'succeeded');
   assert.equal(providerGateway.calls.at(-1)?.model.providerId, 'dashscope');
   assert.equal(providerGateway.calls.at(-1)?.model.modelId, 'qwen3.6-plus');
   assert.deepEqual(providerGateway.calls.at(-1)?.providerOverrides, { enable_thinking: true });
+});
+
+test('agent orchestrator accepts canonical execution_spec and rejects ambiguous dual-track values', async () => {
+  const providerGateway = new StubLlmGateway(output());
+  const { orchestrator } = makeOrchestrator({ llmGateway: providerGateway });
+
+  const result = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    execution_spec: {
+      execution_mode: 'provider_llm',
+      model_option_id: `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.openai-deep-reasoning`,
+    },
+  });
+
+  assert.equal(result.status, 'succeeded');
+  assert.equal(
+    result.provenance.model_option_id,
+    `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.openai-deep-reasoning`,
+  );
+  assert.equal(providerGateway.calls.at(-1)?.model.modelId, 'gpt-5.5');
+  assert.equal(
+    (providerGateway.calls.at(-1)?.normalizedParams as { reasoning_depth?: string } | undefined)?.reasoning_depth,
+    'high',
+  );
+
+  await assert.rejects(
+    () => orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+      ...baseInvocation(),
+      execution_mode: 'provider_llm',
+      run_mode: 'product',
+      execution_spec: {
+        execution_mode: 'codex_assisted',
+      },
+    }),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
+
+  await assert.rejects(
+    () => orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+      ...baseInvocation(),
+      execution_mode: 'codex_assisted',
+      execution_spec: {
+        execution_mode: 'codex_assisted',
+        model_option_id: `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.openai-balanced`,
+      },
+      codex_response: {
+        operator_label: 'codex-local',
+        output: output(),
+      },
+    }),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
 });
 
 test('agent orchestrator records a sanitized provider failure summary for blocked invocations', async () => {
