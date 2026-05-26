@@ -185,6 +185,12 @@ implements TopicSelectionV1bTopicQuestionRepository {
       .find((plan) => plan.topic_question_contract_id === contractId) ?? null;
   }
 
+  async findAnswerabilityPlanById(
+    planId: string,
+  ): Promise<TopicSelectionTopicQuestionAnswerabilityPlanRecord | null> {
+    return this.answerabilityPlans.get(planId) ?? null;
+  }
+
   async listNeedRefsByContractId(contractId: string): Promise<TopicSelectionTopicQuestionNeedRefRecord[]> {
     return this.byContract(this.needRefs, contractId);
   }

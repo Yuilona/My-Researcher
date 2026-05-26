@@ -20,6 +20,7 @@ import type {
   TopicSelectionV1bTopicPackageCreationResult,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-topic-package-contracts';
 import type {
+  TopicSelectionV1bTopicPackageAuthorityPersistence,
   TopicSelectionV1bTopicPackagePersistence,
   TopicSelectionV1bTopicPackageRepository,
 } from '../repositories/topic-selection-v1b-topic-package.repository.js';
@@ -313,6 +314,12 @@ class StubTopicPackageRepository implements TopicSelectionV1bTopicPackageReposit
 
   async createDraftPackage(
     _persistence: TopicSelectionV1bTopicPackagePersistence,
+  ): Promise<TopicSelectionV1bTopicPackageCreationResult> {
+    throw new Error('not implemented in test stub');
+  }
+
+  async createDraftPackageAuthority(
+    _persistence: TopicSelectionV1bTopicPackageAuthorityPersistence,
   ): Promise<TopicSelectionV1bTopicPackageCreationResult> {
     throw new Error('not implemented in test stub');
   }

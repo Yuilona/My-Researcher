@@ -1004,13 +1004,13 @@ tasks:
     updated: 2026-05-25
   - id: T-107
     slug: topic-selection-v1b-workflow-hardening
-    status: planned
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-009
     dev_docs_path: dev-docs/active/topic-selection-v1b-workflow-hardening
-    updated: 2026-05-25
+    updated: 2026-05-27
   - id: T-108
     slug: topic-selection-v1c-workflow-hardening
     status: planned

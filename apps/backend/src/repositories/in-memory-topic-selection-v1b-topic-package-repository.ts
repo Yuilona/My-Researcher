@@ -17,6 +17,7 @@ import type {
   TopicSelectionV1bValueAssessmentRepository,
 } from './topic-selection-v1b-value-assessment.repository.js';
 import type {
+  TopicSelectionV1bTopicPackageAuthorityPersistence,
   TopicSelectionV1bTopicPackagePersistence,
   TopicSelectionV1bTopicPackageRepository,
 } from './topic-selection-v1b-topic-package.repository.js';
@@ -69,6 +70,40 @@ implements TopicSelectionV1bTopicPackageRepository {
         persistence.control_plane.trace_snapshot.trace_snapshot_id,
         persistence.control_plane.trace_snapshot,
       );
+      this.packages.set(persistence.topic_package.topic_package_id, persistence.topic_package);
+      this.checks.set(
+        persistence.package_trace_boundary_check.package_trace_boundary_check_id,
+        persistence.package_trace_boundary_check,
+      );
+      this.readinessAssessments.set(
+        persistence.package_readiness_assessment.package_readiness_assessment_id,
+        persistence.package_readiness_assessment,
+      );
+      if (persistence.v1c_input_bundle) {
+        this.bundles.set(
+          persistence.v1c_input_bundle.v1b_to_v1c_input_bundle_id,
+          persistence.v1c_input_bundle,
+        );
+      }
+      await this.valueAssessmentRepository.patchDispositionDecisionOutputTopicPackage(
+        persistence.topic_package.value_disposition_decision_id,
+        persistence.topic_package.topic_package_id,
+      );
+    } catch (error) {
+      this.restore(snapshot);
+      throw error;
+    }
+    return persistence;
+  }
+
+  async createDraftPackageAuthority(
+    persistence: TopicSelectionV1bTopicPackageAuthorityPersistence,
+  ): Promise<TopicSelectionV1bTopicPackageCreationResult> {
+    if (this.findPackageByDecision(persistence.topic_package.value_disposition_decision_id)) {
+      throw new Error('TopicPackage already exists for this ValueDispositionDecision.');
+    }
+    const snapshot = this.snapshot();
+    try {
       this.packages.set(persistence.topic_package.topic_package_id, persistence.topic_package);
       this.checks.set(
         persistence.package_trace_boundary_check.package_trace_boundary_check_id,

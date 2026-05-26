@@ -176,6 +176,7 @@ type TransitionAttemptInput = {
   human_decision_refs?: TopicSelectionFunctionalRef[];
   state_write_intents?: TopicSelectionStateWriteIntent[];
   created_authority_refs?: TopicSelectionFunctionalRef[];
+  allow_audit_authority_refs_on_blocked?: boolean;
 };
 
 export class TopicSelectionControlPlaneService {
@@ -448,6 +449,7 @@ export class TopicSelectionControlPlaneService {
       humanDecisionValidation.confirmed,
     );
     const canWriteState = transitionResult === 'passed' || transitionResult === 'passed_with_risk';
+    const canRecordCreatedAuthorityRefs = canWriteState || input.allow_audit_authority_refs_on_blocked === true;
     const blockers = gateResult.blockers ?? [];
     const requiredActions = this.uniqueStrings([
       ...(gateResult.required_actions ?? []),
@@ -473,7 +475,7 @@ export class TopicSelectionControlPlaneService {
       blockers,
       accepted_risk_refs: acceptedRiskRefs,
       state_write_intents: canWriteState ? (input.state_write_intents ?? []) : [],
-      created_authority_refs: canWriteState ? (input.created_authority_refs ?? []) : [],
+      created_authority_refs: canRecordCreatedAuthorityRefs ? (input.created_authority_refs ?? []) : [],
       created_at: this.now(),
     });
   }

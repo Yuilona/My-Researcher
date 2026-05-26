@@ -51,6 +51,8 @@ export * from './topic-selection-v1b-research-slice-contracts.js';
 export * from './topic-selection-v1b-topic-question-contracts.js';
 export * from './topic-selection-v1b-value-assessment-contracts.js';
 export * from './topic-selection-v1b-topic-package-contracts.js';
+export * from './topic-selection-v1b-node-policy-contracts.js';
+export * from './topic-selection-v1b-workflow-harness-contracts.js';
 export * from './topic-selection-v1c-promotion-input-contracts.js';
 export * from './topic-selection-v1c-promotion-gate-contracts.js';
 export * from './topic-selection-v1c-human-promotion-decision-contracts.js';

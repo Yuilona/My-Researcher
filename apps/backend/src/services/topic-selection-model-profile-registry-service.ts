@@ -1,11 +1,14 @@
-import * as AjvModule from 'ajv/dist/ajv.js';
-import type {
-  ErrorObject,
-  ValidateFunction,
-} from 'ajv/dist/ajv.js';
+import {
+  Ajv,
+  type ErrorObject,
+  type ValidateFunction,
+} from 'ajv';
 import type {
   TopicSelectionAgentExecutionMode,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-need-validation-contracts';
+import {
+  TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-workflow-harness-contracts';
 import {
   TOPIC_SELECTION_MODEL_PROFILE_REGISTRY_SCHEMA_VERSION,
   topicSelectionModelProfileRegistrySchema,
@@ -20,8 +23,6 @@ import {
   sha256Text,
   stableStringify,
 } from './literature-content-processing-utils.js';
-
-const AjvConstructor = AjvModule.Ajv;
 
 export type TopicSelectionModelProfileRegistryValidationIssueCode =
   | 'SCHEMA_VALIDATION_FAILED'
@@ -78,6 +79,12 @@ const DEFAULT_RUN_MODE_ELIGIBILITY: TopicSelectionModelProfileRunModeEligibility
   provider_llm: ['acceptance', 'product'],
 };
 
+const SUPPORT_PROFILE_RUN_MODE_ELIGIBILITY: TopicSelectionModelProfileRunModeEligibility = {
+  mocked_llm: ['test', 'acceptance'],
+  codex_assisted: ['acceptance', 'product'],
+  provider_llm: [],
+};
+
 const PROVIDER_REQUIRED_CAPABILITIES = [
   'structured_output',
   'json_schema',
@@ -99,6 +106,26 @@ export const TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FRAMING_PROFILE_ID =
   'topic-selection.need-discovery.arbiter-framing.v1' as const;
 export const TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID =
   'topic-selection.need-discovery.arbiter-final.v1' as const;
+export const TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID =
+  TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.research_slice_options_single_agent;
+export const TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID =
+  TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_question_candidates_single_agent;
+export const TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID =
+  TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_value_assessment_single_agent;
+export const TOPIC_SELECTION_V1B_CONSTRAINT_PROFILE_SUPPORT_PROFILE_ID =
+  TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.constraint_profile_support;
+export const TOPIC_SELECTION_V1B_INTAKE_READINESS_SUPPORT_PROFILE_ID =
+  TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.intake_readiness_support;
+export const TOPIC_SELECTION_V1B_SLICE_SELECTION_SUPPORT_PROFILE_ID =
+  TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.slice_selection_support;
+export const TOPIC_SELECTION_V1B_N6_LOOPBACK_TRIAGE_SUPPORT_PROFILE_ID =
+  TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n6_loopback_triage_support;
+export const TOPIC_SELECTION_V1B_N7_CANDIDATE_GROUPING_SUPPORT_PROFILE_ID =
+  TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_candidate_grouping_support;
+export const TOPIC_SELECTION_V1B_N7_FAILED_TRIAL_SYNTHESIS_SUPPORT_PROFILE_ID =
+  TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_failed_trial_synthesis_support;
+export const TOPIC_SELECTION_V1B_N7_N8_DEBATE_ADMISSION_SUPPORT_PROFILE_ID =
+  TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_n8_debate_admission_support;
 
 const DEBATE_WORKER_DEEPSEEK_ELIGIBLE_PROFILE_IDS = new Set<string>([
   TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
@@ -445,6 +472,180 @@ const DEFAULT_TOPIC_SELECTION_MODEL_PROFILE_REGISTRY: TopicSelectionModelProfile
       },
       output_contract: 'RankedCandidateDraftBatch@v1',
     }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID,
+      profile_function: 'v1b_research_slice_option_generation_single_agent',
+      role_family: 'single_agent',
+      stage_family: 'v1b_research_slice_generation',
+      quality_objectives: [
+        'generate_method_evidence_value_aligned_slice_options',
+        'preserve_v1a_bundle_and_constraint_lineage',
+        'prepare_deterministic_slice_option_gate',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'provider_llm', 'codex_assisted'],
+      output_contract: 'ResearchSliceOptionSetDraft@v1',
+      model_options: providerOptions(TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID).map(
+        (option) => ({
+          ...option,
+          normalized_params: normalizedParams({
+            creativity: 'medium',
+            reasoning_depth: 'medium',
+            output_budget: 'large',
+          }),
+        }),
+      ),
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID,
+      profile_function: 'v1b_topic_question_candidate_generation_single_agent',
+      role_family: 'single_agent',
+      stage_family: 'v1b_topic_question_generation',
+      quality_objectives: [
+        'generate_distinct_high_value_topic_question_candidates',
+        'surface_candidate_overlap_and_residual_risk',
+        'prepare_deterministic_topic_question_candidate_gate',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'provider_llm', 'codex_assisted'],
+      output_contract: 'TopicQuestionCandidateSetDraft@v1',
+      model_options: providerOptions(TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID).map(
+        (option) => ({
+          ...option,
+          normalized_params: normalizedParams({
+            creativity: 'medium',
+            reasoning_depth: 'high',
+            output_budget: 'large',
+          }),
+        }),
+      ),
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID,
+      profile_function: 'v1b_topic_value_assessment_single_agent',
+      role_family: 'single_agent',
+      stage_family: 'v1b_topic_value_assessment',
+      quality_objectives: [
+        'assess_topic_question_value_against_method_evidence_value_axes',
+        'preserve_residual_risks_warnings_and_coverage_gaps',
+        'prepare_deterministic_value_assessment_gate',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'provider_llm', 'codex_assisted'],
+      output_contract: 'TopicValueAssessmentDraft@v1',
+      model_options: providerOptions(TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID).map(
+        (option) => ({
+          ...option,
+          normalized_params: normalizedParams({
+            creativity: 'low',
+            reasoning_depth: 'high',
+            output_budget: 'large',
+          }),
+        }),
+      ),
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1B_CONSTRAINT_PROFILE_SUPPORT_PROFILE_ID,
+      profile_function: 'v1b_constraint_profile_semantic_support',
+      role_family: 'single_agent',
+      stage_family: 'v1b_constraint_profile',
+      quality_objectives: [
+        'normalize_constraint_profile_support_without_authority_write',
+        'preserve_frozen_input_lineage',
+        'prepare_deterministic_constraint_profile_gate',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'codex_assisted'],
+      run_mode_eligibility: SUPPORT_PROFILE_RUN_MODE_ELIGIBILITY,
+      output_contract: 'ResearchConstraintProfileDraftSupport@v1',
+      model_options: [],
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1B_INTAKE_READINESS_SUPPORT_PROFILE_ID,
+      profile_function: 'v1b_intake_readiness_semantic_support',
+      role_family: 'single_agent',
+      stage_family: 'v1b_intake_readiness',
+      quality_objectives: [
+        'classify_readiness_support_without_authority_write',
+        'preserve_blocker_warning_loopback_codes',
+        'prepare_deterministic_readiness_gate',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'codex_assisted'],
+      run_mode_eligibility: SUPPORT_PROFILE_RUN_MODE_ELIGIBILITY,
+      output_contract: 'IntakeReadinessClassificationSupport@v1',
+      model_options: [],
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1B_SLICE_SELECTION_SUPPORT_PROFILE_ID,
+      profile_function: 'v1b_slice_selection_semantic_support',
+      role_family: 'single_agent',
+      stage_family: 'v1b_research_slice_selection',
+      quality_objectives: [
+        'review_slice_selection_support_without_authority_write',
+        'preserve_deferred_candidate_context',
+        'prepare_deterministic_slice_selection_gate',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'codex_assisted'],
+      run_mode_eligibility: SUPPORT_PROFILE_RUN_MODE_ELIGIBILITY,
+      output_contract: 'ResearchSliceSelectionReviewSupport@v1',
+      model_options: [],
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1B_N6_LOOPBACK_TRIAGE_SUPPORT_PROFILE_ID,
+      profile_function: 'v1b_n6_loopback_triage_support',
+      role_family: 'single_agent',
+      stage_family: 'v1b_topic_question_generation',
+      quality_objectives: [
+        'summarize_loopback_feedback_without_authority_write',
+        'preserve_failed_trial_reasons_for_regeneration',
+        'prepare_deterministic_candidate_gate_retry_decision',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'codex_assisted'],
+      run_mode_eligibility: SUPPORT_PROFILE_RUN_MODE_ELIGIBILITY,
+      output_contract: 'N6LoopbackTriageSupport@v1',
+      model_options: [],
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1B_N7_CANDIDATE_GROUPING_SUPPORT_PROFILE_ID,
+      profile_function: 'v1b_candidate_grouping_semantic_support',
+      role_family: 'single_agent',
+      stage_family: 'v1b_topic_question_contract',
+      quality_objectives: [
+        'group_overlapping_candidates_without_authority_write',
+        'preserve_multiple_valid_candidate_branches',
+        'prepare_deterministic_contract_materialization_gate',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'codex_assisted'],
+      run_mode_eligibility: SUPPORT_PROFILE_RUN_MODE_ELIGIBILITY,
+      output_contract: 'CandidateGroupingSupport@v1',
+      model_options: [],
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1B_N7_FAILED_TRIAL_SYNTHESIS_SUPPORT_PROFILE_ID,
+      profile_function: 'v1b_failed_trial_synthesis_semantic_support',
+      role_family: 'single_agent',
+      stage_family: 'v1b_topic_question_contract',
+      quality_objectives: [
+        'synthesize_n8_failed_trial_feedback_without_authority_write',
+        'preserve_failure_reason_coverage_for_n6_loopback',
+        'prepare_deterministic_next_candidate_or_loopback_route',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'codex_assisted'],
+      run_mode_eligibility: SUPPORT_PROFILE_RUN_MODE_ELIGIBILITY,
+      output_contract: 'N8FailedTrialSynthesisSupport@v1',
+      model_options: [],
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1B_N7_N8_DEBATE_ADMISSION_SUPPORT_PROFILE_ID,
+      profile_function: 'v1b_n8_debate_admission_semantic_support',
+      role_family: 'single_agent',
+      stage_family: 'v1b_topic_question_contract',
+      quality_objectives: [
+        'select_n8_debate_level_without_authority_write',
+        'preserve_high_value_candidate_signals',
+        'prepare_deterministic_n8_invocation_admission',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'codex_assisted'],
+      run_mode_eligibility: SUPPORT_PROFILE_RUN_MODE_ELIGIBILITY,
+      output_contract: 'N8DebateAdmissionReviewSupport@v1',
+      model_options: [],
+    }),
   ],
 };
 
@@ -459,7 +660,7 @@ export function createDefaultTopicSelectionModelProfileRegistry(): TopicSelectio
 }
 
 export class TopicSelectionModelProfileRegistryService {
-  private readonly ajv = new AjvConstructor({
+  private readonly ajv = new Ajv({
     allErrors: true,
     strict: false,
     removeAdditional: false,

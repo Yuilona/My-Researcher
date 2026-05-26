@@ -39,6 +39,8 @@ import * as topicSelectionV1bResearchSliceContracts from './topic-selection-v1b-
 import * as topicSelectionV1bTopicQuestionContracts from './topic-selection-v1b-topic-question-contracts.js';
 import * as topicSelectionV1bTopicPackageContracts from './topic-selection-v1b-topic-package-contracts.js';
 import * as topicSelectionV1bValueAssessmentContracts from './topic-selection-v1b-value-assessment-contracts.js';
+import * as topicSelectionV1bNodePolicyContracts from './topic-selection-v1b-node-policy-contracts.js';
+import * as topicSelectionV1bWorkflowHarnessContracts from './topic-selection-v1b-workflow-harness-contracts.js';
 import * as topicSelectionV1cPromotionGateContracts from './topic-selection-v1c-promotion-gate-contracts.js';
 import * as topicSelectionV1cHumanPromotionDecisionContracts from './topic-selection-v1c-human-promotion-decision-contracts.js';
 import * as topicSelectionV1cPaperProjectBridgeContracts from './topic-selection-v1c-paper-project-bridge-contracts.js';
@@ -3360,6 +3362,8 @@ test('research-lifecycle barrel re-exports the runtime value surface of split mo
     ...Object.keys(topicSelectionV1bTopicQuestionContracts),
     ...Object.keys(topicSelectionV1bValueAssessmentContracts),
     ...Object.keys(topicSelectionV1bTopicPackageContracts),
+    ...Object.keys(topicSelectionV1bNodePolicyContracts),
+    ...Object.keys(topicSelectionV1bWorkflowHarnessContracts),
     ...Object.keys(topicSelectionV1cPromotionInputContracts),
     ...Object.keys(topicSelectionV1cPromotionGateContracts),
     ...Object.keys(topicSelectionV1cHumanPromotionDecisionContracts),

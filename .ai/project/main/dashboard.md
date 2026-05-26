@@ -8,14 +8,14 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 108 (planned: 4, in-progress: 4, blocked: 0, done: 33, archived: 67)
+- Tasks: 108 (planned: 3, in-progress: 4, blocked: 0, done: 34, archived: 67)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
+| T-107 topic-selection-v1b-workflow-hardening | done | F-001 | dev-docs/active/topic-selection-v1b-workflow-hardening |
 | T-106 experiment-foundation-real-interaction-hardening | in-progress | F-001 | dev-docs/active/experiment-foundation-real-interaction-hardening |
-| T-107 topic-selection-v1b-workflow-hardening | planned | F-001 | dev-docs/active/topic-selection-v1b-workflow-hardening |
 | T-108 topic-selection-v1c-workflow-hardening | planned | F-001 | dev-docs/active/topic-selection-v1c-workflow-hardening |
 | T-090 experiment-foundation-capability-validation | done | F-001 | dev-docs/active/experiment-foundation-capability-validation |
 | T-102 paper-implementation-v1-hardening | done | F-001 | dev-docs/active/paper-implementation-v1-hardening |

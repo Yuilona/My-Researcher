@@ -1,8 +1,8 @@
-import * as AjvModule from 'ajv/dist/ajv.js';
-import type {
-  ErrorObject,
-  ValidateFunction,
-} from 'ajv/dist/ajv.js';
+import {
+  Ajv,
+  type ErrorObject,
+  type ValidateFunction,
+} from 'ajv';
 import type {
   TopicSelectionArtifactRefRecord,
   TopicSelectionFunctionalRef,
@@ -56,8 +56,6 @@ export type {
   TopicSelectionAgentValidationSummary,
   TopicSelectionExecutorKind,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-invocation-contracts';
-
-const AjvConstructor = AjvModule.Ajv;
 
 const FORBIDDEN_OUTPUT_KEY_PATTERNS = [
   /hidden[_-]?reasoning/i,
@@ -140,7 +138,7 @@ type SourceExecution<T> = {
 };
 
 export class TopicSelectionAgentOrchestratorService {
-  private readonly ajv = new AjvConstructor({
+  private readonly ajv = new Ajv({
     allErrors: true,
     strict: false,
     removeAdditional: false,
@@ -538,7 +536,7 @@ export class TopicSelectionAgentOrchestratorService {
       return;
     }
     const message = (this.auditSnapshotValidator.errors ?? [])
-      .map((error) => `${error.instancePath || '/'} ${error.message ?? 'schema validation failed'}`)
+      .map((error: ErrorObject) => `${error.instancePath || '/'} ${error.message ?? 'schema validation failed'}`)
       .join('; ');
     throw new AppError(
       500,

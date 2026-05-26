@@ -83,6 +83,9 @@ export interface TopicSelectionV1bTopicQuestionRepository {
   findAnswerabilityPlanByContractId(
     contractId: string,
   ): Promise<TopicSelectionTopicQuestionAnswerabilityPlanRecord | null>;
+  findAnswerabilityPlanById(
+    planId: string,
+  ): Promise<TopicSelectionTopicQuestionAnswerabilityPlanRecord | null>;
   listNeedRefsByContractId(contractId: string): Promise<TopicSelectionTopicQuestionNeedRefRecord[]>;
   listEvidenceRefsByContractId(contractId: string): Promise<TopicSelectionTopicQuestionEvidenceRefRecord[]>;
   listBoundaryRefsByContractId(contractId: string): Promise<TopicSelectionTopicQuestionBoundaryRefRecord[]>;

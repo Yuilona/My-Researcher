@@ -31,9 +31,18 @@ export type TopicSelectionV1bTopicPackagePersistence = {
   control_plane: TopicSelectionV1bTopicPackageControlPlanePersistence;
 };
 
+export type TopicSelectionV1bTopicPackageAuthorityPersistence = Omit<
+  TopicSelectionV1bTopicPackagePersistence,
+  'control_plane'
+>;
+
 export interface TopicSelectionV1bTopicPackageRepository {
   createDraftPackage(
     persistence: TopicSelectionV1bTopicPackagePersistence,
+  ): Promise<TopicSelectionV1bTopicPackageCreationResult>;
+
+  createDraftPackageAuthority(
+    persistence: TopicSelectionV1bTopicPackageAuthorityPersistence,
   ): Promise<TopicSelectionV1bTopicPackageCreationResult>;
 
   findPackageById(

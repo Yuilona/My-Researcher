@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import * as AjvModule from 'ajv/dist/ajv.js';
-import type { ErrorObject, ValidateFunction } from 'ajv/dist/ajv.js';
+import { Ajv, type ErrorObject, type ValidateFunction } from 'ajv';
 import * as contracts from '@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts';
 import type {
   CreateExperimentFoundationRecordRequest,
@@ -26,7 +25,6 @@ import { sha256Text, stableStringify } from './literature-content-processing-uti
 
 type JsonSchema = Readonly<Record<string, unknown>>;
 type JsonRecord = Record<string, unknown>;
-const AjvConstructor = AjvModule.Ajv;
 
 type RecordKindConfig = {
   schema: JsonSchema;
@@ -392,7 +390,7 @@ const CANDIDATE_RECORD_KINDS: ExperimentFoundationRecordKind[] = [
 ];
 
 export class ExperimentFoundationService {
-  private readonly ajv = new AjvConstructor({
+  private readonly ajv = new Ajv({
     allErrors: true,
     strict: false,
     removeAdditional: false,

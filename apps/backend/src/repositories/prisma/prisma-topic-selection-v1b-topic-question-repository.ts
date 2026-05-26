@@ -638,6 +638,15 @@ implements TopicSelectionV1bTopicQuestionRepository {
     return row ? toAnswerabilityPlanRecord(row) : null;
   }
 
+  async findAnswerabilityPlanById(
+    planId: string,
+  ): Promise<TopicSelectionTopicQuestionAnswerabilityPlanRecord | null> {
+    const row = await this.prisma.topicSelectionTopicQuestionAnswerabilityPlan.findUnique({
+      where: { id: planId },
+    });
+    return row ? toAnswerabilityPlanRecord(row) : null;
+  }
+
   async listNeedRefsByContractId(contractId: string): Promise<TopicSelectionTopicQuestionNeedRefRecord[]> {
     const rows = await this.prisma.topicSelectionTopicQuestionNeedRef.findMany({
       where: { topicQuestionContractId: contractId },

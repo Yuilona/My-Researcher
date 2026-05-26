@@ -40,6 +40,7 @@ import { InMemoryTopicSelectionV1cPaperProjectBridgeRepository } from '../reposi
 import { InMemoryTopicSelectionV1cPromotionGateRepository } from '../repositories/in-memory-topic-selection-v1c-promotion-gate-repository.js';
 import { InMemoryTopicSelectionV1cPromotionInputRepository } from '../repositories/in-memory-topic-selection-v1c-promotion-input-repository.js';
 import type {
+  TopicSelectionV1bTopicPackageAuthorityPersistence,
   TopicSelectionV1bTopicPackagePersistence,
   TopicSelectionV1bTopicPackageRepository,
 } from '../repositories/topic-selection-v1b-topic-package.repository.js';
@@ -107,6 +108,12 @@ class SeededTopicPackageRepository implements TopicSelectionV1bTopicPackageRepos
 
   async createDraftPackage(
     _persistence: TopicSelectionV1bTopicPackagePersistence,
+  ): Promise<TopicSelectionV1bTopicPackageCreationResult> {
+    throw new Error('SeededTopicPackageRepository does not support creating draft packages.');
+  }
+
+  async createDraftPackageAuthority(
+    _persistence: TopicSelectionV1bTopicPackageAuthorityPersistence,
   ): Promise<TopicSelectionV1bTopicPackageCreationResult> {
     throw new Error('SeededTopicPackageRepository does not support creating draft packages.');
   }

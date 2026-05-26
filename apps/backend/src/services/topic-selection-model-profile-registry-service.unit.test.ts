@@ -10,6 +10,11 @@ import {
   TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID,
   TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID,
   TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
+  TOPIC_SELECTION_V1B_CONSTRAINT_PROFILE_SUPPORT_PROFILE_ID,
+  TOPIC_SELECTION_V1B_N7_CANDIDATE_GROUPING_SUPPORT_PROFILE_ID,
+  TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID,
   TopicSelectionModelProfileRegistryService,
 } from './topic-selection-model-profile-registry-service.js';
 import type {
@@ -166,6 +171,48 @@ test('model profile registry validates default DMP v1 profiles and resolves prov
     arbiterFinal.profile.model_options.some((option) => option.provider_id === 'deepseek'),
     false,
   );
+
+  const v1bSliceOptions = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'acceptance',
+    model_option_id: `${TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID}.openai-balanced`,
+  });
+  assert.equal(v1bSliceOptions.profile.output_contract, 'ResearchSliceOptionSetDraft@v1');
+  assert.equal(v1bSliceOptions.selected_model_option?.provider_id, 'openai');
+
+  const v1bQuestionCandidates = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID,
+    execution_mode: 'codex_assisted',
+    run_mode: 'product',
+  });
+  assert.equal(v1bQuestionCandidates.profile.output_contract, 'TopicQuestionCandidateSetDraft@v1');
+  assert.equal(v1bQuestionCandidates.selected_model_option, null);
+
+  const v1bValueAssessment = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'acceptance',
+    model_option_id: `${TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID}.openai-balanced`,
+  });
+  assert.equal(v1bValueAssessment.profile.output_contract, 'TopicValueAssessmentDraft@v1');
+  assert.equal(v1bValueAssessment.selected_model_option?.normalized_params.reasoning_depth, 'high');
+
+  const v1bConstraintSupport = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_V1B_CONSTRAINT_PROFILE_SUPPORT_PROFILE_ID,
+    execution_mode: 'codex_assisted',
+    run_mode: 'product',
+  });
+  assert.equal(v1bConstraintSupport.profile.output_contract, 'ResearchConstraintProfileDraftSupport@v1');
+  assert.equal(v1bConstraintSupport.profile.model_options.length, 0);
+
+  const v1bGroupingSupport = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_V1B_N7_CANDIDATE_GROUPING_SUPPORT_PROFILE_ID,
+    execution_mode: 'mocked_llm',
+    run_mode: 'test',
+  });
+  assert.equal(v1bGroupingSupport.profile.output_contract, 'CandidateGroupingSupport@v1');
+  assert.equal(v1bGroupingSupport.selected_model_option, null);
 });
 
 test('model profile registry enforces run-mode and role profile execution eligibility', () => {

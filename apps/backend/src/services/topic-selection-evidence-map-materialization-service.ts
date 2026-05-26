@@ -1,5 +1,4 @@
-import * as AjvModule from 'ajv/dist/ajv.js';
-import type { ValidateFunction } from 'ajv/dist/ajv.js';
+import { Ajv, type ValidateFunction } from 'ajv';
 import type {
   TopicSelectionActorType,
   TopicSelectionFunctionalRef,
@@ -26,8 +25,6 @@ import {
   sha256Text,
   stableStringify,
 } from './literature-content-processing-utils.js';
-
-const AjvConstructor = AjvModule.Ajv;
 
 export interface TopicSelectionEvidenceMapMaterializationInput {
   workspace_id?: string | null;
@@ -63,7 +60,7 @@ export class TopicSelectionEvidenceMapMaterializationService {
   private readonly draftValidator: ValidateFunction;
 
   constructor() {
-    const ajv = new AjvConstructor({
+    const ajv = new Ajv({
       allErrors: true,
       strict: false,
       removeAdditional: false,
