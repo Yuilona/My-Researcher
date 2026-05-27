@@ -8,6 +8,8 @@
 
 ## Avoid Unsafe External Behavior
 - Do not make true cloud execution the default lane.
+- Do not treat a true-external-canary gate pass as proof of real cloud connectivity; it only means prerequisites are present until a provider-specific real execution implementation exists.
+- Do not let unknown external provider names pass the gate. Add a provider-specific gate contract before accepting a new provider.
 - Do not read or print raw credentials, `DATABASE_URL`, SDK payloads, adapter-private payloads, checkpoints, or raw logs.
 - Do not check in raw real datasets, model weights, checkpoints, external provider payloads, or unredacted object paths.
 - Do not leave external canary resources without cleanup verification if a true canary is later selected.

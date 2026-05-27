@@ -26,6 +26,69 @@
   - Restored topic-selection T-107/T-108 task packages after confirming they are owned by a separate task stream and must not be deleted during T-106 work.
   - Added `afterEach` cleanup for LocalScript temp execution roots created by the execution-service tests.
 
+## 2026-05-27: Phase 3A API Recovery Hardening
+- Added a deterministic recovery scenario to `apps/backend/src/services/experiment-foundation-capability-harness.test.ts`.
+- Covered the API-facing parts of `EF-H-003`, `EF-H-004`, `EF-H-006`, and `EF-H-016`:
+  - stale `dataset_mirror` blocks `dataset_version` readiness and latest readiness exposes blockers/actions;
+  - updating the mirror to fresh via registry upsert lets the next readiness check pass;
+  - incomplete candidate promotion fails with stable `GATE_CONSTRAINT_FAILED` and writes no promotion request/result records;
+  - fixing the candidate payload via registry upsert allows promotion to complete and update candidate status;
+  - submit with mismatched materialization hash fails without creating an external job;
+  - retrying with the original locked submit request succeeds;
+  - cancellation is idempotent, terminal cancelled state is listable, and collect creates partial validation without evidence.
+- This phase intentionally remains memory/API deterministic only. Disposable Postgres parity and recovery proof remain Phase 3B.
+
+## 2026-05-27: Phase 3B Disposable DB Baseline
+- Ran the existing T-103 real-local-DB lane as a T-106 Phase 3B baseline.
+- The runner created a disposable schema, applied repo migrations, round-tripped experiment-foundation registry/readiness/external-job rows, and dropped the schema.
+- Redaction check found no raw database URL, provider keys, or credential patterns in the generated artifacts.
+- This proves DB infrastructure and SSOT migration viability for experiment-foundation tables, but it is not yet the full parity probe for the same readiness/promotion/submit/recovery scenarios exercised by Phase 3A.
+
+## 2026-05-27: Phase 3B Prisma Parity Probe
+- Added opt-in disposable-Postgres parity coverage in `apps/backend/src/services/experiment-foundation-prisma-parity.integration.test.ts`.
+- The test is skipped by default and runs only with `EXPERIMENT_FOUNDATION_PRISMA_PARITY=1` plus `DATABASE_URL`.
+- The test creates an isolated schema, applies repo migrations, runs the parity scenario through `PrismaExperimentFoundationRepository` and `PrismaExperimentFoundationExecutionRepository`, then drops the schema.
+- Covered DB-backed parts of `EF-H-003`, `EF-H-004`, `EF-H-006`, `EF-H-009`, `EF-H-013`, `EF-H-015`, and `EF-H-016`:
+  - duplicate registry create returns `VERSION_CONFLICT`;
+  - stale `dataset_mirror` blocks readiness and latest readiness is persisted;
+  - registry upsert fixes mirror freshness and subsequent readiness passes;
+  - incomplete candidate promotion fails without writing promotion records or changing candidate status;
+  - fixed candidate promotion writes request/result records and updates candidate lifecycle;
+  - successful submit/collect creates persisted result, validation, and evidence refs;
+  - mismatched materialization hash fails without creating a job;
+  - submit idempotency returns the existing job and conflicting reuse returns `VERSION_CONFLICT`;
+  - cancel is idempotent, sync preserves cancelled terminal state, cancelled jobs are listable, and collect produces partial validation without evidence.
+- The adapter used by the parity probe is backend-only deterministic fake execution. This keeps the DB parity lane focused on persistence/service behavior instead of LocalScript process timing, which Phase 2 already covers.
+
+## 2026-05-27: Phase 4 UI Flow Contract
+- Added `07-ui-workbench-flow-contract.md` as the define-only UI proof target.
+- The contract names the required user path through navigation, registry, readiness, candidate promotion, recipe/materialization, execution/evidence, and error states.
+- The contract fixes backend authority for readiness, promotion, materialization, execution, validation, and evidence decisions, so later UI automation cannot drift into renderer-owned domain semantics.
+- No desktop product code, runtime styles, shared contracts, backend routes, or Prisma schema changed in Phase 4.
+
+## 2026-05-27: Phase 5 Cross-flow Seam Probe
+- Strengthened `apps/backend/src/services/paper-implementation-live-experiment-adapter-service.unit.test.ts`.
+- The fake experiment-foundation record port now returns payloads containing paper-claim/final-wording fields while preserving valid record hashes.
+- The live adapter collect path still reads only refs/hashes and stores PaperImplementation `RunEvidenceUnit`, monitor intake, and trace manifest state without copied experiment-foundation DTO fields.
+- Added recursive assertions that adjacent state excludes reusable experiment-foundation DTO keys, evidence/sidecar DTO keys, paper claim fields, final table fields, leaderboard/ranking fields, and publication-ready wording.
+- This extends the existing WorkOrder bridge no-copy guard without changing product code or moving ownership between experiment foundation and PaperImplementation.
+
+## 2026-05-27: Phase 6/7 Hardening Runner And External Gate
+- Added `.ai/scripts/experiment-foundation-hardening-runner.mjs` and the root `experiment-foundation:hardening` package script.
+- The runner writes redacted artifacts under `.ai/.tmp/experiment-foundation-hardening/<run-id>/` and supports `contract`, `deterministic`, `real-local-db`, `ui-definition`, `external-gate`, and `full` modes.
+- `deterministic` runs targeted shared schema, backend execution, capability harness, PaperImplementation seam, backend typecheck, governance sync dry-run, governance lint, and diff hygiene checks.
+- `real-local-db` invokes the opt-in disposable Postgres parity probe with `EXPERIMENT_FOUNDATION_PRISMA_PARITY=1`.
+- `ui-definition` validates that `07-ui-workbench-flow-contract.md` still names the required backend-authority routes and renderer non-ownership rules.
+- `external-gate` is intentionally gate-only: by default it records `skipped`; with `--include-true-external-canary` it checks provider, mirror, approval, budget, cleanup, and provider-specific credential key presence without calling a real cloud provider.
+- The gate never stores raw env values. Artifacts contain key names and present/missing booleans only.
+- The T-103 relationship is documented as a handoff command rather than changing the default T-103 full-flow runner semantics.
+
+## 2026-05-27: Runner Quality Fixes
+- Fixed external-gate environment resolution to read key presence from both `process.env` and root `.env.local`.
+- Added a provider allowlist for the gate contract. The current supported provider is `aliyun_pai_dlc`; unknown providers block instead of returning ready.
+- Strengthened redaction for secret-like `KEY=value`, `KEY: value`, and JSON/quoted assignment shapes, plus bearer authorization output.
+- The gate still records only key names and presence/source booleans. It does not store raw environment values.
+
 ## Decision Backlog
 - D1: confirmed one task with phase gates; split child tasks only after concrete hardening findings or large independent work appears.
 - D2: confirmed default `gate-only` plus `local fake provider`, with true external canary as a first-class explicit opt-in lane for real connectivity and minimum real-flow validation.

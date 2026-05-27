@@ -59,15 +59,24 @@ T-103 remains the standard full-flow runner. T-106 should add a standalone harde
 - add a T-103 lane hook that invokes the T-106 command; or
 - document the T-106 command as the official hardening entrypoint while T-103 stays the standard closure runner.
 
-Expected command shape, to be finalized during implementation:
+Implemented command shape:
 
 ```bash
+pnpm experiment-foundation:hardening -- --mode contract
 pnpm experiment-foundation:hardening -- --mode deterministic
-pnpm experiment-foundation:hardening -- --mode real-local-db
+pnpm experiment-foundation:hardening -- --mode real-local-db --require-real-db
+pnpm experiment-foundation:hardening -- --mode ui-definition
+pnpm experiment-foundation:hardening -- --mode external-gate --include-true-external-canary
 pnpm experiment-foundation:hardening -- --mode full --include-true-external-canary
 ```
 
-The initial command should support explicit lane selection and write redacted artifacts under `.ai/.tmp/experiment-foundation-hardening/<run-id>/`.
+The command supports explicit lane selection and writes redacted artifacts under `.ai/.tmp/experiment-foundation-hardening/<run-id>/`.
+
+`deterministic` runs targeted shared schema, backend execution, capability harness, PaperImplementation seam, backend typecheck, governance sync dry-run, governance lint, and diff hygiene checks. `real-local-db` invokes the opt-in disposable Postgres parity probe. `ui-definition` validates the Phase 4 workbench flow contract. `external-gate` validates prerequisite key presence only.
+
+The T-103 handoff remains documented rather than embedded: T-103 is the standard full-flow closure runner; T-106 is the official post-V1 hardening entrypoint.
+
+The external gate reads key presence from `process.env` and root `.env.local`. It records only source/presence booleans, never values.
 
 ## External Canary Boundary
 
@@ -75,15 +84,19 @@ T-106 uses three external lanes:
 
 - `gate-only`: default; validates opt-in flags and required environment shape without calling external services.
 - `local-fake-external`: default; exercises submit/sync/collect/result/evidence behavior through a fake provider without cloud credentials.
-- `true-external-canary`: explicit opt-in; calls the configured external provider with minimum resources to verify connectivity and real flow.
+- `true-external-canary`: explicit opt-in; Phase 6/7 implements prerequisite gating only. A later provider-specific implementation must call the configured external provider with minimum resources to verify connectivity and real flow.
 
 The true canary must return `blocked`, not `passed`, when credentials, project/bucket/queue, mirror, approval, or cleanup prerequisites are missing.
+
+A gate status of `ready_for_provider_specific_real_execution` means the local prerequisites are present. It is not evidence that any real external provider was contacted.
+
+Supported provider gate contracts are explicit. The initial gate allows `aliyun_pai_dlc`; unknown provider names return `blocked` until a provider-specific gate is added.
 
 True canary artifacts must not store raw datasets, model weights, checkpoints, raw provider logs, SDK payloads, access keys, secrets, full endpoint credentials, or unredacted bucket/object paths.
 
 ## UI Flow Contract
 
-T-106 defines the UI proof target before implementing UI automation. The later workbench test should cover this user path:
+T-106 defines the UI proof target before implementing UI automation. The executable Phase 4 contract lives in `07-ui-workbench-flow-contract.md`. The later workbench test should cover this user path:
 
 1. Open `实验基座` from the desktop navigation.
 2. In Registry, create or upsert a valid contract payload and verify list/detail refresh.

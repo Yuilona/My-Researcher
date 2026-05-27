@@ -30,33 +30,34 @@
 - [x] Stress/load testing remains out of default scope unless a later finding justifies a separate follow-up.
 
 ### Phase 3
-- [ ] Memory and disposable-DB paths agree on create/upsert/list/readiness/promotion/job state semantics.
-- [ ] Idempotency and conflict behavior is tested across registry and execution APIs.
-- [ ] Recovery after failed readiness, promotion, submit, sync, cancel, and collect is explicit.
+- [x] Memory and disposable-DB paths agree on representative create/upsert/list/readiness/promotion/job state semantics covered by the recovery probe.
+- [x] Idempotency and conflict behavior is tested across registry and execution APIs.
+- [x] Recovery after failed readiness, promotion, submit, sync, cancel, and collect is explicit.
 - [ ] Paper-implementation automation can consume stable refs, statuses, validation reports, and evidence refs from both memory and disposable DB paths.
-- [ ] Normal developer schemas are not mutated; disposable schema setup and cleanup are explicit.
+- [x] Normal developer schemas are not mutated; disposable schema setup and cleanup are explicit.
 
 ### Phase 4
-- [ ] Desktop workbench flow contract names the exact user path, backend calls, expected states, and error states.
-- [ ] UI acceptance criteria prove API consumption and error rendering without requiring immediate automation implementation.
-- [ ] Future screenshots or logs must be redacted where stored.
+- [x] Desktop workbench flow contract names the exact user path, backend calls, expected states, and error states.
+- [x] UI acceptance criteria prove API consumption and error rendering without requiring immediate automation implementation.
+- [x] Future screenshots or logs must be redacted where stored.
 
 ### Phase 5
-- [ ] Adjacent flows consume refs and hashes only.
-- [ ] Tests prevent canonical experiment-foundation DTO copies from entering PaperImplementation state.
-- [ ] Paper claim or final-table wording does not leak into evidence candidates or sidecars.
-- [ ] Any required product bridge expansion is recorded as a follow-up unless it is a small compatibility fix exposed by a seam test.
+- [x] Adjacent flows consume refs and hashes only.
+- [x] Tests prevent canonical experiment-foundation DTO copies from entering PaperImplementation state.
+- [x] Paper claim or final-table wording does not leak into evidence candidates or sidecars.
+- [x] Any required product bridge expansion is recorded as a follow-up unless it is a small compatibility fix exposed by a seam test.
 
 ### Phase 6
-- [ ] Default external checks remain safe: gate-only config validation and local fake provider flow.
-- [ ] True external canary exists as an explicit opt-in lane for real connectivity and minimum real flow verification.
-- [ ] True canary has credential, cost, cleanup, blocked/skipped/pass, and redaction guardrails.
-- [ ] True canary artifacts store refs, hashes, summaries, and cleanup status only.
+- [x] Default external checks remain safe: gate-only config validation and local fake provider flow.
+- [x] True external canary exists as an explicit opt-in prerequisite gate and command contract.
+- [x] True canary gate has credential, cost, cleanup, blocked/skipped/pass, and redaction guardrails.
+- [x] True canary gate artifacts store key presence, refs, hashes, summaries, and cleanup prerequisites only.
+- [ ] Provider-specific true canary implementation performs real connectivity and minimum real flow verification.
 
 ### Phase 7
-- [ ] A standalone T-106 hardening command exists with clear deterministic, real-local-DB, UI-definition, cross-flow, and true-external-canary lanes.
-- [ ] T-103 handoff is stable and does not change the default full-flow runner semantics.
-- [ ] Governance sync and lint pass.
+- [x] A standalone T-106 hardening command exists with clear deterministic, real-local-DB, UI-definition, cross-flow, and true-external-canary-gate lanes.
+- [x] T-103 handoff is stable and does not change the default full-flow runner semantics.
+- [x] Governance lint passes.
 - [ ] Residual hardening work is either closed or split into explicit follow-up tasks.
 
 ## Initial Verification Commands

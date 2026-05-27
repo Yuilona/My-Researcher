@@ -40,6 +40,7 @@ import type {
   PaperImplementationRepository,
 } from '../repositories/paper-implementation.repository.js';
 import type { PaperImplementationAiWorkflowHarnessService } from './paper-implementation-ai-workflow-harness-service.js';
+import { findExperimentFoundationPayloadCopyKey } from './paper-implementation-experiment-foundation-boundary-guard.js';
 import type { PaperImplementationIntakeBootstrapService } from './paper-implementation-intake-bootstrap-service.js';
 import { PaperImplementationLiveExperimentAdapterService } from './paper-implementation-live-experiment-adapter-service.js';
 import type { PaperImplementationMotiveEvidenceBoardService } from './paper-implementation-motive-evidence-board-service.js';
@@ -292,6 +293,23 @@ class FakeExperimentRecords {
     ['result_validation_report:result_validation_report_001', 'validation_report_hash_001'],
     ['evidence_candidate:evidence_candidate_001', 'evidence_candidate_hash_001'],
   ]);
+  private readonly payloads = new Map<string, Record<string, unknown>>([
+    ['experiment_result:experiment_result_001', {
+      experiment_result_id: 'experiment_result_001',
+      result_hash: 'experiment_result_hash_001',
+      claim_text: 'must not be copied into PaperImplementation state',
+    }],
+    ['result_validation_report:result_validation_report_001', {
+      result_validation_report_id: 'result_validation_report_001',
+      validation_hash: 'validation_report_hash_001',
+      final_conclusion: 'must not be copied into PaperImplementation state',
+    }],
+    ['evidence_candidate:evidence_candidate_001', {
+      evidence_candidate_id: 'evidence_candidate_001',
+      evidence_hash: 'evidence_candidate_hash_001',
+      publication_ready_text: 'must not be copied into PaperImplementation state',
+    }],
+  ]);
 
   async getRecord(recordKind: string, recordId: string): Promise<ExperimentFoundationStoredRecord> {
     const key = `${recordKind}:${recordId}`;
@@ -310,7 +328,7 @@ class FakeExperimentRecords {
       parent_record_id: null,
       owner_ref_type: null,
       owner_ref_id: null,
-      payload: {},
+      payload: structuredClone(this.payloads.get(key) ?? {}),
       source_refs: [],
       traceability_refs: [],
       created_at: NOW,
@@ -548,6 +566,11 @@ async function assertRejectsWithCode(action: () => Promise<unknown>, expectedCod
   );
 }
 
+function assertNoExperimentFoundationDtoCopies(value: unknown): void {
+  const blocked = findExperimentFoundationPayloadCopyKey(value);
+  assert.equal(blocked, null, `Unexpected experiment-foundation DTO or claim field copied into adjacent state: ${blocked}`);
+}
+
 test('submits admitted WorkOrder to experiment-foundation execution idempotently', async () => {
   const { service, execution, workOrderService } = await makeHarness();
 
@@ -696,6 +719,12 @@ test('collect creates target-specific trace and trusted run evidence from stored
   assert.equal(collected.run_evidence_unit?.result_hash, 'experiment_result_hash_001');
   assert.equal(collected.run_evidence_unit?.result_validation_report_hash, 'validation_report_hash_001');
   assert.equal(collected.run_evidence_unit?.evidence_candidate_hashes[0], 'evidence_candidate_hash_001');
+  assert.equal(collected.run_evidence_unit?.result_ref?.ref_type, 'experiment_result');
+  assert.equal(collected.run_evidence_unit?.result_validation_report_ref?.ref_type, 'result_validation_report');
+  assert.equal(collected.run_evidence_unit?.evidence_candidate_refs[0]?.ref_type, 'evidence_candidate');
+  assertNoExperimentFoundationDtoCopies(collected.monitor_intake);
+  assertNoExperimentFoundationDtoCopies(collected.run_evidence_unit);
+  assertNoExperimentFoundationDtoCopies(collected.trace_manifest);
   assert.equal(collected.trace_manifest?.target_ref.ref_type, 'run_evidence_unit');
   assert.equal(collected.trace_manifest?.target_ref.ref_id, collected.run_evidence_unit?.run_evidence_unit_id);
   assert.equal(collected.trace_manifest?.trace_status, 'complete');

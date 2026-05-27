@@ -7,6 +7,7 @@ import type {
 import { buildExperimentFoundationCapabilityHarness } from './experiment-foundation-capability-harness.js';
 import {
   createExperimentFoundationMinimalGraph,
+  completenessCheckFixture,
   datasetAssetCandidateFixture,
   duplicateCheckFixture,
   EXPERIMENT_FOUNDATION_SCENARIO_TIMESTAMP,
@@ -444,6 +445,157 @@ test('experiment-foundation capability harness validates result, evidence, and s
   }
 });
 
+test('experiment-foundation Phase 3 recovery path exposes actionable state for automated retries', async () => {
+  const localRoot = await createLocalScriptExecutionRoot('experiment-foundation-recovery-');
+  const restoreEnv = installLocalScriptTestEnv(localRoot.root);
+  let harness: CapabilityHarness | null = null;
+  try {
+    harness = await buildExperimentFoundationCapabilityHarness();
+
+    const readinessGraph = createExperimentFoundationMinimalGraph({
+      outputRoot: localRoot.root,
+      scenarioId: 'recovery_readiness',
+      datasetMirrorOverrides: { freshness_status: 'stale' },
+    });
+    await seedGraphRecords(harness, readinessGraph.records);
+    const blockedReadiness = await harness.checkReadiness(
+      experimentFoundationRef('dataset_version', readinessGraph.datasetVersion.dataset_version_id),
+    );
+    assert.equal(blockedReadiness.readiness_status, 'blocked');
+    assert.ok(blockedReadiness.blockers.some((blocker) => blocker.includes('stale')));
+    assert.ok(blockedReadiness.required_actions.some((action) => action.includes('stale')));
+    const latestBlocked = await harness.getLatestReadiness(
+      experimentFoundationRef('dataset_version', readinessGraph.datasetVersion.dataset_version_id),
+    );
+    assert.equal(latestBlocked.readiness_report_id, blockedReadiness.readiness_report_id);
+
+    await harness.upsertRecord(
+      'dataset_mirror',
+      readinessGraph.datasetMirror.dataset_mirror_id,
+      payload({
+        ...readinessGraph.datasetMirror,
+        freshness_status: 'fresh',
+      }),
+    );
+    const recoveredReadiness = await harness.checkReadiness(
+      experimentFoundationRef('dataset_version', readinessGraph.datasetVersion.dataset_version_id),
+    );
+    assert.equal(recoveredReadiness.readiness_status, 'passed');
+    assert.deepEqual(recoveredReadiness.blockers, []);
+
+    const promotionIds = experimentFoundationScenarioIds('recovery_promotion');
+    const promotionGraph = createExperimentFoundationMinimalGraph({
+      outputRoot: localRoot.root,
+      scenarioId: 'recovery_promotion',
+    });
+    await seedPromotionCanonicalRecords(harness, promotionGraph.records);
+    await harness.createRecord(
+      'dataset_asset_candidate',
+      payload(datasetAssetCandidateFixture({
+        completeness_check: completenessCheckFixture({
+          completeness_status: 'incomplete',
+          missing_fields: ['policy_check'],
+        }, promotionIds),
+      }, promotionIds)),
+    );
+    const failedPromotion = await harness.app.inject({
+      method: 'POST',
+      url: `/experiment-foundation/candidates/${promotionIds.datasetAssetCandidateId}/promotion`,
+      payload: {
+        promotion_request: promotionRequestFixture({}, promotionIds),
+        promotion_result: promotionResultFixture({}, promotionIds),
+      },
+    });
+    harness.expectError(failedPromotion, 422, 'GATE_CONSTRAINT_FAILED');
+    assert.ok(
+      failedPromotion.json().error.details.blockers.some((blocker: string) =>
+        blocker.includes('completeness_check.completeness_status')),
+    );
+    const candidateAfterFailedPromotion = await harness.getRecord(
+      'dataset_asset_candidate',
+      promotionIds.datasetAssetCandidateId,
+    );
+    assert.equal(candidateAfterFailedPromotion.status, 'ready_for_promotion');
+    assert.equal(
+      (await harness.listRecords({ record_kind: 'asset_promotion_request' })).records
+        .some((record) => record.record_id === promotionIds.promotionRequestId),
+      false,
+    );
+
+    await harness.upsertRecord(
+      'dataset_asset_candidate',
+      promotionIds.datasetAssetCandidateId,
+      payload(datasetAssetCandidateFixture({}, promotionIds)),
+    );
+    const recoveredPromotion = await harness.promoteCandidate(promotionIds.datasetAssetCandidateId, {
+      promotion_request: promotionRequestFixture({}, promotionIds),
+      promotion_result: promotionResultFixture({}, promotionIds),
+    });
+    assert.equal(recoveredPromotion.candidate_record.status, 'promoted');
+
+    const submitGraph = createExperimentFoundationMinimalGraph({
+      outputRoot: localRoot.root,
+      scenarioId: 'recovery_submit_cancel',
+      taskSpecOverrides: {
+        args: ['-e', 'setTimeout(() => {}, 5000)'],
+        timeout_seconds: 10,
+      },
+    });
+    await seedGraphRecords(harness, submitGraph.records);
+    await harness.checkReadiness(
+      experimentFoundationRef('training_task_spec', submitGraph.trainingTaskSpec.training_task_spec_id),
+    );
+    const mismatchedSubmit = await submitRaw(harness, {
+      ...submitGraph.submitRequest,
+      materialization_result_hash: 'sha256:recovery-submit-mismatch',
+    });
+    harness.expectError(mismatchedSubmit, 422, 'GATE_CONSTRAINT_FAILED');
+    assert.equal(
+      (await listJobsRaw(harness, `training_task_spec_id=${submitGraph.trainingTaskSpec.training_task_spec_id}`))
+        .jobs.length,
+      0,
+    );
+
+    const submitted = await harness.submitJob(submitGraph.submitRequest);
+    assert.equal(submitted.external_job.job_status, 'running');
+    const cancelled = await cancelRaw(harness, submitted.external_job.external_job_id, 'recovery-cancel-key');
+    assert.equal(cancelled.statusCode, 200, cancelled.body);
+    const repeatedCancel = await cancelRaw(harness, submitted.external_job.external_job_id, 'recovery-cancel-key');
+    assert.equal(repeatedCancel.statusCode, 200, repeatedCancel.body);
+    assert.equal(
+      repeatedCancel.json().external_job.stage_event_refs.length,
+      cancelled.json().external_job.stage_event_refs.length,
+    );
+    const cancelledTerminal = await harness.syncJobUntilTerminal(
+      submitted.external_job.external_job_id,
+      { expectedStatus: 'cancelled', timeoutMs: 5000, pollMs: 50 },
+    );
+    assert.equal(cancelledTerminal.external_job.job_status, 'cancelled');
+
+    const cancelledList = await listJobsRaw(harness, 'status=cancelled');
+    assert.ok(
+      cancelledList.jobs.some((job) =>
+        job.external_job_id === submitted.external_job.external_job_id),
+    );
+    const collectedCancelled = await harness.collectJob(submitted.external_job.external_job_id);
+    assert.equal(collectedCancelled.external_job.job_status, 'cancelled');
+    assert.equal(
+      collectedCancelled.external_job.result_refs.some((ref) => ref.ref_type === 'evidence_candidate'),
+      false,
+    );
+    const validationRef = requireResultRef(
+      collectedCancelled.external_job.result_refs,
+      'result_validation_report',
+    );
+    const validation = await harness.getRecord('result_validation_report', validationRef.ref_id);
+    assert.equal(recordPayload(validation).validation_status, 'partial');
+  } finally {
+    await harness?.close();
+    restoreEnv();
+    await localRoot.cleanup();
+  }
+});
+
 async function seedPromotionCanonicalRecords(
   harness: CapabilityHarness,
   records: ExperimentFoundationScenarioRecord[],
@@ -478,6 +630,35 @@ async function submitRaw(
     url: '/experiment-foundation/execution/jobs/submit',
     payload: payload(submitRequest),
   });
+}
+
+async function cancelRaw(
+  harness: CapabilityHarness,
+  externalJobId: string,
+  idempotencyKey: string,
+): Promise<InjectResponse> {
+  return harness.app.inject({
+    method: 'POST',
+    url: `/experiment-foundation/execution/jobs/${externalJobId}/cancel`,
+    payload: {
+      reason: 'T-106 recovery hardening cancellation',
+      idempotency_key: idempotencyKey,
+      requested_by_ref: experimentFoundationRef('user', 'capability_tester'),
+      source_refs: [experimentFoundationRef('test_case', 'recovery_cancel')],
+    },
+  });
+}
+
+async function listJobsRaw(
+  harness: CapabilityHarness,
+  query: string,
+): Promise<{ jobs: Array<Record<string, unknown>>; next_cursor?: string | null }> {
+  const response = await harness.app.inject({
+    method: 'GET',
+    url: `/experiment-foundation/execution/jobs?${query}`,
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  return response.json() as { jobs: Array<Record<string, unknown>>; next_cursor?: string | null };
 }
 
 async function createRecordRaw(

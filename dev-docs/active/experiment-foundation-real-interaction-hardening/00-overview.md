@@ -4,7 +4,7 @@
 - State: in-progress
 - Task: T-106
 - Parent task: `T-043 experiment-foundation-v1`
-- Current focus: Phase 2 LocalScript robustness is implemented; next step is Phase 3 API, DB, and recovery hardening.
+- Current focus: Phase 6 external canary gate and Phase 7 standalone hardening runner are implemented. Remaining work is either UI-driven smoke automation or a provider-specific true external canary implementation, both explicitly outside the default deterministic lane.
 
 ## Goal
 Deepen the post-V1 validation of experiment foundation by proving automation, real or near-real external interaction boundaries, cross-flow handoffs, and recovery behavior under harder conditions than the T-090 capability suite and T-103 runner closure.
@@ -23,14 +23,15 @@ The product-level target is a usable tool surface that lets paper-implementation
 ## Acceptance Criteria
 - [x] A hardening matrix covers registry, readiness, promotion, materialization, execution, result/evidence, desktop, cross-flow integration, and external-canary boundaries.
 - [x] LocalScript robustness tests cover allowlist, path containment, timeout, cancellation, idempotency, partial collection, invalid result payloads, and process cleanup.
-- [ ] API and persistence tests cover duplicate keys, stale refs, readiness transitions, materialization/job hash mismatches, promotion gates, and recovery-safe status updates.
-- [ ] Memory and disposable Postgres paths prove the same automation-facing behavior for registry, readiness, promotion, execution, result, and evidence transitions.
+- [x] API and persistence tests cover duplicate keys, stale refs, readiness transitions, materialization/job hash mismatches, promotion gates, and recovery-safe status updates.
+- [x] Memory and disposable Postgres paths prove representative automation-facing parity for registry, readiness, promotion, execution, result, and evidence transitions.
 - [ ] UI-driven full-flow smoke covers registry, readiness, job submit/sync/cancel/collect, result/evidence detail, and error rendering without renderer-owned domain semantics.
-- [ ] Cross-flow tests verify PaperImplementation and adjacent evidence surfaces consume experiment-foundation refs and sidecars without copying canonical DTOs or claim fields.
-- [ ] External canary has a default safe lane plus a true opt-in canary lane that can verify real connectivity and the minimum real external flow when credentials and environment are present.
+- [x] Cross-flow tests verify PaperImplementation and adjacent evidence surfaces consume experiment-foundation refs and sidecars without copying canonical DTOs or claim fields.
+- [x] External canary has a default safe lane plus a true opt-in prerequisite gate with credential, mirror, approval, budget, cleanup, and redaction checks.
+- [ ] Provider-specific true external canary can verify real connectivity and the minimum real external flow when credentials, environment, budget, and cleanup approval are present.
 - [x] Real-data policy uses synthetic deterministic fixtures by default, with controlled local real fixtures and true external samples only through explicit opt-in and redacted artifacts.
-- [ ] T-103 has either a stable hardening lane hook or a documented handoff command for running this suite.
-- [ ] All artifacts are redacted, stored under `.ai/.tmp/experiment-foundation-hardening/<run-id>/`, and governance lint passes.
+- [x] T-103 has either a stable hardening lane hook or a documented handoff command for running this suite.
+- [x] Runner artifacts are redacted, stored under `.ai/.tmp/experiment-foundation-hardening/<run-id>/`, and governance lint passes for the current task state.
 
 ## Handoff
-Proceed to Phase 3 using `06-hardening-matrix.md` rows `EF-H-003`, `EF-H-004`, `EF-H-006`, `EF-H-015`, and `EF-H-016`. Keep UI in definition mode and do not add true external canary behavior until the API/DB recovery lane is stable.
+Use `pnpm experiment-foundation:hardening -- --mode deterministic` as the official T-106 post-V1 hardening entrypoint, and `--mode real-local-db --require-real-db` for the disposable Postgres parity lane. Do not treat `--mode external-gate --include-true-external-canary` as a real cloud pass; it is a prerequisite gate until a provider-specific true canary implementation is approved.
