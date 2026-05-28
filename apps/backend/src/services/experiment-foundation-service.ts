@@ -13,8 +13,10 @@ import type {
   ExperimentFoundationRecordKind,
   ExperimentFoundationRef,
   ExperimentFoundationStoredRecord,
+  ListExperimentFoundationReadinessReportsResponse,
   ListExperimentFoundationRecordsResponse,
 } from '@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts';
+import { EXPERIMENT_FOUNDATION_READINESS_REPORT_STATUSES } from '@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts';
 import { AppError } from '../errors/app-error.js';
 import type {
   ExperimentFoundationReadinessReportRecord,
@@ -557,6 +559,31 @@ export class ExperimentFoundationService {
       throw new AppError(404, 'NOT_FOUND', `Readiness report for ${targetKind} ${targetId} not found.`);
     }
     return this.toReadinessResponse(report);
+  }
+
+  async listReadinessReports(filter: {
+    status?: string;
+    target_kind?: string;
+    limit?: string | number;
+    cursor?: string;
+  }): Promise<ListExperimentFoundationReadinessReportsResponse> {
+    const statuses: ExperimentFoundationReadinessReportStatus[] = [];
+    if (filter.status) {
+      if (!(EXPERIMENT_FOUNDATION_READINESS_REPORT_STATUSES as readonly string[]).includes(filter.status)) {
+        throw new AppError(400, 'INVALID_PAYLOAD', `Unknown readiness status: ${filter.status}`);
+      }
+      statuses.push(filter.status as ExperimentFoundationReadinessReportStatus);
+    }
+    const result = await this.repository.listReadinessReports({
+      statuses: statuses.length > 0 ? statuses : undefined,
+      targetKind: filter.target_kind ? this.assertRecordKind(filter.target_kind) : undefined,
+      limit: normalizeLimit(filter.limit),
+      cursor: normalizeOptionalString(filter.cursor),
+    });
+    return {
+      reports: result.reports.map((report) => this.toReadinessResponse(report)),
+      next_cursor: result.nextCursor,
+    };
   }
 
   async decidePromotion(

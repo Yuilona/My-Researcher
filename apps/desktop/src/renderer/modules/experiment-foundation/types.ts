@@ -5,6 +5,7 @@ import type {
 } from '@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts';
 
 export type ExperimentFoundationPanelKey =
+  | 'overview'
   | 'registry'
   | 'readiness'
   | 'promotion'

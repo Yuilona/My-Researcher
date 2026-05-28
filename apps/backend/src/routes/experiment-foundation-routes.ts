@@ -4,6 +4,7 @@ import {
   createExperimentFoundationRecordRequestSchema,
   experimentFoundationPromotionDecisionRequestSchema,
   experimentFoundationReadinessCheckRequestSchema,
+  listExperimentFoundationReadinessReportsQuerySchema,
 } from '@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts';
 import { ExperimentFoundationController } from '../controllers/experiment-foundation-controller.js';
 
@@ -99,6 +100,11 @@ export async function registerExperimentFoundationRoutes(
     '/experiment-foundation/readiness/:target_kind/:target_id/latest',
     { schema: readinessParamsSchema },
     controller.getLatestReadiness,
+  );
+  fastify.get(
+    '/experiment-foundation/readiness',
+    { schema: listExperimentFoundationReadinessReportsQuerySchema },
+    controller.listReadinessReports,
   );
   fastify.post(
     '/experiment-foundation/candidates/:candidate_id/promotion',

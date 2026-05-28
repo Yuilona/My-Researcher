@@ -7,6 +7,8 @@ import type {
 } from '@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts';
 import { AppError } from '../../errors/app-error.js';
 import type {
+  ExperimentFoundationReadinessReportListFilter,
+  ExperimentFoundationReadinessReportListResult,
   ExperimentFoundationReadinessReportRecord,
   ExperimentFoundationPromotionPersistenceInput,
   ExperimentFoundationPromotionPersistenceResult,
@@ -158,6 +160,37 @@ export class PrismaExperimentFoundationRepository implements ExperimentFoundatio
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
     return row ? toReadinessReportRecord(row) : null;
+  }
+
+  async listReadinessReports(
+    filter: ExperimentFoundationReadinessReportListFilter,
+  ): Promise<ExperimentFoundationReadinessReportListResult> {
+    const limit = Math.min(Math.max(filter.limit ?? 50, 1), 100);
+    const offset = filter.cursor ? Number.parseInt(filter.cursor, 10) : 0;
+    const startIndex = Number.isFinite(offset) && offset > 0 ? offset : 0;
+
+    const where: Prisma.ExperimentFoundationReadinessReportWhereInput = {};
+    if (filter.targetKind) {
+      where.targetKind = filter.targetKind;
+    }
+    if (filter.statuses && filter.statuses.length > 0) {
+      where.readinessStatus = { in: [...filter.statuses] };
+    }
+
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.experimentFoundationReadinessReport.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: startIndex,
+        take: limit,
+      }),
+      this.prisma.experimentFoundationReadinessReport.count({ where }),
+    ]);
+
+    const reports = rows.map((row) => toReadinessReportRecord(row));
+    const nextOffset = startIndex + reports.length;
+    const nextCursor = nextOffset < total ? String(nextOffset) : null;
+    return { reports, nextCursor };
   }
 
   async recordPromotionDecision(

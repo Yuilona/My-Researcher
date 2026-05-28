@@ -714,3 +714,71 @@ test('experiment-foundation candidate promotion route records request/result and
     await app.close();
   }
 });
+
+test('experiment-foundation readiness list route filters by status and target_kind', async () => {
+  const app = buildApp();
+  try {
+    // Two metadata_complete dataset_version records → two readiness reports.
+    await app.inject({
+      method: 'POST',
+      url: '/experiment-foundation/records',
+      payload: {
+        record_kind: 'dataset_version',
+        payload: datasetVersionPayload('metadata_complete'),
+      },
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/experiment-foundation/readiness/check',
+      payload: {
+        target_ref: sourceRef('dataset_version', 'dataset_version_001'),
+        source_refs: [sourceRef('system_check', 'readiness')],
+      },
+    });
+
+    const allResponse = await app.inject({
+      method: 'GET',
+      url: '/experiment-foundation/readiness',
+    });
+    assert.equal(allResponse.statusCode, 200);
+    const allBody = allResponse.json();
+    assert.ok(Array.isArray(allBody.reports));
+    assert.ok(allBody.reports.length >= 1);
+
+    const blockedResponse = await app.inject({
+      method: 'GET',
+      url: '/experiment-foundation/readiness?status=blocked',
+    });
+    assert.equal(blockedResponse.statusCode, 200);
+    const blockedBody = blockedResponse.json();
+    for (const report of blockedBody.reports) {
+      assert.equal(report.readiness_status, 'blocked');
+    }
+    assert.ok(blockedBody.reports.length >= 1);
+
+    const targetFilterResponse = await app.inject({
+      method: 'GET',
+      url: '/experiment-foundation/readiness?target_kind=dataset_version&limit=5',
+    });
+    assert.equal(targetFilterResponse.statusCode, 200);
+    for (const report of targetFilterResponse.json().reports) {
+      assert.equal(report.target_ref.ref_type, 'dataset_version');
+    }
+
+    // Invalid status value → schema-level 400.
+    const invalidStatusResponse = await app.inject({
+      method: 'GET',
+      url: '/experiment-foundation/readiness?status=not_a_status',
+    });
+    assert.equal(invalidStatusResponse.statusCode, 400);
+
+    // Invalid target_kind → schema-level 400.
+    const invalidTargetResponse = await app.inject({
+      method: 'GET',
+      url: '/experiment-foundation/readiness?target_kind=not_a_kind',
+    });
+    assert.equal(invalidTargetResponse.statusCode, 400);
+  } finally {
+    await app.close();
+  }
+});

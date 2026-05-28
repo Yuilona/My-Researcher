@@ -3,6 +3,8 @@ import type {
   ExperimentFoundationStoredRecord,
 } from '@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts';
 import type {
+  ExperimentFoundationReadinessReportListFilter,
+  ExperimentFoundationReadinessReportListResult,
   ExperimentFoundationReadinessReportRecord,
   ExperimentFoundationPromotionPersistenceInput,
   ExperimentFoundationPromotionPersistenceResult,
@@ -97,6 +99,36 @@ export class InMemoryExperimentFoundationRepository implements ExperimentFoundat
         return byCreatedAt || right.id.localeCompare(left.id);
       });
     return reports[0] ? cloneReadinessReport(reports[0]) : null;
+  }
+
+  async listReadinessReports(
+    filter: ExperimentFoundationReadinessReportListFilter,
+  ): Promise<ExperimentFoundationReadinessReportListResult> {
+    const statusSet = filter.statuses && filter.statuses.length > 0 ? new Set(filter.statuses) : null;
+    const targetKind = filter.targetKind ?? null;
+    const limit = Math.min(Math.max(filter.limit ?? 50, 1), 100);
+    const offset = filter.cursor ? Number.parseInt(filter.cursor, 10) : 0;
+
+    const sorted = [...this.readinessReports].sort((left, right) => {
+      const byCreatedAt = right.createdAt.localeCompare(left.createdAt);
+      return byCreatedAt || right.id.localeCompare(left.id);
+    });
+    const filtered = sorted.filter((report) => {
+      if (targetKind && report.targetKind !== targetKind) {
+        return false;
+      }
+      if (statusSet && !statusSet.has(report.readinessStatus)) {
+        return false;
+      }
+      return true;
+    });
+
+    const startIndex = Number.isFinite(offset) && offset > 0 ? offset : 0;
+    const pageRaw = filtered.slice(startIndex, startIndex + limit);
+    const page = pageRaw.map((report) => cloneReadinessReport(report));
+    const nextOffset = startIndex + page.length;
+    const nextCursor = nextOffset < filtered.length ? String(nextOffset) : null;
+    return { reports: page, nextCursor };
   }
 
   async recordPromotionDecision(

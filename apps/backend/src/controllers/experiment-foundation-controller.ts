@@ -27,6 +27,13 @@ type ReadinessParams = {
   target_id: string;
 };
 
+type ListReadinessQuery = {
+  status?: string;
+  target_kind?: string;
+  limit?: string;
+  cursor?: string;
+};
+
 type CandidateParams = {
   candidate_id: string;
 };
@@ -131,6 +138,18 @@ export class ExperimentFoundationController {
         request.params.target_kind,
         request.params.target_id,
       );
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  listReadinessReports = async (
+    request: FastifyRequest<{ Querystring: ListReadinessQuery }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.service.listReadinessReports(request.query);
       return reply.send(result);
     } catch (error) {
       return handleError(reply, error);

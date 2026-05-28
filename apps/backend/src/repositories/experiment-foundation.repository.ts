@@ -34,6 +34,18 @@ export type ExperimentFoundationReadinessReportRecord = {
   createdAt: string;
 };
 
+export type ExperimentFoundationReadinessReportListFilter = {
+  statuses?: readonly ExperimentFoundationReadinessReportStatus[];
+  targetKind?: ExperimentFoundationRecordKind;
+  limit?: number;
+  cursor?: string;
+};
+
+export type ExperimentFoundationReadinessReportListResult = {
+  reports: ExperimentFoundationReadinessReportRecord[];
+  nextCursor: string | null;
+};
+
 export type ExperimentFoundationPromotionPersistenceInput = {
   promotionRequestRecord: ExperimentFoundationStoredRecord;
   promotionResultRecord: ExperimentFoundationStoredRecord;
@@ -67,6 +79,9 @@ export interface ExperimentFoundationRepository {
     targetKind: ExperimentFoundationRecordKind,
     targetId: string,
   ): Promise<ExperimentFoundationReadinessReportRecord | null>;
+  listReadinessReports(
+    filter: ExperimentFoundationReadinessReportListFilter,
+  ): Promise<ExperimentFoundationReadinessReportListResult>;
   recordPromotionDecision(
     input: ExperimentFoundationPromotionPersistenceInput,
   ): Promise<ExperimentFoundationPromotionPersistenceResult>;

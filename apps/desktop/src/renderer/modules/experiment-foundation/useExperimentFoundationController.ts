@@ -87,7 +87,7 @@ function parseSourceRefs(input: string): ExperimentFoundationRef[] {
 }
 
 export function useExperimentFoundationController() {
-  const [activePanel, setActivePanel] = useState<ExperimentFoundationPanelKey>('registry');
+  const [activePanel, setActivePanel] = useState<ExperimentFoundationPanelKey>('overview');
   const [registryFilters, setRegistryFilters] = useState<RecordListFilters>(initialRegistryFilters);
   const [candidateFilters, setCandidateFilters] = useState<RecordListFilters>(initialCandidateFilters);
   const [recipeFilters, setRecipeFilters] = useState<RecordListFilters>(initialRecipeFilters);
@@ -162,6 +162,29 @@ export function useExperimentFoundationController() {
       setRecordEditorPayload(emptyObjectJson);
     }
   }, []);
+
+  const goToReadiness = useCallback(
+    (targetKind: ExperimentFoundationRecordKind, targetId: string) => {
+      setActivePanel('readiness');
+      setSelectedRecord(null);
+      setReadinessTargetKind(targetKind);
+      setReadinessTargetId(targetId);
+    },
+    [],
+  );
+
+  const goToPromotion = useCallback(
+    (candidateKind: ExperimentFoundationRecordKind, candidateId: string) => {
+      setActivePanel('promotion');
+      setSelectedRecord(null);
+      if ((promotionCandidateRecordKinds as readonly string[]).includes(candidateKind)) {
+        setCandidateFilters((current) => ({ ...current, recordKind: candidateKind }));
+        setRecordEditorKind(candidateKind);
+      }
+      setPromotionCandidateId(candidateId);
+    },
+    [],
+  );
 
   const loadRecords = useCallback(async () => {
     setRecordStatus('loading');
@@ -328,6 +351,18 @@ export function useExperimentFoundationController() {
     }
   }, []);
 
+  const goToJob = useCallback(
+    async (externalJobId: string) => {
+      setActivePanel('execution');
+      setSelectedRecord(null);
+      setRecordEditorKind('evidence_candidate');
+      setRecordEditorId('');
+      setRecordEditorPayload(emptyObjectJson);
+      await selectJobById(externalJobId);
+    },
+    [selectJobById],
+  );
+
   const submitJob = useCallback(async () => {
     setJobMutationStatus('loading');
     setJobMutationMessage('');
@@ -421,6 +456,9 @@ export function useExperimentFoundationController() {
     decidePromotion,
     evidenceRecordKinds,
     evidenceFilters,
+    goToJob,
+    goToPromotion,
+    goToReadiness,
     jobError,
     jobFilters,
     jobMutationMessage,

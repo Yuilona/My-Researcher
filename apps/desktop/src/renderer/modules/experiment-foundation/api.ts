@@ -5,9 +5,11 @@ import type {
   ExperimentFoundationPromotionDecisionResponse,
   ExperimentFoundationReadinessCheckRequest,
   ExperimentFoundationReadinessCheckResponse,
+  ExperimentFoundationReadinessReportStatus,
   ExperimentFoundationRecordKind,
   ExperimentFoundationStoredRecord,
   ExternalTrainingJobResponse,
+  ListExperimentFoundationReadinessReportsResponse,
   ListExperimentFoundationRecordsResponse,
   ListExternalTrainingJobsResponse,
   SubmitExternalTrainingJobRequest,
@@ -90,6 +92,27 @@ export function checkExperimentFoundationReadiness(
     method: 'POST',
     path: '/experiment-foundation/readiness/check',
     body,
+  });
+}
+
+export type ReadinessReportListFilters = {
+  status?: ExperimentFoundationReadinessReportStatus;
+  targetKind?: ExperimentFoundationRecordKind;
+  limit?: number;
+  cursor?: string;
+};
+
+export function listExperimentFoundationReadinessReports(
+  filters: ReadinessReportListFilters = {},
+): Promise<ListExperimentFoundationReadinessReportsResponse> {
+  const params = new URLSearchParams();
+  appendParam(params, 'status', filters.status);
+  appendParam(params, 'target_kind', filters.targetKind);
+  appendParam(params, 'limit', filters.limit ?? 50);
+  appendParam(params, 'cursor', filters.cursor);
+  return requestGovernance<ListExperimentFoundationReadinessReportsResponse>({
+    method: 'GET',
+    path: withQuery('/experiment-foundation/readiness', params),
   });
 }
 

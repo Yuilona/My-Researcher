@@ -311,6 +311,15 @@ export const EXPERIMENT_FOUNDATION_EXTERNAL_TRAINING_JOB_STATUSES = [
 export type ExperimentFoundationExternalTrainingJobStatus =
   (typeof EXPERIMENT_FOUNDATION_EXTERNAL_TRAINING_JOB_STATUSES)[number];
 
+export const EXPERIMENT_FOUNDATION_EXTERNAL_TRAINING_JOB_IN_FLIGHT_STATUSES = [
+  'submitted',
+  'queued',
+  'running',
+  'cancelling',
+] as const satisfies readonly ExperimentFoundationExternalTrainingJobStatus[];
+export type ExperimentFoundationExternalTrainingJobInFlightStatus =
+  (typeof EXPERIMENT_FOUNDATION_EXTERNAL_TRAINING_JOB_IN_FLIGHT_STATUSES)[number];
+
 export const EXPERIMENT_FOUNDATION_RESULT_ARTIFACT_KINDS = [
   'metric_bundle',
   'prediction_bundle',
@@ -564,6 +573,27 @@ export const EXPERIMENT_FOUNDATION_READINESS_REPORT_STATUSES = [
 ] as const;
 export type ExperimentFoundationReadinessReportStatus =
   (typeof EXPERIMENT_FOUNDATION_READINESS_REPORT_STATUSES)[number];
+
+export const EXPERIMENT_FOUNDATION_READINESS_BLOCKED_STATUSES = [
+  'blocked',
+] as const satisfies readonly ExperimentFoundationReadinessReportStatus[];
+export type ExperimentFoundationReadinessBlockedStatus =
+  (typeof EXPERIMENT_FOUNDATION_READINESS_BLOCKED_STATUSES)[number];
+
+export const EXPERIMENT_FOUNDATION_ASSET_CANDIDATE_ATTENTION_STATUSES = [
+  'needs_info',
+  'manual_review_required',
+  'ready_for_promotion',
+] as const satisfies readonly ExperimentFoundationAssetCandidateStatus[];
+export type ExperimentFoundationAssetCandidateAttentionStatus =
+  (typeof EXPERIMENT_FOUNDATION_ASSET_CANDIDATE_ATTENTION_STATUSES)[number];
+
+export const EXPERIMENT_FOUNDATION_EVIDENCE_CANDIDATE_REVIEW_STATUSES = [
+  'candidate',
+  'under_review',
+] as const satisfies readonly ExperimentFoundationEvidenceCandidateStatus[];
+export type ExperimentFoundationEvidenceCandidateReviewStatus =
+  (typeof EXPERIMENT_FOUNDATION_EVIDENCE_CANDIDATE_REVIEW_STATUSES)[number];
 
 export interface ExperimentFoundationRef {
   ref_type: string;
@@ -1661,6 +1691,11 @@ export interface ExperimentFoundationReadinessCheckRequest {
   target_ref: ExperimentFoundationRef;
   check_kind?: string | null;
   source_refs: ExperimentFoundationRef[];
+}
+
+export interface ListExperimentFoundationReadinessReportsResponse {
+  reports: ExperimentFoundationReadinessCheckResponse[];
+  next_cursor?: string | null;
 }
 
 export interface ExperimentFoundationReadinessCheckResponse {
@@ -4687,6 +4722,19 @@ export const experimentFoundationReadinessCheckRequestSchema = {
       target_ref: experimentFoundationRefSchema,
       check_kind: nullableStringId,
       source_refs: { type: 'array', items: experimentFoundationRefSchema },
+    },
+  },
+} as const;
+
+export const listExperimentFoundationReadinessReportsQuerySchema = {
+  querystring: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      status: { enum: [...EXPERIMENT_FOUNDATION_READINESS_REPORT_STATUSES] },
+      target_kind: { enum: [...EXPERIMENT_FOUNDATION_RECORD_KINDS] },
+      limit: { type: 'integer', minimum: 1, maximum: 100 },
+      cursor: { type: 'string', minLength: 1 },
     },
   },
 } as const;

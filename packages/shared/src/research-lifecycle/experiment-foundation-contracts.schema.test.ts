@@ -2,8 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import {
+  EXPERIMENT_FOUNDATION_ASSET_CANDIDATE_ATTENTION_STATUSES,
   EXPERIMENT_FOUNDATION_ASSET_CANDIDATE_FAMILIES,
   EXPERIMENT_FOUNDATION_ASSET_CANDIDATE_STATUSES,
+  EXPERIMENT_FOUNDATION_EVIDENCE_CANDIDATE_REVIEW_STATUSES,
+  EXPERIMENT_FOUNDATION_EVIDENCE_CANDIDATE_STATUSES,
+  EXPERIMENT_FOUNDATION_EXTERNAL_TRAINING_JOB_IN_FLIGHT_STATUSES,
+  EXPERIMENT_FOUNDATION_READINESS_BLOCKED_STATUSES,
+  EXPERIMENT_FOUNDATION_READINESS_REPORT_STATUSES,
   EXPERIMENT_FOUNDATION_ASSET_PROMOTION_DECISION_KINDS,
   EXPERIMENT_FOUNDATION_BENCHMARK_VERIFICATION_STATUSES,
   EXPERIMENT_FOUNDATION_DATASET_CATALOG_STATUSES,
@@ -3530,4 +3536,39 @@ test('experiment-foundation persistence/api wrapper schemas reject unsupported a
     }),
     400,
   );
+});
+
+test('experiment-foundation classification constants subset their canonical enums', () => {
+  // Each classification constant MUST be a strict subset of its canonical enum.
+  // If a canonical status is renamed/removed without updating the classification,
+  // this test fails — preventing renderer-side semantic drift.
+  for (const status of EXPERIMENT_FOUNDATION_READINESS_BLOCKED_STATUSES) {
+    assert.ok(
+      (EXPERIMENT_FOUNDATION_READINESS_REPORT_STATUSES as readonly string[]).includes(status),
+      `readiness blocked status "${status}" is not in EXPERIMENT_FOUNDATION_READINESS_REPORT_STATUSES`,
+    );
+  }
+  for (const status of EXPERIMENT_FOUNDATION_ASSET_CANDIDATE_ATTENTION_STATUSES) {
+    assert.ok(
+      (EXPERIMENT_FOUNDATION_ASSET_CANDIDATE_STATUSES as readonly string[]).includes(status),
+      `asset candidate attention status "${status}" is not in EXPERIMENT_FOUNDATION_ASSET_CANDIDATE_STATUSES`,
+    );
+  }
+  for (const status of EXPERIMENT_FOUNDATION_EVIDENCE_CANDIDATE_REVIEW_STATUSES) {
+    assert.ok(
+      (EXPERIMENT_FOUNDATION_EVIDENCE_CANDIDATE_STATUSES as readonly string[]).includes(status),
+      `evidence candidate review status "${status}" is not in EXPERIMENT_FOUNDATION_EVIDENCE_CANDIDATE_STATUSES`,
+    );
+  }
+  for (const status of EXPERIMENT_FOUNDATION_EXTERNAL_TRAINING_JOB_IN_FLIGHT_STATUSES) {
+    assert.ok(
+      (EXPERIMENT_FOUNDATION_EXTERNAL_TRAINING_JOB_STATUSES as readonly string[]).includes(status),
+      `in-flight job status "${status}" is not in EXPERIMENT_FOUNDATION_EXTERNAL_TRAINING_JOB_STATUSES`,
+    );
+  }
+  // None of the classification sets may be empty — an empty set would silently render zero counts.
+  assert.ok(EXPERIMENT_FOUNDATION_READINESS_BLOCKED_STATUSES.length > 0);
+  assert.ok(EXPERIMENT_FOUNDATION_ASSET_CANDIDATE_ATTENTION_STATUSES.length > 0);
+  assert.ok(EXPERIMENT_FOUNDATION_EVIDENCE_CANDIDATE_REVIEW_STATUSES.length > 0);
+  assert.ok(EXPERIMENT_FOUNDATION_EXTERNAL_TRAINING_JOB_IN_FLIGHT_STATUSES.length > 0);
 });

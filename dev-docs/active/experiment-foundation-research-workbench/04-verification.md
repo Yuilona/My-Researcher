@@ -1,0 +1,93 @@
+# 04 Verification
+
+## Planned Checks (per phase)
+- `pnpm --filter @paper-engineering-assistant/desktop typecheck`
+- `pnpm --filter @paper-engineering-assistant/desktop build`
+- `python3 .ai/skills/features/ui/ui-governance-gate/scripts/ui_gate.py run --mode full`
+- `node .ai/tests/run.mjs --suite ui`
+- `pnpm --filter @paper-engineering-assistant/desktop smoke:e2e`
+- `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+- `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- `git diff --check`
+
+## Phase-specific Behavioral Checks
+- **S0 Overview shell**
+  - Overview is the default tab when entering `实验基座`.
+  - Each counter card matches the count returned by the corresponding list API filter.
+  - Deep-link clicks land on the correct downstream tab with selection preset.
+- **S1 DatasetAsset typed form + RefPicker**
+  - Dataset typed form round-trips through PUT/POST; payload diff against pre-edit JSON has no spurious key drift.
+  - "Advanced JSON" toggle preserves any unknown fields untouched.
+  - `RefPicker` type-ahead matches against the list API for the configured `refType`.
+  - Filter scope per record kind is preserved per T-078 post-review fix.
+- **S2 Experiment flow timeline**
+  - Timeline correctly resolves stages for at least one `run_recipe` test fixture.
+  - Submit / Sync / Cancel / Collect typed forms produce the same network payload shape as today's textarea editors.
+  - Disabled states are driven by missing prerequisite record presence, not duplicated readiness rules.
+- **S3 Baseline/Benchmark typed views + viz**
+  - Baseline / Benchmark / Protocol typed views render against fixture records.
+  - Sparkline renders for any metric with ≥ 2 observations; degrades gracefully to "n/a" otherwise.
+  - `apps/desktop/package.json` is unchanged regarding chart dependencies.
+- **S4 Paper binding**
+  - Sidecar listing groups by `paper_project_ref`.
+  - Jump-to-flow opens the correct `run_recipe` in `实验流`.
+- **S5 T-106 smoke**
+  - Smoke command walks all targeted surfaces end-to-end.
+  - At least one error rendering and one disabled-state case are exercised.
+  - T-106 acceptance checkbox updated when smoke command lands.
+
+## Recorded Runs
+
+### 2026-05-28 — S0 Overview shell
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop typecheck`
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop build`
+- PASS: `python3 .ai/skills/features/ui/ui-governance-gate/scripts/ui_gate.py run --mode full`
+  - First run: 3 errors on `data-variant="h4"` in `OverviewPanel.tsx` (lines 223/231/239). The UI text contract allows only `body | caption | label | h1 | h2 | h3`.
+  - Remediation: changed the 3 section subheadings to `data-variant="label"`.
+  - Passing report: `.ai/.tmp/ui/20260528T102957Z-*/ui-gate-report.md` — Errors: 0, Warnings: 0.
+- PASS: `node .ai/tests/run.mjs --suite ui` (4/4 subsuites)
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop smoke:e2e` — `[desktop-smoke] PASS` (exit-143 trailer is the expected shutdown of the dev process).
+- PASS: `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`
+- PASS: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
+- PASS: `git diff --check`
+
+### S0 Acceptance check
+- [x] Overview is the default `activePanel` (changed `useState<ExperimentFoundationPanelKey>('overview')`).
+- [x] Four counter cards render: `进行中 jobs` / `阻塞记录` / `待晋升候选` / `可用 evidence`.
+- [x] Three lists render with max 5 items each: recent jobs, blocked records, pending candidates.
+- [x] Deep-link callbacks present: `goToJob` (→ execution + preselect), `goToReadiness` (→ readiness + target preset), `goToPromotion` (→ promotion + candidate preset).
+- [x] No new API endpoint introduced; only existing `/experiment-foundation/records` and `/experiment-foundation/execution/jobs` are used.
+- [ ] Visual smoke under Electron — pending (next session can run Computer Use against `pnpm desktop:dev`).
+
+### 2026-05-28 — S0+ Dual-track cleanup
+- PASS: `pnpm --filter @paper-engineering-assistant/shared typecheck`
+- PASS: `pnpm --filter @paper-engineering-assistant/shared test` — 196/196 (added 4 classification constants + cross-enum subset assertion test).
+  - Side fix: added `topicSelectionV1aWorkflowHarnessContracts` import + Object.keys entry to `title-card-management-contracts.schema.test.ts:3332` "research-lifecycle barrel re-exports the runtime value surface of split modules". This was a pre-existing inconsistency: the barrel re-exports v1a workflow harness module since the in-flight T-088 work added it, but the barrel test's expected set hadn't been refreshed. Fixing it unblocks the shared test suite and does not change any production behavior.
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop typecheck`
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop build`
+- PASS: `python3 .ai/skills/features/ui/ui-governance-gate/scripts/ui_gate.py run --mode full` — Errors 0, Warnings 0.
+- PASS: `node .ai/tests/run.mjs --suite ui` — 4/4.
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop smoke:e2e` — `[desktop-smoke] PASS`.
+- PASS: `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`.
+- PASS: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` — unrelated warning on `topic-selection-v1a-production-orchestration/00-overview.md` (T-088 in-flight, missing `## Status` section).
+- PASS: `git diff --check`.
+- BLOCKED-UPSTREAM (resolved): T-088 in-flight work was completed by the user; backend typecheck + full test suite now pass.
+- PASS: `pnpm --filter @paper-engineering-assistant/backend typecheck`.
+- PASS: `node apps/backend/scripts/run-node-tests.mjs src/services/experiment-foundation-service.unit.test.ts` — full backend suite reports 869 pass / 0 fail / 2 skipped over 871 subtests. The readiness-list integration test ("experiment-foundation readiness list route filters by status and target_kind") is included.
+
+### S0+ Acceptance check
+- [x] `EXPERIMENT_FOUNDATION_READINESS_BLOCKED_STATUSES`, `EXPERIMENT_FOUNDATION_ASSET_CANDIDATE_ATTENTION_STATUSES`, `EXPERIMENT_FOUNDATION_EVIDENCE_CANDIDATE_REVIEW_STATUSES`, `EXPERIMENT_FOUNDATION_EXTERNAL_TRAINING_JOB_IN_FLIGHT_STATUSES` exist in shared and each member is asserted to be a subset of its canonical enum.
+- [x] `ListExperimentFoundationReadinessReportsResponse` + `listExperimentFoundationReadinessReportsQuerySchema` exist in shared as thin pagination wrappers around the existing readiness-report DTO; no item DTO shape changes.
+- [x] Backend repository (in-memory + Prisma) implements `listReadinessReports({ statuses, targetKind, limit, cursor })`.
+- [x] Backend service `listReadinessReports` enforces shared enum membership for `status`; new GET route `/experiment-foundation/readiness` registered with shared query schema.
+- [x] Desktop `api.ts` exposes `listExperimentFoundationReadinessReports`; the new endpoint is reachable through the governance bridge prefix allowlist (already covers `/experiment-foundation/`).
+- [x] Overview controller reads canonical readiness reports for the blocked counter and uses shared classification constants for all other counters; no renderer-side `*_STATUSES` string set remains.
+- [x] OverviewPanel renders the blocked-readiness list off the canonical reports and deep-links to `goToReadiness(target_kind, target_id)`.
+- [x] `grep "_STATUSES = " apps/desktop/src/renderer/modules/experiment-foundation/` returns only `new Set<string>(SHARED_CONSTANT)` wrappers; no literal string sets.
+
+## Review Checklist (final)
+- [ ] All Acceptance Criteria in `00-overview.md` are checked.
+- [ ] No legacy CSS paths recreated.
+- [ ] Generic JSON fallback remains reachable for every record kind.
+- [ ] T-106 UI smoke checkbox can be ticked.
+- [ ] Project governance sync + lint both pass.

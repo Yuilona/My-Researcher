@@ -3,6 +3,8 @@ import type {
   ExperimentFoundationStoredRecord,
   ExternalTrainingJob,
 } from '@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts';
+import { StatusBadge } from './components/StatusBadge';
+import { OverviewPanel } from './overview/OverviewPanel';
 import { useExperimentFoundationController } from './useExperimentFoundationController';
 import {
   experimentFoundationExternalJobStatuses,
@@ -16,6 +18,7 @@ const panelTabs: Array<{
   key: ReturnType<typeof useExperimentFoundationController>['activePanel'];
   label: string;
 }> = [
+  { key: 'overview', label: '概览' },
   { key: 'registry', label: '资产/合同' },
   { key: 'readiness', label: 'Readiness' },
   { key: 'promotion', label: '候选晋升' },
@@ -24,22 +27,6 @@ const panelTabs: Array<{
 ];
 
 type Controller = ReturnType<typeof useExperimentFoundationController>;
-
-function statusTone(status: string | null | undefined): 'neutral' | 'success' | 'warning' | 'danger' | 'info' {
-  if (!status) {
-    return 'neutral';
-  }
-  if (['passed', 'ready', 'fresh', 'valid', 'promoted', 'succeeded', 'materialized'].includes(status)) {
-    return 'success';
-  }
-  if (['blocked', 'failed', 'invalid', 'rejected', 'cancelled'].includes(status)) {
-    return 'danger';
-  }
-  if (['stale', 'partial', 'accepted_partial', 'manual_review_required', 'needs_info', 'running'].includes(status)) {
-    return 'warning';
-  }
-  return 'info';
-}
 
 function StatusLine({ status, message }: { status: string; message?: string | null }) {
   if (!message) {
@@ -64,22 +51,6 @@ function StatusLine({ status, message }: { status: string; message?: string | nu
       {message}
     </p>
   );
-}
-
-function StatusBadge({ value }: { value: string | null | undefined }) {
-  const label = value ?? '--';
-  switch (statusTone(value)) {
-    case 'success':
-      return <span data-ui="badge" data-variant="subtle" data-tone="success">{label}</span>;
-    case 'warning':
-      return <span data-ui="badge" data-variant="subtle" data-tone="warning">{label}</span>;
-    case 'danger':
-      return <span data-ui="badge" data-variant="subtle" data-tone="danger">{label}</span>;
-    case 'info':
-      return <span data-ui="badge" data-variant="subtle" data-tone="info">{label}</span>;
-    case 'neutral':
-      return <span data-ui="badge" data-variant="subtle" data-tone="neutral">{label}</span>;
-  }
 }
 
 function JsonEditor({
@@ -744,6 +715,15 @@ export function ExperimentFoundationModule() {
           </div>
         </div>
 
+        {controller.activePanel === 'overview' ? (
+          <OverviewPanel
+            deepLinks={{
+              goToJob: (externalJobId) => void controller.goToJob(externalJobId),
+              goToReadiness: controller.goToReadiness,
+              goToPromotion: controller.goToPromotion,
+            }}
+          />
+        ) : null}
         {controller.activePanel === 'registry' ? <RegistryPanel controller={controller} /> : null}
         {controller.activePanel === 'readiness' ? <ReadinessPanel controller={controller} /> : null}
         {controller.activePanel === 'promotion' ? <PromotionPanel controller={controller} /> : null}
