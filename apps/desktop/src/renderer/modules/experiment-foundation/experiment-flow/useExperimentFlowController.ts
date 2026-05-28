@@ -19,6 +19,7 @@ import {
   syncExperimentFoundationJob,
 } from '../api';
 import type { JobActionStatus } from './JobActionForms';
+import type { ExperimentFoundationOperationStatus } from '../types';
 import { toErrorMessage } from '../utils';
 
 // Timeline stages in canonical order. Each stage has a record kind that the
@@ -57,7 +58,7 @@ export const FLOW_STAGES: FlowStageSpec[] = [
 
 export type FlowStageState = {
   records: ExperimentFoundationStoredRecord[];
-  status: 'idle' | 'loading' | 'success' | 'error';
+  status: ExperimentFoundationOperationStatus;
   error: string | null;
   nextCursor: string | null;
 };
@@ -71,7 +72,7 @@ export type ExperimentFlowController = {
   selectedRunRecipe: ExperimentFoundationStoredRecord | null;
   selectRunRecipe: (record: ExperimentFoundationStoredRecord | null) => void;
   selectRunRecipeById: (recordId: string) => Promise<void>;
-  selectRunRecipeStatus: 'idle' | 'loading' | 'success' | 'error';
+  selectRunRecipeStatus: ExperimentFoundationOperationStatus;
   selectRunRecipeError: string | null;
 
   stages: Record<FlowStageKey, FlowStageState>;
@@ -83,7 +84,7 @@ export type ExperimentFlowController = {
   selectedJob: ExternalTrainingJob | null;
   selectJobById: (externalJobId: string) => Promise<void>;
   selectJobLocally: (job: ExternalTrainingJob | null) => void;
-  jobsStatus: 'idle' | 'loading' | 'success' | 'error';
+  jobsStatus: ExperimentFoundationOperationStatus;
   jobsError: string | null;
 
   jobActionStatus: JobActionStatus;
@@ -111,15 +112,14 @@ function buildInitialStages(): Record<FlowStageKey, FlowStageState> {
 
 export function useExperimentFlowController(): ExperimentFlowController {
   const [selectedRunRecipe, setSelectedRunRecipe] = useState<ExperimentFoundationStoredRecord | null>(null);
-  const [selectRunRecipeStatus, setSelectRunRecipeStatus] = useState<
-    'idle' | 'loading' | 'success' | 'error'
-  >('idle');
+  const [selectRunRecipeStatus, setSelectRunRecipeStatus] =
+    useState<ExperimentFoundationOperationStatus>('idle');
   const [selectRunRecipeError, setSelectRunRecipeError] = useState<string | null>(null);
   const [stages, setStages] = useState<Record<FlowStageKey, FlowStageState>>(buildInitialStages);
 
   const [jobs, setJobs] = useState<ExternalTrainingJob[]>([]);
   const [selectedJob, setSelectedJob] = useState<ExternalTrainingJob | null>(null);
-  const [jobsStatus, setJobsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [jobsStatus, setJobsStatus] = useState<ExperimentFoundationOperationStatus>('idle');
   const [jobsError, setJobsError] = useState<string | null>(null);
 
   const [jobActionStatus, setJobActionStatus] = useState<JobActionStatus>('idle');

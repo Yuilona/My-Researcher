@@ -6,6 +6,7 @@ import {
   type ExperimentFoundationStoredRecord,
 } from '@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts';
 import { listExperimentFoundationRecords } from '../api';
+import type { ExperimentFoundationOperationStatus } from '../types';
 import { shortText, toErrorMessage } from '../utils';
 
 const TYPEAHEAD_DEBOUNCE_MS = 220;
@@ -50,7 +51,7 @@ export function RefPicker({
   const [refTypeInput, setRefTypeInput] = useState<string>(initialRefType);
   const [idInput, setIdInput] = useState<string>(value?.ref_id ?? '');
   const [candidates, setCandidates] = useState<ExperimentFoundationStoredRecord[]>([]);
-  const [loadStatus, setLoadStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [loadStatus, setLoadStatus] = useState<ExperimentFoundationOperationStatus>('idle');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [openSuggestions, setOpenSuggestions] = useState<boolean>(false);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

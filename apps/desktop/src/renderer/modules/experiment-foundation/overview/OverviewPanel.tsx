@@ -5,6 +5,7 @@ import type {
   ExternalTrainingJob,
 } from '@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts';
 import { StatusBadge } from '../components/StatusBadge';
+import type { ExperimentFoundationOperationStatus } from '../types';
 import { shortText } from '../utils';
 import { useOverviewController } from './useOverviewController';
 
@@ -29,7 +30,13 @@ function CounterCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-function StatusLine({ status, message }: { status: 'idle' | 'loading' | 'success' | 'error'; message: string | null }) {
+function StatusLine({
+  status,
+  message,
+}: {
+  status: ExperimentFoundationOperationStatus;
+  message: string | null;
+}) {
   if (!message) {
     return null;
   }

@@ -8,15 +8,19 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 108 (planned: 3, in-progress: 4, blocked: 0, done: 34, archived: 67)
+- Tasks: 112 (planned: 4, in-progress: 5, blocked: 0, done: 35, archived: 68)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
+| T-108 topic-selection-v1c-workflow-hardening | in-progress | F-001 | dev-docs/active/topic-selection-v1c-workflow-hardening |
+| T-110 experiment-foundation-research-workbench | archived | F-001 | dev-docs/archive/experiment-foundation-research-workbench |
+| T-111 topic-selection-v1a-production-orchestration | planned | F-000 | dev-docs/active/topic-selection-v1a-production-orchestration |
+| T-112 topic-selection-llm-context-cache-runtime | planned | F-001 | dev-docs/active/topic-selection-llm-context-cache-runtime |
 | T-107 topic-selection-v1b-workflow-hardening | done | F-001 | dev-docs/active/topic-selection-v1b-workflow-hardening |
+| T-109 paper-implementation-v1-runnable-closure | done | F-001 | dev-docs/active/paper-implementation-v1-runnable-closure |
 | T-106 experiment-foundation-real-interaction-hardening | in-progress | F-001 | dev-docs/active/experiment-foundation-real-interaction-hardening |
-| T-108 topic-selection-v1c-workflow-hardening | planned | F-001 | dev-docs/active/topic-selection-v1c-workflow-hardening |
 | T-090 experiment-foundation-capability-validation | done | F-001 | dev-docs/active/experiment-foundation-capability-validation |
 | T-102 paper-implementation-v1-hardening | done | F-001 | dev-docs/active/paper-implementation-v1-hardening |
 | T-103 experiment-foundation-full-flow-validation-runner | done | F-001 | dev-docs/active/experiment-foundation-full-flow-validation-runner |
@@ -30,8 +34,4 @@ Project: `main`
 | T-098 paper-implementation-result-claim-dossier | done | F-001 | dev-docs/active/paper-implementation-result-claim-dossier |
 | T-099 paper-implementation-ai-workflow-harness | done | F-001 | dev-docs/active/paper-implementation-ai-workflow-harness |
 | T-100 paper-implementation-desktop-workbench | done | F-001 | dev-docs/active/paper-implementation-desktop-workbench |
-| T-023 research-argument-control-plane-v1 | in-progress | F-001 | dev-docs/active/research-argument-control-plane-v1 |
-| T-087 topic-selection-desktop-workbench-v1abc | archived | F-001 | dev-docs/archive/topic-selection-desktop-workbench-v1abc |
-| T-088 topic-selection-workflow-runtime-foundation | in-progress | F-001 | dev-docs/active/topic-selection-workflow-runtime-foundation |
-| T-092 paper-implementation-contracts-and-gap-map | done | F-001 | dev-docs/active/paper-implementation-contracts-and-gap-map |
 <!-- AUTO-GENERATED:END dashboard -->

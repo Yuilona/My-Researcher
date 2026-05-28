@@ -12,7 +12,7 @@ import { RefPicker, RefPickerList } from '../components/RefPicker';
 import { StatusBadge } from '../components/StatusBadge';
 import { StringListEditor } from '../components/StringListEditor';
 import type { JsonObject } from '../types';
-import { shortText } from '../utils';
+import { shortText, toErrorMessage } from '../utils';
 import {
   asEnum,
   asRefArray,
@@ -105,7 +105,7 @@ function build(draft: Draft, base: Record<string, unknown> | null): BuildResult 
     }
     schemaSummary = parsed as Record<string, unknown>;
   } catch (caught) {
-    return { payload: {}, error: caught instanceof Error ? caught.message : String(caught) };
+    return { payload: {}, error: toErrorMessage(caught) };
   }
   const now = new Date().toISOString();
   const payload: JsonObject = {

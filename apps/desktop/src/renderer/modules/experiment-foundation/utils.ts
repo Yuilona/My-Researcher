@@ -63,12 +63,6 @@ export function formatRefList(refs: ExperimentFoundationRef[] | undefined, maxIt
   return refs.length > maxItems ? `${visible.join(', ')} +${refs.length - maxItems}` : visible.join(', ');
 }
 
-export function isExperimentFoundationRecordKind(value: string): value is ExperimentFoundationRecordKind {
-  return (experimentFoundationRecordKinds as string[]).includes(value);
-}
-
-export const emptyObjectJson = prettyJson({});
-
 export const defaultPromotionDecisionJson = prettyJson({
   promotion_request: {},
   promotion_result: {},

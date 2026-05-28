@@ -6,6 +6,7 @@ import type {
 import { JsonAdvancedPanel } from '../components/JsonAdvancedPanel';
 import { StatusBadge } from '../components/StatusBadge';
 import { getRunRecipePayload } from '../payloads';
+import type { ExperimentFoundationOperationStatus } from '../types';
 import { formatRefList, shortText } from '../utils';
 import {
   CancelJobForm,
@@ -31,7 +32,7 @@ export type RunRecipeTimelineProps = {
   jobs: ExternalTrainingJob[];
   selectedJob: ExternalTrainingJob | null;
   onSelectJob: (job: ExternalTrainingJob | null) => void;
-  jobsStatus: 'idle' | 'loading' | 'success' | 'error';
+  jobsStatus: ExperimentFoundationOperationStatus;
   jobsError: string | null;
   jobActionStatus: JobActionStatus;
   jobActionMessage: string | null;
@@ -189,7 +190,7 @@ type JobStageCardProps = {
   jobs: ExternalTrainingJob[];
   selectedJob: ExternalTrainingJob | null;
   onSelectJob: (job: ExternalTrainingJob | null) => void;
-  jobsStatus: 'idle' | 'loading' | 'success' | 'error';
+  jobsStatus: ExperimentFoundationOperationStatus;
   jobsError: string | null;
   jobActionStatus: JobActionStatus;
   jobActionMessage: string | null;

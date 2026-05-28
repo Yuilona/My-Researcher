@@ -10,7 +10,7 @@ import { RefPicker, RefPickerList } from '../components/RefPicker';
 import { StatusBadge } from '../components/StatusBadge';
 import { getEvaluationProtocolPayload } from '../payloads';
 import type { JsonObject } from '../types';
-import { shortText } from '../utils';
+import { shortText, toErrorMessage } from '../utils';
 import { asRefArray, asString, preserveCreatedAt } from './asset-helpers';
 import { useTypedAssetDraft, type BuildResult } from './useTypedAssetDraft';
 
@@ -116,7 +116,7 @@ function build(draft: Draft, base: Record<string, unknown> | null): BuildResult 
     } catch (caught) {
       return {
         payload: {},
-        error: `${key}: ${caught instanceof Error ? caught.message : String(caught)}`,
+        error: `${key}: ${toErrorMessage(caught)}`,
       };
     }
   }

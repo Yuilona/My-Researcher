@@ -16,7 +16,15 @@ const DEFAULT_SOURCE_REFS: ExperimentFoundationRef[] = [
   { ref_type: 'desktop_workbench', ref_id: 'T-110' },
 ];
 
-export type JobActionStatus = 'idle' | 'loading' | 'success' | 'error';
+import type { ExperimentFoundationOperationStatus } from '../types';
+
+/**
+ * Job action lifecycle status. Aliased to the renderer-wide
+ * `ExperimentFoundationOperationStatus` so the four-state union is single
+ * sourced; renaming JobActionStatus or extending the union happens in one
+ * place.
+ */
+export type JobActionStatus = ExperimentFoundationOperationStatus;
 
 type ActionFormShellProps = {
   title: string;
