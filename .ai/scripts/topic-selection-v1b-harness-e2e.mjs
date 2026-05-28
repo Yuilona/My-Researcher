@@ -1,0 +1,3399 @@
+#!/usr/bin/env node
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { PrismaClient } from '@prisma/client';
+
+import { buildApp } from '../../apps/backend/src/app.ts';
+import { PrismaTopicSelectionNeedValidationRepository } from '../../apps/backend/src/repositories/prisma/prisma-topic-selection-need-validation-repository.ts';
+import { BackendLlmGateway } from '../../apps/backend/src/services/llm-gateway.ts';
+import {
+  sha256Text,
+  stableStringify,
+} from '../../apps/backend/src/services/literature-content-processing-utils.ts';
+import { TopicSelectionModelProfileRegistryService } from '../../apps/backend/src/services/topic-selection-model-profile-registry-service.ts';
+import {
+  TOPIC_SELECTION_VALUE_DIMENSIONS,
+  TOPIC_SELECTION_VALUE_GATE_KEYS,
+} from '../../packages/shared/src/research-lifecycle/topic-selection-v1b-value-assessment-contracts.ts';
+import {
+  TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS,
+  TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+  topicSelectionV1bResearchSliceOptionSetDraftPayloadSchema,
+  topicSelectionV1bTopicQuestionCandidateSetDraftPayloadSchema,
+  topicSelectionV1bTopicValueAssessmentDraftPayloadSchema,
+} from '../../packages/shared/src/research-lifecycle/topic-selection-v1b-workflow-harness-contracts.ts';
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
+const RUN_ID = process.env.TOPIC_SELECTION_V1B_HARNESS_RUN_ID
+  ?? process.env.TOPIC_SELECTION_REAL_RUN_ID
+  ?? uniqueId('v1b-harness-e2e');
+const EXISTING_V1B_INPUT_BUNDLE_ID = process.env.TOPIC_SELECTION_V1B_HARNESS_INPUT_BUNDLE_ID?.trim()
+  || process.env.TOPIC_SELECTION_REAL_V1B_INPUT_BUNDLE_ID?.trim()
+  || null;
+const REPEAT_COUNT = positiveInt(process.env.TOPIC_SELECTION_V1B_HARNESS_REPEAT, 1);
+const SEMANTIC_MODE = semanticMode(process.env.TOPIC_SELECTION_V1B_HARNESS_SEMANTIC_MODE);
+const SCENARIO = scenarioMode(process.env.TOPIC_SELECTION_V1B_HARNESS_SCENARIO);
+const PROVIDER_ID = SEMANTIC_MODE === 'provider_llm'
+  ? providerId(process.env.TOPIC_SELECTION_V1B_HARNESS_PROVIDER_ID
+    ?? process.env.TOPIC_SELECTION_REAL_PROVIDER_ID)
+  : null;
+const LLM_TIMEOUT_MS = positiveInt(
+  process.env.TOPIC_SELECTION_V1B_HARNESS_LLM_TIMEOUT_MS
+    ?? process.env.TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS,
+  240_000,
+);
+const LLM_MAX_RETRIES = nonNegativeInt(
+  process.env.TOPIC_SELECTION_V1B_HARNESS_LLM_MAX_RETRIES
+    ?? process.env.TOPIC_SELECTION_REAL_LLM_MAX_RETRIES,
+  PROVIDER_ID === 'openai' ? 6 : 2,
+);
+const EXTERNAL_CODEX_VARIANCE_COUNT = positiveInt(
+  process.env.TOPIC_SELECTION_V1B_HARNESS_CODEX_VARIANCE_COUNT,
+  3,
+);
+const EXTERNAL_CODEX_TIMEOUT_MS = positiveInt(
+  process.env.TOPIC_SELECTION_V1B_HARNESS_CODEX_TIMEOUT_MS,
+  240_000,
+);
+const BUNDLED_CODEX_BIN = '/Applications/Codex.app/Contents/Resources/codex';
+const EXTERNAL_CODEX_BIN = process.env.TOPIC_SELECTION_V1B_HARNESS_CODEX_BIN?.trim()
+  || process.env.CODEX_CLI_PATH?.trim()
+  || (existsSync(BUNDLED_CODEX_BIN) ? BUNDLED_CODEX_BIN : 'codex');
+const EXTERNAL_CODEX_MODEL = process.env.TOPIC_SELECTION_V1B_HARNESS_CODEX_MODEL?.trim() || null;
+const EXTERNAL_CODEX_REASONING_EFFORT = process.env.TOPIC_SELECTION_V1B_HARNESS_CODEX_REASONING_EFFORT?.trim()
+  || 'high';
+const ARTIFACT_DIR = path.join(REPO_ROOT, '.ai/.tmp/topic-selection-v1b-harness-e2e', RUN_ID);
+const MODEL_PROFILE_REGISTRY = new TopicSelectionModelProfileRegistryService();
+const LLM_GATEWAY = new BackendLlmGateway({
+  defaultTimeoutMs: LLM_TIMEOUT_MS,
+  defaultMaxRetries: LLM_MAX_RETRIES,
+});
+
+const REMOVED_LEGACY_WRITE_ROUTES = [
+  '/topic-selection/v1b/intake-snapshots',
+  '/topic-selection/v1b/research-constraint-profiles',
+  '/topic-selection/v1b/intake-readiness-assessments',
+  '/topic-selection/v1b/research-slice-option-sets',
+  '/topic-selection/v1b/research-slice-option-sets/option-set-route/selection-decisions',
+  '/topic-selection/v1b/topic-question-candidate-sets',
+  '/topic-selection/v1b/topic-question-candidate-sets/candidate-set-route/selection-decisions',
+  '/topic-selection/v1b/topic-value-assessments',
+  '/topic-selection/v1b/topic-value-assessments/value-assessment-route/disposition-decisions',
+  '/topic-selection/v1b/topic-packages/drafts',
+  '/topic-selection/v1b/topic-packages/package-route/v1c-input-bundles',
+];
+
+function uniqueId(prefix) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function positiveInt(raw, fallback) {
+  const parsed = Number.parseInt(String(raw ?? ''), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function nonNegativeInt(raw, fallback) {
+  const parsed = Number.parseInt(String(raw ?? ''), 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function semanticMode(raw) {
+  const value = String(raw ?? 'fixture').trim();
+  if (value === 'fixture' || value === 'provider_llm') {
+    return value;
+  }
+  throw new Error(`Unsupported TOPIC_SELECTION_V1B_HARNESS_SEMANTIC_MODE: ${value}`);
+}
+
+function scenarioMode(raw) {
+  const value = String(raw ?? 'positive').trim();
+  if (
+    value === 'positive'
+    || value === 'provider_negative_loopbacks'
+    || value === 'external_codex_n6_variance'
+    || value === 'external_codex_n4_variance'
+    || value === 'external_codex_n8_variance'
+  ) {
+    return value;
+  }
+  throw new Error(`Unsupported TOPIC_SELECTION_V1B_HARNESS_SCENARIO: ${value}`);
+}
+
+function providerId(raw) {
+  const value = String(raw ?? 'openai').trim();
+  if (value === 'openai' || value === 'dashscope') {
+    return value;
+  }
+  throw new Error(`Unsupported v1b provider canary provider: ${value}. Use openai or dashscope.`);
+}
+
+function ref(refType, refId, titleCardId, versionId = null) {
+  return {
+    ref_type: refType,
+    ref_id: refId,
+    version_id: versionId,
+    title_card_id: titleCardId,
+  };
+}
+
+function uniqueRefs(refs) {
+  const seen = new Set();
+  const result = [];
+  for (const item of refs) {
+    const key = [item.ref_type, item.ref_id, item.title_card_id ?? '', item.version_id ?? ''].join(':');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
+function v1bBundleRef(bundle) {
+  return ref('v1a_to_v1b_input_bundle', bundle.v1b_input_bundle_id, bundle.title_card_id, bundle.bundle_version);
+}
+
+function v1aBundleSourceRefs(bundle) {
+  return uniqueRefs([
+    v1bBundleRef(bundle),
+    bundle.validated_need_ref,
+    bundle.source_need_candidate_ref,
+    bundle.adjudication_result_ref,
+    bundle.support_packet_ref,
+    bundle.human_decision_ref,
+    bundle.evidence_map_ref,
+    bundle.search_run_ref,
+    bundle.search_plan_ref,
+    bundle.literature_snapshot_ref,
+    ...bundle.trace_refs,
+    ...bundle.risk_refs,
+    ...bundle.memory_suggestion_refs,
+    ...bundle.recheck_request_refs,
+  ]);
+}
+
+function frozenInputHash(payload) {
+  return sha256Text(stableStringify({
+    input_contract: payload.input_contract,
+    payload: payload.payload,
+    snapshot_kind: payload.snapshot_kind,
+    source_refs: payload.source_refs,
+  }));
+}
+
+function assertStatus(response, expected) {
+  if (response.statusCode !== expected) {
+    assert.fail(`Expected HTTP ${expected}, received ${response.statusCode}: ${response.body}`);
+  }
+}
+
+async function invokeV1bHarnessNode(app, input) {
+  const response = await app.inject({
+    method: 'POST',
+    url: `/topic-selection/v1b/workflow-harness/nodes/${encodeURIComponent(input.node_id)}/invocations`,
+    payload: input,
+  });
+  assertStatus(response, 201);
+  assert.equal(response.headers.deprecation, undefined);
+  return response.json();
+}
+
+async function getWorkflowHarnessArtifact(app, artifactRef) {
+  const response = await app.inject({
+    method: 'GET',
+    url: `/topic-selection/v1b/workflow-harness/artifacts/${encodeURIComponent(artifactRef.ref_id)}`,
+  });
+  assertStatus(response, 200);
+  return response.json();
+}
+
+async function getWorkflowHarnessHandoff(app, artifactRef) {
+  assert.ok(artifactRef, 'Expected workflow harness handoff artifact ref.');
+  const artifact = await getWorkflowHarnessArtifact(app, artifactRef);
+  return artifact.payload;
+}
+
+async function getWorkflowHarnessTraceSnapshotPayload(traceSnapshotRef) {
+  assert.ok(traceSnapshotRef, 'Expected workflow harness trace snapshot ref.');
+  const prisma = new PrismaClient();
+  try {
+    const snapshot = await prisma.topicSelectionTraceSnapshot.findUnique({
+      where: { id: traceSnapshotRef.ref_id },
+    });
+    assert.ok(snapshot, `Trace snapshot not found: ${traceSnapshotRef.ref_id}`);
+    return snapshot.payload;
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+async function recordWorkflowHarnessArtifact(app, input, payload, artifactKind = 'structured_output') {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1b/workflow-harness/artifacts',
+    payload: {
+      title_card_id: input.title_card_id,
+      artifact_kind: artifactKind,
+      storage_kind: 'inline',
+      workflow_run_id: input.workflow_run_id,
+      payload,
+      created_by: 'system',
+    },
+  });
+  assertStatus(response, 201);
+  return response.json();
+}
+
+function sanitizeTelemetry(telemetry) {
+  if (!telemetry || typeof telemetry !== 'object' || Array.isArray(telemetry)) {
+    return null;
+  }
+  return {
+    provider_id: telemetry.provider_id ?? null,
+    model_id: telemetry.model_id ?? null,
+    profile_id: telemetry.profile_id ?? null,
+    prompt_template_id: telemetry.prompt_template_id ?? null,
+    prompt_template_version: telemetry.prompt_template_version ?? null,
+    elapsed_ms: telemetry.elapsed_ms ?? null,
+    request_count: telemetry.request_count ?? null,
+    retry_count: telemetry.retry_count ?? null,
+    timeout_count: telemetry.timeout_count ?? null,
+    rate_limit_count: telemetry.rate_limit_count ?? null,
+    input_tokens: telemetry.input_tokens ?? null,
+    output_tokens: telemetry.output_tokens ?? null,
+    total_tokens: telemetry.total_tokens ?? null,
+    cost_usd: telemetry.cost_usd ?? null,
+  };
+}
+
+function isPlainRecord(value) {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function refVersionId(ref) {
+  return typeof ref.version_id === 'string' ? ref.version_id : '';
+}
+
+function resolveAllowedFunctionalRef(ref, allowedFunctionalRefs) {
+  if (!isFunctionalRef(ref)) {
+    return null;
+  }
+  const candidateVersionId = refVersionId(ref);
+  const matches = allowedFunctionalRefs.filter((allowedRef) => {
+    if (!isFunctionalRef(allowedRef)) {
+      return false;
+    }
+    if (allowedRef.ref_type !== ref.ref_type || allowedRef.ref_id !== ref.ref_id) {
+      return false;
+    }
+    return candidateVersionId.length === 0 || refVersionId(allowedRef) === candidateVersionId;
+  });
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function pathLabel(parts) {
+  return parts.reduce((label, part) => {
+    if (typeof part === 'number') {
+      return `${label}[${part}]`;
+    }
+    return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(part)
+      ? `${label}.${part}`
+      : `${label}[${JSON.stringify(part)}]`;
+  }, '$');
+}
+
+function canonicalizeAllowedFunctionalRefs(payload, allowedFunctionalRefs) {
+  const repairs = [];
+  const allowedRefs = Array.isArray(allowedFunctionalRefs)
+    ? allowedFunctionalRefs.filter(isFunctionalRef)
+    : [];
+  if (allowedRefs.length === 0) {
+    return { payload, repairs };
+  }
+
+  const visit = (value, pathParts) => {
+    if (isFunctionalRef(value)) {
+      const canonicalRef = resolveAllowedFunctionalRef(value, allowedRefs);
+      if (canonicalRef && stableStringify(value) !== stableStringify(canonicalRef)) {
+        repairs.push({
+          code: 'N8_ALLOWED_REF_CANONICALIZED',
+          path: pathLabel(pathParts),
+          from: value,
+          to: canonicalRef,
+        });
+        return JSON.parse(JSON.stringify(canonicalRef));
+      }
+      return value;
+    }
+    if (Array.isArray(value)) {
+      return value.map((item, index) => visit(item, [...pathParts, index]));
+    }
+    if (isPlainRecord(value)) {
+      const next = {};
+      for (const [key, item] of Object.entries(value)) {
+        next[key] = visit(item, [...pathParts, key]);
+      }
+      return next;
+    }
+    return value;
+  };
+
+  return {
+    payload: visit(payload, []),
+    repairs,
+  };
+}
+
+function normalizeProviderStructuredPayload(slotId, payload, allowedFunctionalRefs = []) {
+  if (!isPlainRecord(payload)) {
+    return { payload, repairs: [] };
+  }
+  if (slotId !== 'n8_value_assessment_draft') {
+    return { payload, repairs: [] };
+  }
+
+  const normalized = JSON.parse(JSON.stringify(payload));
+  const repairs = [];
+  const reasoningMemo = normalized.reasoning_memo;
+  if (
+    isPlainRecord(reasoningMemo)
+    && typeof reasoningMemo.effort_to_value !== 'string'
+    && typeof reasoningMemo.effort_to_value_fit === 'string'
+  ) {
+    reasoningMemo.effort_to_value = reasoningMemo.effort_to_value_fit;
+    delete reasoningMemo.effort_to_value_fit;
+    repairs.push({
+      code: 'N8_REASONING_MEMO_EFFORT_TO_VALUE_ALIAS',
+      from: 'reasoning_memo.effort_to_value_fit',
+      to: 'reasoning_memo.effort_to_value',
+    });
+  }
+
+  const canonicalized = canonicalizeAllowedFunctionalRefs(normalized, allowedFunctionalRefs);
+  repairs.push(...canonicalized.repairs);
+
+  return repairs.length > 0 ? { payload: canonicalized.payload, repairs } : { payload, repairs };
+}
+
+async function recordWorkflowHarnessSemanticArtifact(app, input, slot, payload, options = {}) {
+  const support = await recordWorkflowHarnessArtifact(app, input, payload);
+  const normalized = await recordWorkflowHarnessArtifact(app, input, payload);
+  const provenance = await recordWorkflowHarnessArtifact(app, input, {
+    adapter_policy_version: 'topic-selection-v1b-node-policy-v1',
+    source: 'v1b_harness_e2e_runner',
+    run_id: RUN_ID,
+    semantic_mode: options.executionMode ?? 'codex_assisted',
+    provider_id: options.providerId ?? null,
+    model_id: options.modelId ?? null,
+    registry_model_id: options.registryModelId ?? null,
+    model_option_id: options.modelOptionId ?? null,
+    profile_id: options.profileId ?? slot.profile_id,
+    telemetry: sanitizeTelemetry(options.telemetry),
+    normalization_repairs: options.normalizationRepairs ?? [],
+    external_codex_session: options.externalCodexSession ?? null,
+  }, 'diagnostic');
+  assert.ok(support.checksum, 'Expected support artifact checksum.');
+  assert.ok(normalized.checksum, 'Expected normalized artifact checksum.');
+  assert.ok(provenance.checksum, 'Expected provenance artifact checksum.');
+  return {
+    node_id: input.node_id,
+    run_mode: input.run_mode ?? 'acceptance',
+    slot_id: slot.slot_id,
+    allowed_effect: slot.allowed_effect,
+    output_contract: slot.output_contract,
+    execution_mode: options.executionMode ?? 'codex_assisted',
+    profile_id: options.profileId ?? slot.profile_id,
+    model_option_id: options.modelOptionId ?? null,
+    input_hash: input.frozen_input.frozen_input_hash,
+    support_artifact_ref: ref('artifact_ref', support.artifact_ref_id, input.title_card_id ?? support.title_card_id),
+    support_artifact_hash: support.checksum,
+    normalized_output_ref: ref('artifact_ref', normalized.artifact_ref_id, input.title_card_id ?? normalized.title_card_id),
+    normalized_output_hash: normalized.checksum,
+    prompt_packet_hash: options.promptPacketHash ?? 'c'.repeat(64),
+    structured_output_hash: normalized.checksum,
+    adapter_policy_version: 'topic-selection-v1b-node-policy-v1',
+    slot_spec_hash: 'e'.repeat(64),
+    provenance_ref: ref('artifact_ref', provenance.artifact_ref_id, input.title_card_id ?? provenance.title_card_id),
+  };
+}
+
+function v1bHarnessN1Request(bundle, suffix) {
+  const payload = {
+    v1b_input_bundle_id: bundle.v1b_input_bundle_id,
+    v1a_bundle_ref: v1bBundleRef(bundle),
+    v1a_bundle_hash: sha256Text(stableStringify(bundle)),
+    source_refs_hash: sha256Text(stableStringify(v1aBundleSourceRefs(bundle))),
+  };
+  const frozenInput = {
+    input_contract: 'V1aToV1bInputBundleFrozenRef@v1',
+    snapshot_kind: 'v1a_valid_need_bundle',
+    source_refs: [ref('v1a_valid_need_bundle', bundle.v1b_input_bundle_id, bundle.title_card_id, bundle.bundle_version)],
+    payload,
+  };
+  return {
+    schema_version: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    title_card_id: bundle.title_card_id,
+    workflow_run_id: `workflow_run_v1b_harness_e2e_${suffix}`,
+    node_attempt_id: `node_attempt_v1b_harness_e2e_n1_${suffix}`,
+    node_id: 'topic-selection.v1b.create-intake-snapshot.v1',
+    policy_version: 'topic-selection-v1b-node-policy-v1',
+    frozen_input: {
+      ...frozenInput,
+      frozen_input_hash: frozenInputHash(frozenInput),
+    },
+    created_by: 'system',
+  };
+}
+
+function acceptedConstraintProfilePayload() {
+  return {
+    target_community: 'LLM systems researchers',
+    target_venue_class: 'systems',
+    intended_contribution_style: 'workflow_system',
+    method_constraints: ['offline replay evaluation'],
+    resource_constraints: ['single workstation'],
+    available_assets: ['paper corpus', 'review rubric'],
+    feasibility_budget: { person_weeks: 2 },
+    non_goals: ['Do not target production deployment'],
+    claim_ceiling: 'Can claim reviewer-aligned planning feasibility, not production superiority.',
+    human_constraint_notes: null,
+    constraint_payload: { source: 'codex_assisted_harness_e2e' },
+  };
+}
+
+function v1bHarnessN2Request(bundle, n1Result, suffix, acceptedPayload) {
+  assert.ok(n1Result.authority_ref, 'N2 requires N1 authority_ref.');
+  assert.ok(n1Result.hashes.authority_hash, 'N2 requires N1 authority_hash.');
+  const acceptedHash = sha256Text(stableStringify(acceptedPayload));
+  const payload = {
+    accepted_constraint_profile_payload: acceptedPayload,
+    accepted_constraint_profile_payload_hash: acceptedHash,
+    authority_input_provider: 'codex_delegated',
+    delegation_artifact_hash: acceptedHash,
+    intake_snapshot_hash: n1Result.hashes.authority_hash,
+    intake_snapshot_ref: n1Result.authority_ref,
+    previous_profile_hash: null,
+    previous_profile_ref: null,
+    v1a_bundle_hash: sha256Text(stableStringify(bundle)),
+    v1a_bundle_ref: v1bBundleRef(bundle),
+  };
+  const frozenInput = {
+    input_contract: 'N1ToN2Handoff@v1',
+    snapshot_kind: 'v1b_intake_snapshot',
+    source_refs: [n1Result.authority_ref],
+    payload,
+  };
+  return {
+    schema_version: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    title_card_id: bundle.title_card_id,
+    workflow_run_id: `workflow_run_v1b_harness_e2e_${suffix}`,
+    node_attempt_id: `node_attempt_v1b_harness_e2e_n2_${suffix}`,
+    node_id: 'topic-selection.v1b.record-research-constraint-profile.v1',
+    policy_version: 'topic-selection-v1b-node-policy-v1',
+    run_mode: 'acceptance',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.constraint_profile_support,
+    frozen_input: {
+      ...frozenInput,
+      frozen_input_hash: frozenInputHash(frozenInput),
+    },
+    created_by: 'system',
+  };
+}
+
+function v1bHarnessN3Request(n1Result, n2Result, suffix) {
+  assert.ok(n1Result.authority_ref && n1Result.hashes.authority_hash);
+  assert.ok(n2Result.authority_ref && n2Result.hashes.authority_hash);
+  const payload = {
+    intake_snapshot_ref: n1Result.authority_ref,
+    intake_snapshot_hash: n1Result.hashes.authority_hash,
+    constraint_profile_ref: n2Result.authority_ref,
+    constraint_profile_hash: n2Result.hashes.authority_hash,
+    n2_handoff_hash: n2Result.hashes.handoff_hash ?? 'f'.repeat(64),
+  };
+  const frozenInput = {
+    input_contract: 'N2ToN3Handoff@v1',
+    snapshot_kind: 'research_constraint_profile',
+    source_refs: [n2Result.authority_ref],
+    payload,
+  };
+  return harnessRequest(
+    n1Result.authority_ref.title_card_id,
+    suffix,
+    'n3',
+    'topic-selection.v1b.assess-intake-readiness.v1',
+    frozenInput,
+  );
+}
+
+function v1bHarnessN4Request(n1Result, n2Result, n3Result, suffix) {
+  assert.ok(n1Result.authority_ref && n1Result.hashes.authority_hash);
+  assert.ok(n2Result.authority_ref && n2Result.hashes.authority_hash && n2Result.hashes.handoff_hash);
+  assert.ok(n3Result.authority_ref && n3Result.hashes.authority_hash && n3Result.hashes.handoff_hash);
+  const payload = {
+    intake_snapshot_ref: n1Result.authority_ref,
+    intake_snapshot_hash: n1Result.hashes.authority_hash,
+    constraint_profile_ref: n2Result.authority_ref,
+    constraint_profile_hash: n2Result.hashes.authority_hash,
+    intake_readiness_ref: n3Result.authority_ref,
+    intake_readiness_hash: n3Result.hashes.authority_hash,
+    n2_handoff_hash: n2Result.hashes.handoff_hash,
+    n3_handoff_hash: n3Result.hashes.handoff_hash,
+  };
+  const frozenInput = {
+    input_contract: 'N3ToN4Handoff@v1',
+    snapshot_kind: 'v1b_intake_readiness_assessment',
+    source_refs: [n3Result.authority_ref, n2Result.authority_ref, n1Result.authority_ref],
+    payload,
+  };
+  return harnessRequest(
+    n1Result.authority_ref.title_card_id,
+    suffix,
+    'n4',
+    'topic-selection.v1b.generate-research-slice-options.v1',
+    frozenInput,
+  );
+}
+
+function harnessRequest(titleCardId, suffix, nodeAttemptSuffix, nodeId, frozenInput) {
+  return {
+    schema_version: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    title_card_id: titleCardId,
+    workflow_run_id: `workflow_run_v1b_harness_e2e_${suffix}`,
+    node_attempt_id: `node_attempt_v1b_harness_e2e_${nodeAttemptSuffix}_${suffix}`,
+    node_id: nodeId,
+    policy_version: 'topic-selection-v1b-node-policy-v1',
+    frozen_input: {
+      ...frozenInput,
+      frozen_input_hash: frozenInputHash(frozenInput),
+    },
+    created_by: 'system',
+  };
+}
+
+function v1bHarnessN4Draft(bundle) {
+  const evidenceRef = bundle.evidence_role_bundle.support_unit_refs[0] ?? bundle.evidence_map_ref;
+  return {
+    recommended_option_key: 'traceable_workflow_slice',
+    comparison_axes: ['method feasibility', 'evidence traceability'],
+    comparison_summary: 'The recommended slice keeps the claim bounded to workflow traceability.',
+    missing_option_types: [],
+    unresolved_disagreements: [],
+    human_review_triggers: [],
+    options: [{
+      option_key: 'traceable_workflow_slice',
+      source_validated_need_refs: [bundle.validated_need_ref],
+      slice_statement: 'Build a bounded evidence-to-need traceability workflow for topic selection.',
+      problem_space: 'Reviewer-aligned topic selection traceability.',
+      target_setting: 'Local-first CS paper engineering assistant workflows.',
+      target_community: 'LLM systems researchers',
+      included_boundaries: ['v1a evidence-to-need trace preservation'],
+      excluded_boundaries: ['Do not target production deployment', 'promotion decision', 'full paper implementation'],
+      contribution_type_candidate: 'workflow_system',
+      support_evidence_refs: [evidenceRef],
+      challenge_evidence_refs: [],
+      baseline_evidence_refs: [],
+      context_evidence_refs: [],
+      resource_assumptions: ['Fixture run uses existing v1a evidence map.'],
+      data_assumptions: ['Evidence units remain frozen during slice generation.'],
+      evaluation_path: 'Replay the harness and inspect deterministic trace hashes.',
+      baseline_assumptions: ['Route-only smoke tests are insufficient as a baseline.'],
+      hard_blockers: [],
+      dependency_risks: ['Downstream selection may request more options.'],
+      slice_budget: { max_nodes: 4 },
+      expected_claim: 'A bounded workflow can preserve evidence-to-need traceability.',
+      fallback_claim: 'A harness-native workflow improves traceability checks.',
+      observable_success_criteria: ['N4 emits option set refs and hashes through handoff.'],
+      main_risks: ['Evidence coverage may still need review.'],
+      baseline_risk: 'medium',
+      execution_risk: 'medium',
+      scope_risk: 'low',
+      claim_ceiling_alignment: {
+        status: 'aligned',
+        rationale: 'The claim is bounded to traceability workflow behavior.',
+        confidence: 0.8,
+      },
+      confidence: 0.82,
+      requires_human_review: false,
+      human_review_triggers: [],
+      details_payload: { fixture: true },
+    }],
+  };
+}
+
+function hashV1bHarnessOption(option) {
+  return sha256Text(stableStringify({
+    claim_ceiling_alignment: option.claim_ceiling_alignment,
+    dependency_risks: option.dependency_risks,
+    evaluation_path: option.evaluation_path,
+    excluded_boundaries: option.excluded_boundaries,
+    expected_claim: option.expected_claim,
+    fallback_claim: option.fallback_claim,
+    hard_blockers: option.hard_blockers,
+    included_boundaries: option.included_boundaries,
+    main_risks: option.main_risks,
+    option_key: option.option_key,
+    option_ref: ref('research_slice_option', option.research_slice_option_id, option.title_card_id),
+    option_set_id: option.research_slice_option_set_id,
+    problem_space: option.problem_space,
+    risk_levels: {
+      baseline: option.baseline_risk,
+      execution: option.execution_risk,
+      scope: option.scope_risk,
+    },
+    slice_statement: option.slice_statement,
+    source_validated_need_refs: option.source_validated_need_refs,
+    status: option.status,
+    target_community: option.target_community,
+    target_setting: option.target_setting,
+  }));
+}
+
+async function selectedV1bHarnessOption(app, n4Result) {
+  const options = await listV1bHarnessOptions(app, n4Result);
+  const selected = options.find((option) => option.status === 'recommended') ?? options[0];
+  assert.ok(selected, 'N5 requires at least one N4 option.');
+  return selected;
+}
+
+async function listV1bHarnessOptions(app, n4Result) {
+  assert.ok(n4Result.authority_ref, 'N5 requires admitted N4 authority.');
+  const response = await app.inject({
+    method: 'GET',
+    url: `/topic-selection/v1b/research-slice-option-sets/${encodeURIComponent(n4Result.authority_ref.ref_id)}/options`,
+  });
+  assertStatus(response, 200);
+  return response.json().items;
+}
+
+async function listV1bHarnessCandidates(app, n6Result) {
+  assert.ok(n6Result.authority_ref, 'N7 quality checks require admitted N6 authority.');
+  const response = await app.inject({
+    method: 'GET',
+    url: `/topic-selection/v1b/topic-question-candidate-sets/${encodeURIComponent(n6Result.authority_ref.ref_id)}/candidates`,
+  });
+  assertStatus(response, 200);
+  return response.json().items;
+}
+
+async function listV1bHarnessValueAssessments(app, titleCardId) {
+  const response = await app.inject({
+    method: 'GET',
+    url: `/topic-selection/v1b/title-cards/${encodeURIComponent(titleCardId)}/topic-value-assessments`,
+  });
+  assertStatus(response, 200);
+  return response.json().items;
+}
+
+function assertNonEmptyText(value, label) {
+  assert.equal(typeof value, 'string', `${label} must be a string.`);
+  assert.ok(value.trim().length > 0, `${label} must be non-empty.`);
+}
+
+function assertV1bOutputQuality({ selectedOption, candidates, valueAssessments }) {
+  assertNonEmptyText(selectedOption.slice_statement, 'Selected ResearchSlice slice_statement');
+  assertNonEmptyText(selectedOption.expected_claim, 'Selected ResearchSlice expected_claim');
+  assert.ok(selectedOption.support_evidence_refs.length > 0, 'Selected ResearchSlice must cite support evidence.');
+  assert.ok(selectedOption.excluded_boundaries.length > 0, 'Selected ResearchSlice must preserve excluded boundaries.');
+  assert.ok(selectedOption.hard_blockers.length === 0, 'Selected ResearchSlice must not carry hard blockers.');
+
+  assert.ok(candidates.length > 0, 'N6 must persist at least one TopicQuestionCandidate.');
+  const admitted = candidates.find((candidate) => ['admitted', 'recommended'].includes(candidate.status)) ?? candidates[0];
+  assertNonEmptyText(admitted.main_question, 'Admitted TopicQuestionCandidate main_question');
+  assert.ok(admitted.main_question.trim().endsWith('?'), 'Admitted TopicQuestionCandidate main_question must be phrased as a question.');
+  assert.ok(
+    ['answerable', 'answerable_with_risk'].includes(admitted.answerability_verdict),
+    `Admitted TopicQuestionCandidate answerability_verdict is ${admitted.answerability_verdict}.`,
+  );
+  assert.ok(
+    admitted.traceability_check_payload.support_evidence_refs.length > 0,
+    'Admitted TopicQuestionCandidate must retain support evidence refs.',
+  );
+  assert.ok(
+    admitted.falsification_conditions_payload.length > 0,
+    'Admitted TopicQuestionCandidate must include falsification conditions.',
+  );
+
+  assert.ok(valueAssessments.length > 0, 'N8 must persist at least one TopicValueAssessment.');
+  const assessment = valueAssessments[0];
+  assert.ok(
+    ['ready', 'ready_with_accepted_risk'].includes(assessment.readiness_status),
+    `TopicValueAssessment readiness_status is ${assessment.readiness_status}.`,
+  );
+  assert.ok(assessment.total_score >= 70, `TopicValueAssessment total_score is ${assessment.total_score}.`);
+  assert.equal(assessment.hard_gates.length, TOPIC_SELECTION_VALUE_GATE_KEYS.length);
+  assert.equal(assessment.dimension_scores.length, TOPIC_SELECTION_VALUE_DIMENSIONS.length);
+  assert.ok(
+    assessment.hard_gates.every((gate) => gate.verdict === 'pass' || gate.verdict === 'pass_with_risk'),
+    'TopicValueAssessment hard gates must pass or pass_with_risk.',
+  );
+}
+
+function acceptedV1bHarnessSliceSelectionPayload(option) {
+  return {
+    decision: 'select',
+    selected_option_ref: ref('research_slice_option', option.research_slice_option_id, option.title_card_id),
+    selected_option_hash: hashV1bHarnessOption(option),
+    selection_rationale: 'Select the traceable workflow slice with the strongest bounded fit.',
+    decision_basis: { selected_option_key: option.option_key },
+    rejected_option_reasons: [],
+    required_actions: [],
+    accepted_risk_refs: [],
+    confidence: 0.82,
+    requires_human_review: false,
+    human_review_reason: null,
+    loopback_target: null,
+    loopback_target_ref: null,
+    loopback_reason_code: null,
+  };
+}
+
+function v1bHarnessN5Request(n4Result, acceptedPayload, suffix) {
+  assert.ok(n4Result.authority_ref && n4Result.hashes.authority_hash && n4Result.hashes.handoff_hash);
+  const acceptedHash = sha256Text(stableStringify(acceptedPayload));
+  const payload = {
+    research_slice_option_set_ref: n4Result.authority_ref,
+    research_slice_option_set_hash: n4Result.hashes.authority_hash,
+    n4_handoff_hash: n4Result.hashes.handoff_hash,
+    authority_input_provider: 'fixture',
+    accepted_selection_payload: acceptedPayload,
+    accepted_selection_payload_hash: acceptedHash,
+    delegation_artifact_hash: null,
+  };
+  const frozenInput = {
+    input_contract: 'N4ToN5Handoff@v1',
+    snapshot_kind: 'research_slice_option_set',
+    source_refs: [n4Result.authority_ref],
+    payload,
+  };
+  return harnessRequest(
+    n4Result.authority_ref.title_card_id,
+    suffix,
+    'n5',
+    'topic-selection.v1b.select-research-slice.v1',
+    frozenInput,
+  );
+}
+
+async function v1bHarnessRequestFromHandoff(
+  app,
+  result,
+  suffix,
+  expectedHandoffKind,
+  nodeId,
+  nodeAttemptSuffix,
+  inputContract,
+  snapshotKind,
+  payloadPatch,
+) {
+  assert.ok(result.authority_ref && result.handoff_ref && result.hashes.handoff_hash);
+  const handoff = await getWorkflowHarnessHandoff(app, result.handoff_ref);
+  assert.equal(handoff.envelope.handoff_kind, expectedHandoffKind);
+  const payload = {
+    ...handoff.payload,
+    ...payloadPatch,
+  };
+  const frozenInput = {
+    input_contract: inputContract,
+    snapshot_kind: snapshotKind,
+    source_refs: [result.authority_ref, result.handoff_ref, ...handoff.required_refs],
+    payload,
+  };
+  return harnessRequest(result.authority_ref.title_card_id, suffix, nodeAttemptSuffix, nodeId, frozenInput);
+}
+
+async function v1bHarnessN6Request(app, n5Result, suffix) {
+  assert.ok(n5Result.authority_ref && n5Result.handoff_ref && n5Result.hashes.handoff_hash);
+  const handoff = await getWorkflowHarnessHandoff(app, n5Result.handoff_ref);
+  assert.equal(handoff.envelope.handoff_kind, 'N5ToN6Handoff');
+  const payload = {
+    ...handoff.payload,
+    n5_handoff_hash: n5Result.hashes.handoff_hash,
+  };
+  const selectionSnapshotRef = ref(
+    'research_slice_selection_decision',
+    n5Result.authority_ref.ref_id,
+    n5Result.authority_ref.title_card_id,
+    n5Result.authority_ref.version_id ?? null,
+  );
+  const frozenInput = {
+    input_contract: 'N5ToN6Handoff@v1',
+    snapshot_kind: 'research_slice_selection_decision',
+    source_refs: [selectionSnapshotRef, n5Result.handoff_ref, ...handoff.required_refs],
+    payload,
+  };
+  return harnessRequest(
+    n5Result.authority_ref.title_card_id,
+    suffix,
+    'n6',
+    'topic-selection.v1b.generate-topic-question-candidates.v1',
+    frozenInput,
+  );
+}
+
+function v1bHarnessN6Draft(bundle, input) {
+  const payload = input.frozen_input.payload;
+  const evidenceRef = bundle.evidence_role_bundle.support_unit_refs[0] ?? bundle.evidence_map_ref;
+  return {
+    question_frame: {
+      target_setting: 'Local-first CS paper engineering assistant workflows.',
+      target_community: 'LLM systems researchers',
+      object_scope: 'v1b harness-native topic selection candidate generation',
+      task_scope: 'candidate generation, deterministic gates, and replay drift checks',
+      intervention_or_approach: 'WorkflowHarness-native candidate-set gate with frozen semantic artifacts',
+      comparison_baseline: 'route-only smoke tests without harness-level product acceptance',
+      observable_outcome: 'stable candidate-set refs and replay hashes',
+      assumption_refs: [],
+      evidence_refs: [evidenceRef],
+      frame_payload: { fixture: true },
+    },
+    recommended_candidate_keys: ['harness_candidate'],
+    generation_notes: ['Candidate stays inside the selected ResearchSlice and preserves N5 lineage.'],
+    human_review_triggers: [],
+    candidates: [{
+      candidate_key: 'harness_candidate',
+      main_question: 'How can a WorkflowHarness-native candidate gate improve replayable v1b topic selection?',
+      sub_questions: ['Which N5 lineage hashes must remain frozen before N7 admission?'],
+      question_type: 'system',
+      contribution_hypothesis: 'system',
+      source_validated_need_refs: [bundle.validated_need_ref],
+      answerability_plan: {
+        datasets_or_resources: ['v1b harness trace fixtures'],
+        metrics: ['hash drift detection rate'],
+        baselines: ['route-only smoke coverage'],
+        ablations_or_comparisons: ['without frozen semantic artifact admission'],
+        evaluation_setting: 'local deterministic harness acceptance tests',
+        dependency_risks: ['provider canary behavior is not exercised in this fixture'],
+        open_dependencies: [],
+        known_gaps: [],
+        required_evidence_refs: [evidenceRef],
+      },
+      answerability_verdict: 'answerable',
+      expected_claim: 'A harness-native candidate gate improves replayable v1b topic selection.',
+      fallback_claim: 'The gate preserves candidate lineage for downstream review.',
+      max_claim_strength: 'Bounded workflow claim about candidate lineage and replay.',
+      observable_success_criteria: ['N6 emits candidate set refs and hashes.'],
+      boundary_check: {
+        preserved_boundary_refs: [],
+        excluded_boundary_refs: [],
+        boundary_violations: [],
+        prohibited_claims: ['promotion decision'],
+        allowed_refinements: ['tighten candidate wording'],
+      },
+      traceability_check: {
+        support_evidence_refs: [evidenceRef],
+        challenge_evidence_refs: [evidenceRef],
+        baseline_evidence_refs: [evidenceRef],
+        context_evidence_refs: [evidenceRef],
+        mapped_evidence_refs: [evidenceRef],
+        unmapped_assumptions: [],
+      },
+      falsification_conditions: [{
+        condition_type: 'claim_overstrong',
+        severity: 'hard',
+        statement: 'If changed frozen N5 lineage hashes are not detected, the candidate claim must be lowered.',
+        trigger_evidence_refs: [evidenceRef],
+        trigger_source_refs: [payload.research_slice_ref],
+        related_contract_fields: ['expected_claim'],
+        expected_action: 'lower_claim_strength',
+        check_timing: 'before_value_assessment',
+        confidence: 'high',
+      }],
+      risk_notes: [],
+      blockers: [],
+      objections: [],
+      human_review_triggers: [],
+      confidence: 0.84,
+    }],
+  };
+}
+
+function v1bHarnessN6NegativeDraft(bundle, input) {
+  const draft = v1bHarnessN6Draft(bundle, input);
+  return {
+    ...draft,
+    recommended_candidate_keys: ['provider_negative_unanswerable'],
+    generation_notes: ['Provider-backed negative canary: the draft is structurally valid but intentionally not answerable.'],
+    candidates: [{
+      ...draft.candidates[0],
+      candidate_key: 'provider_negative_unanswerable',
+      main_question: 'How can AI improve research?',
+      sub_questions: ['Which unspecified AI system and research setting should be evaluated?'],
+      answerability_verdict: 'not_answerable',
+      expected_claim: 'This intentionally broad candidate should not be admitted as a bounded v1b TopicQuestion.',
+      fallback_claim: 'The harness should loop back rather than materialize an unanswerable candidate.',
+      max_claim_strength: 'No admissible claim; this is a negative loopback canary.',
+      observable_success_criteria: ['N6 blocks the provider-backed candidate and emits a loopback result.'],
+      risk_notes: ['Provider-backed negative canary intentionally violates the N6 answerability quality bar.'],
+      blockers: [],
+      objections: ['The question is too broad to evaluate with the frozen ResearchSlice evidence.'],
+      confidence: 0.42,
+    }],
+  };
+}
+
+function v1bHarnessN6TwoCandidateDraft(bundle, input) {
+  const draft = v1bHarnessN6Draft(bundle, input);
+  const second = {
+    ...draft.candidates[0],
+    candidate_key: 'provider_negative_second_trial_candidate',
+    main_question: 'How can a second candidate preserve evidence-to-need traceability after a failed value trial?',
+    expected_claim: 'A second candidate can preserve traceability after a failed value trial.',
+    fallback_claim: 'The second trial still exposes whether N7 can schedule another candidate.',
+    observable_success_criteria: ['N7 selects the second candidate after frozen N8 feedback.'],
+  };
+  return {
+    ...draft,
+    recommended_candidate_keys: ['harness_candidate', 'provider_negative_second_trial_candidate'],
+    generation_notes: ['Two-candidate fixture used to test provider-backed N8 negative trial exhaustion.'],
+    candidates: [draft.candidates[0], second],
+  };
+}
+
+async function v1bHarnessN7Request(app, n6Result, suffix) {
+  return v1bHarnessRequestFromHandoff(
+    app,
+    n6Result,
+    suffix,
+    'N6ToN7Handoff',
+    'topic-selection.v1b.materialize-topic-question-contract.v1',
+    'n7',
+    'N6ToN7Handoff@v1',
+    'topic_question_candidate_set',
+    {
+      input_mode: 'initial_from_n6',
+      n6_handoff_hash: n6Result.hashes.handoff_hash,
+    },
+  );
+}
+
+async function v1bHarnessN8Request(app, n7Result, suffix) {
+  return v1bHarnessRequestFromHandoff(
+    app,
+    n7Result,
+    suffix,
+    'N7ToN8Handoff',
+    'topic-selection.v1b.assess-topic-value.v1',
+    'n8',
+    'N7ToN8Handoff@v1',
+    'topic_question_contract',
+    { n7_handoff_hash: n7Result.hashes.handoff_hash },
+  );
+}
+
+function v1bHarnessN8ValueDraft(input) {
+  const payload = input.frozen_input.payload;
+  const evidenceRef = payload.topic_question_contract_ref;
+  return {
+    readiness_status: 'ready',
+    strongest_claim_if_success: 'A harness-native topic-selection flow preserves replayable authority boundaries.',
+    fallback_claim_if_success: 'Harness-level acceptance exposes route-only smoke gaps.',
+    hard_gates: TOPIC_SELECTION_VALUE_GATE_KEYS.map((gateKey) => ({
+      gate_key: gateKey,
+      verdict: 'pass',
+      severity: 'info',
+      overridable_with_risk: false,
+      rationale: `${gateKey} passes in the deterministic value fixture.`,
+      refs: [evidenceRef],
+    })),
+    dimension_scores: TOPIC_SELECTION_VALUE_DIMENSIONS.map((dimensionKey) => ({
+      dimension_key: dimensionKey,
+      score: dimensionKey === 'reviewer_risk' ? 72 : 84,
+      rationale: `${dimensionKey} is sufficiently supported for the fixture.`,
+      evidence_refs: [evidenceRef],
+      uncertainty: 'medium',
+    })),
+    risk_penalty: { residual_risk: 'bounded' },
+    reviewer_objections: ['Provider canary behavior is outside this fixture run.'],
+    ceiling_case: 'The topic can support a bounded workflow claim with deterministic trace evidence.',
+    base_case: 'The topic supports harness-native acceptance and replay validation.',
+    floor_case: 'The topic still yields useful negative gate coverage.',
+    recommended_disposition: 'advance_to_package',
+    total_score: 83,
+    value_summary: 'The active TopicQuestionContract has enough value and answerability for draft packaging.',
+    confidence: 0.82,
+    accepted_risk_refs: [],
+    blocker_refs: [],
+    risk_notes: ['Provider canary and output quality review remain downstream checks.'],
+    reasoning_memo: {
+      recommendation: 'advance_to_package',
+      value_thesis: 'Harness-native v1b topic selection is valuable because it closes automation, replay, and authority boundaries.',
+      significance: 'It turns route-testable workflow fragments into a product-level repeatable process.',
+      originality: 'The contribution is a deterministic gate and handoff workflow around LLM-assisted semantic drafts.',
+      claim_leverage: 'The claim remains bounded to workflow robustness and replay evidence.',
+      reviewer_risks: ['The implementation needs downstream provider canary validation.'],
+      effort_to_value: 'The fixture chain gives high value for moderate implementation effort.',
+      strategic_fit: 'It aligns with reviewer-aligned paper engineering workflows.',
+      negative_memory_check: 'No prior negative memory blocks this topic.',
+      evidence_backed_rationale: 'The N7 contract and candidate lineage provide frozen trace evidence.',
+      top_objections: ['The fixture does not prove live provider quality.'],
+      uncertainty: 'Medium uncertainty until provider canary is added.',
+      disposition_bridge: 'Advance to package with residual risks carried into v1c.',
+      requires_critic_review: false,
+      critic_triggers: [],
+      cited_refs: [evidenceRef],
+    },
+  };
+}
+
+function v1bHarnessN8BlockingGateDraft(input) {
+  const draft = v1bHarnessN8ValueDraft(input);
+  return {
+    ...draft,
+    hard_gates: draft.hard_gates.map((gate, index) => index === 0
+      ? {
+        ...gate,
+        verdict: 'fail',
+        severity: 'blocking',
+        rationale: 'Provider-backed negative canary: this gate intentionally blocks package advancement.',
+      }
+      : gate),
+    risk_notes: [
+      ...draft.risk_notes,
+      'Provider-backed negative canary intentionally combines advance_to_package with a blocking hard gate.',
+    ],
+    reasoning_memo: {
+      ...draft.reasoning_memo,
+      reviewer_risks: [
+        ...draft.reasoning_memo.reviewer_risks,
+        'A blocking value gate should prevent authority persistence.',
+      ],
+      top_objections: [
+        ...draft.reasoning_memo.top_objections,
+        'The draft intentionally violates the deterministic advance gate.',
+      ],
+    },
+  };
+}
+
+function v1bHarnessN8NonAdvanceDraft(input) {
+  const draft = v1bHarnessN8ValueDraft(input);
+  return {
+    ...draft,
+    readiness_status: 'needs_refinement',
+    hard_gates: draft.hard_gates.map((gate) => ({
+      ...gate,
+      verdict: gate.gate_key === 'answerability_sanity' ? 'pass_with_risk' : gate.verdict,
+      severity: gate.gate_key === 'answerability_sanity' ? 'warning' : gate.severity,
+      rationale: gate.gate_key === 'answerability_sanity'
+        ? 'Provider-backed negative canary: answerability is not yet strong enough for package drafting.'
+        : gate.rationale,
+    })),
+    dimension_scores: draft.dimension_scores.map((score) => ({
+      ...score,
+      score: Math.min(score.score, score.dimension_key === 'reviewer_risk' ? 58 : 55),
+      rationale: `Provider-backed negative canary keeps ${score.dimension_key} below package-readiness strength.`,
+      uncertainty: 'high',
+    })),
+    recommended_disposition: 'refine_question',
+    total_score: 55,
+    value_summary: 'The provider-backed value draft is valid but should route back for question refinement.',
+    risk_notes: [
+      ...draft.risk_notes,
+      'Provider-backed negative canary intentionally recommends refinement before package drafting.',
+    ],
+    reasoning_memo: {
+      ...draft.reasoning_memo,
+      recommendation: 'refine_question',
+      value_thesis: 'The topic has possible value, but the active question needs refinement before package drafting.',
+      effort_to_value: 'The current effort-to-value fit is weak until the question boundary is narrowed.',
+      strategic_fit: 'Refining the question better fits reviewer-aligned evidence workflows than package advancement.',
+      disposition_bridge: 'Route feedback to N7/N6 rather than package the current contract.',
+      requires_critic_review: true,
+      critic_triggers: ['provider_negative_non_advance'],
+    },
+  };
+}
+
+function providerModelOptionSuffix() {
+  const explicit = process.env.TOPIC_SELECTION_V1B_HARNESS_MODEL_OPTION_SUFFIX?.trim();
+  if (explicit) {
+    return explicit;
+  }
+  assert.ok(PROVIDER_ID, 'provider_llm semantic mode requires provider id.');
+  return PROVIDER_ID === 'dashscope' ? 'dashscope-thinking-budget' : 'openai-balanced';
+}
+
+function resolveProviderRuntime(profileId) {
+  assert.ok(PROVIDER_ID, 'provider_llm semantic mode requires provider id.');
+  const requestedModelOptionId = `${profileId}.${providerModelOptionSuffix()}`;
+  const resolved = MODEL_PROFILE_REGISTRY.resolveProfile({
+    profile_id: profileId,
+    execution_mode: 'provider_llm',
+    run_mode: 'acceptance',
+    model_option_id: requestedModelOptionId,
+  });
+  const selected = resolved.selected_model_option;
+  assert.ok(selected, `Expected provider model option for ${profileId}.`);
+  assert.equal(
+    selected.provider_id,
+    PROVIDER_ID,
+    `Selected model option ${selected.option_id} uses ${selected.provider_id}, not ${PROVIDER_ID}.`,
+  );
+  const modelIdOverride = process.env.TOPIC_SELECTION_V1B_HARNESS_MODEL_ID
+    ?? process.env.TOPIC_SELECTION_REAL_MODEL_ID
+    ?? null;
+  return {
+    modelOptionId: selected.option_id,
+    providerId: selected.provider_id,
+    modelId: modelIdOverride?.trim() || selected.model_id,
+    registryModelId: selected.model_id,
+    normalizedParams: selected.normalized_params,
+    providerOverrides: selected.provider_overrides,
+    timeoutMs: selected.request_policy?.timeout_ms ?? LLM_TIMEOUT_MS,
+  };
+}
+
+function isFunctionalRef(value) {
+  return Boolean(
+    value
+      && typeof value === 'object'
+      && !Array.isArray(value)
+      && typeof value.ref_type === 'string'
+      && typeof value.ref_id === 'string',
+  );
+}
+
+function collectFunctionalRefs(value, seen = new Set(), refs = []) {
+  if (isFunctionalRef(value)) {
+    const titleCardId = typeof value.title_card_id === 'string' ? value.title_card_id : '';
+    const versionId = typeof value.version_id === 'string' ? value.version_id : '';
+    const key = [value.ref_type, value.ref_id, titleCardId, versionId].join(':');
+    if (!seen.has(key)) {
+      seen.add(key);
+      refs.push(value);
+    }
+    return refs;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectFunctionalRefs(item, seen, refs);
+    }
+    return refs;
+  }
+  if (value && typeof value === 'object') {
+    for (const item of Object.values(value)) {
+      collectFunctionalRefs(item, seen, refs);
+    }
+  }
+  return refs;
+}
+
+function providerSystemPrompt(nodeLabel) {
+  return [
+    `Generate the ${nodeLabel} semantic draft for the v1b WorkflowHarness canary.`,
+    'Return only JSON matching the supplied schema.',
+    'Do not create authority records, side effects, packages, promotions, PaperProject bridges, or raw provider audit payloads.',
+    'Copy functional refs exactly from allowed_functional_refs_json, including title_card_id and version_id; never invent placeholder refs or synthetic IDs.',
+    'Copy every field listed in explicit_required_values_json byte-for-byte; do not paraphrase those values.',
+    'When context marks intentional_negative_canary, preserve the requested gate failure exactly; do not repair it into an admissible draft.',
+    'Keep claims bounded to local-first CS paper engineering and reviewer-aligned evidence workflows.',
+    'Prefer admitted, useful drafts when the supplied evidence is sufficient; carry residual risks explicitly instead of overclaiming.',
+  ].join(' ');
+}
+
+function providerContext(base) {
+  return {
+    run_id: RUN_ID,
+    semantic_mode: SEMANTIC_MODE,
+    provider_id: PROVIDER_ID,
+    quality_bar: [
+      'At least one concrete option or candidate where the schema expects a list.',
+      'No production-deployment, promotion-readiness, or paper-project claims.',
+      'Evidence refs are inherited refs only.',
+      'Risk, baseline, and falsification fields are specific enough for reviewer inspection.',
+    ],
+    ...base,
+  };
+}
+
+async function createProviderStructuredDraft(input, slot, schemaName, schema, nodeLabel, context) {
+  const runtime = resolveProviderRuntime(slot.profile_id);
+  const promptPacket = {
+    schema_name: schemaName,
+    node_id: input.node_id,
+    node_attempt_id: input.node_attempt_id,
+    frozen_input_hash: input.frozen_input.frozen_input_hash,
+    context,
+  };
+  const response = await LLM_GATEWAY.createStructuredOutput({
+    executionContext: {
+      feature: 'topic_selection',
+      operation: `v1b_harness_${slot.slot_id}`,
+      traceId: input.node_attempt_id,
+      metadata: {
+        run_id: RUN_ID,
+        workflow_run_id: input.workflow_run_id,
+        node_id: input.node_id,
+        title_card_id: input.title_card_id,
+        semantic_mode: SEMANTIC_MODE,
+      },
+      budget: {
+        timeout_ms: LLM_TIMEOUT_MS,
+      },
+    },
+    model: {
+      providerId: runtime.providerId,
+      modelId: runtime.modelId,
+      profileId: slot.profile_id,
+    },
+    prompt: {
+      promptTemplateId: `topic-selection-v1b-harness-${slot.slot_id}`,
+      version: '2026-05-27',
+    },
+    messages: [
+      {
+        role: 'system',
+        content: providerSystemPrompt(nodeLabel),
+      },
+      {
+        role: 'user',
+        content: JSON.stringify(promptPacket, null, 2),
+      },
+    ],
+    schemaName,
+    schema,
+    policy: {
+      timeoutMs: runtime.timeoutMs,
+      maxRetries: LLM_MAX_RETRIES,
+    },
+    normalizedParams: runtime.normalizedParams,
+    providerOverrides: runtime.providerOverrides,
+  });
+  const normalized = normalizeProviderStructuredPayload(
+    slot.slot_id,
+    response.parsed,
+    context.allowed_functional_refs_json,
+  );
+  return {
+    payload: normalized.payload,
+    runtime,
+    telemetry: response.telemetry,
+    promptPacketHash: sha256Text(stableStringify(promptPacket)),
+    normalizationRepairs: normalized.repairs,
+  };
+}
+
+async function recordModelLikeSemanticDraft(app, input, slot, fixturePayloadFactory, providerSpecFactory) {
+  if (SEMANTIC_MODE !== 'provider_llm') {
+    const payload = fixturePayloadFactory();
+    return {
+      invocationInput: input,
+      semanticArtifact: await recordWorkflowHarnessSemanticArtifact(app, input, slot, payload),
+      summary: {
+        node_id: input.node_id,
+        slot_id: slot.slot_id,
+        execution_mode: 'codex_assisted',
+        provider_id: null,
+        model_id: null,
+        model_option_id: null,
+        output_hash: sha256Text(stableStringify(payload)),
+      },
+    };
+  }
+
+  const providerDraft = await providerSpecFactory();
+  const invocationInput = {
+    ...input,
+    run_mode: 'acceptance',
+    profile_id: slot.profile_id,
+    execution_spec: {
+      execution_mode: 'provider_llm',
+      model_option_id: providerDraft.runtime.modelOptionId,
+    },
+  };
+  return {
+    invocationInput,
+    semanticArtifact: await recordWorkflowHarnessSemanticArtifact(
+      app,
+      invocationInput,
+      slot,
+      providerDraft.payload,
+      {
+        executionMode: 'provider_llm',
+        profileId: slot.profile_id,
+        modelOptionId: providerDraft.runtime.modelOptionId,
+        providerId: providerDraft.runtime.providerId,
+        modelId: providerDraft.runtime.modelId,
+        registryModelId: providerDraft.runtime.registryModelId,
+        telemetry: providerDraft.telemetry,
+        promptPacketHash: providerDraft.promptPacketHash,
+        normalizationRepairs: providerDraft.normalizationRepairs,
+      },
+    ),
+    summary: {
+      node_id: input.node_id,
+      slot_id: slot.slot_id,
+      execution_mode: 'provider_llm',
+      provider_id: providerDraft.runtime.providerId,
+      model_id: providerDraft.runtime.modelId,
+      registry_model_id: providerDraft.runtime.registryModelId,
+      model_option_id: providerDraft.runtime.modelOptionId,
+      output_hash: sha256Text(stableStringify(providerDraft.payload)),
+      telemetry: sanitizeTelemetry(providerDraft.telemetry),
+      normalization_repairs: providerDraft.normalizationRepairs,
+    },
+  };
+}
+
+function withoutGlobalRuntimeAdmission(input) {
+  return {
+    ...input,
+    run_mode: null,
+    profile_id: null,
+    execution_spec: null,
+  };
+}
+
+async function recordCodexAssistedSemanticDraft(app, input, slot, payload) {
+  return {
+    invocationInput: input,
+    semanticArtifact: await recordWorkflowHarnessSemanticArtifact(app, input, slot, payload, {
+      executionMode: 'codex_assisted',
+      profileId: slot.profile_id,
+    }),
+    summary: {
+      node_id: input.node_id,
+      slot_id: slot.slot_id,
+      execution_mode: 'codex_assisted',
+      provider_id: null,
+      model_id: null,
+      model_option_id: null,
+      output_hash: sha256Text(stableStringify(payload)),
+    },
+  };
+}
+
+async function recordExternalCodexSemanticDraft(app, input, slot, payload, externalCodexSession) {
+  return {
+    invocationInput: input,
+    semanticArtifact: await recordWorkflowHarnessSemanticArtifact(app, input, slot, payload, {
+      executionMode: 'codex_assisted',
+      profileId: slot.profile_id,
+      promptPacketHash: externalCodexSession.prompt_hash,
+      externalCodexSession,
+    }),
+    summary: {
+      node_id: input.node_id,
+      slot_id: slot.slot_id,
+      execution_mode: 'codex_assisted',
+      provider_id: null,
+      model_id: null,
+      model_option_id: null,
+      output_hash: sha256Text(stableStringify(payload)),
+      external_codex_session: externalCodexSession,
+    },
+  };
+}
+
+function stripMarkdownJsonFence(text) {
+  const trimmed = String(text ?? '').trim();
+  const fenceMatch = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
+  return fenceMatch ? fenceMatch[1].trim() : trimmed;
+}
+
+function parseJsonObjectFromCodexOutput(text) {
+  const stripped = stripMarkdownJsonFence(text);
+  try {
+    return JSON.parse(stripped);
+  } catch {
+    const start = stripped.indexOf('{');
+    const end = stripped.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      return JSON.parse(stripped.slice(start, end + 1));
+    }
+    throw new Error('External Codex output did not contain a parseable JSON object.');
+  }
+}
+
+async function runExternalCodexJsonSession(prompt, sampleDir) {
+  await fs.mkdir(sampleDir, { recursive: true });
+  const promptPath = path.join(sampleDir, 'prompt.md');
+  const lastMessagePath = path.join(sampleDir, 'last-message.json');
+  const stdoutPath = path.join(sampleDir, 'stdout.log');
+  const stderrPath = path.join(sampleDir, 'stderr.log');
+  await fs.writeFile(promptPath, prompt, 'utf8');
+  const startedAt = new Date().toISOString();
+  const startedMs = Date.now();
+  const args = [
+    '--ask-for-approval',
+    'never',
+    'exec',
+    '-c',
+    `model_reasoning_effort=${EXTERNAL_CODEX_REASONING_EFFORT}`,
+    '--sandbox',
+    'read-only',
+    '--color',
+    'never',
+    '--output-last-message',
+    lastMessagePath,
+    '-C',
+    REPO_ROOT,
+    '-',
+  ];
+  if (EXTERNAL_CODEX_MODEL) {
+    args.splice(5, 0, '-m', EXTERNAL_CODEX_MODEL);
+  }
+  const child = spawn(EXTERNAL_CODEX_BIN, args, {
+    cwd: REPO_ROOT,
+    env: {
+      ...process.env,
+      NO_COLOR: '1',
+    },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  const stdoutChunks = [];
+  const stderrChunks = [];
+  child.stdout.on('data', (chunk) => stdoutChunks.push(Buffer.from(chunk)));
+  child.stderr.on('data', (chunk) => stderrChunks.push(Buffer.from(chunk)));
+  child.stdin.end(prompt);
+
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    child.kill('SIGTERM');
+  }, EXTERNAL_CODEX_TIMEOUT_MS);
+  const exit = await new Promise((resolve, reject) => {
+    child.on('error', reject);
+    child.on('close', (code, signal) => resolve({ code, signal }));
+  });
+  clearTimeout(timeout);
+  const stdout = Buffer.concat(stdoutChunks).toString('utf8');
+  const stderr = Buffer.concat(stderrChunks).toString('utf8');
+  await fs.writeFile(stdoutPath, stdout, 'utf8');
+  await fs.writeFile(stderrPath, stderr, 'utf8');
+  if (timedOut) {
+    throw new Error(`External Codex CLI timed out after ${EXTERNAL_CODEX_TIMEOUT_MS}ms.`);
+  }
+  if (exit.code !== 0) {
+    throw new Error(`External Codex CLI exited with code ${exit.code ?? 'null'} signal ${exit.signal ?? 'null'}.`);
+  }
+  const lastMessage = await fs.readFile(lastMessagePath, 'utf8');
+  if (lastMessage.trim().length === 0) {
+    throw new Error([
+      'External Codex CLI produced no last agent message.',
+      `stdout tail: ${stdout.slice(-500)}`,
+      `stderr tail: ${stderr.slice(-500)}`,
+    ].join('\n'));
+  }
+  const completedAt = new Date().toISOString();
+  return {
+    raw_output: lastMessage,
+    metadata: {
+      cli_bin: EXTERNAL_CODEX_BIN,
+      model: EXTERNAL_CODEX_MODEL,
+      reasoning_effort: EXTERNAL_CODEX_REASONING_EFFORT,
+      argv: args,
+      prompt_path: path.relative(REPO_ROOT, promptPath),
+      last_message_path: path.relative(REPO_ROOT, lastMessagePath),
+      stdout_path: path.relative(REPO_ROOT, stdoutPath),
+      stderr_path: path.relative(REPO_ROOT, stderrPath),
+      prompt_hash: sha256Text(prompt),
+      output_hash: sha256Text(lastMessage),
+      started_at: startedAt,
+      completed_at: completedAt,
+      elapsed_ms: Date.now() - startedMs,
+      timeout_ms: EXTERNAL_CODEX_TIMEOUT_MS,
+    },
+  };
+}
+
+function n4DraftSlot() {
+  return {
+    slot_id: 'n4_research_slice_option_draft',
+    allowed_effect: 'model_draft_for_gate',
+    output_contract: 'ResearchSliceOptionSetDraft@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.research_slice_options_single_agent,
+  };
+}
+
+function n6DraftSlot() {
+  return {
+    slot_id: 'n6_question_candidate_draft',
+    allowed_effect: 'model_draft_for_gate',
+    output_contract: 'TopicQuestionCandidateSetDraft@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_question_candidates_single_agent,
+  };
+}
+
+function n6LoopbackTriageSlot() {
+  return {
+    slot_id: 'n6_loopback_triage',
+    allowed_effect: 'support_only',
+    output_contract: 'N6LoopbackTriageSupport@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n6_loopback_triage_support,
+  };
+}
+
+function n7DebateAdmissionSlot() {
+  return {
+    slot_id: 'n7_n8_debate_admission_review',
+    allowed_effect: 'support_only',
+    output_contract: 'N8DebateAdmissionReviewSupport@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_n8_debate_admission_support,
+  };
+}
+
+function n7FailedTrialSynthesisSlot() {
+  return {
+    slot_id: 'n7_failed_trial_synthesis',
+    allowed_effect: 'support_only',
+    output_contract: 'N8FailedTrialSynthesisSupport@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_failed_trial_synthesis_support,
+  };
+}
+
+function n8DraftSlot() {
+  return {
+    slot_id: 'n8_value_assessment_draft',
+    allowed_effect: 'model_draft_for_gate',
+    output_contract: 'TopicValueAssessmentDraft@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_value_assessment_single_agent,
+  };
+}
+
+function n6LoopbackTriagePayload(input, loopbackTargetCode) {
+  const payload = input.frozen_input.payload;
+  const base = {
+    loopback_target_code: loopbackTargetCode,
+    failure_scope: 'candidate_level',
+    dominant_reason_codes: ['answerability_weak'],
+    affected_refs: [payload.research_slice_ref],
+    regeneration_hints: [
+      'Regenerate a bounded candidate that names the local workflow, evidence source, and reviewer-facing outcome.',
+    ],
+    debate_escalation: null,
+    upstream_rollback: null,
+    rationale: 'Provider-backed negative N6 draft was structurally valid but intentionally not answerable.',
+  };
+  if (loopbackTargetCode === 'n6_debate_escalation') {
+    return {
+      ...base,
+      failure_scope: 'candidate_level',
+      debate_escalation: {
+        debate_level: 'mixed_cost_control',
+        recommended_profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_question_candidates_single_agent,
+        sticky: true,
+        rationale: 'The next N6 retry should use debate to narrow the broad provider-backed candidate.',
+      },
+      rationale: 'Provider-backed negative N6 draft should escalate debate before retrying candidate generation.',
+    };
+  }
+  if (loopbackTargetCode === 'n6_loopback_to_n5_select_different_slice') {
+    return {
+      ...base,
+      failure_scope: 'slice_level',
+      affected_refs: [payload.research_slice_ref, payload.selected_slice_option_ref],
+      upstream_rollback: {
+        target_node_id: 'topic-selection.v1b.select-research-slice.v1',
+        repair_action: 'select_different_slice',
+        rationale: 'The selected slice is too broad for the provider-backed candidate to become answerable.',
+      },
+      rationale: 'Provider-backed negative N6 draft should roll back to N5 for a different ResearchSlice.',
+    };
+  }
+  return base;
+}
+
+async function recordN6LoopbackTriageArtifact(app, input, triagePayload) {
+  return recordWorkflowHarnessSemanticArtifact(
+    app,
+    input,
+    n6LoopbackTriageSlot(),
+    triagePayload,
+    {
+      executionMode: 'codex_assisted',
+      profileId: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n6_loopback_triage_support,
+    },
+  );
+}
+
+function n7DebateAdmissionPayload(overrides = {}) {
+  return {
+    debate_level: 'provider_diverse_deep_debate',
+    recommended_profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_value_assessment_single_agent,
+    high_value_signal_codes: ['bounded_replay_claim'],
+    risk_signal_codes: ['provider_negative_gate_rejected'],
+    rationale: 'Provider-backed N8 gate rejection requires readmission before reassessment.',
+    ...overrides,
+  };
+}
+
+function n7FailedTrialSynthesisPayload(n6Result, candidates) {
+  return {
+    exhausted_candidate_refs: candidates.map((candidate) =>
+      ref('topic_question_candidate', candidate.topic_question_candidate_id, candidate.title_card_id)),
+    failure_reason_codes: ['provider_negative_value_not_supported'],
+    synthesis_summary: 'Provider-backed N8 non-advance assessments exhausted candidate trials.',
+    n6_regeneration_hints: ['Regenerate a narrower question with stronger evidence linkage.'],
+    affected_refs: [n6Result.authority_ref],
+  };
+}
+
+async function recordN7SupportArtifact(app, input, slot, payload) {
+  return recordWorkflowHarnessSemanticArtifact(app, input, slot, payload, {
+    executionMode: 'codex_assisted',
+    profileId: slot.profile_id,
+  });
+}
+
+async function recordN8FeedbackArtifact(app, input, feedback) {
+  const artifact = await recordWorkflowHarnessArtifact(app, input, feedback);
+  return {
+    artifact_ref: ref('artifact_ref', artifact.artifact_ref_id, input.title_card_id ?? artifact.title_card_id),
+    artifact_hash: sha256Text(stableStringify(artifact)),
+    payload_hash: sha256Text(stableStringify(feedback)),
+  };
+}
+
+async function v1bHarnessN7FeedbackRequest(
+  app,
+  initialInput,
+  n7Result,
+  feedbackClass,
+  n8GateResultHash,
+  suffix,
+  valueResult = null,
+) {
+  assert.ok(n7Result.authority_ref && n7Result.handoff_ref, 'N7 feedback requires admitted N7 authority and handoff.');
+  assert.ok(n7Result.hashes.authority_hash && n7Result.hashes.handoff_hash, 'N7 feedback requires N7 hashes.');
+  assert.ok(n8GateResultHash, 'N7 feedback requires an N8 gate result hash.');
+  const n7Handoff = await getWorkflowHarnessHandoff(app, n7Result.handoff_ref);
+  const n7Payload = n7Handoff.payload;
+  const initialPayload = initialInput.frozen_input.payload;
+  const feedback = {
+    feedback_class: feedbackClass,
+    failure_reason_code: feedbackClass === 'gate_rejected'
+      ? 'provider_negative_gate_rejected'
+      : 'provider_negative_value_not_supported',
+    feedback_summary: feedbackClass === 'gate_rejected'
+      ? 'Provider-backed N8 gate rejection blocked the active candidate before value authority was persisted.'
+      : 'Provider-backed N8 value assessment persisted a non-advance disposition for the active candidate.',
+    affected_refs: [n7Payload.active_candidate_ref],
+    previous_n7_handoff_ref: n7Result.handoff_ref,
+    previous_n7_handoff_hash: n7Result.hashes.handoff_hash,
+    previous_trial_ledger_ref: n7Payload.trial_ledger_ref,
+    previous_trial_ledger_hash: n7Payload.trial_ledger_hash,
+    failed_topic_question_contract_ref: n7Result.authority_ref,
+    failed_topic_question_contract_hash: n7Result.hashes.authority_hash,
+    failed_candidate_ref: n7Payload.active_candidate_ref,
+    failed_candidate_hash: n7Payload.active_candidate_hash,
+    topic_question_candidate_set_ref: n7Payload.topic_question_candidate_set_ref,
+    topic_question_candidate_set_hash: n7Payload.topic_question_candidate_set_hash,
+    n8_gate_result_hash: n8GateResultHash,
+    value_assessment_ref: valueResult?.authority_ref ?? null,
+    value_assessment_hash: valueResult?.hashes?.authority_hash ?? null,
+  };
+  const feedbackArtifact = await recordN8FeedbackArtifact(app, initialInput, feedback);
+  const payload = {
+    ...initialPayload,
+    input_mode: 'feedback_from_n8',
+    n8_feedback_ref: feedbackArtifact.artifact_ref,
+    n8_feedback_hash: feedbackArtifact.artifact_hash,
+    n8_feedback_payload_hash: feedbackArtifact.payload_hash,
+  };
+  const frozenInput = {
+    input_contract: 'N8ToN7Feedback@v1',
+    snapshot_kind: 'topic_question_candidate_set',
+    source_refs: uniqueRefs([
+      ...initialInput.frozen_input.source_refs,
+      feedbackArtifact.artifact_ref,
+      n7Result.handoff_ref,
+    ]),
+    payload,
+  };
+  return harnessRequest(
+    initialInput.title_card_id,
+    suffix,
+    'n7_feedback',
+    'topic-selection.v1b.materialize-topic-question-contract.v1',
+    frozenInput,
+  );
+}
+
+function providerN6AllowedRefs(bundle, selectedOption, input) {
+  const n6EvidenceRefs = uniqueRefs([
+    ...selectedOption.support_evidence_refs,
+    ...selectedOption.challenge_evidence_refs,
+    ...selectedOption.baseline_evidence_refs,
+    ...selectedOption.context_evidence_refs,
+  ]);
+  return uniqueRefs([
+    bundle.validated_need_ref,
+    input.frozen_input.payload.research_slice_ref,
+    ...n6EvidenceRefs,
+  ]);
+}
+
+async function providerN6NegativeSemantic(app, bundle, selectedOption, input) {
+  const slot = n6DraftSlot();
+  const negativePayload = v1bHarnessN6NegativeDraft(bundle, input);
+  return recordModelLikeSemanticDraft(app, input, slot, () => negativePayload, () => createProviderStructuredDraft(
+    input,
+    slot,
+    'topic_selection_topic_question_candidate_set',
+    topicSelectionV1bTopicQuestionCandidateSetDraftPayloadSchema,
+    'TopicQuestionCandidateSetDraft',
+    providerContext({
+      node: 'N6',
+      intentional_negative_canary: true,
+      frozen_input: input.frozen_input,
+      selected_research_slice_option: selectedOption,
+      reference_negative_payload_json: negativePayload,
+      explicit_required_values_json: {
+        recommended_candidate_keys: ['provider_negative_unanswerable'],
+        'candidates[0].candidate_key': 'provider_negative_unanswerable',
+        'candidates[0].main_question': 'How can AI improve research?',
+        'candidates[0].answerability_verdict': 'not_answerable',
+        'candidates[0].blockers': [],
+        'candidates[0].confidence': 0.42,
+      },
+      allowed_functional_refs_json: providerN6AllowedRefs(bundle, selectedOption, input),
+      output_instructions: [
+        'Return exactly reference_negative_payload_json.',
+        'This is an intentional negative canary; do not repair answerability_verdict, main_question, confidence, or candidate_key.',
+        'Keep every functional ref copied from reference_negative_payload_json.',
+      ],
+    }),
+  ));
+}
+
+function providerN8AllowedRefs(input, candidates) {
+  const payload = input.frozen_input.payload;
+  const n8EvidenceRefs = uniqueRefs(candidates.flatMap((candidate) => [
+    ...candidate.traceability_check_payload.support_evidence_refs,
+    ...candidate.traceability_check_payload.challenge_evidence_refs,
+    ...candidate.traceability_check_payload.baseline_evidence_refs,
+    ...candidate.traceability_check_payload.context_evidence_refs,
+    ...candidate.traceability_check_payload.mapped_evidence_refs,
+    ...candidate.answerability_plan_payload.required_evidence_refs,
+  ]));
+  return uniqueRefs([
+    payload.topic_question_ref,
+    payload.topic_question_contract_ref,
+    payload.answerability_plan_ref,
+    payload.topic_question_candidate_set_ref,
+    payload.active_candidate_ref,
+    payload.selected_research_slice_ref,
+    ...n8EvidenceRefs,
+  ]);
+}
+
+async function providerN8NegativeSemantic(app, input, candidates, variant) {
+  const slot = n8DraftSlot();
+  const negativePayload = variant === 'blocking_gate'
+    ? v1bHarnessN8BlockingGateDraft(input)
+    : v1bHarnessN8NonAdvanceDraft(input);
+  const requiredValues = variant === 'blocking_gate'
+    ? {
+      readiness_status: 'ready',
+      recommended_disposition: 'advance_to_package',
+      'hard_gates[0].verdict': 'fail',
+      'hard_gates[0].severity': 'blocking',
+      'reasoning_memo.recommendation': 'advance_to_package',
+    }
+    : {
+      readiness_status: 'needs_refinement',
+      recommended_disposition: 'refine_question',
+      total_score: 55,
+      'reasoning_memo.recommendation': 'refine_question',
+      'reasoning_memo.requires_critic_review': true,
+    };
+  return recordModelLikeSemanticDraft(app, input, slot, () => negativePayload, () => createProviderStructuredDraft(
+    input,
+    slot,
+    'topic_selection_topic_value_assessment',
+    topicSelectionV1bTopicValueAssessmentDraftPayloadSchema,
+    'TopicValueAssessmentDraft',
+    providerContext({
+      node: 'N8',
+      intentional_negative_canary: true,
+      frozen_input: input.frozen_input,
+      persisted_topic_question_candidates: candidates,
+      reference_negative_payload_json: negativePayload,
+      explicit_required_values_json: requiredValues,
+      allowed_functional_refs_json: providerN8AllowedRefs(input, candidates),
+      output_instructions: [
+        'Return exactly reference_negative_payload_json.',
+        'This is an intentional negative canary; do not repair the requested disposition, gate verdicts, readiness, score, or critic flags.',
+        'Keep every functional ref copied from reference_negative_payload_json.',
+      ],
+    }),
+  ));
+}
+
+async function v1bHarnessN9Request(app, n8Result, suffix) {
+  return v1bHarnessRequestFromHandoff(
+    app,
+    n8Result,
+    suffix,
+    'N8ToN9Handoff',
+    'topic-selection.v1b.decide-value-disposition.v1',
+    'n9',
+    'N8ToN9Handoff@v1',
+    'topic_value_assessment',
+    { n8_handoff_hash: n8Result.hashes.handoff_hash },
+  );
+}
+
+async function v1bHarnessN10Request(app, n9Result, suffix) {
+  return v1bHarnessRequestFromHandoff(
+    app,
+    n9Result,
+    suffix,
+    'N9ToN10Handoff',
+    'topic-selection.v1b.create-draft-topic-package.v1',
+    'n10',
+    'N9ToN10Handoff@v1',
+    'value_disposition_decision',
+    { n9_handoff_hash: n9Result.hashes.handoff_hash },
+  );
+}
+
+async function v1bHarnessN11Request(app, n10Result, suffix) {
+  return v1bHarnessRequestFromHandoff(
+    app,
+    n10Result,
+    suffix,
+    'N10ToN11Handoff',
+    'topic-selection.v1b.publish-v1c-input-bundle.v1',
+    'n11',
+    'N10ToN11Handoff@v1',
+    'topic_package',
+    { n10_handoff_hash: n10Result.hashes.handoff_hash },
+  );
+}
+
+async function loadExistingV1bInputBundle(bundleId) {
+  const prisma = new PrismaClient();
+  try {
+    const repository = new PrismaTopicSelectionNeedValidationRepository(prisma);
+    const bundle = await repository.findV1aToV1bInputBundleById(bundleId);
+    assert.ok(bundle, `Existing v1b input bundle not found: ${bundleId}`);
+    return bundle;
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+function existingV1bInputBundleResult(bundle) {
+  return {
+    titleCardId: bundle.title_card_id,
+    validatedNeedId: bundle.validated_need_id,
+    v1bInputBundle: bundle,
+    v1bInputBundleId: bundle.v1b_input_bundle_id,
+  };
+}
+
+async function runV1bHarnessHttpN1ToN11(app, suffix, existingBundle = null) {
+  const bundleResult = existingBundle
+    ? existingV1bInputBundleResult(existingBundle)
+    : await createV1bInputBundle(app, suffix);
+  const bundle = bundleResult.v1bInputBundle;
+  const acceptedProfile = acceptedConstraintProfilePayload();
+  const semanticSummaries = [];
+
+  const n1Input = v1bHarnessN1Request(bundle, suffix);
+  const n1 = await invokeV1bHarnessNode(app, n1Input);
+
+  const n2Input = v1bHarnessN2Request(bundle, n1, suffix, acceptedProfile);
+  const n2SemanticArtifact = await recordWorkflowHarnessSemanticArtifact(app, n2Input, {
+    slot_id: 'n2_constraint_profile_semantic_support',
+    allowed_effect: 'delegated_payload_candidate',
+    output_contract: 'ResearchConstraintProfileDraftSupport@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.constraint_profile_support,
+  }, acceptedProfile);
+  const n2 = await invokeV1bHarnessNode(app, {
+    ...n2Input,
+    semantic_artifacts: [n2SemanticArtifact],
+  });
+
+  const n3 = await invokeV1bHarnessNode(app, v1bHarnessN3Request(n1, n2, suffix));
+  const n4Input = v1bHarnessN4Request(n1, n2, n3, suffix);
+  const n4Slot = {
+    slot_id: 'n4_research_slice_option_draft',
+    allowed_effect: 'model_draft_for_gate',
+    output_contract: 'ResearchSliceOptionSetDraft@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.research_slice_options_single_agent,
+  };
+  const n4Semantic = await recordModelLikeSemanticDraft(app, n4Input, n4Slot, () => v1bHarnessN4Draft(bundle), () => {
+    const n4EvidenceRefConstraints = {
+      support_evidence_refs: bundle.evidence_role_bundle.support_unit_refs,
+      challenge_evidence_refs: bundle.evidence_role_bundle.challenge_unit_refs,
+      baseline_evidence_refs: bundle.evidence_role_bundle.baseline_unit_refs,
+      context_evidence_refs: bundle.evidence_role_bundle.context_unit_refs,
+    };
+    const n4AllowedOutputRefs = uniqueRefs([
+      bundle.validated_need_ref,
+      ...n4EvidenceRefConstraints.support_evidence_refs,
+      ...n4EvidenceRefConstraints.challenge_evidence_refs,
+      ...n4EvidenceRefConstraints.baseline_evidence_refs,
+      ...n4EvidenceRefConstraints.context_evidence_refs,
+    ]);
+    const context = providerContext({
+      node: 'N4',
+      frozen_input: n4Input.frozen_input,
+      v1a_bundle: bundle,
+      evidence_ref_constraints_json: n4EvidenceRefConstraints,
+      explicit_required_values_json: {
+        'options[*].target_community': acceptedProfile.target_community,
+        'options[*].contribution_type_candidate': acceptedProfile.intended_contribution_style,
+        'at least one options[*].expected_claim': 'A bounded local workflow can preserve evidence-to-need traceability for topic-selection review.',
+        'at least one options[*].fallback_claim': 'The workflow exposes topic-selection trace gaps for reviewer inspection.',
+        'at least one options[*].claim_ceiling_alignment.status': 'aligned',
+        'options[*].excluded_boundaries must include each non_goals item': acceptedProfile.non_goals,
+        'at least one options[*].hard_blockers': [],
+        'at least one options[*].requires_human_review': false,
+        'at least one options[*].baseline_risk': 'medium',
+        'at least one options[*].execution_risk': 'medium',
+        'at least one options[*].scope_risk': 'low',
+        claim_ceiling: acceptedProfile.claim_ceiling,
+      },
+      allowed_functional_refs_json: n4AllowedOutputRefs,
+      output_instructions: [
+        'Return one or two ResearchSlice options.',
+        'recommended_option_key must match one returned option_key.',
+        `Every option target_community must be exactly: ${acceptedProfile.target_community}`,
+        `Every option contribution_type_candidate must be exactly: ${acceptedProfile.intended_contribution_style}`,
+        'At least one option must be selectable: hard_blockers must be [], requires_human_review must be false, confidence must be >= 0.75, and no risk level may be high.',
+        'Ordinary uncertainty belongs in dependency_risks or main_risks, not in hard_blockers.',
+        'At least one option expected_claim must be exactly: A bounded local workflow can preserve evidence-to-need traceability for topic-selection review.',
+        'At least one option fallback_claim must be exactly: The workflow exposes topic-selection trace gaps for reviewer inspection.',
+        'Do not include forbidden claim-ceiling phrases such as production superiority in expected_claim or fallback_claim.',
+        'Only source_validated_need_refs may cite the validated_need ref.',
+        'Only support_evidence_refs, challenge_evidence_refs, baseline_evidence_refs, and context_evidence_refs may cite evidence refs, and each role must use only the matching evidence_ref_constraints_json list.',
+        'Do not put intake, readiness, constraint-profile, trace_snapshot, artifact_ref, search, or literature refs in any evidence ref array.',
+        'Every option must keep the claim ceiling bounded and cite inherited support evidence.',
+        'Copy supplied non-goals into excluded_boundaries when applicable.',
+      ],
+    });
+    return createProviderStructuredDraft(
+      n4Input,
+      n4Slot,
+      'topic_selection_research_slice_option_set',
+      topicSelectionV1bResearchSliceOptionSetDraftPayloadSchema,
+      'ResearchSliceOptionSetDraft',
+      context,
+    );
+  });
+  semanticSummaries.push(n4Semantic.summary);
+  const n4 = await invokeV1bHarnessNode(app, {
+    ...n4Semantic.invocationInput,
+    semantic_artifacts: [n4Semantic.semanticArtifact],
+  });
+  assert.ok(n4.authority_ref, JSON.stringify(n4));
+
+  const selectedOption = await selectedV1bHarnessOption(app, n4);
+  const n5 = await invokeV1bHarnessNode(
+    app,
+    v1bHarnessN5Request(n4, acceptedV1bHarnessSliceSelectionPayload(selectedOption), suffix),
+  );
+
+  const n6Input = await v1bHarnessN6Request(app, n5, suffix);
+  const n6Slot = {
+    slot_id: 'n6_question_candidate_draft',
+    allowed_effect: 'model_draft_for_gate',
+    output_contract: 'TopicQuestionCandidateSetDraft@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_question_candidates_single_agent,
+  };
+  const n6Semantic = await recordModelLikeSemanticDraft(app, n6Input, n6Slot, () => v1bHarnessN6Draft(bundle, n6Input), () => {
+    const n6EvidenceRefs = uniqueRefs([
+      ...selectedOption.support_evidence_refs,
+      ...selectedOption.challenge_evidence_refs,
+      ...selectedOption.baseline_evidence_refs,
+      ...selectedOption.context_evidence_refs,
+    ]);
+    const n6AllowedOutputRefs = uniqueRefs([
+      bundle.validated_need_ref,
+      n6Input.frozen_input.payload.research_slice_ref,
+      ...n6EvidenceRefs,
+    ]);
+    const context = providerContext({
+      node: 'N6',
+      frozen_input: n6Input.frozen_input,
+      selected_research_slice_option: selectedOption,
+      evidence_ref_constraints_json: {
+        question_frame_evidence_refs: n6EvidenceRefs,
+        support_evidence_refs: selectedOption.support_evidence_refs,
+        challenge_evidence_refs: selectedOption.challenge_evidence_refs,
+        baseline_evidence_refs: selectedOption.baseline_evidence_refs,
+        context_evidence_refs: selectedOption.context_evidence_refs,
+      },
+      explicit_required_values_json: {
+        'question_frame.target_setting': selectedOption.target_setting,
+        'question_frame.target_community': selectedOption.target_community,
+        'question_frame.assumption_refs': [],
+        'boundary_check.preserved_boundary_refs': [],
+        'boundary_check.excluded_boundary_refs': [],
+        'boundary_check.boundary_violations': [],
+        'at least one candidates[*].candidate_key': 'harness_traceability_gate',
+        'at least one candidates[*].main_question': 'How can a WorkflowHarness-native topic selection gate preserve evidence-to-need traceability for reviewer inspection?',
+        'at least one candidates[*].answerability_verdict': 'answerable',
+        'at least one candidates[*].blockers': [],
+        'at least one candidates[*].boundary_check.boundary_violations': [],
+        'at least one candidates[*].expected_claim': 'A WorkflowHarness-native topic selection gate can preserve evidence-to-need traceability for reviewer inspection.',
+        'at least one candidates[*].fallback_claim': 'The gate exposes topic-selection trace gaps for reviewer inspection.',
+        'at least one candidates[*].max_claim_strength': 'Bounded workflow claim about trace preservation under local reviewer inspection.',
+      },
+      v1a_bundle_refs: {
+        validated_need_ref: bundle.validated_need_ref,
+        evidence_role_bundle: bundle.evidence_role_bundle,
+      },
+      allowed_functional_refs_json: n6AllowedOutputRefs,
+      output_instructions: [
+        'Return one or two answerable TopicQuestion candidates.',
+        'recommended_candidate_keys must reference returned candidate_key values.',
+        `question_frame.target_setting must be exactly: ${selectedOption.target_setting}`,
+        `question_frame.target_community must be exactly: ${selectedOption.target_community}`,
+        'question_frame.assumption_refs, boundary_check.preserved_boundary_refs, boundary_check.excluded_boundary_refs, and boundary_check.boundary_violations must be empty arrays for this canary.',
+        'Only evidence_ref_constraints_json refs may appear in question_frame.evidence_refs, answerability_plan.required_evidence_refs, traceability_check evidence arrays, mapped_evidence_refs, and falsification_conditions.trigger_evidence_refs.',
+        'Do not put research_slice, research_slice_option, research_slice_option_set, slice_selection_decision, research_slice_selection_decision, artifact_ref, intake, readiness, or constraint-profile refs in any evidence field.',
+        'At least one candidate must be admissible: candidate_key harness_traceability_gate, the exact main_question from explicit_required_values_json, answerability_verdict answerable, blockers [], boundary_violations [], and confidence >= 0.75.',
+        'For the admissible candidate, answerability_plan must include at least one dataset/resource, metric, baseline, evaluation_setting, and required_evidence_refs.',
+        'For the admissible candidate, traceability_check must include non-empty support_evidence_refs, challenge_evidence_refs, baseline_evidence_refs, context_evidence_refs, and mapped_evidence_refs.',
+        'For the admissible candidate, include at least one falsification condition with severity hard or answerability, a trigger_evidence_ref from evidence_ref_constraints_json, and trigger_source_refs containing the research_slice_ref.',
+        'Do not include forbidden claim-ceiling phrases such as production superiority in expected_claim or fallback_claim.',
+        'Each recommended candidate must have a question-shaped main_question ending with a question mark.',
+        'Each recommended candidate must include support/challenge/baseline/context refs where inherited refs are available.',
+        'Each recommended candidate must include falsification_conditions.',
+      ],
+    });
+    return createProviderStructuredDraft(
+      n6Input,
+      n6Slot,
+      'topic_selection_topic_question_candidate_set',
+      topicSelectionV1bTopicQuestionCandidateSetDraftPayloadSchema,
+      'TopicQuestionCandidateSetDraft',
+      context,
+    );
+  });
+  semanticSummaries.push(n6Semantic.summary);
+  const n6 = await invokeV1bHarnessNode(app, {
+    ...n6Semantic.invocationInput,
+    semantic_artifacts: [n6Semantic.semanticArtifact],
+  });
+  assert.ok(n6.handoff_ref, JSON.stringify(n6));
+  const candidates = await listV1bHarnessCandidates(app, n6);
+
+  const n7 = await invokeV1bHarnessNode(app, await v1bHarnessN7Request(app, n6, suffix));
+  const n8Input = await v1bHarnessN8Request(app, n7, suffix);
+  const n8Slot = {
+    slot_id: 'n8_value_assessment_draft',
+    allowed_effect: 'model_draft_for_gate',
+    output_contract: 'TopicValueAssessmentDraft@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_value_assessment_single_agent,
+  };
+  const n8Semantic = await recordModelLikeSemanticDraft(app, n8Input, n8Slot, () => v1bHarnessN8ValueDraft(n8Input), () => {
+    const n8Payload = n8Input.frozen_input.payload;
+    const n8EvidenceRefs = uniqueRefs(candidates.flatMap((candidate) => [
+      ...candidate.traceability_check_payload.support_evidence_refs,
+      ...candidate.traceability_check_payload.challenge_evidence_refs,
+      ...candidate.traceability_check_payload.baseline_evidence_refs,
+      ...candidate.traceability_check_payload.context_evidence_refs,
+      ...candidate.traceability_check_payload.mapped_evidence_refs,
+      ...candidate.answerability_plan_payload.required_evidence_refs,
+    ]));
+    const n8AllowedValueRefs = uniqueRefs([
+      n8Payload.topic_question_ref,
+      n8Payload.topic_question_contract_ref,
+      n8Payload.answerability_plan_ref,
+      n8Payload.topic_question_candidate_set_ref,
+      n8Payload.active_candidate_ref,
+      n8Payload.selected_research_slice_ref,
+      ...n8EvidenceRefs,
+    ]);
+    const context = providerContext({
+      node: 'N8',
+      frozen_input: n8Input.frozen_input,
+      selected_research_slice_option: selectedOption,
+      persisted_topic_question_candidates: candidates,
+      evidence_ref_constraints_json: {
+        value_evidence_refs: n8EvidenceRefs,
+      },
+      explicit_required_values_json: {
+        readiness_status: 'ready_with_accepted_risk',
+        recommended_disposition: 'advance_to_package',
+        'reasoning_memo.recommendation': 'advance_to_package',
+        'total_score minimum for this acceptance canary': 72,
+        'hard_gates[*].refs': [n8Payload.topic_question_contract_ref],
+        'hard_gates[*].verdict must be only': ['pass', 'pass_with_risk'],
+        'hard_gates[*].severity must not be': ['blocking'],
+        'dimension_scores[*].evidence_refs must use only': n8EvidenceRefs,
+        'dimension_scores[*].score minimum for every dimension': 65,
+        'dimension_scores reviewer_risk score minimum': 70,
+        'reasoning_memo.effort_to_value': 'The package-drafting value is high relative to the contained implementation and review overhead.',
+        'reasoning_memo.cited_refs must use only': n8AllowedValueRefs,
+        'reasoning_memo must not contain': ['effort_to_value_fit'],
+        accepted_risk_refs: [],
+        blocker_refs: [],
+      },
+      allowed_functional_refs_json: n8AllowedValueRefs,
+      output_instructions: [
+        `Return exactly ${TOPIC_SELECTION_VALUE_GATE_KEYS.length} hard_gates in this order: ${TOPIC_SELECTION_VALUE_GATE_KEYS.join(', ')}.`,
+        `Return exactly ${TOPIC_SELECTION_VALUE_DIMENSIONS.length} dimension_scores in this order: ${TOPIC_SELECTION_VALUE_DIMENSIONS.join(', ')}.`,
+        'Only allowed_functional_refs_json may appear in hard_gates.refs, dimension_scores.evidence_refs, accepted_risk_refs, blocker_refs, and reasoning_memo.cited_refs.',
+        'Copy allowed refs as whole JSON objects, including the exact title_card_id and version_id values; never reconstruct ref fields manually.',
+        'Never output artifact_ref, trace_snapshot, transition_attempt, gate_result, intake, readiness, constraint-profile, option-set, or selection-decision refs in N8 value refs.',
+        'Use topic_question_contract_ref for hard_gates[*].refs. Use evidence_ref_constraints_json.value_evidence_refs for dimension_scores[*].evidence_refs.',
+        'This is a package-drafting acceptance canary, not a promotion-readiness review. The supplied candidate is answerable and risks are explicit.',
+        'Set readiness_status to ready_with_accepted_risk, recommended_disposition to advance_to_package, and reasoning_memo.recommendation to advance_to_package.',
+        'Use the exact reasoning_memo key effort_to_value; never use effort_to_value_fit.',
+        'Set total_score to at least 72. Use 76 when uncertain; do not recommend advance_to_package with total_score below 70.',
+        'Every dimension score must be at least 65, and reviewer_risk must be at least 70 because explicit residual risk handling is a value-positive signal here.',
+        'No hard gate may have verdict fail or severity blocking for this canary; use pass_with_risk where a residual concern remains.',
+        'Do not assess promotion readiness; assess package-drafting readiness only.',
+      ],
+    });
+    return createProviderStructuredDraft(
+      n8Input,
+      n8Slot,
+      'topic_selection_topic_value_assessment',
+      topicSelectionV1bTopicValueAssessmentDraftPayloadSchema,
+      'TopicValueAssessmentDraft',
+      context,
+    );
+  });
+  semanticSummaries.push(n8Semantic.summary);
+  const n8 = await invokeV1bHarnessNode(app, {
+    ...n8Semantic.invocationInput,
+    semantic_artifacts: [n8Semantic.semanticArtifact],
+  });
+  assert.ok(n8.authority_ref, JSON.stringify(n8));
+  const valueAssessments = await listV1bHarnessValueAssessments(app, bundle.title_card_id);
+  assertV1bOutputQuality({ selectedOption, candidates, valueAssessments });
+  const n9 = await invokeV1bHarnessNode(app, await v1bHarnessN9Request(app, n8, suffix));
+  const n10 = await invokeV1bHarnessNode(app, await v1bHarnessN10Request(app, n9, suffix));
+  const n11 = await invokeV1bHarnessNode(app, await v1bHarnessN11Request(app, n10, suffix));
+
+  return {
+    bundle,
+    selectedOption,
+    candidates,
+    valueAssessments,
+    semanticSummaries,
+    nodes: { n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11 },
+  };
+}
+
+async function runV1bHarnessHttpSetupToN5(app, suffix, existingBundle = null) {
+  const bundleResult = existingBundle
+    ? existingV1bInputBundleResult(existingBundle)
+    : await createV1bInputBundle(app, suffix);
+  const bundle = bundleResult.v1bInputBundle;
+  const acceptedProfile = acceptedConstraintProfilePayload();
+  const semanticSummaries = [];
+
+  const n1Input = v1bHarnessN1Request(bundle, suffix);
+  const n1 = await invokeV1bHarnessNode(app, n1Input);
+
+  const n2Input = v1bHarnessN2Request(bundle, n1, suffix, acceptedProfile);
+  const n2SemanticArtifact = await recordWorkflowHarnessSemanticArtifact(app, n2Input, {
+    slot_id: 'n2_constraint_profile_semantic_support',
+    allowed_effect: 'delegated_payload_candidate',
+    output_contract: 'ResearchConstraintProfileDraftSupport@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.constraint_profile_support,
+  }, acceptedProfile);
+  const n2 = await invokeV1bHarnessNode(app, {
+    ...n2Input,
+    semantic_artifacts: [n2SemanticArtifact],
+  });
+
+  const n3 = await invokeV1bHarnessNode(app, v1bHarnessN3Request(n1, n2, suffix));
+  const n4Input = v1bHarnessN4Request(n1, n2, n3, suffix);
+  const n4Semantic = await recordCodexAssistedSemanticDraft(
+    app,
+    n4Input,
+    n4DraftSlot(),
+    v1bHarnessN4Draft(bundle),
+  );
+  semanticSummaries.push(n4Semantic.summary);
+  const n4 = await invokeV1bHarnessNode(app, {
+    ...n4Semantic.invocationInput,
+    semantic_artifacts: [n4Semantic.semanticArtifact],
+  });
+  assert.ok(n4.authority_ref, JSON.stringify(n4));
+
+  const selectedOption = await selectedV1bHarnessOption(app, n4);
+  const n5 = await invokeV1bHarnessNode(
+    app,
+    v1bHarnessN5Request(n4, acceptedV1bHarnessSliceSelectionPayload(selectedOption), suffix),
+  );
+
+  return {
+    bundle,
+    selectedOption,
+    semanticSummaries,
+    nodes: { n1, n2, n3, n4, n5 },
+  };
+}
+
+async function runV1bHarnessHttpSetupToN3(app, suffix, existingBundle = null) {
+  const bundleResult = existingBundle
+    ? existingV1bInputBundleResult(existingBundle)
+    : await createV1bInputBundle(app, suffix);
+  const bundle = bundleResult.v1bInputBundle;
+  const acceptedProfile = acceptedConstraintProfilePayload();
+  const semanticSummaries = [];
+
+  const n1Input = v1bHarnessN1Request(bundle, suffix);
+  const n1 = await invokeV1bHarnessNode(app, n1Input);
+
+  const n2Input = v1bHarnessN2Request(bundle, n1, suffix, acceptedProfile);
+  const n2SemanticArtifact = await recordWorkflowHarnessSemanticArtifact(app, n2Input, {
+    slot_id: 'n2_constraint_profile_semantic_support',
+    allowed_effect: 'delegated_payload_candidate',
+    output_contract: 'ResearchConstraintProfileDraftSupport@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.constraint_profile_support,
+  }, acceptedProfile);
+  semanticSummaries.push({
+    node_id: n2Input.node_id,
+    slot_id: 'n2_constraint_profile_semantic_support',
+    execution_mode: 'codex_assisted',
+    provider_id: null,
+    model_id: null,
+    model_option_id: null,
+    output_hash: sha256Text(stableStringify(acceptedProfile)),
+  });
+  const n2 = await invokeV1bHarnessNode(app, {
+    ...n2Input,
+    semantic_artifacts: [n2SemanticArtifact],
+  });
+
+  const n3 = await invokeV1bHarnessNode(app, v1bHarnessN3Request(n1, n2, suffix));
+
+  return {
+    bundle,
+    acceptedProfile,
+    semanticSummaries,
+    nodes: { n1, n2, n3 },
+  };
+}
+
+async function invokeProviderNegativeN6Loopback(app, setup, suffix, loopbackTargetCode) {
+  const n6Input = await v1bHarnessN6Request(app, setup.nodes.n5, suffix);
+  const n6Semantic = await providerN6NegativeSemantic(app, setup.bundle, setup.selectedOption, n6Input);
+  const semanticArtifacts = [n6Semantic.semanticArtifact];
+  const semanticSummaries = [n6Semantic.summary];
+  if (loopbackTargetCode !== 'n6_regenerate_candidates') {
+    const triagePayload = n6LoopbackTriagePayload(n6Semantic.invocationInput, loopbackTargetCode);
+    semanticArtifacts.push(await recordN6LoopbackTriageArtifact(app, n6Semantic.invocationInput, triagePayload));
+  }
+  const invocationInput = semanticArtifacts.length > 1
+    ? withoutGlobalRuntimeAdmission(n6Semantic.invocationInput)
+    : n6Semantic.invocationInput;
+  const n6 = await invokeV1bHarnessNode(app, {
+    ...invocationInput,
+    semantic_artifacts: semanticArtifacts,
+  });
+  assert.equal(n6.gate_status, 'blocked');
+  assert.equal(n6.failure_class, 'semantic_non_pass');
+  assert.equal(n6.route_decision, 'loopback');
+  assert.equal(n6.error_code, 'N6_NO_ADMISSIBLE_TOPIC_QUESTION_CANDIDATE');
+  assert.equal(n6.authority_ref, null);
+  assert.equal(n6.handoff_ref, null);
+  const loopbackTrace = await getWorkflowHarnessTraceSnapshotPayload(n6.trace_snapshot_ref);
+  assert.equal(loopbackTrace.loopback_target_code, loopbackTargetCode);
+  assert.equal(
+    loopbackTrace.route_target_node_id,
+    loopbackTargetCode === 'n6_loopback_to_n5_select_different_slice'
+      ? 'topic-selection.v1b.select-research-slice.v1'
+      : 'topic-selection.v1b.generate-topic-question-candidates.v1',
+  );
+  if (loopbackTargetCode === 'n6_debate_escalation') {
+    assert.ok(loopbackTrace.debate_escalation, 'N6 debate loopback must preserve debate escalation payload.');
+  }
+  if (loopbackTargetCode === 'n6_loopback_to_n5_select_different_slice') {
+    assert.ok(loopbackTrace.upstream_rollback, 'N6 upstream loopback must preserve rollback payload.');
+  }
+  return {
+    case_id: loopbackTargetCode,
+    expected_loopback_target_code: loopbackTargetCode,
+    loopback_trace: {
+      loopback_target_code: loopbackTrace.loopback_target_code,
+      route_target_node_id: loopbackTrace.route_target_node_id,
+      loopback_failure_scope: loopbackTrace.loopback_failure_scope,
+      loopback_reason_codes: loopbackTrace.loopback_reason_codes,
+      has_debate_escalation: Boolean(loopbackTrace.debate_escalation),
+      has_upstream_rollback: Boolean(loopbackTrace.upstream_rollback),
+    },
+    semantic_artifacts: semanticSummaries,
+    nodes: {
+      n6: summarizeNode(n6),
+    },
+  };
+}
+
+async function runReadyN6Fixture(app, setup, suffix, draftFactory = v1bHarnessN6Draft) {
+  const n6Input = await v1bHarnessN6Request(app, setup.nodes.n5, suffix);
+  const n6Payload = draftFactory(setup.bundle, n6Input);
+  const n6Semantic = await recordCodexAssistedSemanticDraft(app, n6Input, n6DraftSlot(), n6Payload);
+  const n6 = await invokeV1bHarnessNode(app, {
+    ...n6Semantic.invocationInput,
+    semantic_artifacts: [n6Semantic.semanticArtifact],
+  });
+  assert.ok(n6.handoff_ref, JSON.stringify(n6));
+  const candidates = await listV1bHarnessCandidates(app, n6);
+  return {
+    candidates,
+    n6,
+    n6Input,
+    semanticSummaries: [n6Semantic.summary],
+  };
+}
+
+async function runProviderN8GateReadmissionVariant(app, setup, suffix) {
+  const ready = await runReadyN6Fixture(app, setup, `${suffix}_n6_gate_readmission`);
+  const n7InitialInput = await v1bHarnessN7Request(app, ready.n6, `${suffix}_n7_gate_readmission_initial`);
+  const n7Initial = await invokeV1bHarnessNode(app, n7InitialInput);
+  assert.equal(n7Initial.route_decision, 'invoke_next');
+
+  const n8RejectedInput = await v1bHarnessN8Request(app, n7Initial, `${suffix}_n8_blocking_gate`);
+  const n8Semantic = await providerN8NegativeSemantic(app, n8RejectedInput, ready.candidates, 'blocking_gate');
+  const n8Rejected = await invokeV1bHarnessNode(app, {
+    ...n8Semantic.invocationInput,
+    semantic_artifacts: [n8Semantic.semanticArtifact],
+  });
+  assert.equal(n8Rejected.gate_status, 'blocked');
+  assert.equal(n8Rejected.route_decision, 'blocked');
+  assert.equal(n8Rejected.error_code, 'N8_ADVANCE_WITH_BLOCKING_GATE');
+  assert.equal(n8Rejected.authority_ref, null);
+  assert.equal(n8Rejected.handoff_ref, null);
+
+  const feedbackInput = await v1bHarnessN7FeedbackRequest(
+    app,
+    n7InitialInput,
+    n7Initial,
+    'gate_rejected',
+    n8Rejected.hashes.gate_result_hash,
+    `${suffix}_n7_gate_readmission_feedback`,
+  );
+  const debateSupport = await recordN7SupportArtifact(
+    app,
+    feedbackInput,
+    n7DebateAdmissionSlot(),
+    n7DebateAdmissionPayload(),
+  );
+  const readmitted = await invokeV1bHarnessNode(app, {
+    ...feedbackInput,
+    semantic_artifacts: [debateSupport],
+  });
+  assert.equal(readmitted.gate_status, 'admitted_with_warnings');
+  assert.equal(readmitted.route_decision, 'invoke_next');
+  assert.equal(readmitted.authority_ref?.ref_id, n7Initial.authority_ref?.ref_id);
+
+  return {
+    case_id: 'n8_blocking_gate_to_n7_readmission',
+    semantic_artifacts: [...ready.semanticSummaries, n8Semantic.summary],
+    nodes: {
+      n6: summarizeNode(ready.n6),
+      n7_initial: summarizeNode(n7Initial),
+      n8_blocking_gate: summarizeNode(n8Rejected),
+      n7_readmitted: summarizeNode(readmitted),
+    },
+  };
+}
+
+async function runProviderN7TrialExhaustionVariant(app, setup, suffix) {
+  const ready = await runReadyN6Fixture(
+    app,
+    setup,
+    `${suffix}_n6_two_candidates`,
+    v1bHarnessN6TwoCandidateDraft,
+  );
+  assert.ok(ready.candidates.length >= 2, 'N7 exhaustion requires at least two candidates.');
+
+  const n7InitialInput = await v1bHarnessN7Request(app, ready.n6, `${suffix}_n7_first_trial`);
+  const firstTrial = await invokeV1bHarnessNode(app, n7InitialInput);
+  assert.equal(firstTrial.route_decision, 'invoke_next');
+
+  const firstN8Input = await v1bHarnessN8Request(app, firstTrial, `${suffix}_n8_first_non_advance`);
+  const firstN8Semantic = await providerN8NegativeSemantic(app, firstN8Input, ready.candidates, 'non_advance');
+  const firstN8 = await invokeV1bHarnessNode(app, {
+    ...firstN8Semantic.invocationInput,
+    semantic_artifacts: [firstN8Semantic.semanticArtifact],
+  });
+  assert.equal(firstN8.route_decision, 'invoke_next');
+  assert.ok(['admitted', 'admitted_with_warnings'].includes(firstN8.gate_status));
+  assert.ok(firstN8.authority_ref);
+
+  const secondTrialInput = await v1bHarnessN7FeedbackRequest(
+    app,
+    n7InitialInput,
+    firstTrial,
+    'semantic_candidate_failure',
+    firstN8.hashes.gate_result_hash,
+    `${suffix}_n7_second_trial_feedback`,
+    firstN8,
+  );
+  const secondTrial = await invokeV1bHarnessNode(app, secondTrialInput);
+  assert.equal(secondTrial.route_decision, 'invoke_next');
+  assert.notEqual(secondTrial.authority_ref?.ref_id, firstTrial.authority_ref?.ref_id);
+
+  const secondN8Input = await v1bHarnessN8Request(app, secondTrial, `${suffix}_n8_second_non_advance`);
+  const secondN8Semantic = await providerN8NegativeSemantic(app, secondN8Input, ready.candidates, 'non_advance');
+  const secondN8 = await invokeV1bHarnessNode(app, {
+    ...secondN8Semantic.invocationInput,
+    semantic_artifacts: [secondN8Semantic.semanticArtifact],
+  });
+  assert.equal(secondN8.route_decision, 'invoke_next');
+  assert.ok(['admitted', 'admitted_with_warnings'].includes(secondN8.gate_status));
+  assert.ok(secondN8.authority_ref);
+
+  const exhaustedInput = await v1bHarnessN7FeedbackRequest(
+    app,
+    n7InitialInput,
+    secondTrial,
+    'semantic_candidate_failure',
+    secondN8.hashes.gate_result_hash,
+    `${suffix}_n7_exhaustion_feedback`,
+    secondN8,
+  );
+  const refreshedCandidates = await listV1bHarnessCandidates(app, ready.n6);
+  const synthesisSupport = await recordN7SupportArtifact(
+    app,
+    exhaustedInput,
+    n7FailedTrialSynthesisSlot(),
+    n7FailedTrialSynthesisPayload(ready.n6, refreshedCandidates),
+  );
+  const exhausted = await invokeV1bHarnessNode(app, {
+    ...exhaustedInput,
+    semantic_artifacts: [synthesisSupport],
+  });
+  assert.equal(exhausted.gate_status, 'blocked');
+  assert.equal(exhausted.failure_class, 'semantic_non_pass');
+  assert.equal(exhausted.route_decision, 'loopback');
+  assert.equal(exhausted.error_code, 'N7_CANDIDATE_TRIALS_EXHAUSTED');
+  assert.equal(exhausted.handoff_ref, null);
+
+  return {
+    case_id: 'n7_trial_switch_and_exhaustion_to_n6_loopback',
+    candidate_count: ready.candidates.length,
+    semantic_artifacts: [...ready.semanticSummaries, firstN8Semantic.summary, secondN8Semantic.summary],
+    nodes: {
+      n6: summarizeNode(ready.n6),
+      n7_first_trial: summarizeNode(firstTrial),
+      n8_first_non_advance: summarizeNode(firstN8),
+      n7_second_trial: summarizeNode(secondTrial),
+      n8_second_non_advance: summarizeNode(secondN8),
+      n7_exhausted: summarizeNode(exhausted),
+    },
+  };
+}
+
+async function runProviderBackedNegativeLoopbacks(app, suffix, existingBundle = null) {
+  assert.equal(SEMANTIC_MODE, 'provider_llm', 'provider_negative_loopbacks requires provider_llm semantic mode.');
+  assert.ok(PROVIDER_ID, 'provider_negative_loopbacks requires TOPIC_SELECTION_V1B_HARNESS_PROVIDER_ID.');
+  const setup = await runV1bHarnessHttpSetupToN5(app, `${suffix}_setup`, existingBundle);
+  const cases = [];
+  for (const loopbackTargetCode of [
+    'n6_regenerate_candidates',
+    'n6_debate_escalation',
+    'n6_loopback_to_n5_select_different_slice',
+  ]) {
+    cases.push(await invokeProviderNegativeN6Loopback(
+      app,
+      setup,
+      `${suffix}_${loopbackTargetCode}`,
+      loopbackTargetCode,
+    ));
+  }
+  cases.push(await runProviderN8GateReadmissionVariant(app, setup, `${suffix}_gate_readmission`));
+  cases.push(await runProviderN7TrialExhaustionVariant(app, setup, `${suffix}_trial_exhaustion`));
+  return {
+    bundle: setup.bundle,
+    selectedOption: setup.selectedOption,
+    setupSemanticSummaries: setup.semanticSummaries,
+    setupNodes: setup.nodes,
+    cases,
+  };
+}
+
+function externalCodexN4Prompt(bundle, sampleIndex) {
+  const reviewAngles = [
+    'method feasibility and deterministic replay evidence',
+    'evidence traceability and reviewer-facing inspection',
+    'claim ceiling, scoped contribution, and low-risk package setup',
+  ];
+  const reviewAngle = reviewAngles[(sampleIndex - 1) % reviewAngles.length];
+  const template = v1bHarnessN4Draft(bundle);
+  template.comparison_summary = `The recommended slice stays bounded while emphasizing ${reviewAngle}.`;
+  template.options[0] = {
+    ...template.options[0],
+    details_payload: {
+      ...template.options[0].details_payload,
+      external_codex_n4_variance_sample: sampleIndex,
+      review_angle: reviewAngle,
+    },
+  };
+
+  return [
+    'You are an external Codex CLI session producing one frozen semantic artifact for Topic Selection v1b N4.',
+    'Do not inspect files, do not run shell commands, and do not explain your answer.',
+    'Return ONLY one valid JSON object. Do not wrap it in Markdown fences.',
+    '',
+    'Contract rules:',
+    '- Preserve all JSON keys, enum values, numeric values, booleans, array lengths, option_key values, risk levels, and functional ref objects exactly as provided in the template.',
+    '- Do not add or remove options, refs, blockers, human review triggers, comparison axes, or details_payload fields.',
+    '- excluded_boundaries must remain byte-for-byte identical to the template because they preserve ResearchConstraintProfile non-goals.',
+    '- recommended_option_key must remain traceable_workflow_slice and must match the returned option_key.',
+    '- hard_blockers must remain [], requires_human_review must remain false, and confidence must stay 0.82.',
+    '- baseline_risk must remain medium, execution_risk must remain medium, and scope_risk must remain low.',
+    '- Copy every ref as a whole JSON object exactly as it appears in the template. Do not invent refs.',
+    '',
+    `Natural-language variation target for this sample: ${reviewAngle}.`,
+    'You may vary only natural-language wording in comparison_summary, slice_statement, problem_space, included_boundaries, resource_assumptions, data_assumptions, evaluation_path, baseline_assumptions, dependency_risks, expected_claim, fallback_claim, observable_success_criteria, main_risks, and claim_ceiling_alignment.rationale.',
+    'The varied wording must remain bounded to local WorkflowHarness topic-selection traceability and must not claim production deployment, promotion readiness, or full paper implementation.',
+    '',
+    'Template to return as JSON:',
+    JSON.stringify(template, null, 2),
+  ].join('\n');
+}
+
+async function runExternalCodexN4Variance(app, suffix, existingBundle = null) {
+  assert.equal(
+    SEMANTIC_MODE,
+    'fixture',
+    'external_codex_n4_variance currently uses fixture setup plus external Codex N4 artifacts.',
+  );
+  const setup = await runV1bHarnessHttpSetupToN3(app, `${suffix}_setup`, existingBundle);
+  const samples = [];
+
+  for (let index = 0; index < EXTERNAL_CODEX_VARIANCE_COUNT; index += 1) {
+    const sampleIndex = index + 1;
+    const sampleSuffix = `${suffix}_external_codex_n4_${sampleIndex}`;
+    const n4Input = v1bHarnessN4Request(setup.nodes.n1, setup.nodes.n2, setup.nodes.n3, sampleSuffix);
+    const prompt = externalCodexN4Prompt(setup.bundle, sampleIndex);
+    const sampleDir = path.join(ARTIFACT_DIR, 'external-codex-n4-variance', `sample-${sampleIndex}`);
+    const codexSession = await runExternalCodexJsonSession(prompt, sampleDir);
+    const payload = parseJsonObjectFromCodexOutput(codexSession.raw_output);
+    const outputHash = sha256Text(stableStringify(payload));
+    const n4Semantic = await recordExternalCodexSemanticDraft(
+      app,
+      n4Input,
+      n4DraftSlot(),
+      payload,
+      {
+        ...codexSession.metadata,
+        sample_index: sampleIndex,
+        parsed_payload_hash: outputHash,
+      },
+    );
+    const n4 = await invokeV1bHarnessNode(app, {
+      ...n4Semantic.invocationInput,
+      semantic_artifacts: [n4Semantic.semanticArtifact],
+    });
+    const options = n4.authority_ref ? await listV1bHarnessOptions(app, n4) : [];
+    const selectedOption = options.find((option) => option.status === 'recommended') ?? options[0] ?? null;
+
+    samples.push({
+      sample_index: sampleIndex,
+      parsed_payload_hash: outputHash,
+      recommended_option_key: payload.recommended_option_key,
+      option_keys: Array.isArray(payload.options)
+        ? payload.options.map((option) => option?.option_key).filter(Boolean)
+        : [],
+      slice_statements: Array.isArray(payload.options)
+        ? payload.options.map((option) => option?.slice_statement).filter(Boolean)
+        : [],
+      expected_claims: Array.isArray(payload.options)
+        ? payload.options.map((option) => option?.expected_claim).filter(Boolean)
+        : [],
+      persisted_option_count: options.length,
+      selected_option_id: selectedOption?.research_slice_option_id ?? null,
+      semantic_artifacts: [n4Semantic.summary],
+      nodes: {
+        n4: summarizeNode(n4),
+      },
+    });
+  }
+
+  const failedSamples = samples.filter((sample) =>
+    !['admitted', 'admitted_with_warnings'].includes(sample.nodes.n4.gate_status)
+      || sample.nodes.n4.route_decision !== 'invoke_next'
+  );
+  assert.deepEqual(
+    failedSamples.map((sample) => ({ sample_index: sample.sample_index, n4: sample.nodes.n4 })),
+    [],
+    'External Codex N4 variance samples must all pass deterministic N4 admission and route to N5.',
+  );
+
+  return {
+    bundle: setup.bundle,
+    variance_count: EXTERNAL_CODEX_VARIANCE_COUNT,
+    unique_payload_hash_count: new Set(samples.map((sample) => sample.parsed_payload_hash)).size,
+    unique_slice_statement_count: new Set(samples.flatMap((sample) => sample.slice_statements)).size,
+    unique_expected_claim_count: new Set(samples.flatMap((sample) => sample.expected_claims)).size,
+    setupSemanticSummaries: setup.semanticSummaries,
+    setupNodes: setup.nodes,
+    samples,
+  };
+}
+
+function externalCodexN6Prompt(bundle, selectedOption, n6Input, sampleIndex) {
+  const payload = n6Input.frozen_input.payload;
+  const evidenceRefs = uniqueRefs([
+    ...selectedOption.support_evidence_refs,
+    ...selectedOption.challenge_evidence_refs,
+    ...selectedOption.baseline_evidence_refs,
+    ...selectedOption.context_evidence_refs,
+  ]);
+  const evidenceRef = evidenceRefs[0]
+    ?? bundle.evidence_role_bundle.support_unit_refs[0]
+    ?? bundle.evidence_map_ref;
+  const candidateKey = `external_codex_candidate_${sampleIndex}`;
+  const template = {
+    question_frame: {
+      target_setting: selectedOption.target_setting,
+      target_community: selectedOption.target_community,
+      object_scope: 'v1b harness-native topic selection candidate generation',
+      task_scope: 'candidate generation, deterministic gates, and replay drift checks',
+      intervention_or_approach: 'WorkflowHarness-native candidate-set gate with frozen semantic artifacts',
+      comparison_baseline: 'route-only smoke tests without harness-level product acceptance',
+      observable_outcome: 'stable candidate-set refs and replay hashes',
+      assumption_refs: [],
+      evidence_refs: [evidenceRef],
+      frame_payload: {
+        external_codex_n6_variance_sample: sampleIndex,
+        source: 'codex_cli_exec',
+      },
+    },
+    recommended_candidate_keys: [candidateKey],
+    generation_notes: [
+      `External Codex CLI variance sample ${sampleIndex}; keep the candidate bounded to the selected ResearchSlice.`,
+    ],
+    human_review_triggers: [],
+    candidates: [{
+      candidate_key: candidateKey,
+      main_question: 'How can a WorkflowHarness-native topic selection gate preserve evidence-to-need traceability for reviewer inspection?',
+      sub_questions: [
+        'Which frozen N5 lineage hashes must remain stable before N7 admission?',
+      ],
+      question_type: 'system',
+      contribution_hypothesis: 'system',
+      source_validated_need_refs: [bundle.validated_need_ref],
+      answerability_plan: {
+        datasets_or_resources: ['v1b harness trace fixtures'],
+        metrics: ['hash drift detection rate'],
+        baselines: ['route-only smoke coverage'],
+        ablations_or_comparisons: ['without frozen semantic artifact admission'],
+        evaluation_setting: 'local deterministic harness acceptance tests',
+        dependency_risks: ['external Codex session wording can vary across runs'],
+        open_dependencies: [],
+        known_gaps: [],
+        required_evidence_refs: [evidenceRef],
+      },
+      answerability_verdict: 'answerable',
+      expected_claim: 'A WorkflowHarness-native topic selection gate can preserve evidence-to-need traceability for reviewer inspection.',
+      fallback_claim: 'The gate exposes topic-selection trace gaps for reviewer inspection.',
+      max_claim_strength: 'Bounded workflow claim about trace preservation under local reviewer inspection.',
+      observable_success_criteria: ['N6 emits candidate set refs and hashes.'],
+      boundary_check: {
+        preserved_boundary_refs: [],
+        excluded_boundary_refs: [],
+        boundary_violations: [],
+        prohibited_claims: ['promotion decision'],
+        allowed_refinements: ['tighten candidate wording'],
+      },
+      traceability_check: {
+        support_evidence_refs: [evidenceRef],
+        challenge_evidence_refs: [evidenceRef],
+        baseline_evidence_refs: [evidenceRef],
+        context_evidence_refs: [evidenceRef],
+        mapped_evidence_refs: [evidenceRef],
+        unmapped_assumptions: [],
+      },
+      falsification_conditions: [{
+        condition_type: 'claim_overstrong',
+        severity: 'hard',
+        statement: 'If changed frozen N5 lineage hashes are not detected, the candidate claim must be lowered.',
+        trigger_evidence_refs: [evidenceRef],
+        trigger_source_refs: [payload.research_slice_ref],
+        related_contract_fields: ['expected_claim'],
+        expected_action: 'lower_claim_strength',
+        check_timing: 'before_value_assessment',
+        confidence: 'high',
+      }],
+      risk_notes: [],
+      blockers: [],
+      objections: [],
+      human_review_triggers: [],
+      confidence: 0.82,
+    }],
+  };
+
+  return [
+    'You are an external Codex CLI session producing one frozen semantic artifact for Topic Selection v1b N6.',
+    'Do not inspect files, do not run shell commands, and do not explain your answer.',
+    'Return ONLY one valid JSON object. Do not wrap it in Markdown fences.',
+    'Preserve all JSON keys, enum values, arrays, and functional ref objects exactly as provided in the template.',
+    'You may vary only natural-language wording inside main_question, sub_questions, generation_notes, expected_claim, fallback_claim, max_claim_strength, observable_success_criteria, dependency_risks, and statement.',
+    'The output must remain answerable, blocker-free, boundary-violation-free, and confidence must stay >= 0.75.',
+    '',
+    'Allowed functional refs are already embedded in the template. Do not invent refs.',
+    '',
+    'Template to return as JSON:',
+    JSON.stringify(template, null, 2),
+  ].join('\n');
+}
+
+async function runExternalCodexN6Variance(app, suffix, existingBundle = null) {
+  assert.equal(SEMANTIC_MODE, 'fixture', 'external_codex_n6_variance currently uses fixture setup plus external Codex N6 artifacts.');
+  const setup = await runV1bHarnessHttpSetupToN5(app, `${suffix}_setup`, existingBundle);
+  const samples = [];
+
+  for (let index = 0; index < EXTERNAL_CODEX_VARIANCE_COUNT; index += 1) {
+    const sampleIndex = index + 1;
+    const sampleSuffix = `${suffix}_external_codex_${sampleIndex}`;
+    const n6Input = await v1bHarnessN6Request(app, setup.nodes.n5, sampleSuffix);
+    const prompt = externalCodexN6Prompt(setup.bundle, setup.selectedOption, n6Input, sampleIndex);
+    const sampleDir = path.join(ARTIFACT_DIR, 'external-codex-n6-variance', `sample-${sampleIndex}`);
+    const codexSession = await runExternalCodexJsonSession(prompt, sampleDir);
+    const payload = parseJsonObjectFromCodexOutput(codexSession.raw_output);
+    const outputHash = sha256Text(stableStringify(payload));
+    const n6Semantic = await recordExternalCodexSemanticDraft(
+      app,
+      n6Input,
+      n6DraftSlot(),
+      payload,
+      {
+        ...codexSession.metadata,
+        sample_index: sampleIndex,
+        parsed_payload_hash: outputHash,
+      },
+    );
+    const n6 = await invokeV1bHarnessNode(app, {
+      ...n6Semantic.invocationInput,
+      semantic_artifacts: [n6Semantic.semanticArtifact],
+    });
+    const candidates = n6.handoff_ref ? await listV1bHarnessCandidates(app, n6) : [];
+    samples.push({
+      sample_index: sampleIndex,
+      parsed_payload_hash: outputHash,
+      candidate_keys: Array.isArray(payload.candidates)
+        ? payload.candidates.map((candidate) => candidate?.candidate_key).filter(Boolean)
+        : [],
+      main_questions: Array.isArray(payload.candidates)
+        ? payload.candidates.map((candidate) => candidate?.main_question).filter(Boolean)
+        : [],
+      persisted_candidate_count: candidates.length,
+      semantic_artifacts: [n6Semantic.summary],
+      nodes: {
+        n6: summarizeNode(n6),
+      },
+    });
+  }
+
+  const failedSamples = samples.filter((sample) =>
+    !['admitted', 'admitted_with_warnings'].includes(sample.nodes.n6.gate_status)
+  );
+  assert.deepEqual(
+    failedSamples.map((sample) => ({ sample_index: sample.sample_index, n6: sample.nodes.n6 })),
+    [],
+    'External Codex N6 variance samples must all pass deterministic N6 admission.',
+  );
+
+  return {
+    bundle: setup.bundle,
+    selectedOption: setup.selectedOption,
+    variance_count: EXTERNAL_CODEX_VARIANCE_COUNT,
+    unique_payload_hash_count: new Set(samples.map((sample) => sample.parsed_payload_hash)).size,
+    unique_main_question_count: new Set(samples.flatMap((sample) => sample.main_questions)).size,
+    setupSemanticSummaries: setup.semanticSummaries,
+    setupNodes: setup.nodes,
+    samples,
+  };
+}
+
+function externalCodexN8Prompt(n8Input, sampleIndex) {
+  const reviewAngles = [
+    'traceability, replay hashes, and reviewer inspection value',
+    'bounded claim strength, package-drafting readiness, and residual risk handling',
+    'effort-to-value tradeoff, deterministic gates, and downstream package usefulness',
+  ];
+  const reviewAngle = reviewAngles[(sampleIndex - 1) % reviewAngles.length];
+  const template = v1bHarnessN8ValueDraft(n8Input);
+  return [
+    'You are an external Codex CLI session producing one frozen semantic artifact for Topic Selection v1b N8.',
+    'Do not inspect files, do not run shell commands, and do not explain your answer.',
+    'Return ONLY one valid JSON object. Do not wrap it in Markdown fences.',
+    '',
+    'Contract rules:',
+    '- Preserve all JSON keys, enum values, numeric scores, booleans, arrays, array lengths, and functional ref objects exactly as provided in the template.',
+    `- hard_gates must stay in this exact order: ${TOPIC_SELECTION_VALUE_GATE_KEYS.join(', ')}.`,
+    `- dimension_scores must stay in this exact order: ${TOPIC_SELECTION_VALUE_DIMENSIONS.join(', ')}.`,
+    '- Do not add or remove hard gates, dimensions, refs, blockers, accepted risks, or memo fields.',
+    '- Use the exact reasoning_memo key effort_to_value. Do not output effort_to_value_fit.',
+    '- The output must remain ready, advance_to_package, blocker-free, and total_score must stay 83.',
+    '- Copy every ref as a whole JSON object exactly as it appears in the template. Do not invent refs.',
+    '',
+    `Natural-language variation target for this sample: ${reviewAngle}.`,
+    'You may vary only natural-language wording in hard_gates[*].rationale, dimension_scores[*].rationale, reviewer_objections, ceiling_case, base_case, floor_case, value_summary, risk_notes, reasoning_memo.value_thesis, reasoning_memo.significance, reasoning_memo.originality, reasoning_memo.claim_leverage, reasoning_memo.reviewer_risks, reasoning_memo.effort_to_value, reasoning_memo.strategic_fit, reasoning_memo.negative_memory_check, reasoning_memo.evidence_backed_rationale, reasoning_memo.top_objections, reasoning_memo.uncertainty, and reasoning_memo.disposition_bridge.',
+    'Do not vary reasoning_memo.recommendation, reasoning_memo.requires_critic_review, reasoning_memo.critic_triggers, or reasoning_memo.cited_refs.',
+    'The varied wording must remain consistent with the template scores, ready status, advance disposition, and cited refs.',
+    '',
+    'Template to return as JSON:',
+    JSON.stringify(template, null, 2),
+  ].join('\n');
+}
+
+async function runExternalCodexN8Variance(app, suffix, existingBundle = null) {
+  assert.equal(
+    SEMANTIC_MODE,
+    'fixture',
+    'external_codex_n8_variance currently uses fixture setup plus external Codex N8 artifacts.',
+  );
+  const setup = await runV1bHarnessHttpSetupToN5(app, `${suffix}_setup`, existingBundle);
+  const samples = [];
+
+  for (let index = 0; index < EXTERNAL_CODEX_VARIANCE_COUNT; index += 1) {
+    const sampleIndex = index + 1;
+    const sampleSuffix = `${suffix}_external_codex_n8_${sampleIndex}`;
+    const ready = await runReadyN6Fixture(app, setup, `${sampleSuffix}_n6`);
+    const n7Input = await v1bHarnessN7Request(app, ready.n6, `${sampleSuffix}_n7`);
+    const n7 = await invokeV1bHarnessNode(app, n7Input);
+    assert.equal(n7.route_decision, 'invoke_next');
+
+    const n8Input = await v1bHarnessN8Request(app, n7, `${sampleSuffix}_n8`);
+    const prompt = externalCodexN8Prompt(n8Input, sampleIndex);
+    const sampleDir = path.join(ARTIFACT_DIR, 'external-codex-n8-variance', `sample-${sampleIndex}`);
+    const codexSession = await runExternalCodexJsonSession(prompt, sampleDir);
+    const payload = parseJsonObjectFromCodexOutput(codexSession.raw_output);
+    const outputHash = sha256Text(stableStringify(payload));
+    const n8Semantic = await recordExternalCodexSemanticDraft(
+      app,
+      n8Input,
+      n8DraftSlot(),
+      payload,
+      {
+        ...codexSession.metadata,
+        sample_index: sampleIndex,
+        parsed_payload_hash: outputHash,
+      },
+    );
+    const n8 = await invokeV1bHarnessNode(app, {
+      ...n8Semantic.invocationInput,
+      semantic_artifacts: [n8Semantic.semanticArtifact],
+    });
+    const valueAssessments = n8.authority_ref
+      ? await listV1bHarnessValueAssessments(app, setup.bundle.title_card_id)
+      : [];
+    const persistedAssessment = n8.authority_ref
+      ? valueAssessments.find((assessment) => assessment.topic_value_assessment_id === n8.authority_ref.ref_id)
+      : null;
+    if (n8.authority_ref) {
+      assert.ok(persistedAssessment, 'External Codex N8 admission must persist the value assessment authority row.');
+    }
+
+    samples.push({
+      sample_index: sampleIndex,
+      parsed_payload_hash: outputHash,
+      readiness_status: payload.readiness_status,
+      recommended_disposition: payload.recommended_disposition,
+      total_score: payload.total_score,
+      value_summary: payload.value_summary,
+      reasoning_memo_recommendation: payload.reasoning_memo?.recommendation,
+      reasoning_memo_value_thesis: payload.reasoning_memo?.value_thesis,
+      persisted_value_assessment_count: valueAssessments.length,
+      persisted_value_assessment_id: persistedAssessment?.topic_value_assessment_id ?? null,
+      semantic_artifacts: [n8Semantic.summary],
+      nodes: {
+        n6: summarizeNode(ready.n6),
+        n7: summarizeNode(n7),
+        n8: summarizeNode(n8),
+      },
+    });
+  }
+
+  const failedSamples = samples.filter((sample) =>
+    !['admitted', 'admitted_with_warnings'].includes(sample.nodes.n8.gate_status)
+      || sample.nodes.n8.route_decision !== 'invoke_next'
+  );
+  assert.deepEqual(
+    failedSamples.map((sample) => ({ sample_index: sample.sample_index, n8: sample.nodes.n8 })),
+    [],
+    'External Codex N8 variance samples must all pass deterministic N8 admission and route to N9.',
+  );
+
+  return {
+    bundle: setup.bundle,
+    selectedOption: setup.selectedOption,
+    variance_count: EXTERNAL_CODEX_VARIANCE_COUNT,
+    unique_payload_hash_count: new Set(samples.map((sample) => sample.parsed_payload_hash)).size,
+    unique_value_summary_count: new Set(samples.map((sample) => sample.value_summary).filter(Boolean)).size,
+    unique_value_thesis_count: new Set(samples.map((sample) => sample.reasoning_memo_value_thesis).filter(Boolean)).size,
+    setupSemanticSummaries: setup.semanticSummaries,
+    setupNodes: setup.nodes,
+    samples,
+  };
+}
+
+function manualLocator(input) {
+  return {
+    locator_type: 'manual',
+    locator_ref: ref('manual_locator', input.key, input.titleCardId),
+    literature_ref: input.literatureRef,
+    source_ref: input.sourceRef,
+    content_ref: null,
+    section_ref: null,
+    paragraph_ref: null,
+    anchor_ref: null,
+    manual_label: `Manual locator ${input.key}`,
+  };
+}
+
+async function createLiterature(app, suffix) {
+  const safeSuffix = suffix.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
+  const importRes = await app.inject({
+    method: 'POST',
+    url: '/literature/collections/import',
+    payload: {
+      items: [{
+        provider: 'manual',
+        external_id: `topic-selection-v1b-harness-${safeSuffix}`,
+        title: `Topic Selection v1b Harness Evidence ${suffix}`,
+        abstract: 'Evidence workflows miss reviewer-facing traceability from claims to decisions.',
+        authors: ['Harness Runner'],
+        year: 2026,
+        doi: `10.1000/topic-selection-v1b-harness-${safeSuffix}`,
+        source_url: `https://example.com/topic-selection-v1b-harness/${safeSuffix}`,
+      }],
+    },
+  });
+  assertStatus(importRes, 200);
+  const body = importRes.json();
+  const literatureId = body.results[0]?.literature_id;
+  assert.ok(literatureId);
+  return literatureId;
+}
+
+async function createTitleCard(app, suffix) {
+  const titleCardRes = await app.inject({
+    method: 'POST',
+    url: '/title-cards',
+    payload: {
+      working_title: `Topic Selection v1b Harness Title ${suffix}`,
+      brief: 'Validate v1b topic package drafting through harness HTTP routes.',
+    },
+  });
+  assertStatus(titleCardRes, 201);
+  return titleCardRes.json().title_card_id;
+}
+
+async function createV1bInputBundle(app, suffix) {
+  const literatureId = await createLiterature(app, suffix);
+  const titleCardId = await createTitleCard(app, suffix);
+
+  const basketRes = await app.inject({
+    method: 'PATCH',
+    url: `/title-cards/${encodeURIComponent(titleCardId)}/evidence-basket`,
+    payload: { add_literature_ids: [literatureId] },
+  });
+  assertStatus(basketRes, 200);
+
+  const seedRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1a/topic-seeds/from-title-card',
+    payload: { title_card_id: titleCardId, created_by: 'system' },
+  });
+  assertStatus(seedRes, 201);
+  const seed = seedRes.json();
+
+  const snapshotRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1a/literature-resource-pool-snapshots',
+    payload: {
+      title_card_id: titleCardId,
+      topic_seed_id: seed.topic_seed_id,
+      created_by: 'system',
+    },
+  });
+  assertStatus(snapshotRes, 201);
+  const snapshot = snapshotRes.json();
+  const literatureRef = snapshot.literature_refs[0] ?? ref('literature_record', literatureId, titleCardId);
+  const sourceRef = snapshot.content_source_refs[0] ?? ref('literature_source', `manual-source-${suffix}`, titleCardId);
+
+  const coverageIntents = [
+    ['support-traceability', 'support', 'support reviewer-facing traceability gap'],
+    ['challenge-freshness', 'challenge', 'challenge evidence freshness for traceability workflows'],
+    ['baseline-provenance', 'baseline', 'baseline decision chain misses provenance'],
+    ['context-workflow', 'context', 'context local CS paper engineering workflow'],
+  ].map(([coverageKey, role, query]) => ({
+    coverage_key: coverageKey,
+    intent_type: role,
+    query,
+    expected_evidence_role: role,
+  }));
+
+  const planRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1a/search-plans',
+    payload: {
+      title_card_id: titleCardId,
+      topic_seed_id: seed.topic_seed_id,
+      literature_resource_pool_snapshot_id: snapshot.literature_resource_pool_snapshot_id,
+      query_intents: coverageIntents.map((intent) => intent.query),
+      coverage_intents: coverageIntents,
+      created_by: 'system',
+    },
+  });
+  assertStatus(planRes, 201);
+  const plan = planRes.json();
+
+  const runRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1a/search-runs',
+    payload: {
+      title_card_id: titleCardId,
+      search_plan_id: plan.search_plan.search_plan_id,
+      result_accounting: {
+        total_result_count: 4,
+        unique_literature_count: 1,
+        duplicate_result_count: 0,
+        failed_source_count: 0,
+        skipped_source_count: 0,
+      },
+      source_health_summary: { source_count: 1, warning_codes: [] },
+      dedup_summary: { canonical_work_refs: [literatureRef] },
+      evidence_map_input_refs: [literatureRef, sourceRef],
+      coverage_observations: plan.coverage_row_intents.map((row) => ({
+        coverage_row_intent_id: row.coverage_row_intent_id,
+        status: 'succeeded',
+        result_count: 1,
+        source_count: 1,
+      })),
+      evidence_bindings: plan.coverage_row_intents.map((row, index) => ({
+        coverage_row_intent_id: row.coverage_row_intent_id,
+        literature_ref: literatureRef,
+        source_refs: [sourceRef],
+        binding_kind: 'retrieval_hit',
+        result_rank: index + 1,
+      })),
+      coverage_assessments: plan.coverage_row_intents.map((row) => ({
+        coverage_row_intent_id: row.coverage_row_intent_id,
+        verdict: 'satisfied',
+        confidence: 0.88,
+        assessed_by: 'system',
+      })),
+      created_by: 'system',
+    },
+  });
+  assertStatus(runRes, 201);
+  const run = runRes.json();
+
+  const byRole = new Map(plan.coverage_row_intents.map((row) => [row.expected_evidence_role, row]));
+  const evidenceMapRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1a/evidence-maps',
+    payload: {
+      title_card_id: titleCardId,
+      search_run_id: run.search_run.search_run_id,
+      evidence_units: [
+        {
+          client_unit_key: 'support',
+          coverage_row_intent_id: byRole.get('support')?.coverage_row_intent_id,
+          evidence_role: 'support',
+          literature_ref: literatureRef,
+          locator: manualLocator({ titleCardId, literatureRef, sourceRef, key: `support-${suffix}` }),
+          source_statement: 'Reviewers need traceability from source claims to topic-selection decisions.',
+        },
+        {
+          client_unit_key: 'challenge',
+          coverage_row_intent_id: byRole.get('challenge')?.coverage_row_intent_id,
+          evidence_role: 'challenge',
+          literature_ref: literatureRef,
+          locator: manualLocator({ titleCardId, literatureRef, sourceRef, key: `challenge-${suffix}` }),
+          source_statement: 'Evidence freshness can weaken reviewer-facing traceability conclusions.',
+        },
+        {
+          client_unit_key: 'baseline',
+          coverage_row_intent_id: byRole.get('baseline')?.coverage_row_intent_id,
+          evidence_role: 'baseline',
+          literature_ref: literatureRef,
+          locator: manualLocator({ titleCardId, literatureRef, sourceRef, key: `baseline-${suffix}` }),
+          source_statement: 'Baseline decision chains often collapse provenance into a single opaque status.',
+        },
+        {
+          client_unit_key: 'context',
+          coverage_row_intent_id: byRole.get('context')?.coverage_row_intent_id,
+          evidence_role: 'context',
+          literature_ref: literatureRef,
+          locator: manualLocator({ titleCardId, literatureRef, sourceRef, key: `context-${suffix}` }),
+          source_statement: 'The workflow is scoped to local CS paper engineering and reviewer-aligned evidence review.',
+        },
+      ],
+      created_by: 'system',
+    },
+  });
+  assertStatus(evidenceMapRes, 201);
+  const evidenceMap = evidenceMapRes.json();
+
+  const candidateRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1a/need-candidates',
+    payload: {
+      title_card_id: titleCardId,
+      evidence_map_id: evidenceMap.evidence_map.evidence_map_id,
+      candidate_need: 'Reviewer-aligned topic selection needs traceable evidence-to-need decisions.',
+      mechanism_type: 'workflow_gap',
+      mechanism_summary: 'The decision chain is hard to audit without explicit gates and evidence refs.',
+      scope_notes: 'Local-first CS paper engineering workflows that prepare reviewer-facing topic decisions.',
+      prior_art_status: 'no_strong_solution_found',
+      created_by: 'system',
+    },
+  });
+  assertStatus(candidateRes, 201);
+  const candidate = candidateRes.json();
+
+  const readinessRes = await app.inject({
+    method: 'POST',
+    url: `/topic-selection/v1a/need-candidates/${encodeURIComponent(candidate.need_candidate_id)}/readiness-assessments`,
+    payload: { assessed_by: 'system' },
+  });
+  assertStatus(readinessRes, 201);
+  const readiness = readinessRes.json();
+
+  const packetRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1a/validation-support-packets',
+    payload: {
+      need_candidate_id: candidate.need_candidate_id,
+      readiness_assessment_id: readiness.readiness_assessment_id,
+      created_by: 'system',
+    },
+  });
+  assertStatus(packetRes, 201);
+  const packet = packetRes.json();
+
+  const adjudicationRes = await app.inject({
+    method: 'POST',
+    url: `/topic-selection/v1a/need-candidates/${encodeURIComponent(candidate.need_candidate_id)}/adjudications`,
+    payload: {
+      support_packet_id: packet.validation_support_packet_id,
+      final_decision: 'validate',
+      rationale: 'Human reviewer confirms the need and trace boundary.',
+      adjudicated_by: { actor_type: 'human', actor_id: 'v1b-harness-runner' },
+    },
+  });
+  assertStatus(adjudicationRes, 201);
+  const adjudication = adjudicationRes.json();
+  assert.ok(adjudication.adjudication_result.output_validated_need_id);
+
+  const confirmationRes = await app.inject({
+    method: 'POST',
+    url: `/topic-selection/v1a/adjudications/${encodeURIComponent(
+      adjudication.adjudication_result.adjudication_result_id,
+    )}/human-confirmations`,
+    payload: {
+      human_actor: { actor_type: 'human', actor_id: 'v1b-harness-runner' },
+      human_rationale: 'Support, challenge, baseline, context, and handoff refs are sufficient for v1b input.',
+    },
+  });
+  assertStatus(confirmationRes, 201);
+  const confirmation = confirmationRes.json();
+
+  const v1bBundleRes = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1a/v1b-input-bundles',
+    payload: {
+      validated_need_id: confirmation.validated_need.validated_need_id,
+      created_by: 'system',
+    },
+  });
+  assertStatus(v1bBundleRes, 201);
+  const v1bBundle = v1bBundleRes.json();
+
+  return {
+    titleCardId,
+    validatedNeedId: confirmation.validated_need.validated_need_id,
+    v1bInputBundle: v1bBundle,
+    v1bInputBundleId: v1bBundle.v1b_input_bundle_id,
+  };
+}
+
+async function assertLegacyRoutesRemoved(app) {
+  for (const route of REMOVED_LEGACY_WRITE_ROUTES) {
+    const response = await app.inject({
+      method: 'POST',
+      url: route,
+      payload: {},
+    });
+    assert.equal(response.statusCode, 404, `${route} should not be registered`);
+    assert.equal(response.headers.deprecation, undefined);
+  }
+}
+
+function summarizeNode(result) {
+  return {
+    gate_status: result.gate_status,
+    route_decision: result.route_decision,
+    failure_class: result.failure_class,
+    error_code: result.error_code,
+    authority_ref: result.authority_ref,
+    handoff_ref: result.handoff_ref,
+    transition_attempt_ref: result.transition_attempt_ref,
+    hashes: result.hashes,
+  };
+}
+
+async function writeJson(filePath, value) {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+}
+
+async function main() {
+  await fs.mkdir(ARTIFACT_DIR, { recursive: true });
+  const app = buildApp();
+  const startedAt = new Date().toISOString();
+  const runs = [];
+  try {
+    await app.ready();
+    await assertLegacyRoutesRemoved(app);
+    const existingBundle = EXISTING_V1B_INPUT_BUNDLE_ID
+      ? await loadExistingV1bInputBundle(EXISTING_V1B_INPUT_BUNDLE_ID)
+      : null;
+
+    for (let index = 0; index < REPEAT_COUNT; index += 1) {
+      const suffix = REPEAT_COUNT === 1 ? RUN_ID : `${RUN_ID}-${index + 1}`;
+      if (SCENARIO === 'positive') {
+        const result = await runV1bHarnessHttpN1ToN11(app, suffix, existingBundle);
+        assert.equal(result.nodes.n11.route_decision, 'stop_v1b_complete');
+        runs.push({
+          run_index: index + 1,
+          scenario: SCENARIO,
+          v1b_input_bundle_source: existingBundle ? 'existing' : 'created_in_run',
+          title_card_id: result.bundle.title_card_id,
+          v1b_input_bundle_id: result.bundle.v1b_input_bundle_id,
+          selected_option_id: result.selectedOption.research_slice_option_id,
+          candidate_count: result.candidates.length,
+          value_assessment_count: result.valueAssessments.length,
+          semantic_artifacts: result.semanticSummaries,
+          nodes: Object.fromEntries(
+            Object.entries(result.nodes).map(([node, nodeResult]) => [node, summarizeNode(nodeResult)]),
+          ),
+        });
+        continue;
+      }
+
+      if (SCENARIO === 'external_codex_n6_variance') {
+        const result = await runExternalCodexN6Variance(app, suffix, existingBundle);
+        runs.push({
+          run_index: index + 1,
+          scenario: SCENARIO,
+          v1b_input_bundle_source: existingBundle ? 'existing' : 'created_in_run',
+          title_card_id: result.bundle.title_card_id,
+          v1b_input_bundle_id: result.bundle.v1b_input_bundle_id,
+          selected_option_id: result.selectedOption.research_slice_option_id,
+          variance_count: result.variance_count,
+          unique_payload_hash_count: result.unique_payload_hash_count,
+          unique_main_question_count: result.unique_main_question_count,
+          setup_semantic_artifacts: result.setupSemanticSummaries,
+          setup_nodes: Object.fromEntries(
+            Object.entries(result.setupNodes).map(([node, nodeResult]) => [node, summarizeNode(nodeResult)]),
+          ),
+          samples: result.samples,
+        });
+        continue;
+      }
+
+      if (SCENARIO === 'external_codex_n4_variance') {
+        const result = await runExternalCodexN4Variance(app, suffix, existingBundle);
+        runs.push({
+          run_index: index + 1,
+          scenario: SCENARIO,
+          v1b_input_bundle_source: existingBundle ? 'existing' : 'created_in_run',
+          title_card_id: result.bundle.title_card_id,
+          v1b_input_bundle_id: result.bundle.v1b_input_bundle_id,
+          variance_count: result.variance_count,
+          unique_payload_hash_count: result.unique_payload_hash_count,
+          unique_slice_statement_count: result.unique_slice_statement_count,
+          unique_expected_claim_count: result.unique_expected_claim_count,
+          setup_semantic_artifacts: result.setupSemanticSummaries,
+          setup_nodes: Object.fromEntries(
+            Object.entries(result.setupNodes).map(([node, nodeResult]) => [node, summarizeNode(nodeResult)]),
+          ),
+          samples: result.samples,
+        });
+        continue;
+      }
+
+      if (SCENARIO === 'external_codex_n8_variance') {
+        const result = await runExternalCodexN8Variance(app, suffix, existingBundle);
+        runs.push({
+          run_index: index + 1,
+          scenario: SCENARIO,
+          v1b_input_bundle_source: existingBundle ? 'existing' : 'created_in_run',
+          title_card_id: result.bundle.title_card_id,
+          v1b_input_bundle_id: result.bundle.v1b_input_bundle_id,
+          selected_option_id: result.selectedOption.research_slice_option_id,
+          variance_count: result.variance_count,
+          unique_payload_hash_count: result.unique_payload_hash_count,
+          unique_value_summary_count: result.unique_value_summary_count,
+          unique_value_thesis_count: result.unique_value_thesis_count,
+          setup_semantic_artifacts: result.setupSemanticSummaries,
+          setup_nodes: Object.fromEntries(
+            Object.entries(result.setupNodes).map(([node, nodeResult]) => [node, summarizeNode(nodeResult)]),
+          ),
+          samples: result.samples,
+        });
+        continue;
+      }
+
+      const result = await runProviderBackedNegativeLoopbacks(app, suffix, existingBundle);
+      runs.push({
+        run_index: index + 1,
+        scenario: SCENARIO,
+        v1b_input_bundle_source: existingBundle ? 'existing' : 'created_in_run',
+        title_card_id: result.bundle.title_card_id,
+        v1b_input_bundle_id: result.bundle.v1b_input_bundle_id,
+        selected_option_id: result.selectedOption.research_slice_option_id,
+        setup_semantic_artifacts: result.setupSemanticSummaries,
+        setup_nodes: Object.fromEntries(
+          Object.entries(result.setupNodes).map(([node, nodeResult]) => [node, summarizeNode(nodeResult)]),
+        ),
+        cases: result.cases,
+      });
+    }
+
+    const summary = {
+      status: 'passed',
+      run_id: RUN_ID,
+      scenario: SCENARIO,
+      semantic_mode: SEMANTIC_MODE,
+      provider_id: PROVIDER_ID,
+      input_bundle_id: EXISTING_V1B_INPUT_BUNDLE_ID,
+      repeat_count: REPEAT_COUNT,
+      started_at: startedAt,
+      completed_at: new Date().toISOString(),
+      artifact_dir: path.relative(REPO_ROOT, ARTIFACT_DIR),
+      legacy_write_routes_registered: false,
+      runs,
+    };
+    await writeJson(path.join(ARTIFACT_DIR, 'result.json'), summary);
+    console.log(JSON.stringify(summary, null, 2));
+  } catch (error) {
+    const failure = {
+      status: 'failed',
+      run_id: RUN_ID,
+      scenario: SCENARIO,
+      semantic_mode: SEMANTIC_MODE,
+      provider_id: PROVIDER_ID,
+      started_at: startedAt,
+      failed_at: new Date().toISOString(),
+      artifact_dir: path.relative(REPO_ROOT, ARTIFACT_DIR),
+      error: error instanceof Error
+        ? { name: error.name, message: error.message, stack: error.stack }
+        : { message: String(error) },
+      runs,
+    };
+    await writeJson(path.join(ARTIFACT_DIR, 'failure.json'), failure);
+    throw error;
+  } finally {
+    await app.close();
+  }
+}
+
+await main();

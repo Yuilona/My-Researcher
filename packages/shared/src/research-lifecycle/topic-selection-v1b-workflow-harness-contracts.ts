@@ -171,6 +171,14 @@ export const TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS = {
 export type TopicSelectionV1bWorkflowHarnessProfileId =
   (typeof TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS)[keyof typeof TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS];
 
+export const TOPIC_SELECTION_V1B_N6_LOOPBACK_TARGET_CODES = [
+  'n6_regenerate_candidates',
+  'n6_debate_escalation',
+  'n6_loopback_to_n5_select_different_slice',
+] as const;
+export type TopicSelectionV1bN6LoopbackTargetCode =
+  (typeof TOPIC_SELECTION_V1B_N6_LOOPBACK_TARGET_CODES)[number];
+
 export const TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_HANDOFF_KINDS = [
   'N1ToN2Handoff',
   'N2ToN3Handoff',
@@ -757,10 +765,37 @@ export const TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_NODE_POLICIES = [
         handoff_kind: 'N6ToN7Handoff',
         allowed_gate_statuses: ['admitted', 'admitted_with_warnings'],
       },
+      {
+        route_id: 'RB_N6_REGENERATE',
+        from_node_id: 'topic-selection.v1b.generate-topic-question-candidates.v1',
+        route_signal: 'candidate_regeneration_requested',
+        route_decision: 'loopback',
+        next_node_id: 'topic-selection.v1b.generate-topic-question-candidates.v1',
+        handoff_kind: null,
+        allowed_gate_statuses: ['blocked'],
+      },
+      {
+        route_id: 'RB_N6_DEBATE_ESCALATION',
+        from_node_id: 'topic-selection.v1b.generate-topic-question-candidates.v1',
+        route_signal: 'candidate_debate_escalation_requested',
+        route_decision: 'loopback',
+        next_node_id: 'topic-selection.v1b.generate-topic-question-candidates.v1',
+        handoff_kind: null,
+        allowed_gate_statuses: ['blocked'],
+      },
+      {
+        route_id: 'RB_N6_N5_SELECT_DIFFERENT_SLICE',
+        from_node_id: 'topic-selection.v1b.generate-topic-question-candidates.v1',
+        route_signal: 'select_different_slice_requested',
+        route_decision: 'loopback',
+        next_node_id: 'topic-selection.v1b.select-research-slice.v1',
+        handoff_kind: null,
+        allowed_gate_statuses: ['blocked'],
+      },
     ],
     blocker_codes: ['weak_topic_question_candidate_set', 'duplicate_or_overlapping_candidates', 'missing_value_axis'],
     warning_codes: ['candidate_overlap_preserved', 'debate_escalation_recommended'],
-    loopback_target_codes: ['n6_regenerate_candidates', 'n6_debate_escalation'],
+    loopback_target_codes: [...TOPIC_SELECTION_V1B_N6_LOOPBACK_TARGET_CODES],
     replay_hash_components: [...DEFAULT_REPLAY_HASH_COMPONENTS, 'selected_candidate_hash'],
   },
   {
@@ -1087,6 +1122,9 @@ export interface TopicSelectionV1bN8ToN9HandoffPayload {
   topic_value_assessment_hash: string;
   topic_question_contract_ref: TopicSelectionFunctionalRef;
   topic_question_contract_hash: string;
+  value_reasoning_memo_ref: TopicSelectionFunctionalRef;
+  value_reasoning_memo_hash: string;
+  recommended_disposition: TopicSelectionValueDisposition;
 }
 
 export interface TopicSelectionV1bN9ToN10HandoffPayload {
@@ -1102,6 +1140,8 @@ export interface TopicSelectionV1bN10ToN11HandoffPayload {
   draft_topic_package_hash: string;
   value_disposition_ref: TopicSelectionFunctionalRef;
   value_disposition_hash: string;
+  v1c_input_bundle_ref: TopicSelectionFunctionalRef;
+  v1c_input_bundle_hash: string;
 }
 
 export interface TopicSelectionV1bV1cInputBundlePayload {
@@ -1235,6 +1275,26 @@ export interface TopicSelectionV1bN6HarnessFrozenInputPayload {
   selected_slice_option_hash: string;
 }
 
+export interface TopicSelectionV1bN6LoopbackTriageSupportPayload {
+  loopback_target_code: TopicSelectionV1bN6LoopbackTargetCode;
+  failure_scope: 'candidate_level' | 'question_frame_level' | 'slice_level' | 'upstream_context_level';
+  dominant_reason_codes: string[];
+  affected_refs: TopicSelectionFunctionalRef[];
+  regeneration_hints: string[];
+  debate_escalation: {
+    debate_level: 'mixed_cost_control' | 'provider_diverse_deep';
+    recommended_profile_id: string;
+    sticky: boolean;
+    rationale: string;
+  } | null;
+  upstream_rollback: {
+    target_node_id: 'topic-selection.v1b.select-research-slice.v1';
+    repair_action: 'select_different_slice';
+    rationale: string;
+  } | null;
+  rationale: string;
+}
+
 export type TopicSelectionV1bN7InputMode = 'initial_from_n6' | 'feedback_from_n8';
 
 export interface TopicSelectionV1bN7HarnessInitialFrozenInputPayload
@@ -1287,9 +1347,6 @@ extends TopicSelectionV1bN7ToN8HandoffPayload {
 export interface TopicSelectionV1bN9HarnessFrozenInputPayload
 extends TopicSelectionV1bN8ToN9HandoffPayload {
   n8_handoff_hash: string;
-  value_reasoning_memo_ref: TopicSelectionFunctionalRef;
-  value_reasoning_memo_hash: string;
-  recommended_disposition: TopicSelectionValueDisposition;
 }
 
 export interface TopicSelectionV1bN10HarnessFrozenInputPayload
@@ -1300,8 +1357,6 @@ extends TopicSelectionV1bN9ToN10HandoffPayload {
 export interface TopicSelectionV1bN11HarnessFrozenInputPayload
 extends TopicSelectionV1bN10ToN11HandoffPayload {
   n10_handoff_hash: string;
-  v1c_input_bundle_ref: TopicSelectionFunctionalRef;
-  v1c_input_bundle_hash: string;
 }
 
 export interface TopicSelectionV1bCandidateGroupingSupportPayload {
@@ -1495,6 +1550,7 @@ const nullableAgentRunMode = { anyOf: [agentRunMode, { type: 'null' }] } as cons
 const v1bProfileId = { enum: Object.values(TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS) } as const;
 const nullableV1bProfileId = { anyOf: [v1bProfileId, { type: 'null' }] } as const;
 const handoffKind = { enum: [...TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_HANDOFF_KINDS] } as const;
+const n6LoopbackTargetCode = { enum: [...TOPIC_SELECTION_V1B_N6_LOOPBACK_TARGET_CODES] } as const;
 const replayHashComponent = { enum: [...TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_REPLAY_HASH_COMPONENTS] } as const;
 const n2AuthorityInputProvider = { enum: [...TOPIC_SELECTION_V1B_N2_AUTHORITY_INPUT_PROVIDERS] } as const;
 const n5AuthorityInputProvider = { enum: [...TOPIC_SELECTION_V1B_N5_AUTHORITY_INPUT_PROVIDERS] } as const;
@@ -1845,6 +1901,134 @@ export const topicSelectionV1bN6HarnessFrozenInputPayloadSchema = {
     selected_slice_option_ref: strictFunctionalRefSchema,
     selected_slice_option_hash: hashString,
   },
+} as const;
+
+export const topicSelectionV1bN6LoopbackTriageSupportPayloadSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'loopback_target_code',
+    'failure_scope',
+    'dominant_reason_codes',
+    'affected_refs',
+    'regeneration_hints',
+    'debate_escalation',
+    'upstream_rollback',
+    'rationale',
+  ],
+  properties: {
+    loopback_target_code: n6LoopbackTargetCode,
+    failure_scope: { enum: ['candidate_level', 'question_frame_level', 'slice_level', 'upstream_context_level'] },
+    dominant_reason_codes: {
+      type: 'array',
+      items: stringId,
+      minItems: 1,
+    },
+    affected_refs: {
+      type: 'array',
+      items: strictFunctionalRefSchema,
+      minItems: 1,
+    },
+    regeneration_hints: stringArray,
+    debate_escalation: {
+      anyOf: [
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['debate_level', 'recommended_profile_id', 'sticky', 'rationale'],
+          properties: {
+            debate_level: { enum: ['mixed_cost_control', 'provider_diverse_deep'] },
+            recommended_profile_id: stringId,
+            sticky: { type: 'boolean' },
+            rationale: stringId,
+          },
+        },
+        { type: 'null' },
+      ],
+    },
+    upstream_rollback: {
+      anyOf: [
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['target_node_id', 'repair_action', 'rationale'],
+          properties: {
+            target_node_id: { const: 'topic-selection.v1b.select-research-slice.v1' },
+            repair_action: { const: 'select_different_slice' },
+            rationale: stringId,
+          },
+        },
+        { type: 'null' },
+      ],
+    },
+    rationale: stringId,
+  },
+  allOf: [
+    {
+      if: {
+        required: ['loopback_target_code'],
+        properties: {
+          loopback_target_code: { const: 'n6_debate_escalation' },
+        },
+      },
+      then: {
+        properties: {
+          failure_scope: { enum: ['candidate_level', 'question_frame_level'] },
+          debate_escalation: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['debate_level', 'recommended_profile_id', 'sticky', 'rationale'],
+            properties: {
+              debate_level: { enum: ['mixed_cost_control', 'provider_diverse_deep'] },
+              recommended_profile_id: stringId,
+              sticky: { type: 'boolean' },
+              rationale: stringId,
+            },
+          },
+          upstream_rollback: { type: 'null' },
+        },
+      },
+    },
+    {
+      if: {
+        required: ['loopback_target_code'],
+        properties: {
+          loopback_target_code: { const: 'n6_loopback_to_n5_select_different_slice' },
+        },
+      },
+      then: {
+        properties: {
+          failure_scope: { enum: ['slice_level', 'upstream_context_level'] },
+          debate_escalation: { type: 'null' },
+          upstream_rollback: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['target_node_id', 'repair_action', 'rationale'],
+            properties: {
+              target_node_id: { const: 'topic-selection.v1b.select-research-slice.v1' },
+              repair_action: { const: 'select_different_slice' },
+              rationale: stringId,
+            },
+          },
+        },
+      },
+    },
+    {
+      if: {
+        required: ['loopback_target_code'],
+        properties: {
+          loopback_target_code: { const: 'n6_regenerate_candidates' },
+        },
+      },
+      then: {
+        properties: {
+          failure_scope: { enum: ['candidate_level', 'question_frame_level'] },
+          debate_escalation: { type: 'null' },
+          upstream_rollback: { type: 'null' },
+        },
+      },
+    },
+  ],
 } as const;
 
 const n6ToN7LineagePayloadProperties = {
@@ -2664,12 +2848,27 @@ const handoffPayloadSchemas = {
       'topic_value_assessment_hash',
       'topic_question_contract_ref',
       'topic_question_contract_hash',
+      'value_reasoning_memo_ref',
+      'value_reasoning_memo_hash',
+      'recommended_disposition',
     ],
     properties: {
       topic_value_assessment_ref: strictFunctionalRefSchema,
       topic_value_assessment_hash: hashString,
       topic_question_contract_ref: strictFunctionalRefSchema,
       topic_question_contract_hash: hashString,
+      value_reasoning_memo_ref: strictFunctionalRefSchema,
+      value_reasoning_memo_hash: hashString,
+      recommended_disposition: {
+        enum: [
+          'advance_to_package',
+          'refine_question',
+          'refine_slice',
+          'recheck_evidence_or_search',
+          'park',
+          'drop',
+        ],
+      },
     },
   },
   N9ToN10Handoff: {
@@ -2698,12 +2897,16 @@ const handoffPayloadSchemas = {
       'draft_topic_package_hash',
       'value_disposition_ref',
       'value_disposition_hash',
+      'v1c_input_bundle_ref',
+      'v1c_input_bundle_hash',
     ],
     properties: {
       draft_topic_package_ref: strictFunctionalRefSchema,
       draft_topic_package_hash: hashString,
       value_disposition_ref: strictFunctionalRefSchema,
       value_disposition_hash: hashString,
+      v1c_input_bundle_ref: strictFunctionalRefSchema,
+      v1c_input_bundle_hash: hashString,
     },
   },
   V1cInputBundle: {

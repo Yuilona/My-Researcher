@@ -108,6 +108,7 @@ import {
   type TopicSelectionV1bN5HarnessFrozenInputPayload,
   type TopicSelectionV1bN5ToN6HandoffPayload,
   type TopicSelectionV1bN6HarnessFrozenInputPayload,
+  type TopicSelectionV1bN6LoopbackTriageSupportPayload,
   type TopicSelectionV1bN6ToN7HandoffPayload,
   type TopicSelectionV1bN7HarnessFrozenInputPayload,
   type TopicSelectionV1bN7HarnessFeedbackFrozenInputPayload,
@@ -260,6 +261,8 @@ type RunnerPersistInput = {
   transitionKey: string;
   tracePhase: string;
   tracePayload?: Record<string, unknown>;
+  loopbackTargetCode?: string | null;
+  routeTargetNodeId?: TopicSelectionV1bWorkflowHarnessNodeId | null;
   errorCode?: string | null;
   errorMessage?: string | null;
 };
@@ -303,6 +306,26 @@ type N6DraftResolution = {
   draft: TopicSelectionV1bTopicQuestionCandidateSetDraftPayload;
   draftHash: string;
   semanticArtifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef;
+};
+
+type N6LoopbackTriageResolution = {
+  artifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef;
+  payload: TopicSelectionV1bN6LoopbackTriageSupportPayload;
+  payloadHash: string;
+} | null;
+
+type N6LoopbackPlan = {
+  affectedRefs: TopicSelectionFunctionalRef[];
+  debateEscalation: TopicSelectionV1bN6LoopbackTriageSupportPayload['debate_escalation'];
+  failureScope: TopicSelectionV1bN6LoopbackTriageSupportPayload['failure_scope'];
+  loopbackTargetCode: TopicSelectionV1bN6LoopbackTriageSupportPayload['loopback_target_code'];
+  rationale: string;
+  reasonCodes: string[];
+  regenerationHints: string[];
+  routeTargetNodeId: TopicSelectionV1bWorkflowHarnessNodeId;
+  triageArtifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef | null;
+  triagePayloadHash: string | null;
+  upstreamRollback: TopicSelectionV1bN6LoopbackTriageSupportPayload['upstream_rollback'];
 };
 
 type N6CandidateValidationResult = {
@@ -2778,6 +2801,17 @@ export class TopicSelectionV1bWorkflowHarnessService {
     });
     if (!validation.ok) {
       if (validation.routeDecision === 'loopback') {
+        const loopbackPlan = await this.resolveN6LoopbackPlan(input, {
+          blockedCandidateContexts: validation.blockedCandidateContexts ?? [],
+          defaultAffectedRef: payload.value.research_slice_ref,
+          frozenPayload: payload.value,
+        });
+        if (!loopbackPlan.ok) {
+          return this.persistBlockedResult(input, hashContext, {
+            blockerCode: loopbackPlan.code,
+            message: loopbackPlan.message,
+          });
+        }
         return this.persistAdmittedResult(input, hashContext, {
           authorityHash: null,
           authorityRef: null,
@@ -2787,17 +2821,33 @@ export class TopicSelectionV1bWorkflowHarnessService {
           gateStatus: 'blocked',
           handoff: null,
           handoffHash: null,
+          loopbackTargetCode: loopbackPlan.value.loopbackTargetCode,
           routeDecision: 'loopback',
+          routeTargetNodeId: loopbackPlan.value.routeTargetNodeId,
           sourceRef: payload.value.research_slice_ref,
           targetRef: this.nodeAttemptRef(input),
           tracePhase: 'T-107 N6 topic question candidate runner',
           tracePayload: {
             blocked_candidate_context: validation.blockedCandidateContexts ?? [],
+            debate_escalation: loopbackPlan.value.debateEscalation,
             draft_hash: draftResolution.draftHash,
-            loopback_target: 'select_different_slice',
+            loopback_affected_refs: loopbackPlan.value.affectedRefs,
+            loopback_failure_scope: loopbackPlan.value.failureScope,
+            loopback_rationale: loopbackPlan.value.rationale,
+            loopback_reason_codes: loopbackPlan.value.reasonCodes,
+            loopback_target_code: loopbackPlan.value.loopbackTargetCode,
+            regeneration_hints: loopbackPlan.value.regenerationHints,
+            route_target_node_id: loopbackPlan.value.routeTargetNodeId,
+            triage_artifact_ref: loopbackPlan.value.triageArtifact?.normalized_output_ref ?? null,
+            triage_artifact_hash: loopbackPlan.value.triageArtifact?.normalized_output_hash ?? null,
+            triage_payload_hash: loopbackPlan.value.triagePayloadHash,
+            upstream_rollback: loopbackPlan.value.upstreamRollback,
           },
           transitionKey: 'topic-selection.v1b.harness.n6-topic-question-candidates',
-          warnings: validation.warnings ?? [],
+          warnings: [
+            ...(validation.warnings ?? []),
+            ...this.n6LoopbackWarnings(loopbackPlan.value),
+          ],
         }, {
           writeAuthority: async () => {},
         });
@@ -3007,7 +3057,13 @@ export class TopicSelectionV1bWorkflowHarnessService {
         message: 'N7 does not consume pure N8 technical failures; N8 must retry or block without changing candidate trial state.',
       });
     }
-    if (loaded.value.feedback?.feedback_class === 'gate_rejected' && support.value.debateAdmission) {
+    if (loaded.value.feedback?.feedback_class === 'gate_rejected' && !support.value.debateAdmission) {
+      return this.persistBlockedResult(input, hashContext, {
+        blockerCode: 'N7_GATE_READMISSION_DEBATE_ADMISSION_REQUIRED',
+        message: 'N7 gate-rejected feedback requires frozen N8 debate-admission support before readmission.',
+      });
+    }
+    if (loaded.value.feedback?.feedback_class === 'gate_rejected') {
       return this.runN7GateReadmission(input, hashContext, payload.value, loaded.value, support.value);
     }
 
@@ -3279,11 +3335,13 @@ export class TopicSelectionV1bWorkflowHarnessService {
         gate_status: outcome.gateStatus,
         handoff_hash: outcome.handoffHash,
         input_contract: input.frozen_input.input_contract,
+        ...(outcome.loopbackTargetCode ? { loopback_target_code: outcome.loopbackTargetCode } : {}),
         node_id: input.node_id,
         node_replay_key: hashContext.nodeReplayKey,
         policy_version: input.policy_version,
         profile_id: input.profile_id ?? null,
         route_decision: outcome.routeDecision,
+        route_target_node_id: outcome.routeTargetNodeId ?? this.routeTargetNode(input.node_id, outcome.routeDecision),
         run_mode: input.run_mode ?? null,
         runtime_admission_hash: hashContext.runtimeAdmissionHash,
         semantic_artifact_count: input.semantic_artifacts?.length ?? 0,
@@ -3384,10 +3442,14 @@ export class TopicSelectionV1bWorkflowHarnessService {
         ...outcome.tracePayload,
         blocker_codes: outcome.blockers.map((blocker) => blocker.code),
         gate_status: outcome.gateStatus,
+        ...((outcome.loopbackTargetCode ?? outcome.tracePayload?.loopback_target_code)
+          ? { loopback_target_code: outcome.loopbackTargetCode ?? outcome.tracePayload?.loopback_target_code }
+          : {}),
         node_id: input.node_id,
         node_replay_key: hashContext.nodeReplayKey,
         phase: outcome.tracePhase,
         route_decision: outcome.routeDecision,
+        route_target_node_id: outcome.routeTargetNodeId ?? this.routeTargetNode(input.node_id, outcome.routeDecision),
         warning_codes: outcome.warnings.map((warning) => warning.code),
       },
       created_by: createdBy,
@@ -3408,8 +3470,10 @@ export class TopicSelectionV1bWorkflowHarnessService {
       blockerCodes: outcome.blockers.map((blocker) => blocker.code),
       gateStatus: outcome.gateStatus,
       handoffHash: outcome.handoffHash,
+      loopbackTargetCode: outcome.loopbackTargetCode ?? null,
       routeDecision: outcome.routeDecision,
       routeReasonCode: outcome.errorCode ?? outcome.blockers[0]?.code ?? null,
+      routeTargetNodeId: outcome.routeTargetNodeId ?? null,
       warningCodes: outcome.warnings.map((warning) => warning.code),
     });
     const resultWithoutTraceArtifact: TopicSelectionV1bWorkflowHarnessRunResult = {
@@ -3474,8 +3538,10 @@ export class TopicSelectionV1bWorkflowHarnessService {
       blockerCodes: string[];
       gateStatus: TopicSelectionV1bWorkflowHarnessGateStatus;
       handoffHash: string | null;
+      loopbackTargetCode: string | null;
       routeDecision: TopicSelectionV1bWorkflowHarnessRouteDecision;
       routeReasonCode: string | null;
+      routeTargetNodeId: TopicSelectionV1bWorkflowHarnessNodeId | null;
       warningCodes: string[];
     },
   ): TopicSelectionV1bWorkflowHarnessHashes {
@@ -3483,6 +3549,7 @@ export class TopicSelectionV1bWorkflowHarnessService {
       authorityHash: outcome.authorityHash,
       blockerCodes: outcome.blockerCodes,
       gateStatus: outcome.gateStatus,
+      loopbackTargetCode: outcome.loopbackTargetCode,
       routeDecision: outcome.routeDecision,
       warningCodes: outcome.warningCodes,
     });
@@ -3493,9 +3560,10 @@ export class TopicSelectionV1bWorkflowHarnessService {
       node_attempt_id: input.node_attempt_id,
       node_id: input.node_id,
       route_decision: outcome.routeDecision,
+      loopback_target_code: outcome.loopbackTargetCode,
       route_policy_version: input.policy_version,
       route_reason_code: outcome.routeReasonCode,
-      target_node_id: this.routeTargetNode(input.node_id, outcome.routeDecision),
+      target_node_id: outcome.routeTargetNodeId ?? this.routeTargetNode(input.node_id, outcome.routeDecision),
     });
     return {
       frozen_input_hash: hashContext.frozenInputHash,
@@ -3516,6 +3584,7 @@ export class TopicSelectionV1bWorkflowHarnessService {
       authorityHash: string | null;
       blockerCodes: string[];
       gateStatus: TopicSelectionV1bWorkflowHarnessGateStatus;
+      loopbackTargetCode?: string | null;
       routeDecision: TopicSelectionV1bWorkflowHarnessRouteDecision;
       warningCodes: string[];
     },
@@ -3526,6 +3595,7 @@ export class TopicSelectionV1bWorkflowHarnessService {
       blocker_codes: outcome.blockerCodes,
       frozen_input_hash: hashContext.frozenInputHash,
       gate_status: outcome.gateStatus,
+      loopback_target_code: outcome.loopbackTargetCode ?? null,
       node_id: input.node_id,
       node_replay_key: hashContext.nodeReplayKey,
       output_schema_version: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUN_RESULT_SCHEMA_VERSION,
@@ -3694,7 +3764,7 @@ export class TopicSelectionV1bWorkflowHarnessService {
       return 'topic-selection.v1b.generate-research-slice-options.v1';
     }
     if (nodeId === 'topic-selection.v1b.generate-topic-question-candidates.v1' && routeDecision === 'loopback') {
-      return 'topic-selection.v1b.select-research-slice.v1';
+      return 'topic-selection.v1b.generate-topic-question-candidates.v1';
     }
     if (nodeId === 'topic-selection.v1b.materialize-topic-question-contract.v1' && routeDecision === 'loopback') {
       return 'topic-selection.v1b.generate-topic-question-candidates.v1';
@@ -4340,7 +4410,7 @@ export class TopicSelectionV1bWorkflowHarnessService {
       tracePhase: 'T-107 N7 candidate trial exhaustion',
       tracePayload: {
         failed_candidate_ids: choice.failedCandidateIds,
-        loopback_target: 'generate-topic-question-candidates',
+        loopback_target_code: 'n7_loopback_to_n6',
         synthesis_hash: synthesis.payloadHash,
         trial_ledger_hash: trialLedgerHash,
       },
@@ -4374,7 +4444,7 @@ export class TopicSelectionV1bWorkflowHarnessService {
           admission_review: {
             failed_trial_synthesis_hash: synthesis.payloadHash,
             input_mode: payload.input_mode,
-            loopback_target: 'N6',
+            loopback_target_code: 'n7_loopback_to_n6',
           },
           candidate_relationships: {},
           priority_order: this.n7PriorityOrder(payload, loaded, support),
@@ -4735,6 +4805,9 @@ export class TopicSelectionV1bWorkflowHarnessService {
       topic_value_assessment_hash: assessmentHash,
       topic_question_contract_ref: contractRef,
       topic_question_contract_hash: payload.value.topic_question_contract_hash,
+      value_reasoning_memo_ref: memoRef,
+      value_reasoning_memo_hash: this.hashN8ValueReasoningMemoAuthority(memo),
+      recommended_disposition: draftResolution.value.draft.recommended_disposition,
     };
     const handoff = this.buildHandoff(input, {
       handoffKind: 'N8ToN9Handoff',
@@ -5085,6 +5158,20 @@ export class TopicSelectionV1bWorkflowHarnessService {
     if (existing) {
       const packageRef = this.ref('topic_package', existing.topic_package_id, existing.title_card_id, existing.package_version);
       const packageHash = this.hashN10PackageAuthority(existing);
+      const existingBundle = await this.runnerDependencies.topicPackageRepository!
+        .findV1cInputBundleByPackageId(existing.topic_package_id);
+      if (!existingBundle) {
+        return this.persistBlockedResult(input, hashContext, {
+          blockerCode: 'N10_EXISTING_V1C_BUNDLE_MISSING',
+          message: 'N10 existing package is missing its v1c input bundle authority.',
+        });
+      }
+      const v1cInputBundleRef = this.ref(
+        'v1b_to_v1c_input_bundle',
+        existingBundle.v1b_to_v1c_input_bundle_id,
+        existingBundle.title_card_id,
+      );
+      const v1cInputBundleHash = this.hashN10V1cInputBundleAuthority(existingBundle);
       const warning = this.warning('N10_PACKAGE_EXISTING_RETURNED', 'N10 returned the existing package for this disposition decision.', [packageRef]);
       const gateResultHash = this.outcomeGateResultHash(input, hashContext, {
         authorityHash: packageHash,
@@ -5098,6 +5185,8 @@ export class TopicSelectionV1bWorkflowHarnessService {
         draft_topic_package_hash: packageHash,
         value_disposition_ref: payload.value.value_disposition_ref,
         value_disposition_hash: payload.value.value_disposition_hash,
+        v1c_input_bundle_ref: v1cInputBundleRef,
+        v1c_input_bundle_hash: v1cInputBundleHash,
       };
       const handoff = this.buildHandoff(input, {
         handoffKind: 'N10ToN11Handoff',
@@ -5153,11 +5242,19 @@ export class TopicSelectionV1bWorkflowHarnessService {
       warningCodes: warnings.map((warning) => warning.code),
     });
     const packageRef = built.value.topicPackage.topic_package_ref;
+    const v1cInputBundleRef = this.ref(
+      'v1b_to_v1c_input_bundle',
+      built.value.v1cInputBundle!.v1b_to_v1c_input_bundle_id,
+      built.value.topicPackage.title_card_id,
+    );
+    const v1cInputBundleHash = this.hashN10V1cInputBundleAuthority(built.value.v1cInputBundle!);
     const handoffPayload: TopicSelectionV1bWorkflowHarnessHandoffPayload = {
       draft_topic_package_ref: packageRef,
       draft_topic_package_hash: packageHash,
       value_disposition_ref: payload.value.value_disposition_ref,
       value_disposition_hash: payload.value.value_disposition_hash,
+      v1c_input_bundle_ref: v1cInputBundleRef,
+      v1c_input_bundle_hash: v1cInputBundleHash,
     };
     const handoff = this.buildHandoff(input, {
       handoffKind: 'N10ToN11Handoff',
@@ -8341,6 +8438,310 @@ export class TopicSelectionV1bWorkflowHarnessService {
       draftHash,
       semanticArtifact,
     };
+  }
+
+  private async resolveN6LoopbackPlan(
+    input: TopicSelectionV1bWorkflowHarnessRunRequest,
+    context: {
+      blockedCandidateContexts: Record<string, unknown>[];
+      defaultAffectedRef: TopicSelectionFunctionalRef;
+      frozenPayload: TopicSelectionV1bN6HarnessFrozenInputPayload;
+    },
+  ): Promise<{ ok: true; value: N6LoopbackPlan } | { ok: false; code: string; message: string }> {
+    const triage = await this.resolveN6LoopbackTriage(input);
+    if (!triage.ok) {
+      return triage;
+    }
+    if (!triage.value) {
+      return {
+        ok: true,
+        value: {
+          affectedRefs: [context.defaultAffectedRef],
+          debateEscalation: null,
+          failureScope: 'candidate_level',
+          loopbackTargetCode: 'n6_regenerate_candidates',
+          rationale: 'N6 deterministic gate found no admissible candidates, so the harness requests candidate regeneration.',
+          reasonCodes: this.n6LoopbackReasonCodes(context.blockedCandidateContexts),
+          regenerationHints: [],
+          routeTargetNodeId: 'topic-selection.v1b.generate-topic-question-candidates.v1',
+          triageArtifact: null,
+          triagePayloadHash: null,
+          upstreamRollback: null,
+        },
+      };
+    }
+
+    const policyBlocker = this.n6LoopbackTriagePolicyBlocker(triage.value.payload, context.frozenPayload);
+    if (policyBlocker) {
+      return policyBlocker;
+    }
+    return {
+      ok: true,
+      value: {
+        affectedRefs: triage.value.payload.affected_refs,
+        debateEscalation: triage.value.payload.debate_escalation,
+        failureScope: triage.value.payload.failure_scope,
+        loopbackTargetCode: triage.value.payload.loopback_target_code,
+        rationale: triage.value.payload.rationale,
+        reasonCodes: triage.value.payload.dominant_reason_codes,
+        regenerationHints: triage.value.payload.regeneration_hints,
+        routeTargetNodeId: this.n6LoopbackRouteTargetNode(triage.value.payload.loopback_target_code),
+        triageArtifact: triage.value.artifact,
+        triagePayloadHash: triage.value.payloadHash,
+        upstreamRollback: triage.value.payload.upstream_rollback,
+      },
+    };
+  }
+
+  private async resolveN6LoopbackTriage(
+    input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  ): Promise<{ ok: true; value: N6LoopbackTriageResolution } | { ok: false; code: string; message: string }> {
+    const artifact = (input.semantic_artifacts ?? []).find((item) => item.slot_id === 'n6_loopback_triage');
+    if (!artifact) {
+      return { ok: true, value: null };
+    }
+    if (!artifact.normalized_output_ref) {
+      return {
+        ok: false,
+        code: 'N6_LOOPBACK_TRIAGE_ARTIFACT_NOT_FOUND',
+        message: 'N6 loopback triage support artifact must provide a frozen normalized_output_ref.',
+      };
+    }
+    const [support, normalized, provenance] = await Promise.all([
+      this.controlPlane.getArtifactRef(artifact.support_artifact_ref.ref_id),
+      this.controlPlane.getArtifactRef(artifact.normalized_output_ref.ref_id),
+      this.controlPlane.getArtifactRef(artifact.provenance_ref.ref_id),
+    ]);
+    if (!support || !normalized || !provenance) {
+      return {
+        ok: false,
+        code: 'N6_LOOPBACK_TRIAGE_ARTIFACT_NOT_FOUND',
+        message: 'N6 loopback triage artifact refs must resolve to frozen control-plane ArtifactRef records.',
+      };
+    }
+    if (
+      support.checksum !== artifact.support_artifact_hash
+      || normalized.checksum !== artifact.normalized_output_hash
+    ) {
+      return {
+        ok: false,
+        code: 'N6_LOOPBACK_TRIAGE_ARTIFACT_HASH_MISMATCH',
+        message: 'N6 loopback triage artifact hashes do not match persisted ArtifactRef checksums.',
+      };
+    }
+    if (!this.isN6LoopbackTriageSupportPayload(normalized.payload)) {
+      return {
+        ok: false,
+        code: 'N6_LOOPBACK_TRIAGE_ARTIFACT_INVALID',
+        message: 'N6 loopback triage normalized payload does not match N6LoopbackTriageSupport@v1.',
+      };
+    }
+    const payloadHash = this.hash(normalized.payload);
+    if (
+      payloadHash !== artifact.normalized_output_hash
+      || payloadHash !== artifact.structured_output_hash
+      || payloadHash !== artifact.support_artifact_hash
+    ) {
+      return {
+        ok: false,
+        code: 'N6_LOOPBACK_TRIAGE_ARTIFACT_HASH_MISMATCH',
+        message: 'N6 loopback triage payload hash does not match frozen provenance.',
+      };
+    }
+    return {
+      ok: true,
+      value: {
+        artifact,
+        payload: normalized.payload as unknown as TopicSelectionV1bN6LoopbackTriageSupportPayload,
+        payloadHash,
+      },
+    };
+  }
+
+  private n6LoopbackTriagePolicyBlocker(
+    payload: TopicSelectionV1bN6LoopbackTriageSupportPayload,
+    frozenPayload: TopicSelectionV1bN6HarnessFrozenInputPayload,
+  ): { ok: false; code: string; message: string } | null {
+    const affectedRefsBlocker = this.n6LoopbackTriageAffectedRefsBlocker(payload, frozenPayload);
+    if (affectedRefsBlocker) {
+      return affectedRefsBlocker;
+    }
+    if (payload.loopback_target_code === 'n6_debate_escalation') {
+      if (!this.isN6CandidateRetryScope(payload.failure_scope)) {
+        return {
+          ok: false,
+          code: 'N6_LOOPBACK_TRIAGE_POLICY_MISMATCH',
+          message: 'N6 debate escalation triage requires candidate-level or question-frame-level failure_scope.',
+        };
+      }
+      if (!payload.debate_escalation || payload.upstream_rollback) {
+        return {
+          ok: false,
+          code: 'N6_LOOPBACK_TRIAGE_POLICY_MISMATCH',
+          message: 'N6 debate escalation triage requires debate_escalation and forbids upstream_rollback.',
+        };
+      }
+      return null;
+    }
+    if (payload.loopback_target_code === 'n6_loopback_to_n5_select_different_slice') {
+      if (!this.isN6UpstreamRollbackScope(payload.failure_scope)) {
+        return {
+          ok: false,
+          code: 'N6_LOOPBACK_TRIAGE_POLICY_MISMATCH',
+          message: 'N6 upstream rollback triage requires slice-level or upstream-context-level failure_scope.',
+        };
+      }
+      if (!payload.upstream_rollback || payload.debate_escalation) {
+        return {
+          ok: false,
+          code: 'N6_LOOPBACK_TRIAGE_POLICY_MISMATCH',
+          message: 'N6 upstream rollback triage requires upstream_rollback and forbids debate_escalation.',
+        };
+      }
+      return null;
+    }
+    if (!this.isN6CandidateRetryScope(payload.failure_scope)) {
+      return {
+        ok: false,
+        code: 'N6_LOOPBACK_TRIAGE_POLICY_MISMATCH',
+        message: 'N6 regeneration triage requires candidate-level or question-frame-level failure_scope.',
+      };
+    }
+    if (payload.debate_escalation || payload.upstream_rollback) {
+      return {
+        ok: false,
+        code: 'N6_LOOPBACK_TRIAGE_POLICY_MISMATCH',
+        message: 'N6 regeneration triage must not include debate_escalation or upstream_rollback.',
+      };
+    }
+    return null;
+  }
+
+  private n6LoopbackTriageAffectedRefsBlocker(
+    payload: TopicSelectionV1bN6LoopbackTriageSupportPayload,
+    frozenPayload: TopicSelectionV1bN6HarnessFrozenInputPayload,
+  ): { ok: false; code: string; message: string } | null {
+    const allowedLineageRefs = this.uniqueRefs([
+      frozenPayload.constraint_profile_ref,
+      frozenPayload.intake_readiness_ref,
+      frozenPayload.research_slice_ref,
+      frozenPayload.research_slice_selection_ref,
+      frozenPayload.research_slice_option_set_ref,
+      frozenPayload.selected_slice_option_ref,
+    ]);
+    const allowedLineageRefKeys = new Set(allowedLineageRefs.map((ref) => this.refKey(ref)));
+    const outsideLineageRef = payload.affected_refs
+      .find((affectedRef) => !allowedLineageRefKeys.has(this.refKey(affectedRef)));
+    const includesSelectedSlice = payload.affected_refs
+      .some((affectedRef) => this.refsEqual(affectedRef, frozenPayload.research_slice_ref));
+    if (outsideLineageRef || !includesSelectedSlice) {
+      return {
+        ok: false,
+        code: 'N6_LOOPBACK_TRIAGE_AFFECTED_REFS_MISMATCH',
+        message: 'N6 loopback triage affected_refs must stay within the frozen N6 lineage and include the selected ResearchSlice ref.',
+      };
+    }
+    return null;
+  }
+
+  private isN6CandidateRetryScope(
+    failureScope: TopicSelectionV1bN6LoopbackTriageSupportPayload['failure_scope'],
+  ): boolean {
+    return failureScope === 'candidate_level' || failureScope === 'question_frame_level';
+  }
+
+  private isN6UpstreamRollbackScope(
+    failureScope: TopicSelectionV1bN6LoopbackTriageSupportPayload['failure_scope'],
+  ): boolean {
+    return failureScope === 'slice_level' || failureScope === 'upstream_context_level';
+  }
+
+  private n6LoopbackRouteTargetNode(
+    loopbackTargetCode: TopicSelectionV1bN6LoopbackTriageSupportPayload['loopback_target_code'],
+  ): TopicSelectionV1bWorkflowHarnessNodeId {
+    if (loopbackTargetCode === 'n6_loopback_to_n5_select_different_slice') {
+      return 'topic-selection.v1b.select-research-slice.v1';
+    }
+    return 'topic-selection.v1b.generate-topic-question-candidates.v1';
+  }
+
+  private n6LoopbackWarnings(plan: N6LoopbackPlan): TopicSelectionGateIssue[] {
+    if (plan.loopbackTargetCode !== 'n6_debate_escalation') {
+      return [];
+    }
+    return [
+      this.warning(
+        'N6_DEBATE_ESCALATION_RECOMMENDED',
+        'N6 loopback triage recommends debate escalation before retrying candidate generation.',
+        plan.affectedRefs,
+      ),
+    ];
+  }
+
+  private n6LoopbackReasonCodes(blockedCandidateContexts: Record<string, unknown>[]): string[] {
+    return this.uniqueStrings(
+      blockedCandidateContexts
+        .map((context) => typeof context.dominant_reason === 'string' ? context.dominant_reason : null)
+        .filter((reason): reason is string => Boolean(reason)),
+    );
+  }
+
+  private isN6LoopbackTriageSupportPayload(value: unknown): value is TopicSelectionV1bN6LoopbackTriageSupportPayload {
+    if (!this.isRecord(value) || !this.hasOnlyKeys(value, [
+      'affected_refs',
+      'debate_escalation',
+      'dominant_reason_codes',
+      'failure_scope',
+      'loopback_target_code',
+      'rationale',
+      'regeneration_hints',
+      'upstream_rollback',
+    ])) {
+      return false;
+    }
+    return [
+      'n6_regenerate_candidates',
+      'n6_debate_escalation',
+      'n6_loopback_to_n5_select_different_slice',
+    ].includes(value.loopback_target_code as string)
+      && ['candidate_level', 'question_frame_level', 'slice_level', 'upstream_context_level'].includes(value.failure_scope as string)
+      && this.isStringArray(value.dominant_reason_codes)
+      && (value.dominant_reason_codes as string[]).length > 0
+      && this.isFunctionalRefArray(value.affected_refs)
+      && (value.affected_refs as unknown[]).length > 0
+      && this.isStringArray(value.regeneration_hints)
+      && typeof value.rationale === 'string'
+      && value.rationale.trim().length > 0
+      && this.isN6DebateEscalationPayload(value.debate_escalation)
+      && this.isN6UpstreamRollbackPayload(value.upstream_rollback);
+  }
+
+  private isN6DebateEscalationPayload(
+    value: unknown,
+  ): value is TopicSelectionV1bN6LoopbackTriageSupportPayload['debate_escalation'] {
+    return value === null || (
+      this.isRecord(value)
+      && this.hasOnlyKeys(value, ['debate_level', 'recommended_profile_id', 'sticky', 'rationale'])
+      && ['mixed_cost_control', 'provider_diverse_deep'].includes(value.debate_level as string)
+      && typeof value.recommended_profile_id === 'string'
+      && value.recommended_profile_id.trim().length > 0
+      && typeof value.sticky === 'boolean'
+      && typeof value.rationale === 'string'
+      && value.rationale.trim().length > 0
+    );
+  }
+
+  private isN6UpstreamRollbackPayload(
+    value: unknown,
+  ): value is TopicSelectionV1bN6LoopbackTriageSupportPayload['upstream_rollback'] {
+    return value === null || (
+      this.isRecord(value)
+      && this.hasOnlyKeys(value, ['target_node_id', 'repair_action', 'rationale'])
+      && value.target_node_id === 'topic-selection.v1b.select-research-slice.v1'
+      && value.repair_action === 'select_different_slice'
+      && typeof value.rationale === 'string'
+      && value.rationale.trim().length > 0
+    );
   }
 
   private extractN6DraftPayload(

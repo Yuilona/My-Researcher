@@ -569,23 +569,27 @@ test('v1a Prisma E2E smoke creates a traced human-confirmed ValidatedNeed and re
         created_by: 'system',
       },
       follow_up_search_run: {
+        run_status: 'failed',
         result_accounting: {
-          total_result_count: 1,
-          unique_literature_count: 1,
+          total_result_count: 0,
+          unique_literature_count: 0,
           duplicate_result_count: 0,
-          failed_source_count: 0,
+          failed_source_count: 1,
           skipped_source_count: 0,
         },
         source_health_summary: {
           source_count: 1,
-          warning_codes: [],
+          failed_source_count: 1,
+          error_codes: ['SEARCH_PROVIDER_FAILED'],
+          failure_summary: 'Recheck follow-up provider failed before returning consumable counter-evidence.',
         },
-        evidence_map_input_refs: [ref('literature_record', literatureId, titleCardId)],
+        evidence_map_input_refs: [],
         created_by: 'system',
       },
     });
     assert.equal(materializedRecheck.request.status, 'materialized');
     assert.equal(materializedRecheck.follow_up_search_run?.run_kind, 'recheck_followup');
+    assert.equal(materializedRecheck.follow_up_search_run?.run_status, 'failed');
 
     const supportRefs = validatedNeed.evidence_role_bundle.support_unit_refs;
     const baselineRefs = validatedNeed.evidence_role_bundle.baseline_unit_refs;

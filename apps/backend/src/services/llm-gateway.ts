@@ -135,6 +135,7 @@ type RetryTelemetryState = {
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_RETRIES = 1;
+const MAX_PROVIDER_RETRIES = 8;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -361,7 +362,10 @@ export class BackendLlmGateway {
     );
     const maxRetries = Math.max(
       0,
-      Math.min(3, this.normalizeNonNegativeInteger(input.policy?.maxRetries ?? this.options.defaultMaxRetries, DEFAULT_MAX_RETRIES)),
+      Math.min(
+        MAX_PROVIDER_RETRIES,
+        this.normalizeNonNegativeInteger(input.policy?.maxRetries ?? this.options.defaultMaxRetries, DEFAULT_MAX_RETRIES),
+      ),
     );
 
     let lastError: LlmGatewayError | null = null;

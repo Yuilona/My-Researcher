@@ -165,6 +165,7 @@ import { TopicSelectionV1bResearchSliceService } from './services/topic-selectio
 import { TopicSelectionV1bTopicPackageService } from './services/topic-selection-v1b-topic-package-service.js';
 import { TopicSelectionV1bTopicQuestionService } from './services/topic-selection-v1b-topic-question-service.js';
 import { TopicSelectionV1bValueAssessmentService } from './services/topic-selection-v1b-value-assessment-service.js';
+import { TopicSelectionV1bWorkflowHarnessService } from './services/topic-selection-v1b-workflow-harness-service.js';
 import {
   TopicSelectionV1cDownstreamFeedbackRecheckService,
   type TopicSelectionPaperProjectBridgeHandoffProvider,
@@ -425,13 +426,30 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     repository: topicSelectionV1bTopicPackageRepository,
     valueAssessmentRepository: topicSelectionV1bValueAssessmentRepository,
   });
+  const topicSelectionV1bWorkflowHarnessService = new TopicSelectionV1bWorkflowHarnessService(
+    topicSelectionControlPlaneService,
+    {
+      runnerDependencies: {
+        evidenceMapRepository: topicSelectionEvidenceMapRepository,
+        needValidationRepository: topicSelectionNeedValidationRepository,
+        recheckRiskMemoryRepository: topicSelectionRecheckRiskMemoryRepository,
+        researchSliceRepository: topicSelectionV1bResearchSliceRepository,
+        searchResourceRepository: topicSelectionSearchResourceRepository,
+        topicPackageRepository: topicSelectionV1bTopicPackageRepository,
+        topicQuestionRepository: topicSelectionV1bTopicQuestionRepository,
+        v1bIntakeRepository: topicSelectionV1bIntakeRepository,
+        valueAssessmentRepository: topicSelectionV1bValueAssessmentRepository,
+      },
+    },
+  );
   const topicSelectionV1bController = new TopicSelectionV1bController(
-    topicSelectionV1bIntakeService,
     topicSelectionV1bResearchSliceService,
     topicSelectionV1bTopicQuestionService,
     topicSelectionV1bValueAssessmentService,
     topicSelectionV1bTopicPackageService,
     topicSelectionOfflineEvaluationReplayService,
+    topicSelectionV1bWorkflowHarnessService,
+    topicSelectionControlPlaneService,
   );
   const topicSelectionV1cPromotionInputService = new TopicSelectionV1cPromotionInputService({
     repository: topicSelectionV1cPromotionInputRepository,

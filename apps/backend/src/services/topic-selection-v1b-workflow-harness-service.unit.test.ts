@@ -13,6 +13,7 @@ import {
   type TopicSelectionV1bN4HarnessFrozenInputPayload,
   type TopicSelectionV1bN5HarnessFrozenInputPayload,
   type TopicSelectionV1bN6HarnessFrozenInputPayload,
+  type TopicSelectionV1bN6LoopbackTriageSupportPayload,
   type TopicSelectionV1bN7HarnessFrozenInputPayload,
   type TopicSelectionV1bCandidateGroupingSupportPayload,
   type TopicSelectionV1bN8DebateAdmissionReviewSupportPayload,
@@ -29,6 +30,7 @@ import {
   type TopicSelectionV1bWorkflowHarnessNodeId,
   type TopicSelectionV1bWorkflowHarnessHandoff,
   type TopicSelectionV1bWorkflowHarnessRunRequest,
+  type TopicSelectionV1bWorkflowHarnessRunResult,
   type TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-workflow-harness-contracts';
 import type {
@@ -1038,6 +1040,61 @@ async function recordN7SupportArtifact<T extends Record<string, unknown>>(
   });
 }
 
+async function recordN6LoopbackTriageArtifact(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  payload: TopicSelectionV1bN6LoopbackTriageSupportPayload,
+): Promise<TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef> {
+  return recordN7SupportArtifact(ctx, input, {
+    slot_id: 'n6_loopback_triage',
+    allowed_effect: 'support_only',
+    output_contract: 'N6LoopbackTriageSupport@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n6_loopback_triage_support,
+  }, payload as unknown as Record<string, unknown>);
+}
+
+function n6LoopbackTriagePayload(
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  overrides: Partial<TopicSelectionV1bN6LoopbackTriageSupportPayload> = {},
+): TopicSelectionV1bN6LoopbackTriageSupportPayload {
+  const payload = input.frozen_input.payload as unknown as TopicSelectionV1bN6HarnessFrozenInputPayload;
+  return {
+    loopback_target_code: 'n6_regenerate_candidates',
+    failure_scope: 'candidate_level',
+    dominant_reason_codes: ['not_answerable'],
+    affected_refs: [payload.research_slice_ref],
+    regeneration_hints: ['Regenerate a bounded candidate that stays inside the selected ResearchSlice.'],
+    debate_escalation: null,
+    upstream_rollback: null,
+    rationale: 'All generated candidates failed N6 deterministic semantic admission.',
+    ...overrides,
+  };
+}
+
+async function invokeN6WithFailedDraftAndTriage(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  triagePayload: TopicSelectionV1bN6LoopbackTriageSupportPayload,
+) {
+  const draft = await n6Draft(ctx, input);
+  return ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [
+      await recordN6DraftArtifact(ctx, input, {
+        ...draft,
+        candidates: [
+          {
+            ...draft.candidates[0]!,
+            answerability_verdict: 'not_answerable',
+            main_question: 'How can AI improve research?',
+          },
+        ],
+      }),
+      await recordN6LoopbackTriageArtifact(ctx, input, triagePayload),
+    ],
+  });
+}
+
 function n7GroupingPayload(input: TopicSelectionV1bWorkflowHarnessRunRequest): TopicSelectionV1bCandidateGroupingSupportPayload {
   const payload = input.frozen_input.payload as unknown as TopicSelectionV1bN7HarnessFrozenInputPayload;
   return {
@@ -1549,6 +1606,89 @@ async function runReadyN11(ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>
   const input = await n11Request(ctx, n10);
   const n11 = await ctx.service.invokeNode(input);
   return { n10, n11 };
+}
+
+async function runTerminalPackageFromN8(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  n8Result: TopicSelectionV1bWorkflowHarnessRunResult,
+  suffix: string,
+) {
+  const n9 = await ctx.service.invokeNode(await n9Request(ctx, n8Result, {
+    workflow_run_id: `workflow_run_v1b_n9_${suffix}`,
+    node_attempt_id: `node_attempt_v1b_n9_${suffix}`,
+  }));
+  assert.equal(n9.gate_status, 'admitted_with_warnings');
+  assert.equal(n9.route_decision, 'invoke_next');
+
+  const n10 = await ctx.service.invokeNode(await n10Request(ctx, n9, {
+    workflow_run_id: `workflow_run_v1b_n10_${suffix}`,
+    node_attempt_id: `node_attempt_v1b_n10_${suffix}`,
+  }));
+  assert.equal(n10.gate_status, 'admitted_with_warnings');
+  assert.equal(n10.route_decision, 'invoke_next');
+
+  const n11 = await ctx.service.invokeNode(await n11Request(ctx, n10, {
+    workflow_run_id: `workflow_run_v1b_n11_${suffix}`,
+    node_attempt_id: `node_attempt_v1b_n11_${suffix}`,
+  }));
+  assert.equal(n11.gate_status, 'admitted_with_warnings');
+  assert.equal(n11.route_decision, 'stop_v1b_complete');
+  assert.equal(n11.authority_ref?.ref_type, 'v1b_to_v1c_input_bundle');
+  return { n9, n10, n11 };
+}
+
+async function assertTraceLoopbackTargetCode(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  result: TopicSelectionV1bWorkflowHarnessRunResult,
+  expected: string,
+  expectedTargetNodeId?: TopicSelectionV1bWorkflowHarnessNodeId,
+) {
+  assert.ok(result.trace_snapshot_ref);
+  const trace = await ctx.controlPlane.getTraceSnapshot(result.trace_snapshot_ref.ref_id);
+  assert.ok(trace);
+  assert.equal(trace.payload.loopback_target_code, expected);
+  if (expectedTargetNodeId) {
+    assert.equal(trace.payload.route_target_node_id, expectedTargetNodeId);
+  }
+  assert.equal(trace.payload.loopback_target, undefined);
+  const policy = TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_NODE_POLICIES.find((item) => item.node_id === result.node_id);
+  assert.ok((policy?.loopback_target_codes as readonly string[] | undefined)?.includes(expected));
+  return trace;
+}
+
+async function assertNoTraceArtifactForAttempt(
+  ctx: ReturnType<typeof makeContext>,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+): Promise<void> {
+  const failedAttemptArtifacts = await ctx.controlPlane.listArtifactRefsByWorkflowRunId(input.workflow_run_id);
+  const failedTraceArtifacts = failedAttemptArtifacts.filter((artifact) =>
+    artifact.artifact_kind === 'trace'
+    && (artifact.payload as { node_id?: string } | null)?.node_id === input.node_id
+  );
+  assert.equal(failedTraceArtifacts.length, 0);
+}
+
+async function assertAuthorityWriteFailureCanRetry(
+  ctx: ReturnType<typeof makeContext>,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  expectedError: RegExp,
+  assertNoAuthority: () => Promise<void>,
+): Promise<void> {
+  await assert.rejects(
+    () => ctx.service.invokeNode(input),
+    expectedError,
+  );
+  await assertNoTraceArtifactForAttempt(ctx, input);
+  await assertNoAuthority();
+
+  const result = await ctx.service.invokeNode(input);
+  assert.notEqual(result.gate_status, 'blocked');
+  assert.equal(result.replay_provenance, null);
+  assert.ok(result.authority_ref);
+
+  const replay = await ctx.service.invokeNode(input);
+  assert.equal(replay.replay_provenance?.replayed, true);
+  assert.equal(replay.authority_ref?.ref_id, result.authority_ref?.ref_id);
 }
 
 async function seedHarnessV1aBundle(options: {
@@ -2375,6 +2515,194 @@ test('v1b workflow harness N5 authority write failure does not leave replayable 
   assert.equal(replay.authority_ref?.ref_id, result.authority_ref?.ref_id);
 });
 
+test('v1b workflow harness multi-record authority write failures do not leave replayable admitted traces', async () => {
+  {
+    const ctx = await seedHarnessV1aBundle();
+    const { n1, n2, n3 } = await runReadyN3(ctx);
+    const baseInput = n4Request(n1, n2, n3);
+    const input = {
+      ...baseInput,
+      semantic_artifacts: [await recordN4DraftArtifact(ctx, baseInput, n4Draft())],
+    };
+    const originalCreate = ctx.researchSliceRepository.createPlanRunWithOptionSet.bind(ctx.researchSliceRepository);
+    let captured: Parameters<typeof ctx.researchSliceRepository.createPlanRunWithOptionSet>[0] | null = null;
+    let failNextWrite = true;
+    ctx.researchSliceRepository.createPlanRunWithOptionSet = async (creation) => {
+      if (failNextWrite) {
+        failNextWrite = false;
+        captured = creation;
+        throw new Error('injected N4 authority write failure');
+      }
+      return originalCreate(creation);
+    };
+
+    await assertAuthorityWriteFailureCanRetry(ctx, input, /injected N4 authority write failure/, async () => {
+      assert.ok(captured);
+      assert.equal(await ctx.researchSliceRepository.findPlanRunById(captured.plan_run.plan_research_slice_run_id), null);
+      assert.equal(await ctx.researchSliceRepository.findOptionSetById(captured.option_set.research_slice_option_set_id), null);
+      assert.equal((await ctx.researchSliceRepository.listOptionsByOptionSetId(captured.option_set.research_slice_option_set_id)).length, 0);
+    });
+  }
+
+  {
+    const ctx = await seedHarnessV1aBundle();
+    const { n5 } = await runReadyN5(ctx);
+    const baseInput = await n6Request(ctx, n5);
+    const draft = await n6Draft(ctx, baseInput);
+    const input = {
+      ...baseInput,
+      semantic_artifacts: [await recordN6DraftArtifact(ctx, baseInput, draft)],
+    };
+    const originalCreate = ctx.topicQuestionRepository.createFormationRunWithCandidates.bind(ctx.topicQuestionRepository);
+    let captured: Parameters<typeof ctx.topicQuestionRepository.createFormationRunWithCandidates>[0] | null = null;
+    let failNextWrite = true;
+    ctx.topicQuestionRepository.createFormationRunWithCandidates = async (creation) => {
+      if (failNextWrite) {
+        failNextWrite = false;
+        captured = creation;
+        throw new Error('injected N6 authority write failure');
+      }
+      return originalCreate(creation);
+    };
+
+    await assertAuthorityWriteFailureCanRetry(ctx, input, /injected N6 authority write failure/, async () => {
+      assert.ok(captured);
+      assert.equal(await ctx.topicQuestionRepository.findFormationRunById(captured.form_topic_question_run.form_topic_question_run_id), null);
+      assert.equal(await ctx.topicQuestionRepository.findQuestionFrameById(captured.question_frame.question_frame_id), null);
+      assert.equal(await ctx.topicQuestionRepository.findCandidateSetById(captured.candidate_set.topic_question_candidate_set_id), null);
+      assert.equal(await ctx.topicQuestionRepository.findCandidateById(captured.candidates[0]!.topic_question_candidate_id), null);
+    });
+  }
+
+  {
+    const ctx = await seedHarnessV1aBundle();
+    const { n6 } = await runReadyN6(ctx);
+    const input = await n7Request(ctx, n6);
+    const originalCreate = ctx.topicQuestionRepository.createSelectionDecisionWithMaterializations.bind(ctx.topicQuestionRepository);
+    let captured: Parameters<typeof ctx.topicQuestionRepository.createSelectionDecisionWithMaterializations>[0] | null = null;
+    let failNextWrite = true;
+    ctx.topicQuestionRepository.createSelectionDecisionWithMaterializations = async (creation) => {
+      if (failNextWrite) {
+        failNextWrite = false;
+        captured = creation;
+        throw new Error('injected N7 authority write failure');
+      }
+      return originalCreate(creation);
+    };
+
+    await assertAuthorityWriteFailureCanRetry(ctx, input, /injected N7 authority write failure/, async () => {
+      assert.ok(captured);
+      const materialization = captured.materializations[0]!;
+      assert.equal(await ctx.topicQuestionRepository.findSelectionDecisionById(captured.decision.topic_question_selection_decision_id), null);
+      assert.equal(await ctx.topicQuestionRepository.findTopicQuestionById(materialization.topic_question.topic_question_id), null);
+      assert.equal(
+        await ctx.topicQuestionRepository.findTopicQuestionContractById(
+          materialization.topic_question_contract.topic_question_contract_id,
+        ),
+        null,
+      );
+      assert.equal(
+        await ctx.topicQuestionRepository.findAnswerabilityPlanById(
+          materialization.answerability_plan.topic_question_answerability_plan_id,
+        ),
+        null,
+      );
+    });
+  }
+
+  {
+    const ctx = await seedHarnessV1aBundle();
+    const { n7 } = await runReadyN7(ctx);
+    const baseInput = await n8Request(ctx, n7);
+    const draft = n8ValueDraft(baseInput);
+    const input = {
+      ...baseInput,
+      semantic_artifacts: [await recordN8ValueDraftArtifact(ctx, baseInput, draft)],
+    };
+    const originalCreate = ctx.valueAssessmentRepository.createAssessmentWithMemo.bind(ctx.valueAssessmentRepository);
+    let captured: Parameters<typeof ctx.valueAssessmentRepository.createAssessmentWithMemo>[0] | null = null;
+    let failNextWrite = true;
+    ctx.valueAssessmentRepository.createAssessmentWithMemo = async (creation) => {
+      if (failNextWrite) {
+        failNextWrite = false;
+        captured = creation;
+        throw new Error('injected N8 authority write failure');
+      }
+      return originalCreate(creation);
+    };
+
+    await assertAuthorityWriteFailureCanRetry(ctx, input, /injected N8 authority write failure/, async () => {
+      assert.ok(captured);
+      assert.equal(
+        await ctx.valueAssessmentRepository.findAssessmentRunById(
+          captured.assess_topic_value_run.assess_topic_value_run_id,
+        ),
+        null,
+      );
+      assert.equal(
+        await ctx.valueAssessmentRepository.findInputSnapshotById(
+          captured.topic_value_input_snapshot.topic_value_input_snapshot_id,
+        ),
+        null,
+      );
+      assert.equal(
+        await ctx.valueAssessmentRepository.findAssessmentById(
+          captured.topic_value_assessment.topic_value_assessment_id,
+        ),
+        null,
+      );
+      assert.equal(
+        await ctx.valueAssessmentRepository.findReasoningMemoById(
+          captured.value_reasoning_memo.value_reasoning_memo_id,
+        ),
+        null,
+      );
+    });
+  }
+
+  {
+    const ctx = await seedHarnessV1aBundle();
+    const { n9 } = await runReadyN9(ctx);
+    const input = await n10Request(ctx, n9);
+    const originalCreate = ctx.topicPackageRepository.createDraftPackageAuthority.bind(ctx.topicPackageRepository);
+    let captured: Parameters<typeof ctx.topicPackageRepository.createDraftPackageAuthority>[0] | null = null;
+    let failNextWrite = true;
+    ctx.topicPackageRepository.createDraftPackageAuthority = async (creation) => {
+      if (failNextWrite) {
+        failNextWrite = false;
+        captured = creation;
+        throw new Error('injected N10 authority write failure');
+      }
+      return originalCreate(creation);
+    };
+
+    await assertAuthorityWriteFailureCanRetry(ctx, input, /injected N10 authority write failure/, async () => {
+      assert.ok(captured);
+      assert.equal(await ctx.topicPackageRepository.findPackageById(captured.topic_package.topic_package_id), null);
+      assert.equal(
+        await ctx.topicPackageRepository.findTraceBoundaryCheckById(
+          captured.package_trace_boundary_check.package_trace_boundary_check_id,
+        ),
+        null,
+      );
+      assert.equal(
+        await ctx.topicPackageRepository.findReadinessAssessmentById(
+          captured.package_readiness_assessment.package_readiness_assessment_id,
+        ),
+        null,
+      );
+      if (captured.v1c_input_bundle) {
+        assert.equal(
+          await ctx.topicPackageRepository.findV1cInputBundleById(
+            captured.v1c_input_bundle.v1b_to_v1c_input_bundle_id,
+          ),
+          null,
+        );
+      }
+    });
+  }
+});
+
 test('v1b workflow harness N5 accepts Codex delegated selection only with matching semantic provenance', async () => {
   const ctx = await seedHarnessV1aBundle();
   const { n4 } = await runReadyN4(ctx);
@@ -2647,7 +2975,216 @@ test('v1b workflow harness N6 emits loopback with no authority when all candidat
   assert.equal(result.error_code, 'N6_NO_ADMISSIBLE_TOPIC_QUESTION_CANDIDATE');
   assert.equal(result.authority_ref, null);
   assert.equal(result.handoff_ref, null);
+  await assertTraceLoopbackTargetCode(ctx, result, 'n6_regenerate_candidates');
   assert.deepEqual(await ctx.topicQuestionRepository.listCandidateSetsByTitleCardId(TITLE_CARD_ID), []);
+});
+
+test('v1b workflow harness N6 applies loopback triage for debate escalation and upstream rollback', async () => {
+  const debateCtx = await seedHarnessV1aBundle();
+  const { n5: debateN5 } = await runReadyN5(debateCtx);
+  const debateInput = await n6Request(debateCtx, debateN5, {
+    workflow_run_id: 'workflow_run_v1b_n6_debate_triage',
+    node_attempt_id: 'node_attempt_v1b_n6_debate_triage',
+  });
+  const debateDraft = await n6Draft(debateCtx, debateInput);
+  const debateResult = await debateCtx.service.invokeNode({
+    ...debateInput,
+    semantic_artifacts: [
+      await recordN6DraftArtifact(debateCtx, debateInput, {
+        ...debateDraft,
+        candidates: [
+          {
+            ...debateDraft.candidates[0]!,
+            answerability_verdict: 'not_answerable',
+            main_question: 'How can AI improve research?',
+          },
+        ],
+      }),
+      await recordN6LoopbackTriageArtifact(debateCtx, debateInput, n6LoopbackTriagePayload(debateInput, {
+        loopback_target_code: 'n6_debate_escalation',
+        debate_escalation: {
+          debate_level: 'mixed_cost_control',
+          recommended_profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_question_candidates_single_agent,
+          sticky: true,
+          rationale: 'Escalate the next candidate generation pass to debate-shaped review before retrying N6.',
+        },
+        upstream_rollback: null,
+        rationale: 'Candidate failures look like prompt contention rather than a bad selected slice.',
+      })),
+    ],
+  });
+  assert.equal(debateResult.gate_status, 'blocked');
+  assert.equal(debateResult.route_decision, 'loopback');
+  assert.equal(debateResult.authority_ref, null);
+  assert.equal(debateResult.handoff_ref, null);
+  assert.ok(debateResult.warnings.some((warning) => warning.code === 'N6_DEBATE_ESCALATION_RECOMMENDED'));
+  const debateTrace = await assertTraceLoopbackTargetCode(
+    debateCtx,
+    debateResult,
+    'n6_debate_escalation',
+    'topic-selection.v1b.generate-topic-question-candidates.v1',
+  );
+  assert.equal((debateTrace.payload.debate_escalation as { sticky?: boolean } | null)?.sticky, true);
+  assert.equal(debateTrace.payload.upstream_rollback, null);
+
+  const rollbackCtx = await seedHarnessV1aBundle();
+  const { n5: rollbackN5 } = await runReadyN5(rollbackCtx);
+  const rollbackInput = await n6Request(rollbackCtx, rollbackN5, {
+    workflow_run_id: 'workflow_run_v1b_n6_upstream_rollback',
+    node_attempt_id: 'node_attempt_v1b_n6_upstream_rollback',
+  });
+  const rollbackDraft = await n6Draft(rollbackCtx, rollbackInput);
+  const rollbackResult = await rollbackCtx.service.invokeNode({
+    ...rollbackInput,
+    semantic_artifacts: [
+      await recordN6DraftArtifact(rollbackCtx, rollbackInput, {
+        ...rollbackDraft,
+        candidates: [
+          {
+            ...rollbackDraft.candidates[0]!,
+            answerability_verdict: 'not_answerable',
+            main_question: 'How can AI improve research?',
+          },
+        ],
+      }),
+      await recordN6LoopbackTriageArtifact(rollbackCtx, rollbackInput, n6LoopbackTriagePayload(rollbackInput, {
+        loopback_target_code: 'n6_loopback_to_n5_select_different_slice',
+        failure_scope: 'slice_level',
+        debate_escalation: null,
+        upstream_rollback: {
+          target_node_id: 'topic-selection.v1b.select-research-slice.v1',
+          repair_action: 'select_different_slice',
+          rationale: 'The selected ResearchSlice is too broad to yield an admissible TopicQuestion.',
+        },
+        rationale: 'The failure is slice-level; retrying N6 against the same slice would repeat the same failure.',
+      })),
+    ],
+  });
+  assert.equal(rollbackResult.gate_status, 'blocked');
+  assert.equal(rollbackResult.route_decision, 'loopback');
+  assert.equal(rollbackResult.authority_ref, null);
+  assert.equal(rollbackResult.handoff_ref, null);
+  const rollbackTrace = await assertTraceLoopbackTargetCode(
+    rollbackCtx,
+    rollbackResult,
+    'n6_loopback_to_n5_select_different_slice',
+    'topic-selection.v1b.select-research-slice.v1',
+  );
+  assert.equal(
+    (rollbackTrace.payload.upstream_rollback as { repair_action?: string } | null)?.repair_action,
+    'select_different_slice',
+  );
+  assert.equal(rollbackTrace.payload.debate_escalation, null);
+  assert.deepEqual(await rollbackCtx.topicQuestionRepository.listCandidateSetsByTitleCardId(TITLE_CARD_ID), []);
+});
+
+test('v1b workflow harness N6 blocks inconsistent loopback triage before routing', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n5 } = await runReadyN5(ctx);
+  const input = await n6Request(ctx, n5, {
+    workflow_run_id: 'workflow_run_v1b_n6_bad_triage',
+    node_attempt_id: 'node_attempt_v1b_n6_bad_triage',
+  });
+  const result = await invokeN6WithFailedDraftAndTriage(ctx, input, n6LoopbackTriagePayload(input, {
+    loopback_target_code: 'n6_debate_escalation',
+    debate_escalation: null,
+  }));
+
+  assert.equal(result.gate_status, 'blocked');
+  assert.equal(result.route_decision, 'blocked');
+  assert.equal(result.error_code, 'N6_LOOPBACK_TRIAGE_POLICY_MISMATCH');
+  assert.equal(result.authority_ref, null);
+  assert.equal(result.handoff_ref, null);
+  assert.deepEqual(await ctx.topicQuestionRepository.listCandidateSetsByTitleCardId(TITLE_CARD_ID), []);
+
+  const scopeCtx = await seedHarnessV1aBundle();
+  const { n5: scopeN5 } = await runReadyN5(scopeCtx);
+  const scopeInput = await n6Request(scopeCtx, scopeN5, {
+    workflow_run_id: 'workflow_run_v1b_n6_bad_triage_scope',
+    node_attempt_id: 'node_attempt_v1b_n6_bad_triage_scope',
+  });
+  const scopeResult = await invokeN6WithFailedDraftAndTriage(scopeCtx, scopeInput, n6LoopbackTriagePayload(scopeInput, {
+    loopback_target_code: 'n6_loopback_to_n5_select_different_slice',
+    failure_scope: 'candidate_level',
+    debate_escalation: null,
+    upstream_rollback: {
+      target_node_id: 'topic-selection.v1b.select-research-slice.v1',
+      repair_action: 'select_different_slice',
+      rationale: 'The selected ResearchSlice is too broad to yield an admissible TopicQuestion.',
+    },
+  }));
+  assert.equal(scopeResult.gate_status, 'blocked');
+  assert.equal(scopeResult.route_decision, 'blocked');
+  assert.equal(scopeResult.error_code, 'N6_LOOPBACK_TRIAGE_POLICY_MISMATCH');
+  assert.equal(scopeResult.authority_ref, null);
+  assert.equal(scopeResult.handoff_ref, null);
+  assert.deepEqual(await scopeCtx.topicQuestionRepository.listCandidateSetsByTitleCardId(TITLE_CARD_ID), []);
+
+  const lineageCtx = await seedHarnessV1aBundle();
+  const { n5: lineageN5 } = await runReadyN5(lineageCtx);
+  const lineageInput = await n6Request(lineageCtx, lineageN5, {
+    workflow_run_id: 'workflow_run_v1b_n6_bad_triage_refs',
+    node_attempt_id: 'node_attempt_v1b_n6_bad_triage_refs',
+  });
+  const lineageResult = await invokeN6WithFailedDraftAndTriage(
+    lineageCtx,
+    lineageInput,
+    n6LoopbackTriagePayload(lineageInput, {
+      affected_refs: [ref('research_slice', 'research_slice_outside_frozen_n6_lineage', TITLE_CARD_ID)],
+    }),
+  );
+  assert.equal(lineageResult.gate_status, 'blocked');
+  assert.equal(lineageResult.route_decision, 'blocked');
+  assert.equal(lineageResult.error_code, 'N6_LOOPBACK_TRIAGE_AFFECTED_REFS_MISMATCH');
+  assert.equal(lineageResult.authority_ref, null);
+  assert.equal(lineageResult.handoff_ref, null);
+  assert.deepEqual(await lineageCtx.topicQuestionRepository.listCandidateSetsByTitleCardId(TITLE_CARD_ID), []);
+
+  const artifactCtx = await seedHarnessV1aBundle();
+  const { n5: artifactN5 } = await runReadyN5(artifactCtx);
+  const artifactInput = await n6Request(artifactCtx, artifactN5, {
+    workflow_run_id: 'workflow_run_v1b_n6_bad_triage_artifact',
+    node_attempt_id: 'node_attempt_v1b_n6_bad_triage_artifact',
+  });
+  const artifactDraft = await n6Draft(artifactCtx, artifactInput);
+  const triageArtifact = await recordN6LoopbackTriageArtifact(
+    artifactCtx,
+    artifactInput,
+    n6LoopbackTriagePayload(artifactInput),
+  );
+  const wrongSupportArtifact = await artifactCtx.controlPlane.recordArtifactRef({
+    title_card_id: TITLE_CARD_ID,
+    artifact_kind: 'structured_output',
+    storage_kind: 'inline',
+    workflow_run_id: artifactInput.workflow_run_id,
+    payload: { wrong_support: true },
+    created_by: 'system',
+  });
+  const artifactResult = await artifactCtx.service.invokeNode({
+    ...artifactInput,
+    semantic_artifacts: [
+      await recordN6DraftArtifact(artifactCtx, artifactInput, {
+        ...artifactDraft,
+        candidates: [
+          {
+            ...artifactDraft.candidates[0]!,
+            answerability_verdict: 'not_answerable',
+            main_question: 'How can AI improve research?',
+          },
+        ],
+      }),
+      {
+        ...triageArtifact,
+        support_artifact_ref: ref('artifact_ref', wrongSupportArtifact.artifact_ref_id, TITLE_CARD_ID),
+      },
+    ],
+  });
+  assert.equal(artifactResult.gate_status, 'blocked');
+  assert.equal(artifactResult.route_decision, 'blocked');
+  assert.equal(artifactResult.error_code, 'N6_LOOPBACK_TRIAGE_ARTIFACT_HASH_MISMATCH');
+  assert.equal(artifactResult.authority_ref, null);
+  assert.equal(artifactResult.handoff_ref, null);
+  assert.deepEqual(await artifactCtx.topicQuestionRepository.listCandidateSetsByTitleCardId(TITLE_CARD_ID), []);
 });
 
 test('v1b workflow harness N6 carries warnings and detects replay drift', async () => {
@@ -2688,6 +3225,92 @@ test('v1b workflow harness N6 carries warnings and detects replay drift', async 
   });
   assert.equal(drift.gate_status, 'blocked');
   assert.equal(drift.error_code, 'REPLAY_SEMANTIC_ARTIFACT_HASH_MISMATCH');
+});
+
+test('v1b workflow harness N6 partial semantic failure admits only passing candidates without upstream rollback', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n4, n5 } = await runReadyN5(ctx);
+  const input = await n6Request(ctx, n5, {
+    workflow_run_id: 'workflow_run_v1b_n6_partial_semantic_failure',
+    node_attempt_id: 'node_attempt_v1b_n6_partial_semantic_failure',
+  });
+  const draft = await n6Draft(ctx, input);
+  const failedCandidate = {
+    ...draft.candidates[0]!,
+    answerability_verdict: 'not_answerable' as const,
+    candidate_key: 'blocked_broad_candidate',
+    main_question: 'How can AI improve research?',
+  };
+  const admittedCandidate = {
+    ...draft.candidates[0]!,
+    candidate_key: 'admitted_specific_candidate',
+    expected_claim: 'Partial semantic gating preserves only answerable v1b topic-question candidates.',
+    main_question: 'How can partial N6 semantic gating preserve only an answerable v1b topic-question candidate?',
+  };
+
+  const result = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [
+      await recordN6DraftArtifact(ctx, input, {
+        ...draft,
+        candidates: [failedCandidate, admittedCandidate],
+        recommended_candidate_keys: ['blocked_broad_candidate', 'admitted_specific_candidate'],
+      }),
+    ],
+  });
+
+  assert.equal(result.gate_status, 'admitted_with_warnings');
+  assert.equal(result.route_decision, 'invoke_next');
+  assert.equal(result.error_code, null);
+  assert.ok(result.warnings.some((warning) => warning.code === 'BLOCKED_CANDIDATES_PRESENT'));
+  assert.equal(result.warnings.some((warning) => warning.code === 'debate_escalation_recommended'), false);
+
+  const candidateSet = await ctx.topicQuestionRepository.findCandidateSetById(result.authority_ref!.ref_id);
+  assert.equal(candidateSet?.candidate_count, 1);
+  assert.equal(candidateSet?.recommended_candidate_ids.length, 1);
+  const readiness = candidateSet?.admission_readiness as {
+    blocked_candidate_context?: Array<{ candidate_key?: string; dominant_reason?: string }>;
+  } | undefined;
+  assert.equal(readiness?.blocked_candidate_context?.length, 1);
+  assert.equal(readiness?.blocked_candidate_context?.[0]?.candidate_key, 'blocked_broad_candidate');
+  assert.equal(readiness?.blocked_candidate_context?.[0]?.dominant_reason, 'answerability_weak');
+
+  const candidates = await ctx.topicQuestionRepository.listCandidatesByCandidateSetId(result.authority_ref!.ref_id);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0]?.candidate_key, 'admitted_specific_candidate');
+
+  const trace = await ctx.controlPlane.getTraceSnapshot(result.trace_snapshot_ref!.ref_id);
+  assert.equal(trace?.payload.loopback_target_code, undefined);
+  const optionSet = await ctx.researchSliceRepository.findOptionSetById(n4.authority_ref!.ref_id);
+  assert.equal(optionSet?.status, 'selected');
+  const selectionDecision = await ctx.researchSliceRepository.findSelectionDecisionById(n5.authority_ref!.ref_id);
+  assert.equal(selectionDecision?.decision, 'select');
+  assert.equal(selectionDecision?.output_research_slice_ref?.ref_type, 'research_slice');
+});
+
+test('v1b workflow harness N6 rejects debate execution config before persistence', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n5 } = await runReadyN5(ctx);
+  const input = await n6Request(ctx, n5, {
+    execution_spec: {
+      debate_config: {
+        profile_id: 'topic-selection.question-candidates.debate.unimplemented',
+      },
+      execution_mode: 'codex_assisted',
+      model_option_id: null,
+    } as unknown as TopicSelectionV1bWorkflowHarnessRunRequest['execution_spec'],
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_question_candidates_single_agent,
+    run_mode: 'acceptance',
+    workflow_run_id: 'workflow_run_v1b_n6_reject_debate_config',
+    node_attempt_id: 'node_attempt_v1b_n6_reject_debate_config',
+  });
+
+  await assert.rejects(
+    () => ctx.service.invokeNode(input),
+    (error) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
+  assert.deepEqual(await ctx.controlPlane.listArtifactRefsByWorkflowRunId(input.workflow_run_id), []);
+  assert.deepEqual(await ctx.topicQuestionRepository.listCandidateSetsByTitleCardId(TITLE_CARD_ID), []);
 });
 
 test('v1b workflow harness N7 materializes an active TopicQuestionContract from N6 handoff', async () => {
@@ -2810,6 +3433,83 @@ test('v1b workflow harness N7 accepts Codex grouping support but blocks unknown 
   assert.equal(blocked.authority_ref, null);
 });
 
+test('v1b workflow harness N7 blocks duplicate grouping priority and initial failed-trial synthesis', async () => {
+  const duplicateCtx = await seedHarnessV1aBundle();
+  const { n5 } = await runReadyN5(duplicateCtx);
+  const n6Input = await n6Request(duplicateCtx, n5, {
+    workflow_run_id: 'workflow_run_v1b_n6_duplicate_grouping_priority',
+    node_attempt_id: 'node_attempt_v1b_n6_duplicate_grouping_priority',
+  });
+  const draft = await n6Draft(duplicateCtx, n6Input);
+  const second = {
+    ...draft.candidates[0]!,
+    candidate_key: 'second_harness_candidate',
+    main_question: 'How can duplicate grouping priority be blocked before N7 materialization?',
+    expected_claim: 'N7 blocks duplicate candidate priority before writing a contract.',
+  };
+  const n6 = await duplicateCtx.service.invokeNode({
+    ...n6Input,
+    semantic_artifacts: [
+      await recordN6DraftArtifact(duplicateCtx, n6Input, {
+        ...draft,
+        candidates: [draft.candidates[0]!, second],
+        recommended_candidate_keys: ['harness_candidate', 'second_harness_candidate'],
+      }),
+    ],
+  });
+  const input = await n7Request(duplicateCtx, n6, {
+    workflow_run_id: 'workflow_run_v1b_n7_duplicate_grouping_priority',
+    node_attempt_id: 'node_attempt_v1b_n7_duplicate_grouping_priority',
+  });
+  const grouping = n7GroupingPayload(input);
+  const duplicate = await duplicateCtx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [
+      await recordN7SupportArtifact(duplicateCtx, input, {
+        allowed_effect: 'support_only',
+        output_contract: 'CandidateGroupingSupport@v1',
+        profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_candidate_grouping_support,
+        slot_id: 'n7_candidate_grouping',
+      }, {
+        ...grouping,
+        priority_order: [grouping.selected_candidate_ref, grouping.selected_candidate_ref],
+      } as unknown as Record<string, unknown>),
+    ],
+  });
+  assert.equal(duplicate.gate_status, 'blocked');
+  assert.equal(duplicate.error_code, 'N7_DUPLICATE_PRIORITY_CANDIDATE');
+  assert.equal(duplicate.authority_ref, null);
+
+  const synthesisCtx = await seedHarnessV1aBundle();
+  const { n6: synthesisN6 } = await runReadyN6(synthesisCtx);
+  const synthesisInput = await n7Request(synthesisCtx, synthesisN6, {
+    workflow_run_id: 'workflow_run_v1b_n7_initial_failed_trial_synthesis',
+    node_attempt_id: 'node_attempt_v1b_n7_initial_failed_trial_synthesis',
+  });
+  const candidates = await synthesisCtx.topicQuestionRepository.listCandidatesByCandidateSetId(synthesisN6.authority_ref!.ref_id);
+  const initialSynthesis = await synthesisCtx.service.invokeNode({
+    ...synthesisInput,
+    semantic_artifacts: [
+      await recordN7SupportArtifact(synthesisCtx, synthesisInput, {
+        allowed_effect: 'support_only',
+        output_contract: 'N8FailedTrialSynthesisSupport@v1',
+        profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_failed_trial_synthesis_support,
+        slot_id: 'n7_failed_trial_synthesis',
+      }, {
+        affected_refs: [synthesisN6.authority_ref!],
+        exhausted_candidate_refs: candidates.map((candidate) =>
+          ref('topic_question_candidate', candidate.topic_question_candidate_id, TITLE_CARD_ID)),
+        failure_reason_codes: ['value_not_supported'],
+        n6_regeneration_hints: ['This support is illegal before any N8 feedback exists.'],
+        synthesis_summary: 'Initial N7 trials cannot consume failed-trial synthesis.',
+      } satisfies TopicSelectionV1bN8FailedTrialSynthesisSupportPayload as unknown as Record<string, unknown>),
+    ],
+  });
+  assert.equal(initialSynthesis.gate_status, 'blocked');
+  assert.equal(initialSynthesis.error_code, 'N7_FAILED_TRIAL_SYNTHESIS_NOT_ALLOWED_FOR_INITIAL_TRIAL');
+  assert.equal(initialSynthesis.authority_ref, null);
+});
+
 test('v1b workflow harness N7 consumes N8 feedback to select next candidate or loop back to N6', async () => {
   const ctx = await seedHarnessV1aBundle();
   const { n5 } = await runReadyN5(ctx);
@@ -2844,6 +3544,11 @@ test('v1b workflow harness N7 consumes N8 feedback to select next candidate or l
   const firstHandoffPayload = firstHandoff.payload as { active_candidate_ref: TopicSelectionFunctionalRef };
   const secondContract = await ctx.topicQuestionRepository.findTopicQuestionContractById(secondTrial.authority_ref!.ref_id);
   assert.notEqual(secondContract?.source_candidate_id, firstHandoffPayload.active_candidate_ref.ref_id);
+  const secondDecision = secondContract
+    ? await ctx.topicQuestionRepository.findSelectionDecisionById(secondContract.selection_decision_id)
+    : null;
+  assert.equal(secondDecision?.blocking_contexts[0]?.feedback_class, 'semantic_candidate_failure');
+  assert.equal(secondDecision?.blocking_contexts[0]?.failure_reason_code, 'value_not_supported');
   const candidates = await ctx.topicQuestionRepository.listCandidatesByCandidateSetId(n6.authority_ref!.ref_id);
   assert.equal(candidates.filter((candidate) => candidate.status === 'admitted').length, 1);
   assert.equal(candidates.filter((candidate) => candidate.status === 'rejected').length, 1);
@@ -2874,6 +3579,118 @@ test('v1b workflow harness N7 consumes N8 feedback to select next candidate or l
   assert.equal(exhausted.route_decision, 'loopback');
   assert.equal(exhausted.handoff_ref, null);
   assert.equal(exhausted.authority_ref?.ref_type, 'topic_question_selection_decision');
+  await assertTraceLoopbackTargetCode(ctx, exhausted, 'n7_loopback_to_n6');
+  const exhaustedDecision = await ctx.topicQuestionRepository.findSelectionDecisionById(exhausted.authority_ref!.ref_id);
+  assert.equal(exhaustedDecision?.admission_review.loopback_target_code, 'n7_loopback_to_n6');
+});
+
+test('v1b workflow harness N7 readmits gate-rejected feedback with updated debate admission only', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n6 } = await runReadyN6(ctx);
+  const initialInput = await n7Request(ctx, n6);
+  const first = await ctx.service.invokeNode(initialInput);
+  const firstHandoffArtifact = await ctx.controlPlane.getArtifactRef(first.handoff_ref!.ref_id);
+  const firstHandoff = firstHandoffArtifact?.payload as unknown as TopicSelectionV1bWorkflowHarnessHandoff;
+  const firstHandoffPayload = firstHandoff.payload as {
+    active_candidate_ref: TopicSelectionFunctionalRef;
+    n8_debate_admission_hash: string;
+  };
+  const feedbackInput = await n7FeedbackRequest(ctx, initialInput, first, 'gate_rejected');
+  const missingAdmission = await ctx.service.invokeNode(feedbackInput);
+  assert.equal(missingAdmission.gate_status, 'blocked');
+  assert.equal(missingAdmission.error_code, 'N7_GATE_READMISSION_DEBATE_ADMISSION_REQUIRED');
+  assert.equal(missingAdmission.authority_ref, null);
+  assert.equal(missingAdmission.handoff_ref, null);
+
+  const readmitted = await ctx.service.invokeNode({
+    ...feedbackInput,
+    node_attempt_id: 'node_attempt_v1b_n7_gate_readmission_with_support',
+    semantic_artifacts: [
+      await recordN7SupportArtifact(ctx, feedbackInput, {
+        allowed_effect: 'support_only',
+        output_contract: 'N8DebateAdmissionReviewSupport@v1',
+        profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_n8_debate_admission_support,
+        slot_id: 'n7_n8_debate_admission_review',
+      }, n7DebateAdmissionPayload({
+        debate_level: 'provider_diverse_deep_debate',
+        rationale: 'Gate rejection requires bounded deep readmission without consuming the candidate trial.',
+        risk_signal_codes: ['debate_admission_too_weak'],
+      }) as unknown as Record<string, unknown>),
+    ],
+  });
+
+  assert.equal(readmitted.gate_status, 'admitted_with_warnings');
+  assert.equal(readmitted.route_decision, 'invoke_next');
+  assert.equal(readmitted.authority_ref?.ref_id, first.authority_ref?.ref_id);
+  assert.equal(readmitted.error_code, null);
+  assert.ok(readmitted.warnings.some((warning) => warning.code === 'n8_debate_level_selected'));
+
+  const readmittedHandoffArtifact = await ctx.controlPlane.getArtifactRef(readmitted.handoff_ref!.ref_id);
+  const readmittedHandoff = readmittedHandoffArtifact?.payload as unknown as TopicSelectionV1bWorkflowHarnessHandoff;
+  const readmittedPayload = readmittedHandoff.payload as {
+    active_candidate_ref: TopicSelectionFunctionalRef;
+    n8_debate_admission_hash: string;
+  };
+  assert.equal(readmittedPayload.active_candidate_ref.ref_id, firstHandoffPayload.active_candidate_ref.ref_id);
+  assert.notEqual(readmittedPayload.n8_debate_admission_hash, firstHandoffPayload.n8_debate_admission_hash);
+
+  const candidates = await ctx.topicQuestionRepository.listCandidatesByCandidateSetId(n6.authority_ref!.ref_id);
+  assert.equal(candidates.filter((candidate) => candidate.status === 'rejected').length, 0);
+  assert.equal(candidates.filter((candidate) => candidate.status === 'admitted').length, 1);
+});
+
+test('v1b workflow harness N7 blocks incomplete failed-trial synthesis before N6 loopback', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n5 } = await runReadyN5(ctx);
+  const n6Input = await n6Request(ctx, n5);
+  const draft = await n6Draft(ctx, n6Input);
+  const second = {
+    ...draft.candidates[0]!,
+    candidate_key: 'second_harness_candidate',
+    main_question: 'How can incomplete failed-trial synthesis be detected before N6 regeneration?',
+    expected_claim: 'N7 should require synthesis coverage for every failed candidate trial.',
+  };
+  const n6 = await ctx.service.invokeNode({
+    ...n6Input,
+    semantic_artifacts: [
+      await recordN6DraftArtifact(ctx, n6Input, {
+        ...draft,
+        recommended_candidate_keys: ['harness_candidate', 'second_harness_candidate'],
+        candidates: [draft.candidates[0]!, second],
+      }),
+    ],
+  });
+  const initialInput = await n7Request(ctx, n6);
+  const first = await ctx.service.invokeNode(initialInput);
+  const secondTrial = await ctx.service.invokeNode(await n7FeedbackRequest(ctx, initialInput, first));
+  const candidates = await ctx.topicQuestionRepository.listCandidatesByCandidateSetId(n6.authority_ref!.ref_id);
+  const exhaustedInput = await n7FeedbackRequest(ctx, initialInput, secondTrial);
+  const incompleteSynthesis: TopicSelectionV1bN8FailedTrialSynthesisSupportPayload = {
+    exhausted_candidate_refs: [
+      ref('topic_question_candidate', candidates[0]!.topic_question_candidate_id, TITLE_CARD_ID),
+    ],
+    failure_reason_codes: ['value_not_supported'],
+    synthesis_summary: 'This synthesis intentionally omits one failed trial and must not route to N6.',
+    n6_regeneration_hints: ['The missing failed trial should block regeneration.'],
+    affected_refs: [n6.authority_ref!],
+  };
+  const result = await ctx.service.invokeNode({
+    ...exhaustedInput,
+    semantic_artifacts: [
+      await recordN7SupportArtifact(ctx, exhaustedInput, {
+        allowed_effect: 'support_only',
+        output_contract: 'N8FailedTrialSynthesisSupport@v1',
+        profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_failed_trial_synthesis_support,
+        slot_id: 'n7_failed_trial_synthesis',
+      }, incompleteSynthesis as unknown as Record<string, unknown>),
+    ],
+  });
+
+  assert.equal(result.gate_status, 'blocked');
+  assert.equal(result.error_code, 'N7_FAILED_TRIAL_SYNTHESIS_INCOMPLETE');
+  assert.equal(result.route_decision, 'blocked');
+  assert.equal(result.authority_ref, null);
+  assert.equal(result.handoff_ref, null);
 });
 
 test('v1b workflow harness N7 blocks technical N8 feedback and replays exact admitted result', async () => {
@@ -3015,6 +3832,388 @@ test('v1b workflow harness N8 rejects schema-valid-looking value drafts with ext
   assert.equal(dimensionDrift.gate_status, 'blocked');
   assert.equal(dimensionDrift.error_code, 'N8_VALUE_DIMENSION_COVERAGE_INVALID');
   assert.equal(dimensionDrift.authority_ref, null);
+});
+
+test('v1b workflow harness N8 blocks disposition, readiness, score, citation, and ref variants before authority', async () => {
+  async function assertN8DraftBlock(
+    suffix: string,
+    expectedErrorCode: string,
+    mutate: (
+      draft: TopicSelectionV1bTopicValueAssessmentDraftPayload,
+    ) => TopicSelectionV1bTopicValueAssessmentDraftPayload,
+  ) {
+    const ctx = await seedHarnessV1aBundle();
+    const { n7 } = await runReadyN7(ctx);
+    const input = await n8Request(ctx, n7, {
+      workflow_run_id: `workflow_run_v1b_n8_${suffix}`,
+      node_attempt_id: `node_attempt_v1b_n8_${suffix}`,
+    });
+    const result = await ctx.service.invokeNode({
+      ...input,
+      semantic_artifacts: [await recordN8ValueDraftArtifact(ctx, input, mutate(n8ValueDraft(input)))],
+    });
+    assert.equal(result.gate_status, 'blocked');
+    assert.equal(result.error_code, expectedErrorCode);
+    assert.equal(result.authority_ref, null);
+    assert.equal(result.handoff_ref, null);
+  }
+
+  await assertN8DraftBlock('memo_disposition_mismatch', 'N8_VALUE_MEMO_DISPOSITION_MISMATCH', (draft) => ({
+    ...draft,
+    reasoning_memo: {
+      ...draft.reasoning_memo,
+      recommendation: 'park',
+    },
+  }));
+
+  await assertN8DraftBlock('advance_blocking_gate', 'N8_ADVANCE_WITH_BLOCKING_GATE', (draft) => ({
+    ...draft,
+    hard_gates: [
+      {
+        ...draft.hard_gates[0]!,
+        severity: 'blocking' as const,
+        verdict: 'fail' as const,
+      },
+      ...draft.hard_gates.slice(1),
+    ],
+  }));
+
+  await assertN8DraftBlock('advance_non_ready', 'N8_ADVANCE_WITH_NON_READY_VALUE', (draft) => ({
+    ...draft,
+    readiness_status: 'needs_refinement',
+  }));
+
+  await assertN8DraftBlock('advance_low_score', 'N8_ADVANCE_SCORE_TOO_LOW', (draft) => ({
+    ...draft,
+    total_score: 59,
+  }));
+
+  await assertN8DraftBlock('memo_citations_missing', 'N8_VALUE_MEMO_CITATIONS_REQUIRED', (draft) => ({
+    ...draft,
+    reasoning_memo: {
+      ...draft.reasoning_memo,
+      cited_refs: [],
+    },
+  }));
+
+  await assertN8DraftBlock('unknown_value_ref', 'N8_UNKNOWN_VALUE_TRACE_REF', (draft) => ({
+    ...draft,
+    reasoning_memo: {
+      ...draft.reasoning_memo,
+      cited_refs: [ref('artifact_ref', 'not_allowed_in_n8_value_refs', TITLE_CARD_ID)],
+    },
+  }));
+});
+
+test('v1b workflow harness N6 semantic loopback can regenerate candidates and close through N11', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n5 } = await runReadyN5(ctx);
+  const failedInput = await n6Request(ctx, n5, {
+    workflow_run_id: 'workflow_run_v1b_n6_loopback_first',
+    node_attempt_id: 'node_attempt_v1b_n6_loopback_first',
+  });
+  const failedDraft = await n6Draft(ctx, failedInput);
+  const failed = await ctx.service.invokeNode({
+    ...failedInput,
+    semantic_artifacts: [
+      await recordN6DraftArtifact(ctx, failedInput, {
+        ...failedDraft,
+        candidates: [
+          {
+            ...failedDraft.candidates[0]!,
+            answerability_verdict: 'not_answerable',
+            main_question: 'How can AI improve research?',
+          },
+        ],
+      }),
+    ],
+  });
+
+  assert.equal(failed.gate_status, 'blocked');
+  assert.equal(failed.route_decision, 'loopback');
+  assert.equal(failed.error_code, 'N6_NO_ADMISSIBLE_TOPIC_QUESTION_CANDIDATE');
+  await assertTraceLoopbackTargetCode(ctx, failed, 'n6_regenerate_candidates');
+  assert.deepEqual(await ctx.topicQuestionRepository.listCandidateSetsByTitleCardId(TITLE_CARD_ID), []);
+
+  const retryInput = await n6Request(ctx, n5, {
+    workflow_run_id: 'workflow_run_v1b_n6_loopback_retry',
+    node_attempt_id: 'node_attempt_v1b_n6_loopback_retry',
+  });
+  const retryDraft = await n6Draft(ctx, retryInput, {
+    generation_notes: ['Regenerated after N6 semantic loopback with a bounded answerable candidate.'],
+  });
+  retryDraft.recommended_candidate_keys = ['regenerated_harness_candidate'];
+  retryDraft.candidates[0] = {
+    ...retryDraft.candidates[0]!,
+    candidate_key: 'regenerated_harness_candidate',
+    main_question: 'How can a regenerated WorkflowHarness candidate restore v1b topic-question viability after loopback?',
+    expected_claim: 'Regenerated candidates can restore a viable v1b topic-question path after semantic loopback.',
+  };
+  const n6 = await ctx.service.invokeNode({
+    ...retryInput,
+    semantic_artifacts: [await recordN6DraftArtifact(ctx, retryInput, retryDraft)],
+  });
+  assert.equal(n6.gate_status, 'admitted');
+  assert.equal(n6.route_decision, 'invoke_next');
+
+  const n7 = await ctx.service.invokeNode(await n7Request(ctx, n6, {
+    workflow_run_id: 'workflow_run_v1b_n7_after_n6_regen',
+    node_attempt_id: 'node_attempt_v1b_n7_after_n6_regen',
+  }));
+  assert.equal(n7.gate_status, 'admitted');
+  const n8Input = await n8Request(ctx, n7, {
+    workflow_run_id: 'workflow_run_v1b_n8_after_n6_regen',
+    node_attempt_id: 'node_attempt_v1b_n8_after_n6_regen',
+  });
+  const n8 = await ctx.service.invokeNode({
+    ...n8Input,
+    semantic_artifacts: [await recordN8ValueDraftArtifact(ctx, n8Input, n8ValueDraft(n8Input))],
+  });
+  assert.equal(n8.gate_status, 'admitted_with_warnings');
+
+  const terminal = await runTerminalPackageFromN8(ctx, n8, 'after_n6_regen');
+  assert.equal(terminal.n11.route_decision, 'stop_v1b_complete');
+  assert.equal((await ctx.topicQuestionRepository.listCandidateSetsByTitleCardId(TITLE_CARD_ID)).length, 1);
+});
+
+test('v1b workflow harness N7 semantic trial switch can close on the next candidate through N11', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n5 } = await runReadyN5(ctx);
+  const n6Input = await n6Request(ctx, n5, {
+    workflow_run_id: 'workflow_run_v1b_n6_trial_switch',
+    node_attempt_id: 'node_attempt_v1b_n6_trial_switch',
+  });
+  const draft = await n6Draft(ctx, n6Input);
+  const second = {
+    ...draft.candidates[0]!,
+    candidate_key: 'second_harness_candidate',
+    main_question: 'How can N7 close the v1b workflow on a second candidate after N8 semantic feedback?',
+    expected_claim: 'N7 can preserve failed feedback and close on the next viable candidate.',
+  };
+  const n6 = await ctx.service.invokeNode({
+    ...n6Input,
+    semantic_artifacts: [
+      await recordN6DraftArtifact(ctx, n6Input, {
+        ...draft,
+        recommended_candidate_keys: ['harness_candidate', 'second_harness_candidate'],
+        candidates: [draft.candidates[0]!, second],
+      }),
+    ],
+  });
+
+  const initialInput = await n7Request(ctx, n6, {
+    workflow_run_id: 'workflow_run_v1b_n7_trial_switch_first',
+    node_attempt_id: 'node_attempt_v1b_n7_trial_switch_first',
+  });
+  const first = await ctx.service.invokeNode(initialInput);
+  const secondTrial = await ctx.service.invokeNode(await n7FeedbackRequest(ctx, initialInput, first));
+  assert.equal(secondTrial.gate_status, 'admitted');
+
+  const n8Input = await n8Request(ctx, secondTrial, {
+    workflow_run_id: 'workflow_run_v1b_n8_trial_switch_second',
+    node_attempt_id: 'node_attempt_v1b_n8_trial_switch_second',
+  });
+  const n8 = await ctx.service.invokeNode({
+    ...n8Input,
+    semantic_artifacts: [await recordN8ValueDraftArtifact(ctx, n8Input, n8ValueDraft(n8Input))],
+  });
+  assert.equal(n8.gate_status, 'admitted_with_warnings');
+
+  const assessment = await ctx.valueAssessmentRepository.findAssessmentById(n8.authority_ref!.ref_id);
+  assert.equal(assessment?.topic_question_contract_id, secondTrial.authority_ref?.ref_id);
+  const candidates = await ctx.topicQuestionRepository.listCandidatesByCandidateSetId(n6.authority_ref!.ref_id);
+  assert.equal(candidates.filter((candidate) => candidate.status === 'rejected').length, 1);
+  assert.equal(candidates.filter((candidate) => candidate.status === 'admitted').length, 1);
+
+  const terminal = await runTerminalPackageFromN8(ctx, n8, 'trial_switch_second');
+  assert.equal(terminal.n11.route_decision, 'stop_v1b_complete');
+});
+
+test('v1b workflow harness N8 gate rejection can readmit through N7 and close the same candidate through N11', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n6 } = await runReadyN6(ctx);
+  const initialInput = await n7Request(ctx, n6, {
+    workflow_run_id: 'workflow_run_v1b_n7_gate_readmission_first',
+    node_attempt_id: 'node_attempt_v1b_n7_gate_readmission_first',
+  });
+  const first = await ctx.service.invokeNode(initialInput);
+  const firstHandoffArtifact = await ctx.controlPlane.getArtifactRef(first.handoff_ref!.ref_id);
+  const firstHandoff = firstHandoffArtifact?.payload as unknown as TopicSelectionV1bWorkflowHarnessHandoff;
+  const firstHandoffPayload = firstHandoff.payload as {
+    active_candidate_ref: TopicSelectionFunctionalRef;
+    n8_debate_admission_hash: string;
+  };
+
+  const rejectedN8Input = await n8Request(ctx, first, {
+    workflow_run_id: 'workflow_run_v1b_n8_gate_rejected_before_readmission',
+    node_attempt_id: 'node_attempt_v1b_n8_gate_rejected_before_readmission',
+  });
+  const rejectedDraft = n8ValueDraft(rejectedN8Input);
+  const rejectedN8 = await ctx.service.invokeNode({
+    ...rejectedN8Input,
+    semantic_artifacts: [
+      await recordN8ValueDraftArtifact(ctx, rejectedN8Input, {
+        ...rejectedDraft,
+        hard_gates: [
+          ...rejectedDraft.hard_gates,
+          {
+            gate_key: 'unsupported_value_gate',
+            verdict: 'pass',
+            severity: 'info',
+            overridable_with_risk: false,
+            rationale: 'This gate rejection triggers N7 readmission coverage.',
+            refs: [rejectedDraft.reasoning_memo.cited_refs[0]!],
+          },
+        ],
+      } as unknown as TopicSelectionV1bTopicValueAssessmentDraftPayload),
+    ],
+  });
+  assert.equal(rejectedN8.gate_status, 'blocked');
+  assert.equal(rejectedN8.error_code, 'N8_VALUE_GATE_COVERAGE_INVALID');
+  assert.equal(rejectedN8.authority_ref, null);
+
+  const feedbackInput = await n7FeedbackRequest(ctx, initialInput, first, 'gate_rejected');
+  const readmitted = await ctx.service.invokeNode({
+    ...feedbackInput,
+    semantic_artifacts: [
+      await recordN7SupportArtifact(ctx, feedbackInput, {
+        allowed_effect: 'support_only',
+        output_contract: 'N8DebateAdmissionReviewSupport@v1',
+        profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_n8_debate_admission_support,
+        slot_id: 'n7_n8_debate_admission_review',
+      }, n7DebateAdmissionPayload({
+        debate_level: 'provider_diverse_deep_debate',
+        rationale: 'Gate rejection requires readmission before the same candidate can be reassessed.',
+        risk_signal_codes: ['debate_admission_too_weak'],
+      }) as unknown as Record<string, unknown>),
+    ],
+  });
+  assert.equal(readmitted.gate_status, 'admitted_with_warnings');
+  assert.equal(readmitted.authority_ref?.ref_id, first.authority_ref?.ref_id);
+  const readmittedHandoffArtifact = await ctx.controlPlane.getArtifactRef(readmitted.handoff_ref!.ref_id);
+  const readmittedHandoff = readmittedHandoffArtifact?.payload as unknown as TopicSelectionV1bWorkflowHarnessHandoff;
+  const readmittedPayload = readmittedHandoff.payload as {
+    active_candidate_ref: TopicSelectionFunctionalRef;
+    n8_debate_admission_hash: string;
+  };
+  assert.equal(readmittedPayload.active_candidate_ref.ref_id, firstHandoffPayload.active_candidate_ref.ref_id);
+  assert.notEqual(readmittedPayload.n8_debate_admission_hash, firstHandoffPayload.n8_debate_admission_hash);
+
+  const n8Input = await n8Request(ctx, readmitted, {
+    workflow_run_id: 'workflow_run_v1b_n8_after_gate_readmission',
+    node_attempt_id: 'node_attempt_v1b_n8_after_gate_readmission',
+  });
+  const n8 = await ctx.service.invokeNode({
+    ...n8Input,
+    semantic_artifacts: [await recordN8ValueDraftArtifact(ctx, n8Input, n8ValueDraft(n8Input))],
+  });
+  assert.equal(n8.gate_status, 'admitted_with_warnings');
+  const assessment = await ctx.valueAssessmentRepository.findAssessmentById(n8.authority_ref!.ref_id);
+  assert.equal(assessment?.topic_question_contract_id, first.authority_ref?.ref_id);
+
+  const candidates = await ctx.topicQuestionRepository.listCandidatesByCandidateSetId(n6.authority_ref!.ref_id);
+  assert.equal(candidates.filter((candidate) => candidate.status === 'rejected').length, 0);
+  assert.equal(candidates.filter((candidate) => candidate.status === 'admitted').length, 1);
+  const terminal = await runTerminalPackageFromN8(ctx, n8, 'after_gate_readmission');
+  assert.equal(terminal.n11.route_decision, 'stop_v1b_complete');
+});
+
+test('v1b workflow harness N7 exhausted trials can loop back to regenerated N6 and close through N11', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n5 } = await runReadyN5(ctx);
+  const n6Input = await n6Request(ctx, n5, {
+    workflow_run_id: 'workflow_run_v1b_n6_exhaust_then_regen',
+    node_attempt_id: 'node_attempt_v1b_n6_exhaust_then_regen',
+  });
+  const draft = await n6Draft(ctx, n6Input);
+  const second = {
+    ...draft.candidates[0]!,
+    candidate_key: 'second_harness_candidate',
+    main_question: 'How can a second trial exercise N7 exhaustion before N6 regeneration?',
+    expected_claim: 'Multiple trials can exhaust and route back to N6 with synthesis context.',
+  };
+  const n6 = await ctx.service.invokeNode({
+    ...n6Input,
+    semantic_artifacts: [
+      await recordN6DraftArtifact(ctx, n6Input, {
+        ...draft,
+        recommended_candidate_keys: ['harness_candidate', 'second_harness_candidate'],
+        candidates: [draft.candidates[0]!, second],
+      }),
+    ],
+  });
+  const initialInput = await n7Request(ctx, n6, {
+    workflow_run_id: 'workflow_run_v1b_n7_exhaust_first',
+    node_attempt_id: 'node_attempt_v1b_n7_exhaust_first',
+  });
+  const first = await ctx.service.invokeNode(initialInput);
+  const secondTrial = await ctx.service.invokeNode(await n7FeedbackRequest(ctx, initialInput, first));
+  const exhaustedInput = await n7FeedbackRequest(ctx, initialInput, secondTrial);
+  const exhaustedCandidates = await ctx.topicQuestionRepository.listCandidatesByCandidateSetId(n6.authority_ref!.ref_id);
+  const exhausted = await ctx.service.invokeNode({
+    ...exhaustedInput,
+    semantic_artifacts: [
+      await recordN7SupportArtifact(ctx, exhaustedInput, {
+        allowed_effect: 'support_only',
+        output_contract: 'N8FailedTrialSynthesisSupport@v1',
+        profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_failed_trial_synthesis_support,
+        slot_id: 'n7_failed_trial_synthesis',
+      }, {
+        exhausted_candidate_refs: exhaustedCandidates.map((candidate) =>
+          ref('topic_question_candidate', candidate.topic_question_candidate_id, TITLE_CARD_ID)),
+        failure_reason_codes: ['value_not_supported'],
+        synthesis_summary: 'Both candidate trials failed value support and should regenerate N6 candidates.',
+        n6_regeneration_hints: ['Add a narrower method and stronger evidence link before retrying N6.'],
+        affected_refs: [n6.authority_ref!],
+      } satisfies TopicSelectionV1bN8FailedTrialSynthesisSupportPayload as unknown as Record<string, unknown>),
+    ],
+  });
+  assert.equal(exhausted.gate_status, 'blocked');
+  assert.equal(exhausted.route_decision, 'loopback');
+  assert.equal(exhausted.error_code, 'N7_CANDIDATE_TRIALS_EXHAUSTED');
+  await assertTraceLoopbackTargetCode(ctx, exhausted, 'n7_loopback_to_n6');
+  const exhaustedDecision = await ctx.topicQuestionRepository.findSelectionDecisionById(exhausted.authority_ref!.ref_id);
+  assert.equal(exhaustedDecision?.admission_review.loopback_target_code, 'n7_loopback_to_n6');
+
+  const regenInput = await n6Request(ctx, n5, {
+    workflow_run_id: 'workflow_run_v1b_n6_after_n7_exhaustion',
+    node_attempt_id: 'node_attempt_v1b_n6_after_n7_exhaustion',
+  });
+  const regenDraft = await n6Draft(ctx, regenInput, {
+    generation_notes: ['Regenerated after N7 exhausted all prior candidate trials.'],
+  });
+  regenDraft.recommended_candidate_keys = ['regenerated_after_exhaustion_candidate'];
+  regenDraft.candidates[0] = {
+    ...regenDraft.candidates[0]!,
+    candidate_key: 'regenerated_after_exhaustion_candidate',
+    main_question: 'How can regenerated N6 candidates recover value support after exhausted N7 trials?',
+    expected_claim: 'Regenerated candidates can recover value support after exhausted N7 trials.',
+  };
+  const regeneratedN6 = await ctx.service.invokeNode({
+    ...regenInput,
+    semantic_artifacts: [await recordN6DraftArtifact(ctx, regenInput, regenDraft)],
+  });
+  assert.equal(regeneratedN6.gate_status, 'admitted');
+  assert.equal(regeneratedN6.route_decision, 'invoke_next');
+
+  const n7 = await ctx.service.invokeNode(await n7Request(ctx, regeneratedN6, {
+    workflow_run_id: 'workflow_run_v1b_n7_after_exhaustion_regen',
+    node_attempt_id: 'node_attempt_v1b_n7_after_exhaustion_regen',
+  }));
+  assert.equal(n7.gate_status, 'admitted');
+  const n8Input = await n8Request(ctx, n7, {
+    workflow_run_id: 'workflow_run_v1b_n8_after_exhaustion_regen',
+    node_attempt_id: 'node_attempt_v1b_n8_after_exhaustion_regen',
+  });
+  const n8 = await ctx.service.invokeNode({
+    ...n8Input,
+    semantic_artifacts: [await recordN8ValueDraftArtifact(ctx, n8Input, n8ValueDraft(n8Input))],
+  });
+  assert.equal(n8.gate_status, 'admitted_with_warnings');
+
+  const terminal = await runTerminalPackageFromN8(ctx, n8, 'after_exhaustion_regen');
+  assert.equal(terminal.n11.route_decision, 'stop_v1b_complete');
+  assert.equal((await ctx.topicQuestionRepository.listCandidateSetsByTitleCardId(TITLE_CARD_ID)).length, 2);
 });
 
 test('v1b workflow harness N9 creates advance disposition and N10 creates draft package plus v1c bundle', async () => {

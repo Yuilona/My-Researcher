@@ -4,14 +4,19 @@ import type { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 
 import type {
+  TopicSelectionArtifactRefRecord,
   TopicSelectionFunctionalRef,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-control-plane-contracts';
+import type {
+  TopicSelectionV1aToV1bInputBundleRecord,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-need-validation-contracts';
 import {
   TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_METRIC_KEYS,
   type TopicSelectionOfflineEvaluationCaseRecord,
   type TopicSelectionOfflineEvaluationObservedOutput,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-offline-evaluation-replay-contracts';
 import type {
+  TopicSelectionResearchSliceOptionRecord,
   TopicSelectionResearchSliceOptionDraft,
   TopicSelectionResearchSliceOptionSetLlmOutput,
   TopicSelectionV1bTopicQuestionFormationInput,
@@ -20,16 +25,42 @@ import type {
   TopicSelectionFormTopicQuestionLlmOutput,
   TopicSelectionTopicQuestionAnswerabilityPlanDraft,
   TopicSelectionTopicQuestionCandidateDraft,
-  TopicSelectionV1bTopicQuestionMaterialization,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-topic-question-contracts';
 import {
   TOPIC_SELECTION_VALUE_DIMENSIONS,
   TOPIC_SELECTION_VALUE_GATE_KEYS,
   type TopicSelectionAssessTopicValueLlmOutput,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-value-assessment-contracts';
+import {
+  TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+  TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS,
+  type TopicSelectionV1bAcceptedConstraintProfilePayload,
+  type TopicSelectionV1bAcceptedSliceSelectionPayload,
+  type TopicSelectionV1bN1HarnessFrozenInputPayload,
+  type TopicSelectionV1bN3HarnessFrozenInputPayload,
+  type TopicSelectionV1bN4HarnessFrozenInputPayload,
+  type TopicSelectionV1bN5HarnessFrozenInputPayload,
+  type TopicSelectionV1bN6HarnessFrozenInputPayload,
+  type TopicSelectionV1bN7HarnessFrozenInputPayload,
+  type TopicSelectionV1bN8HarnessFrozenInputPayload,
+  type TopicSelectionV1bN9HarnessFrozenInputPayload,
+  type TopicSelectionV1bN10HarnessFrozenInputPayload,
+  type TopicSelectionV1bN11HarnessFrozenInputPayload,
+  type TopicSelectionV1bN2HarnessFrozenInputPayload,
+  type TopicSelectionV1bResearchSliceOptionSetDraftPayload,
+  type TopicSelectionV1bTopicQuestionCandidateSetDraftPayload,
+  type TopicSelectionV1bTopicValueAssessmentDraftPayload,
+  type TopicSelectionV1bWorkflowHarnessHandoff,
+  type TopicSelectionV1bWorkflowHarnessRunRequest,
+  type TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-workflow-harness-contracts';
 
 import { buildApp } from '../app.js';
 import type { LlmCallTelemetry, LlmStructuredOutputRequest } from '../services/llm-gateway.js';
+import {
+  sha256Text,
+  stableStringify,
+} from '../services/literature-content-processing-utils.js';
 
 type ValueAssessmentFixtureMode =
   | 'ready'
@@ -54,6 +85,895 @@ function ref(
     version_id: versionId,
     title_card_id: titleCardId,
   };
+}
+
+function uniqueRefs(refs: TopicSelectionFunctionalRef[]): TopicSelectionFunctionalRef[] {
+  const seen = new Set<string>();
+  const result: TopicSelectionFunctionalRef[] = [];
+  for (const item of refs) {
+    const key = [item.ref_type, item.ref_id, item.title_card_id ?? '', item.version_id ?? ''].join(':');
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
+function v1bBundleRef(bundle: TopicSelectionV1aToV1bInputBundleRecord): TopicSelectionFunctionalRef {
+  return ref('v1a_to_v1b_input_bundle', bundle.v1b_input_bundle_id, bundle.title_card_id, bundle.bundle_version);
+}
+
+function v1aBundleSourceRefs(bundle: TopicSelectionV1aToV1bInputBundleRecord): TopicSelectionFunctionalRef[] {
+  return uniqueRefs([
+    v1bBundleRef(bundle),
+    bundle.validated_need_ref,
+    bundle.source_need_candidate_ref,
+    bundle.adjudication_result_ref,
+    bundle.support_packet_ref,
+    bundle.human_decision_ref,
+    bundle.evidence_map_ref,
+    bundle.search_run_ref,
+    bundle.search_plan_ref,
+    bundle.literature_snapshot_ref,
+    ...bundle.trace_refs,
+    ...bundle.risk_refs,
+    ...bundle.memory_suggestion_refs,
+    ...bundle.recheck_request_refs,
+  ]);
+}
+
+function frozenInputHash(payload: TopicSelectionV1bWorkflowHarnessRunRequest['frozen_input']): string {
+  return sha256Text(stableStringify({
+    input_contract: payload.input_contract,
+    payload: payload.payload,
+    snapshot_kind: payload.snapshot_kind,
+    source_refs: payload.source_refs,
+  }));
+}
+
+function v1bHarnessN1Request(
+  bundle: TopicSelectionV1aToV1bInputBundleRecord,
+  suffix: string,
+): TopicSelectionV1bWorkflowHarnessRunRequest {
+  const payload: TopicSelectionV1bN1HarnessFrozenInputPayload = {
+    v1b_input_bundle_id: bundle.v1b_input_bundle_id,
+    v1a_bundle_ref: v1bBundleRef(bundle),
+    v1a_bundle_hash: sha256Text(stableStringify(bundle)),
+    source_refs_hash: sha256Text(stableStringify(v1aBundleSourceRefs(bundle))),
+  };
+  const frozenInput: TopicSelectionV1bWorkflowHarnessRunRequest['frozen_input'] = {
+    input_contract: 'V1aToV1bInputBundleFrozenRef@v1',
+    snapshot_kind: 'v1a_valid_need_bundle',
+    source_refs: [ref('v1a_valid_need_bundle', bundle.v1b_input_bundle_id, bundle.title_card_id, bundle.bundle_version)],
+    payload: payload as unknown as Record<string, unknown>,
+  };
+  return {
+    schema_version: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    title_card_id: bundle.title_card_id,
+    workflow_run_id: `workflow_run_v1b_harness_http_${suffix}`,
+    node_attempt_id: `node_attempt_v1b_harness_http_n1_${suffix}`,
+    node_id: 'topic-selection.v1b.create-intake-snapshot.v1',
+    policy_version: 'topic-selection-v1b-node-policy-v1',
+    frozen_input: {
+      ...frozenInput,
+      frozen_input_hash: frozenInputHash(frozenInput),
+    },
+    created_by: 'system',
+  };
+}
+
+function v1bHarnessSemanticArtifact(
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  overrides: Partial<TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef>,
+): TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef {
+  const titleCardId = input.title_card_id ?? 'title_card_v1b_harness_http';
+  return {
+    node_id: input.node_id,
+    run_mode: input.run_mode ?? 'acceptance',
+    slot_id: 'n2_constraint_profile_semantic_support',
+    allowed_effect: 'delegated_payload_candidate',
+    output_contract: 'ResearchConstraintProfileDraftSupport@v1',
+    execution_mode: 'codex_assisted',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.constraint_profile_support,
+    model_option_id: null,
+    input_hash: input.frozen_input.frozen_input_hash!,
+    support_artifact_ref: ref('artifact_ref', `${input.node_attempt_id}_support`, titleCardId),
+    support_artifact_hash: 'a'.repeat(64),
+    normalized_output_ref: ref('artifact_ref', `${input.node_attempt_id}_normalized`, titleCardId),
+    normalized_output_hash: 'b'.repeat(64),
+    prompt_packet_hash: 'c'.repeat(64),
+    structured_output_hash: 'd'.repeat(64),
+    adapter_policy_version: 'topic-selection-v1b-node-policy-v1',
+    slot_spec_hash: 'e'.repeat(64),
+    provenance_ref: ref('artifact_ref', `${input.node_attempt_id}_provenance`, titleCardId),
+    ...overrides,
+  };
+}
+
+function acceptedConstraintProfilePayload(): TopicSelectionV1bAcceptedConstraintProfilePayload {
+  return {
+    target_community: 'LLM systems researchers',
+    target_venue_class: 'systems',
+    intended_contribution_style: 'workflow_system',
+    method_constraints: ['offline replay evaluation'],
+    resource_constraints: ['single workstation'],
+    available_assets: ['paper corpus', 'review rubric'],
+    feasibility_budget: { person_weeks: 2 },
+    non_goals: ['Do not target production deployment'],
+    claim_ceiling: 'Can claim reviewer-aligned planning feasibility, not production superiority.',
+    human_constraint_notes: null,
+    constraint_payload: { source: 'codex_assisted_http_test' },
+  };
+}
+
+function v1bHarnessN2Request(
+  bundle: TopicSelectionV1aToV1bInputBundleRecord,
+  n1Result: { authority_ref: TopicSelectionFunctionalRef | null; hashes: { authority_hash: string | null } },
+  suffix: string,
+  acceptedPayload: TopicSelectionV1bAcceptedConstraintProfilePayload,
+): TopicSelectionV1bWorkflowHarnessRunRequest {
+  assert.ok(n1Result.authority_ref, 'N2 harness HTTP fixture requires N1 authority_ref.');
+  assert.ok(n1Result.hashes.authority_hash, 'N2 harness HTTP fixture requires N1 authority_hash.');
+  const acceptedHash = sha256Text(stableStringify(acceptedPayload));
+  const payload: TopicSelectionV1bN2HarnessFrozenInputPayload = {
+    accepted_constraint_profile_payload: acceptedPayload,
+    accepted_constraint_profile_payload_hash: acceptedHash,
+    authority_input_provider: 'codex_delegated',
+    delegation_artifact_hash: acceptedHash,
+    intake_snapshot_hash: n1Result.hashes.authority_hash,
+    intake_snapshot_ref: n1Result.authority_ref,
+    previous_profile_hash: null,
+    previous_profile_ref: null,
+    v1a_bundle_hash: sha256Text(stableStringify(bundle)),
+    v1a_bundle_ref: v1bBundleRef(bundle),
+  };
+  const frozenInput: TopicSelectionV1bWorkflowHarnessRunRequest['frozen_input'] = {
+    input_contract: 'N1ToN2Handoff@v1',
+    snapshot_kind: 'v1b_intake_snapshot',
+    source_refs: [n1Result.authority_ref],
+    payload: payload as unknown as Record<string, unknown>,
+  };
+  const request: TopicSelectionV1bWorkflowHarnessRunRequest = {
+    schema_version: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    title_card_id: bundle.title_card_id,
+    workflow_run_id: `workflow_run_v1b_harness_http_${suffix}`,
+    node_attempt_id: `node_attempt_v1b_harness_http_n2_${suffix}`,
+    node_id: 'topic-selection.v1b.record-research-constraint-profile.v1',
+    policy_version: 'topic-selection-v1b-node-policy-v1',
+    run_mode: 'acceptance',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.constraint_profile_support,
+    frozen_input: {
+      ...frozenInput,
+      frozen_input_hash: frozenInputHash(frozenInput),
+    },
+    created_by: 'system',
+  };
+  return {
+    ...request,
+    semantic_artifacts: [
+      v1bHarnessSemanticArtifact(request, {
+        normalized_output_hash: acceptedHash,
+        structured_output_hash: acceptedHash,
+      }),
+    ],
+  };
+}
+
+type WorkflowHarnessHttpResult = {
+  gate_status: string;
+  route_decision: string;
+  failure_class: string | null;
+  authority_ref: TopicSelectionFunctionalRef | null;
+  handoff_ref: TopicSelectionFunctionalRef | null;
+  transition_attempt_ref: TopicSelectionFunctionalRef | null;
+  hashes: {
+    authority_hash: string | null;
+    handoff_hash: string | null;
+  };
+};
+
+async function invokeV1bHarnessNode(
+  app: FastifyInstance,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+): Promise<WorkflowHarnessHttpResult> {
+  const response = await app.inject({
+    method: 'POST',
+    url: `/topic-selection/v1b/workflow-harness/nodes/${encodeURIComponent(input.node_id)}/invocations`,
+    payload: input,
+  });
+  assertStatus(response, 201);
+  assert.equal(response.headers.deprecation, undefined);
+  return response.json() as WorkflowHarnessHttpResult;
+}
+
+async function getWorkflowHarnessArtifact(
+  app: FastifyInstance,
+  artifactRef: TopicSelectionFunctionalRef,
+): Promise<TopicSelectionArtifactRefRecord> {
+  const response = await app.inject({
+    method: 'GET',
+    url: `/topic-selection/v1b/workflow-harness/artifacts/${encodeURIComponent(artifactRef.ref_id)}`,
+  });
+  assertStatus(response, 200);
+  return response.json() as TopicSelectionArtifactRefRecord;
+}
+
+async function getWorkflowHarnessHandoff(
+  app: FastifyInstance,
+  artifactRef: TopicSelectionFunctionalRef | null,
+): Promise<TopicSelectionV1bWorkflowHarnessHandoff> {
+  assert.ok(artifactRef, 'Expected workflow harness handoff artifact ref.');
+  const artifact = await getWorkflowHarnessArtifact(app, artifactRef);
+  return artifact.payload as unknown as TopicSelectionV1bWorkflowHarnessHandoff;
+}
+
+async function recordWorkflowHarnessArtifact(
+  app: FastifyInstance,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  payload: Record<string, unknown>,
+  artifactKind: TopicSelectionArtifactRefRecord['artifact_kind'] = 'structured_output',
+): Promise<TopicSelectionArtifactRefRecord> {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/topic-selection/v1b/workflow-harness/artifacts',
+    payload: {
+      title_card_id: input.title_card_id,
+      artifact_kind: artifactKind,
+      storage_kind: 'inline',
+      workflow_run_id: input.workflow_run_id,
+      payload,
+      created_by: 'system',
+    },
+  });
+  assertStatus(response, 201);
+  return response.json() as TopicSelectionArtifactRefRecord;
+}
+
+async function recordWorkflowHarnessSemanticArtifact(
+  app: FastifyInstance,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  slot: Pick<
+    TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef,
+    'slot_id' | 'allowed_effect' | 'output_contract' | 'profile_id'
+  >,
+  payload: Record<string, unknown>,
+): Promise<TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef> {
+  const support = await recordWorkflowHarnessArtifact(app, input, payload);
+  const normalized = await recordWorkflowHarnessArtifact(app, input, payload);
+  const provenance = await recordWorkflowHarnessArtifact(app, input, {
+    adapter_policy_version: 'topic-selection-v1b-node-policy-v1',
+    source: 'harness_http_fixture',
+  }, 'diagnostic');
+  assert.ok(support.checksum, 'Expected support artifact checksum.');
+  assert.ok(normalized.checksum, 'Expected normalized artifact checksum.');
+  assert.ok(provenance.checksum, 'Expected provenance artifact checksum.');
+  return {
+    node_id: input.node_id,
+    run_mode: input.run_mode ?? 'acceptance',
+    slot_id: slot.slot_id,
+    allowed_effect: slot.allowed_effect,
+    output_contract: slot.output_contract,
+    execution_mode: 'codex_assisted',
+    profile_id: slot.profile_id,
+    model_option_id: null,
+    input_hash: input.frozen_input.frozen_input_hash!,
+    support_artifact_ref: ref('artifact_ref', support.artifact_ref_id, input.title_card_id ?? support.title_card_id ?? 'title_card_v1b_harness_http'),
+    support_artifact_hash: support.checksum,
+    normalized_output_ref: ref(
+      'artifact_ref',
+      normalized.artifact_ref_id,
+      input.title_card_id ?? normalized.title_card_id ?? 'title_card_v1b_harness_http',
+    ),
+    normalized_output_hash: normalized.checksum,
+    prompt_packet_hash: 'c'.repeat(64),
+    structured_output_hash: normalized.checksum,
+    adapter_policy_version: 'topic-selection-v1b-node-policy-v1',
+    slot_spec_hash: 'e'.repeat(64),
+    provenance_ref: ref('artifact_ref', provenance.artifact_ref_id, input.title_card_id ?? provenance.title_card_id ?? 'title_card_v1b_harness_http'),
+  };
+}
+
+function v1bHarnessN3Request(
+  n1Result: WorkflowHarnessHttpResult,
+  n2Result: WorkflowHarnessHttpResult,
+  suffix: string,
+): TopicSelectionV1bWorkflowHarnessRunRequest {
+  assert.ok(n1Result.authority_ref && n1Result.hashes.authority_hash);
+  assert.ok(n2Result.authority_ref && n2Result.hashes.authority_hash);
+  const payload: TopicSelectionV1bN3HarnessFrozenInputPayload = {
+    intake_snapshot_ref: n1Result.authority_ref,
+    intake_snapshot_hash: n1Result.hashes.authority_hash,
+    constraint_profile_ref: n2Result.authority_ref,
+    constraint_profile_hash: n2Result.hashes.authority_hash,
+    n2_handoff_hash: n2Result.hashes.handoff_hash ?? 'f'.repeat(64),
+  };
+  const frozenInput: TopicSelectionV1bWorkflowHarnessRunRequest['frozen_input'] = {
+    input_contract: 'N2ToN3Handoff@v1',
+    snapshot_kind: 'research_constraint_profile',
+    source_refs: [n2Result.authority_ref],
+    payload: payload as unknown as Record<string, unknown>,
+  };
+  return {
+    schema_version: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    title_card_id: n1Result.authority_ref.title_card_id,
+    workflow_run_id: `workflow_run_v1b_harness_http_${suffix}`,
+    node_attempt_id: `node_attempt_v1b_harness_http_n3_${suffix}`,
+    node_id: 'topic-selection.v1b.assess-intake-readiness.v1',
+    policy_version: 'topic-selection-v1b-node-policy-v1',
+    frozen_input: {
+      ...frozenInput,
+      frozen_input_hash: frozenInputHash(frozenInput),
+    },
+    created_by: 'system',
+  };
+}
+
+function v1bHarnessN4Request(
+  n1Result: WorkflowHarnessHttpResult,
+  n2Result: WorkflowHarnessHttpResult,
+  n3Result: WorkflowHarnessHttpResult,
+  suffix: string,
+): TopicSelectionV1bWorkflowHarnessRunRequest {
+  assert.ok(n1Result.authority_ref && n1Result.hashes.authority_hash);
+  assert.ok(n2Result.authority_ref && n2Result.hashes.authority_hash && n2Result.hashes.handoff_hash);
+  assert.ok(n3Result.authority_ref && n3Result.hashes.authority_hash && n3Result.hashes.handoff_hash);
+  const payload: TopicSelectionV1bN4HarnessFrozenInputPayload = {
+    intake_snapshot_ref: n1Result.authority_ref,
+    intake_snapshot_hash: n1Result.hashes.authority_hash,
+    constraint_profile_ref: n2Result.authority_ref,
+    constraint_profile_hash: n2Result.hashes.authority_hash,
+    intake_readiness_ref: n3Result.authority_ref,
+    intake_readiness_hash: n3Result.hashes.authority_hash,
+    n2_handoff_hash: n2Result.hashes.handoff_hash,
+    n3_handoff_hash: n3Result.hashes.handoff_hash,
+  };
+  const frozenInput: TopicSelectionV1bWorkflowHarnessRunRequest['frozen_input'] = {
+    input_contract: 'N3ToN4Handoff@v1',
+    snapshot_kind: 'v1b_intake_readiness_assessment',
+    source_refs: [n3Result.authority_ref, n2Result.authority_ref, n1Result.authority_ref],
+    payload: payload as unknown as Record<string, unknown>,
+  };
+  return {
+    schema_version: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    title_card_id: n1Result.authority_ref.title_card_id,
+    workflow_run_id: `workflow_run_v1b_harness_http_${suffix}`,
+    node_attempt_id: `node_attempt_v1b_harness_http_n4_${suffix}`,
+    node_id: 'topic-selection.v1b.generate-research-slice-options.v1',
+    policy_version: 'topic-selection-v1b-node-policy-v1',
+    frozen_input: {
+      ...frozenInput,
+      frozen_input_hash: frozenInputHash(frozenInput),
+    },
+    created_by: 'system',
+  };
+}
+
+function v1bHarnessN4Draft(
+  bundle: TopicSelectionV1aToV1bInputBundleRecord,
+): TopicSelectionV1bResearchSliceOptionSetDraftPayload {
+  const evidenceRef = bundle.evidence_role_bundle.support_unit_refs[0] ?? bundle.evidence_map_ref;
+  return {
+    recommended_option_key: 'traceable_workflow_slice',
+    comparison_axes: ['method feasibility', 'evidence traceability'],
+    comparison_summary: 'The recommended slice keeps the claim bounded to workflow traceability.',
+    missing_option_types: [],
+    unresolved_disagreements: [],
+    human_review_triggers: [],
+    options: [{
+      option_key: 'traceable_workflow_slice',
+      source_validated_need_refs: [bundle.validated_need_ref],
+      slice_statement: 'Build a bounded evidence-to-need traceability workflow for topic selection.',
+      problem_space: 'Reviewer-aligned topic selection traceability.',
+      target_setting: 'Local-first CS paper engineering assistant workflows.',
+      target_community: 'LLM systems researchers',
+      included_boundaries: ['v1a evidence-to-need trace preservation'],
+      excluded_boundaries: ['Do not target production deployment', 'promotion decision', 'full paper implementation'],
+      contribution_type_candidate: 'workflow_system',
+      support_evidence_refs: [evidenceRef],
+      challenge_evidence_refs: [],
+      baseline_evidence_refs: [],
+      context_evidence_refs: [],
+      resource_assumptions: ['Fixture run uses existing v1a evidence map.'],
+      data_assumptions: ['Evidence units remain frozen during slice generation.'],
+      evaluation_path: 'Replay the harness and inspect deterministic trace hashes.',
+      baseline_assumptions: ['Route-only smoke tests are insufficient as a baseline.'],
+      hard_blockers: [],
+      dependency_risks: ['Downstream selection may request more options.'],
+      slice_budget: { max_nodes: 4 },
+      expected_claim: 'A bounded workflow can preserve evidence-to-need traceability.',
+      fallback_claim: 'A harness-native workflow improves traceability checks.',
+      observable_success_criteria: ['N4 emits option set refs and hashes through handoff.'],
+      main_risks: ['Evidence coverage may still need review.'],
+      baseline_risk: 'medium',
+      execution_risk: 'medium',
+      scope_risk: 'low',
+      claim_ceiling_alignment: {
+        status: 'aligned',
+        rationale: 'The claim is bounded to traceability workflow behavior.',
+        confidence: 0.8,
+      },
+      confidence: 0.82,
+      requires_human_review: false,
+      human_review_triggers: [],
+      details_payload: { fixture: true },
+    }],
+  };
+}
+
+function hashV1bHarnessOption(option: TopicSelectionResearchSliceOptionRecord): string {
+  return sha256Text(stableStringify({
+    claim_ceiling_alignment: option.claim_ceiling_alignment,
+    dependency_risks: option.dependency_risks,
+    evaluation_path: option.evaluation_path,
+    excluded_boundaries: option.excluded_boundaries,
+    expected_claim: option.expected_claim,
+    fallback_claim: option.fallback_claim,
+    hard_blockers: option.hard_blockers,
+    included_boundaries: option.included_boundaries,
+    main_risks: option.main_risks,
+    option_key: option.option_key,
+    option_ref: ref('research_slice_option', option.research_slice_option_id, option.title_card_id),
+    option_set_id: option.research_slice_option_set_id,
+    problem_space: option.problem_space,
+    risk_levels: {
+      baseline: option.baseline_risk,
+      execution: option.execution_risk,
+      scope: option.scope_risk,
+    },
+    slice_statement: option.slice_statement,
+    source_validated_need_refs: option.source_validated_need_refs,
+    status: option.status,
+    target_community: option.target_community,
+    target_setting: option.target_setting,
+  }));
+}
+
+async function selectedV1bHarnessOption(
+  app: FastifyInstance,
+  n4Result: WorkflowHarnessHttpResult,
+): Promise<TopicSelectionResearchSliceOptionRecord> {
+  assert.ok(n4Result.authority_ref, 'N5 fixture requires admitted N4 authority.');
+  const response = await app.inject({
+    method: 'GET',
+    url: `/topic-selection/v1b/research-slice-option-sets/${encodeURIComponent(n4Result.authority_ref.ref_id)}/options`,
+  });
+  assertStatus(response, 200);
+  const payload = response.json() as { items: TopicSelectionResearchSliceOptionRecord[] };
+  const selected = payload.items.find((option) => option.status === 'recommended') ?? payload.items[0];
+  assert.ok(selected, 'N5 fixture requires at least one N4 option.');
+  return selected;
+}
+
+function acceptedV1bHarnessSliceSelectionPayload(
+  option: TopicSelectionResearchSliceOptionRecord,
+): TopicSelectionV1bAcceptedSliceSelectionPayload {
+  return {
+    decision: 'select',
+    selected_option_ref: ref('research_slice_option', option.research_slice_option_id, option.title_card_id),
+    selected_option_hash: hashV1bHarnessOption(option),
+    selection_rationale: 'Select the traceable workflow slice with the strongest bounded fit.',
+    decision_basis: { selected_option_key: option.option_key },
+    rejected_option_reasons: [],
+    required_actions: [],
+    accepted_risk_refs: [],
+    confidence: 0.82,
+    requires_human_review: false,
+    human_review_reason: null,
+    loopback_target: null,
+    loopback_target_ref: null,
+    loopback_reason_code: null,
+  };
+}
+
+function v1bHarnessN5Request(
+  n4Result: WorkflowHarnessHttpResult,
+  acceptedPayload: TopicSelectionV1bAcceptedSliceSelectionPayload,
+  suffix: string,
+): TopicSelectionV1bWorkflowHarnessRunRequest {
+  assert.ok(n4Result.authority_ref && n4Result.hashes.authority_hash && n4Result.hashes.handoff_hash);
+  const acceptedHash = sha256Text(stableStringify(acceptedPayload));
+  const payload: TopicSelectionV1bN5HarnessFrozenInputPayload = {
+    research_slice_option_set_ref: n4Result.authority_ref,
+    research_slice_option_set_hash: n4Result.hashes.authority_hash,
+    n4_handoff_hash: n4Result.hashes.handoff_hash,
+    authority_input_provider: 'fixture',
+    accepted_selection_payload: acceptedPayload,
+    accepted_selection_payload_hash: acceptedHash,
+    delegation_artifact_hash: null,
+  };
+  const frozenInput: TopicSelectionV1bWorkflowHarnessRunRequest['frozen_input'] = {
+    input_contract: 'N4ToN5Handoff@v1',
+    snapshot_kind: 'research_slice_option_set',
+    source_refs: [n4Result.authority_ref],
+    payload: payload as unknown as Record<string, unknown>,
+  };
+  return {
+    schema_version: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    title_card_id: n4Result.authority_ref.title_card_id,
+    workflow_run_id: `workflow_run_v1b_harness_http_${suffix}`,
+    node_attempt_id: `node_attempt_v1b_harness_http_n5_${suffix}`,
+    node_id: 'topic-selection.v1b.select-research-slice.v1',
+    policy_version: 'topic-selection-v1b-node-policy-v1',
+    frozen_input: {
+      ...frozenInput,
+      frozen_input_hash: frozenInputHash(frozenInput),
+    },
+    created_by: 'system',
+  };
+}
+
+async function v1bHarnessRequestFromHandoff<TPayload>(
+  app: FastifyInstance,
+  result: WorkflowHarnessHttpResult,
+  suffix: string,
+  expectedHandoffKind: TopicSelectionV1bWorkflowHarnessHandoff['envelope']['handoff_kind'],
+  nodeId: TopicSelectionV1bWorkflowHarnessRunRequest['node_id'],
+  nodeAttemptSuffix: string,
+  inputContract: string,
+  snapshotKind: string,
+  payloadPatch: Record<string, unknown>,
+): Promise<TopicSelectionV1bWorkflowHarnessRunRequest> {
+  assert.ok(result.authority_ref && result.handoff_ref && result.hashes.handoff_hash);
+  const handoff = await getWorkflowHarnessHandoff(app, result.handoff_ref);
+  assert.equal(handoff.envelope.handoff_kind, expectedHandoffKind);
+  const payload = {
+    ...(handoff.payload as unknown as Record<string, unknown>),
+    ...payloadPatch,
+  } as unknown as TPayload;
+  const frozenInput: TopicSelectionV1bWorkflowHarnessRunRequest['frozen_input'] = {
+    input_contract: inputContract,
+    snapshot_kind: snapshotKind,
+    source_refs: [result.authority_ref, result.handoff_ref, ...handoff.required_refs],
+    payload: payload as unknown as Record<string, unknown>,
+  };
+  return {
+    schema_version: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    title_card_id: result.authority_ref.title_card_id,
+    workflow_run_id: `workflow_run_v1b_harness_http_${suffix}`,
+    node_attempt_id: `node_attempt_v1b_harness_http_${nodeAttemptSuffix}_${suffix}`,
+    node_id: nodeId,
+    policy_version: 'topic-selection-v1b-node-policy-v1',
+    frozen_input: {
+      ...frozenInput,
+      frozen_input_hash: frozenInputHash(frozenInput),
+    },
+    created_by: 'system',
+  };
+}
+
+async function v1bHarnessN6Request(
+  app: FastifyInstance,
+  n5Result: WorkflowHarnessHttpResult,
+  suffix: string,
+): Promise<TopicSelectionV1bWorkflowHarnessRunRequest> {
+  assert.ok(n5Result.authority_ref && n5Result.handoff_ref && n5Result.hashes.handoff_hash);
+  const handoff = await getWorkflowHarnessHandoff(app, n5Result.handoff_ref);
+  assert.equal(handoff.envelope.handoff_kind, 'N5ToN6Handoff');
+  const payload: TopicSelectionV1bN6HarnessFrozenInputPayload = {
+    ...(handoff.payload as TopicSelectionV1bN6HarnessFrozenInputPayload),
+    n5_handoff_hash: n5Result.hashes.handoff_hash,
+  };
+  const selectionSnapshotRef = ref(
+    'research_slice_selection_decision',
+    n5Result.authority_ref.ref_id,
+    n5Result.authority_ref.title_card_id ?? 'title_card_v1b_harness_http',
+    n5Result.authority_ref.version_id ?? null,
+  );
+  const frozenInput: TopicSelectionV1bWorkflowHarnessRunRequest['frozen_input'] = {
+    input_contract: 'N5ToN6Handoff@v1',
+    snapshot_kind: 'research_slice_selection_decision',
+    source_refs: [selectionSnapshotRef, n5Result.handoff_ref, ...handoff.required_refs],
+    payload: payload as unknown as Record<string, unknown>,
+  };
+  return {
+    schema_version: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    title_card_id: n5Result.authority_ref.title_card_id,
+    workflow_run_id: `workflow_run_v1b_harness_http_${suffix}`,
+    node_attempt_id: `node_attempt_v1b_harness_http_n6_${suffix}`,
+    node_id: 'topic-selection.v1b.generate-topic-question-candidates.v1',
+    policy_version: 'topic-selection-v1b-node-policy-v1',
+    frozen_input: {
+      ...frozenInput,
+      frozen_input_hash: frozenInputHash(frozenInput),
+    },
+    created_by: 'system',
+  };
+}
+
+function v1bHarnessN6Draft(
+  bundle: TopicSelectionV1aToV1bInputBundleRecord,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+): TopicSelectionV1bTopicQuestionCandidateSetDraftPayload {
+  const payload = input.frozen_input.payload as unknown as TopicSelectionV1bN6HarnessFrozenInputPayload;
+  const evidenceRef = bundle.evidence_role_bundle.support_unit_refs[0] ?? bundle.evidence_map_ref;
+  return {
+    question_frame: {
+      target_setting: 'Local-first CS paper engineering assistant workflows.',
+      target_community: 'LLM systems researchers',
+      object_scope: 'v1b harness-native topic selection candidate generation',
+      task_scope: 'candidate generation, deterministic gates, and replay drift checks',
+      intervention_or_approach: 'WorkflowHarness-native candidate-set gate with frozen semantic artifacts',
+      comparison_baseline: 'route-only smoke tests without harness-level product acceptance',
+      observable_outcome: 'stable candidate-set refs and replay hashes',
+      assumption_refs: [],
+      evidence_refs: [evidenceRef],
+      frame_payload: { fixture: true },
+    },
+    recommended_candidate_keys: ['harness_candidate'],
+    generation_notes: ['Candidate stays inside the selected ResearchSlice and preserves N5 lineage.'],
+    human_review_triggers: [],
+    candidates: [{
+      candidate_key: 'harness_candidate',
+      main_question: 'How can a WorkflowHarness-native candidate gate improve replayable v1b topic selection?',
+      sub_questions: ['Which N5 lineage hashes must remain frozen before N7 admission?'],
+      question_type: 'system',
+      contribution_hypothesis: 'system',
+      source_validated_need_refs: [bundle.validated_need_ref],
+      answerability_plan: {
+        datasets_or_resources: ['v1b harness trace fixtures'],
+        metrics: ['hash drift detection rate'],
+        baselines: ['route-only smoke coverage'],
+        ablations_or_comparisons: ['without frozen semantic artifact admission'],
+        evaluation_setting: 'local deterministic harness acceptance tests',
+        dependency_risks: ['provider canary behavior is not exercised in this fixture'],
+        open_dependencies: [],
+        known_gaps: [],
+        required_evidence_refs: [evidenceRef],
+      },
+      answerability_verdict: 'answerable',
+      expected_claim: 'A harness-native candidate gate improves replayable v1b topic selection.',
+      fallback_claim: 'The gate preserves candidate lineage for downstream review.',
+      max_claim_strength: 'Bounded workflow claim about candidate lineage and replay.',
+      observable_success_criteria: ['N6 emits candidate set refs and hashes.'],
+      boundary_check: {
+        preserved_boundary_refs: [],
+        excluded_boundary_refs: [],
+        boundary_violations: [],
+        prohibited_claims: ['promotion decision'],
+        allowed_refinements: ['tighten candidate wording'],
+      },
+      traceability_check: {
+        support_evidence_refs: [evidenceRef],
+        challenge_evidence_refs: [evidenceRef],
+        baseline_evidence_refs: [evidenceRef],
+        context_evidence_refs: [evidenceRef],
+        mapped_evidence_refs: [evidenceRef],
+        unmapped_assumptions: [],
+      },
+      falsification_conditions: [{
+        condition_type: 'claim_overstrong',
+        severity: 'hard',
+        statement: 'If changed frozen N5 lineage hashes are not detected, the candidate claim must be lowered.',
+        trigger_evidence_refs: [evidenceRef],
+        trigger_source_refs: [payload.research_slice_ref],
+        related_contract_fields: ['expected_claim'],
+        expected_action: 'lower_claim_strength',
+        check_timing: 'before_value_assessment',
+        confidence: 'high',
+      }],
+      risk_notes: [],
+      blockers: [],
+      objections: [],
+      human_review_triggers: [],
+      confidence: 0.84,
+    }],
+  };
+}
+
+async function v1bHarnessN7Request(
+  app: FastifyInstance,
+  n6Result: WorkflowHarnessHttpResult,
+  suffix: string,
+): Promise<TopicSelectionV1bWorkflowHarnessRunRequest> {
+  return v1bHarnessRequestFromHandoff<TopicSelectionV1bN7HarnessFrozenInputPayload>(
+    app,
+    n6Result,
+    suffix,
+    'N6ToN7Handoff',
+    'topic-selection.v1b.materialize-topic-question-contract.v1',
+    'n7',
+    'N6ToN7Handoff@v1',
+    'topic_question_candidate_set',
+    {
+      input_mode: 'initial_from_n6',
+      n6_handoff_hash: n6Result.hashes.handoff_hash,
+    },
+  );
+}
+
+async function v1bHarnessN8Request(
+  app: FastifyInstance,
+  n7Result: WorkflowHarnessHttpResult,
+  suffix: string,
+): Promise<TopicSelectionV1bWorkflowHarnessRunRequest> {
+  return v1bHarnessRequestFromHandoff<TopicSelectionV1bN8HarnessFrozenInputPayload>(
+    app,
+    n7Result,
+    suffix,
+    'N7ToN8Handoff',
+    'topic-selection.v1b.assess-topic-value.v1',
+    'n8',
+    'N7ToN8Handoff@v1',
+    'topic_question_contract',
+    { n7_handoff_hash: n7Result.hashes.handoff_hash },
+  );
+}
+
+function v1bHarnessN8ValueDraft(
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+): TopicSelectionV1bTopicValueAssessmentDraftPayload {
+  const payload = input.frozen_input.payload as unknown as TopicSelectionV1bN8HarnessFrozenInputPayload;
+  const evidenceRef = payload.topic_question_contract_ref;
+  return {
+    readiness_status: 'ready',
+    strongest_claim_if_success: 'A harness-native topic-selection flow preserves replayable authority boundaries.',
+    fallback_claim_if_success: 'Harness-level acceptance exposes route-only smoke gaps.',
+    hard_gates: TOPIC_SELECTION_VALUE_GATE_KEYS.map((gateKey) => ({
+      gate_key: gateKey,
+      verdict: 'pass' as const,
+      severity: 'info' as const,
+      overridable_with_risk: false,
+      rationale: `${gateKey} passes in the deterministic value fixture.`,
+      refs: [evidenceRef],
+    })),
+    dimension_scores: TOPIC_SELECTION_VALUE_DIMENSIONS.map((dimensionKey) => ({
+      dimension_key: dimensionKey,
+      score: dimensionKey === 'reviewer_risk' ? 72 : 84,
+      rationale: `${dimensionKey} is sufficiently supported for the fixture.`,
+      evidence_refs: [evidenceRef],
+      uncertainty: 'medium',
+    })),
+    risk_penalty: { residual_risk: 'bounded' },
+    reviewer_objections: ['Provider canary behavior is outside this fixture run.'],
+    ceiling_case: 'The topic can support a bounded workflow claim with deterministic trace evidence.',
+    base_case: 'The topic supports harness-native acceptance and replay validation.',
+    floor_case: 'The topic still yields useful negative gate coverage.',
+    recommended_disposition: 'advance_to_package',
+    total_score: 83,
+    value_summary: 'The active TopicQuestionContract has enough value and answerability for draft packaging.',
+    confidence: 0.82,
+    accepted_risk_refs: [],
+    blocker_refs: [],
+    risk_notes: ['Provider canary and output quality review remain downstream checks.'],
+    reasoning_memo: {
+      recommendation: 'advance_to_package',
+      value_thesis: 'Harness-native v1b topic selection is valuable because it closes automation, replay, and authority boundaries.',
+      significance: 'It turns route-testable workflow fragments into a product-level repeatable process.',
+      originality: 'The contribution is a deterministic gate and handoff workflow around LLM-assisted semantic drafts.',
+      claim_leverage: 'The claim remains bounded to workflow robustness and replay evidence.',
+      reviewer_risks: ['The implementation needs downstream provider canary validation.'],
+      effort_to_value: 'The fixture chain gives high value for moderate implementation effort.',
+      strategic_fit: 'It aligns with reviewer-aligned paper engineering workflows.',
+      negative_memory_check: 'No prior negative memory blocks this topic.',
+      evidence_backed_rationale: 'The N7 contract and candidate lineage provide frozen trace evidence.',
+      top_objections: ['The fixture does not prove live provider quality.'],
+      uncertainty: 'Medium uncertainty until provider canary is added.',
+      disposition_bridge: 'Advance to package with residual risks carried into v1c.',
+      requires_critic_review: false,
+      critic_triggers: [],
+      cited_refs: [evidenceRef],
+    },
+  };
+}
+
+async function v1bHarnessN9Request(
+  app: FastifyInstance,
+  n8Result: WorkflowHarnessHttpResult,
+  suffix: string,
+): Promise<TopicSelectionV1bWorkflowHarnessRunRequest> {
+  return v1bHarnessRequestFromHandoff<TopicSelectionV1bN9HarnessFrozenInputPayload>(
+    app,
+    n8Result,
+    suffix,
+    'N8ToN9Handoff',
+    'topic-selection.v1b.decide-value-disposition.v1',
+    'n9',
+    'N8ToN9Handoff@v1',
+    'topic_value_assessment',
+    { n8_handoff_hash: n8Result.hashes.handoff_hash },
+  );
+}
+
+async function v1bHarnessN10Request(
+  app: FastifyInstance,
+  n9Result: WorkflowHarnessHttpResult,
+  suffix: string,
+): Promise<TopicSelectionV1bWorkflowHarnessRunRequest> {
+  return v1bHarnessRequestFromHandoff<TopicSelectionV1bN10HarnessFrozenInputPayload>(
+    app,
+    n9Result,
+    suffix,
+    'N9ToN10Handoff',
+    'topic-selection.v1b.create-draft-topic-package.v1',
+    'n10',
+    'N9ToN10Handoff@v1',
+    'value_disposition_decision',
+    { n9_handoff_hash: n9Result.hashes.handoff_hash },
+  );
+}
+
+async function v1bHarnessN11Request(
+  app: FastifyInstance,
+  n10Result: WorkflowHarnessHttpResult,
+  suffix: string,
+): Promise<TopicSelectionV1bWorkflowHarnessRunRequest> {
+  return v1bHarnessRequestFromHandoff<TopicSelectionV1bN11HarnessFrozenInputPayload>(
+    app,
+    n10Result,
+    suffix,
+    'N10ToN11Handoff',
+    'topic-selection.v1b.publish-v1c-input-bundle.v1',
+    'n11',
+    'N10ToN11Handoff@v1',
+    'topic_package',
+    { n10_handoff_hash: n10Result.hashes.handoff_hash },
+  );
+}
+
+async function runV1bHarnessHttpN1ToN11(
+  app: FastifyInstance,
+  suffix: string,
+): Promise<{
+  bundle: TopicSelectionV1aToV1bInputBundleRecord;
+  n11: WorkflowHarnessHttpResult;
+}> {
+  const bundleResult = await createV1bInputBundle(app, suffix);
+  const n1Input = v1bHarnessN1Request(bundleResult.v1bInputBundle, suffix);
+  const n1 = await invokeV1bHarnessNode(app, n1Input);
+  const acceptedProfile = acceptedConstraintProfilePayload();
+  const n2Input = v1bHarnessN2Request(bundleResult.v1bInputBundle, n1, suffix, acceptedProfile);
+  const n2 = await invokeV1bHarnessNode(app, n2Input);
+  const n3 = await invokeV1bHarnessNode(app, v1bHarnessN3Request(n1, n2, suffix));
+  const n4Input = v1bHarnessN4Request(n1, n2, n3, suffix);
+  const n4 = await invokeV1bHarnessNode(app, {
+    ...n4Input,
+    semantic_artifacts: [
+      await recordWorkflowHarnessSemanticArtifact(app, n4Input, {
+        slot_id: 'n4_research_slice_option_draft',
+        allowed_effect: 'model_draft_for_gate',
+        output_contract: 'ResearchSliceOptionSetDraft@v1',
+        profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.research_slice_options_single_agent,
+      }, v1bHarnessN4Draft(bundleResult.v1bInputBundle) as unknown as Record<string, unknown>),
+    ],
+  });
+  assert.ok(n4.authority_ref, JSON.stringify(n4));
+  const selectedOption = await selectedV1bHarnessOption(app, n4);
+  const n5 = await invokeV1bHarnessNode(
+    app,
+    v1bHarnessN5Request(n4, acceptedV1bHarnessSliceSelectionPayload(selectedOption), suffix),
+  );
+  const n6Input = await v1bHarnessN6Request(app, n5, suffix);
+  const n6 = await invokeV1bHarnessNode(app, {
+    ...n6Input,
+    semantic_artifacts: [
+      await recordWorkflowHarnessSemanticArtifact(app, n6Input, {
+        slot_id: 'n6_question_candidate_draft',
+        allowed_effect: 'model_draft_for_gate',
+        output_contract: 'TopicQuestionCandidateSetDraft@v1',
+        profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_question_candidates_single_agent,
+      }, v1bHarnessN6Draft(bundleResult.v1bInputBundle, n6Input) as unknown as Record<string, unknown>),
+    ],
+  });
+  assert.ok(n6.handoff_ref, JSON.stringify(n6));
+  const n7 = await invokeV1bHarnessNode(app, await v1bHarnessN7Request(app, n6, suffix));
+  const n8Input = await v1bHarnessN8Request(app, n7, suffix);
+  const n8 = await invokeV1bHarnessNode(app, {
+    ...n8Input,
+    semantic_artifacts: [
+      await recordWorkflowHarnessSemanticArtifact(app, n8Input, {
+        slot_id: 'n8_value_assessment_draft',
+        allowed_effect: 'model_draft_for_gate',
+        output_contract: 'TopicValueAssessmentDraft@v1',
+        profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_value_assessment_single_agent,
+      }, v1bHarnessN8ValueDraft(n8Input) as unknown as Record<string, unknown>),
+    ],
+  });
+  const n9 = await invokeV1bHarnessNode(app, await v1bHarnessN9Request(app, n8, suffix));
+  const n10 = await invokeV1bHarnessNode(app, await v1bHarnessN10Request(app, n9, suffix));
+  const n11 = await invokeV1bHarnessNode(app, await v1bHarnessN11Request(app, n10, suffix));
+  return { bundle: bundleResult.v1bInputBundle, n11 };
 }
 
 function assertStatus(response: { statusCode: number; body: string }, expected: number): void {
@@ -811,857 +1731,63 @@ async function createV1bInputBundle(app: FastifyInstance, suffix: string) {
     payload: { validated_need_id: confirmation.validated_need.validated_need_id, created_by: 'system' },
   });
   assertStatus(v1bBundleRes, 201);
-  const v1bBundle = v1bBundleRes.json() as { v1b_input_bundle_id: string };
+  const v1bBundle = v1bBundleRes.json() as TopicSelectionV1aToV1bInputBundleRecord;
 
   return {
     titleCardId,
     validatedNeedId: confirmation.validated_need.validated_need_id,
+    v1bInputBundle: v1bBundle,
     v1bInputBundleId: v1bBundle.v1b_input_bundle_id,
   };
 }
 
-type V1bFlowResult = {
-  titleCardId: string;
-  validatedNeedId: string;
-  v1bInputBundleId: string;
-  intakeSnapshot: { v1b_intake_snapshot_id: string };
-  constraintProfile: { research_constraint_profile_id: string };
-  readiness: { v1b_intake_readiness_assessment_id: string; recommendation: string };
-  sliceOptionSet: { option_set: { research_slice_option_set_id: string }; options: Array<{ research_slice_option_id: string }> };
-  sliceSelection: { research_slice?: { research_slice_id: string } };
-  questionCandidateSet: {
-    candidate_set: { topic_question_candidate_set_id: string };
-    candidates: Array<{ topic_question_candidate_id: string }>;
-  };
-  questionSelection: {
-    materializations: TopicSelectionV1bTopicQuestionMaterialization[];
-  };
-  valueAssessment: { topic_value_assessment: { topic_value_assessment_id: string } };
-  disposition?: { value_disposition_decision_id: string; decision: string };
-  draftPackage?: { topic_package: { topic_package_id: string; package_readiness_status: string } };
-};
+const removedLegacyWriteRoutes = [
+  '/topic-selection/v1b/intake-snapshots',
+  '/topic-selection/v1b/research-constraint-profiles',
+  '/topic-selection/v1b/intake-readiness-assessments',
+  '/topic-selection/v1b/research-slice-option-sets',
+  '/topic-selection/v1b/research-slice-option-sets/option-set-route/selection-decisions',
+  '/topic-selection/v1b/topic-question-candidate-sets',
+  '/topic-selection/v1b/topic-question-candidate-sets/candidate-set-route/selection-decisions',
+  '/topic-selection/v1b/topic-value-assessments',
+  '/topic-selection/v1b/topic-value-assessments/value-assessment-route/disposition-decisions',
+  '/topic-selection/v1b/topic-packages/drafts',
+  '/topic-selection/v1b/topic-packages/package-route/v1c-input-bundles',
+] as const;
 
-async function runV1bDraftingPassFromReadiness(
-  app: FastifyInstance,
-  readinessAssessmentId: string,
-): Promise<Pick<
-  V1bFlowResult,
-  'sliceOptionSet' | 'sliceSelection' | 'questionCandidateSet' | 'questionSelection' | 'valueAssessment' | 'disposition' | 'draftPackage'
->> {
-  const sliceOptionsRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1b/research-slice-option-sets',
-    payload: {
-      readiness_assessment_id: readinessAssessmentId,
-      triggered_by: 'system',
-    },
-  });
-  assertStatus(sliceOptionsRes, 201);
-  const sliceOptionSet = sliceOptionsRes.json() as V1bFlowResult['sliceOptionSet'];
-  assert.ok(sliceOptionSet.options[0]?.research_slice_option_id);
-
-  const sliceSelectionRes = await app.inject({
-    method: 'POST',
-    url: `/topic-selection/v1b/research-slice-option-sets/${encodeURIComponent(sliceOptionSet.option_set.research_slice_option_set_id)}/selection-decisions`,
-    payload: {
-      option_set_id: 'ignored-by-path',
-      decision: 'select',
-      selected_option_id: sliceOptionSet.options[0].research_slice_option_id,
-      decided_by: 'human',
-      selection_rationale: 'Selected as the refined bounded option.',
-      confidence: 0.86,
-    },
-  });
-  assertStatus(sliceSelectionRes, 201);
-  const sliceSelection = sliceSelectionRes.json() as V1bFlowResult['sliceSelection'];
-  assert.ok(sliceSelection.research_slice?.research_slice_id);
-
-  const questionCandidateRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1b/topic-question-candidate-sets',
-    payload: {
-      research_slice_id: sliceSelection.research_slice.research_slice_id,
-      triggered_by: 'system',
-    },
-  });
-  assertStatus(questionCandidateRes, 201);
-  const questionCandidateSet = questionCandidateRes.json() as V1bFlowResult['questionCandidateSet'];
-  assert.ok(questionCandidateSet.candidates[0]?.topic_question_candidate_id);
-
-  const questionSelectionRes = await app.inject({
-    method: 'POST',
-    url: `/topic-selection/v1b/topic-question-candidate-sets/${encodeURIComponent(questionCandidateSet.candidate_set.topic_question_candidate_set_id)}/selection-decisions`,
-    payload: {
-      candidate_set_id: 'ignored-by-path',
-      decision: 'admit',
-      admitted_candidate_ids: [questionCandidateSet.candidates[0].topic_question_candidate_id],
-      decided_by: 'human',
-      decision_rationale: 'Refined question is answerable and within the selected slice.',
-      confidence: 0.87,
-    },
-  });
-  assertStatus(questionSelectionRes, 201);
-  const questionSelection = questionSelectionRes.json() as V1bFlowResult['questionSelection'];
-  const contractId = questionSelection.materializations[0]?.topic_question_contract.topic_question_contract_id;
-  assert.ok(contractId);
-
-  const valueAssessmentRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1b/topic-value-assessments',
-    payload: {
-      topic_question_contract_id: contractId,
-      triggered_by: 'system',
-    },
-  });
-  assertStatus(valueAssessmentRes, 201);
-  const valueAssessment = valueAssessmentRes.json() as V1bFlowResult['valueAssessment'];
-  assert.ok(valueAssessment.topic_value_assessment.topic_value_assessment_id);
-
-  const dispositionRes = await app.inject({
-    method: 'POST',
-    url: `/topic-selection/v1b/topic-value-assessments/${encodeURIComponent(valueAssessment.topic_value_assessment.topic_value_assessment_id)}/disposition-decisions`,
-    payload: {
-      topic_value_assessment_id: 'ignored-by-path',
-      decision: 'advance_to_package',
-      decided_by: 'human',
-      decision_rationale: 'Refined slice is now ready for draft package handoff.',
-    },
-  });
-  assertStatus(dispositionRes, 201);
-  const disposition = dispositionRes.json() as { value_disposition_decision_id: string; decision: string };
-  assert.equal(disposition.decision, 'advance_to_package');
-
-  const packageRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1b/topic-packages/drafts',
-    payload: {
-      value_disposition_decision_id: disposition.value_disposition_decision_id,
-      created_by: 'system',
-    },
-  });
-  assertStatus(packageRes, 201);
-  const draftPackage = packageRes.json() as {
-    topic_package: { topic_package_id: string; package_readiness_status: string };
-  };
-  assert.equal(draftPackage.topic_package.package_readiness_status, 'ready_for_promotion_review');
-
-  const bundleRes = await app.inject({
-    method: 'POST',
-    url: `/topic-selection/v1b/topic-packages/${encodeURIComponent(draftPackage.topic_package.topic_package_id)}/v1c-input-bundles`,
-  });
-  assertStatus(bundleRes, 200);
-
-  return {
-    sliceOptionSet,
-    sliceSelection,
-    questionCandidateSet,
-    questionSelection,
-    valueAssessment,
-    disposition,
-    draftPackage,
-  };
-}
-
-async function runV1bValuePassFromQuestionContract(
-  app: FastifyInstance,
-  contractId: string,
-): Promise<Pick<V1bFlowResult, 'valueAssessment' | 'disposition' | 'draftPackage'>> {
-  const valueAssessmentRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1b/topic-value-assessments',
-    payload: {
-      topic_question_contract_id: contractId,
-      triggered_by: 'system',
-    },
-  });
-  assertStatus(valueAssessmentRes, 201);
-  const valueAssessment = valueAssessmentRes.json() as V1bFlowResult['valueAssessment'];
-  assert.ok(valueAssessment.topic_value_assessment.topic_value_assessment_id);
-
-  const dispositionRes = await app.inject({
-    method: 'POST',
-    url: `/topic-selection/v1b/topic-value-assessments/${encodeURIComponent(valueAssessment.topic_value_assessment.topic_value_assessment_id)}/disposition-decisions`,
-    payload: {
-      topic_value_assessment_id: 'ignored-by-path',
-      decision: 'advance_to_package',
-      decided_by: 'human',
-      decision_rationale: 'Re-entered value path is ready for draft package handoff.',
-    },
-  });
-  assertStatus(dispositionRes, 201);
-  const disposition = dispositionRes.json() as { value_disposition_decision_id: string; decision: string };
-  assert.equal(disposition.decision, 'advance_to_package');
-
-  const packageRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1b/topic-packages/drafts',
-    payload: {
-      value_disposition_decision_id: disposition.value_disposition_decision_id,
-      created_by: 'system',
-    },
-  });
-  assertStatus(packageRes, 201);
-  const draftPackage = packageRes.json() as {
-    topic_package: { topic_package_id: string; package_readiness_status: string };
-  };
-  assert.equal(draftPackage.topic_package.package_readiness_status, 'ready_for_promotion_review');
-
-  const bundleRes = await app.inject({
-    method: 'POST',
-    url: `/topic-selection/v1b/topic-packages/${encodeURIComponent(draftPackage.topic_package.topic_package_id)}/v1c-input-bundles`,
-  });
-  assertStatus(bundleRes, 200);
-
-  return {
-    valueAssessment,
-    disposition,
-    draftPackage,
-  };
-}
-
-async function runV1bQuestionValuePassFromSlice(
-  app: FastifyInstance,
-  researchSliceId: string,
-): Promise<Pick<
-  V1bFlowResult,
-  'questionCandidateSet' | 'questionSelection' | 'valueAssessment' | 'disposition' | 'draftPackage'
->> {
-  const questionCandidateRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1b/topic-question-candidate-sets',
-    payload: {
-      research_slice_id: researchSliceId,
-      triggered_by: 'system',
-    },
-  });
-  assertStatus(questionCandidateRes, 201);
-  const questionCandidateSet = questionCandidateRes.json() as V1bFlowResult['questionCandidateSet'];
-  assert.ok(questionCandidateSet.candidates[0]?.topic_question_candidate_id);
-
-  const questionSelectionRes = await app.inject({
-    method: 'POST',
-    url: `/topic-selection/v1b/topic-question-candidate-sets/${encodeURIComponent(questionCandidateSet.candidate_set.topic_question_candidate_set_id)}/selection-decisions`,
-    payload: {
-      candidate_set_id: 'ignored-by-path',
-      decision: 'admit',
-      admitted_candidate_ids: [questionCandidateSet.candidates[0].topic_question_candidate_id],
-      decided_by: 'human',
-      decision_rationale: 'Refined question is answerable within the existing slice.',
-      confidence: 0.87,
-    },
-  });
-  assertStatus(questionSelectionRes, 201);
-  const questionSelection = questionSelectionRes.json() as V1bFlowResult['questionSelection'];
-  const contractId = questionSelection.materializations[0]?.topic_question_contract.topic_question_contract_id;
-  assert.ok(contractId);
-
-  return {
-    questionCandidateSet,
-    questionSelection,
-    ...(await runV1bValuePassFromQuestionContract(app, contractId)),
-  };
-}
-
-async function runV1bHttpFlow(
-  app: FastifyInstance,
-  suffix: string,
-  options: { stopAtAssessment?: boolean } = {},
-): Promise<V1bFlowResult> {
-  const base = await createV1bInputBundle(app, suffix);
-
-  const intakeRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1b/intake-snapshots',
-    payload: {
-      v1b_input_bundle_id: base.v1bInputBundleId,
-      created_by: 'system',
-    },
-  });
-  assertStatus(intakeRes, 201);
-  const intakeSnapshot = intakeRes.json() as V1bFlowResult['intakeSnapshot'];
-
-  const profileRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1b/research-constraint-profiles',
-    payload: {
-      v1b_intake_snapshot_id: intakeSnapshot.v1b_intake_snapshot_id,
-      target_community: 'LLM systems researchers',
-      target_venue_class: 'systems',
-      intended_contribution_style: 'workflow system',
-      method_constraints: ['offline replay evaluation'],
-      resource_constraints: ['single workstation'],
-      available_assets: ['paper corpus', 'review rubric'],
-      feasibility_budget: { person_weeks: 2 },
-      non_goals: ['Do not target production deployment'],
-      claim_ceiling: 'Can claim reviewer-aligned planning feasibility, not production superiority.',
-      created_by: 'human',
-    },
-  });
-  assertStatus(profileRes, 201);
-  const constraintProfile = profileRes.json() as V1bFlowResult['constraintProfile'];
-
-  const readinessRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1b/intake-readiness-assessments',
-    payload: {
-      v1b_intake_snapshot_id: intakeSnapshot.v1b_intake_snapshot_id,
-      research_constraint_profile_id: constraintProfile.research_constraint_profile_id,
-      assessed_by: 'system',
-    },
-  });
-  assertStatus(readinessRes, 201);
-  const readiness = readinessRes.json() as V1bFlowResult['readiness'];
-  assert.equal(readiness.recommendation, 'ready_for_slice');
-
-  const sliceOptionsRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1b/research-slice-option-sets',
-    payload: {
-      readiness_assessment_id: readiness.v1b_intake_readiness_assessment_id,
-      triggered_by: 'system',
-    },
-  });
-  assertStatus(sliceOptionsRes, 201);
-  const sliceOptionSet = sliceOptionsRes.json() as V1bFlowResult['sliceOptionSet'];
-  assert.ok(sliceOptionSet.options[0]?.research_slice_option_id);
-
-  const sliceSelectionRes = await app.inject({
-    method: 'POST',
-    url: `/topic-selection/v1b/research-slice-option-sets/${encodeURIComponent(sliceOptionSet.option_set.research_slice_option_set_id)}/selection-decisions`,
-    payload: {
-      option_set_id: 'ignored-by-path',
-      decision: 'select',
-      selected_option_id: sliceOptionSet.options[0].research_slice_option_id,
-      decided_by: 'human',
-      selection_rationale: 'Selected as the most bounded option.',
-      confidence: 0.84,
-    },
-  });
-  assertStatus(sliceSelectionRes, 201);
-  const sliceSelection = sliceSelectionRes.json() as V1bFlowResult['sliceSelection'];
-  assert.ok(sliceSelection.research_slice?.research_slice_id);
-
-  const questionCandidateRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1b/topic-question-candidate-sets',
-    payload: {
-      research_slice_id: sliceSelection.research_slice.research_slice_id,
-      triggered_by: 'system',
-    },
-  });
-  assertStatus(questionCandidateRes, 201);
-  const questionCandidateSet = questionCandidateRes.json() as V1bFlowResult['questionCandidateSet'];
-  assert.ok(questionCandidateSet.candidates[0]?.topic_question_candidate_id);
-
-  const questionSelectionRes = await app.inject({
-    method: 'POST',
-    url: `/topic-selection/v1b/topic-question-candidate-sets/${encodeURIComponent(questionCandidateSet.candidate_set.topic_question_candidate_set_id)}/selection-decisions`,
-    payload: {
-      candidate_set_id: 'ignored-by-path',
-      decision: 'admit',
-      admitted_candidate_ids: [questionCandidateSet.candidates[0].topic_question_candidate_id],
-      decided_by: 'human',
-      decision_rationale: 'Question is answerable and within the selected slice.',
-      confidence: 0.85,
-    },
-  });
-  assertStatus(questionSelectionRes, 201);
-  const questionSelection = questionSelectionRes.json() as V1bFlowResult['questionSelection'];
-  const contractId = questionSelection.materializations[0]?.topic_question_contract.topic_question_contract_id;
-  assert.ok(contractId);
-
-  const valueAssessmentRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1b/topic-value-assessments',
-    payload: {
-      topic_question_contract_id: contractId,
-      triggered_by: 'system',
-    },
-  });
-  assertStatus(valueAssessmentRes, 201);
-  const valueAssessment = valueAssessmentRes.json() as V1bFlowResult['valueAssessment'];
-  assert.ok(valueAssessment.topic_value_assessment.topic_value_assessment_id);
-
-  const result: V1bFlowResult = {
-    ...base,
-    intakeSnapshot,
-    constraintProfile,
-    readiness,
-    sliceOptionSet,
-    sliceSelection,
-    questionCandidateSet,
-    questionSelection,
-    valueAssessment,
-  };
-  if (options.stopAtAssessment) {
-    return result;
-  }
-
-  const dispositionRes = await app.inject({
-    method: 'POST',
-    url: `/topic-selection/v1b/topic-value-assessments/${encodeURIComponent(valueAssessment.topic_value_assessment.topic_value_assessment_id)}/disposition-decisions`,
-    payload: {
-      topic_value_assessment_id: 'ignored-by-path',
-      decision: 'advance_to_package',
-      decided_by: 'human',
-      decision_rationale: 'Advance only to draft package for v1c handoff.',
-    },
-  });
-  assertStatus(dispositionRes, 201);
-  const disposition = dispositionRes.json() as { value_disposition_decision_id: string; decision: string };
-  assert.equal(disposition.decision, 'advance_to_package');
-
-  const packageRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1b/topic-packages/drafts',
-    payload: {
-      value_disposition_decision_id: disposition.value_disposition_decision_id,
-      created_by: 'system',
-    },
-  });
-  assertStatus(packageRes, 201);
-  const draftPackage = packageRes.json() as {
-    topic_package: { topic_package_id: string; package_readiness_status: string };
-  };
-  assert.equal(draftPackage.topic_package.package_readiness_status, 'ready_for_promotion_review');
-
-  const readPackageRes = await app.inject({
-    method: 'GET',
-    url: `/topic-selection/v1b/topic-packages/${encodeURIComponent(draftPackage.topic_package.topic_package_id)}`,
-  });
-  assertStatus(readPackageRes, 200);
-  const readPackage = readPackageRes.json() as { topic_package_id: string; package_readiness_status: string };
-  assert.equal(readPackage.topic_package_id, draftPackage.topic_package.topic_package_id);
-  assert.equal(readPackage.package_readiness_status, 'ready_for_promotion_review');
-
-  const bundleRes = await app.inject({
-    method: 'POST',
-    url: `/topic-selection/v1b/topic-packages/${encodeURIComponent(draftPackage.topic_package.topic_package_id)}/v1c-input-bundles`,
-  });
-  assertStatus(bundleRes, 200);
-  const v1cBundle = bundleRes.json() as {
-    topic_package_id: string;
-    value_disposition_decision_ref: TopicSelectionFunctionalRef;
-  };
-  assert.equal(v1cBundle.topic_package_id, draftPackage.topic_package.topic_package_id);
-  assert.equal(v1cBundle.value_disposition_decision_ref.ref_id, disposition.value_disposition_decision_id);
-
-  return {
-    ...result,
-    disposition,
-    draftPackage,
-  };
-}
-
-test('topic-selection v1b HTTP routes drive v1b input bundle to draft package and v1c handoff', async () => {
-  const fakeLlmGateway = new FakeTopicSelectionV1bLlmGateway();
-  const app = buildApp({ topicSelectionV1bLlmGateway: fakeLlmGateway });
-  try {
-    const result = await runV1bHttpFlow(app, uniqueId('v1b-api'));
-
-    assert.equal(result.draftPackage?.topic_package.package_readiness_status, 'ready_for_promotion_review');
-    assert.deepEqual(
-      fakeLlmGateway.calls.map((call) => call.schemaName),
-      [
-        'topic_selection_research_slice_option_set',
-        'topic_selection_topic_question_candidate_set',
-        'topic_selection_topic_value_assessment',
-      ],
-    );
-
-    // T-087 Phase 3.1 — assert the 4 new list-by-title-card projections.
-    const sliceSets = await app.inject({
-      method: 'GET',
-      url: `/topic-selection/v1b/title-cards/${encodeURIComponent(result.titleCardId)}/research-slice-option-sets`,
-    });
-    assertStatus(sliceSets, 200);
-    const sliceSetsPayload = sliceSets.json() as { items: Array<{ research_slice_option_set_id: string; title_card_id: string }> };
-    assert.ok(sliceSetsPayload.items.length > 0);
-    assert.ok(sliceSetsPayload.items.every((item) => item.title_card_id === result.titleCardId));
-
-    const questionSets = await app.inject({
-      method: 'GET',
-      url: `/topic-selection/v1b/title-cards/${encodeURIComponent(result.titleCardId)}/topic-question-candidate-sets`,
-    });
-    assertStatus(questionSets, 200);
-    const questionSetsPayload = questionSets.json() as { items: Array<{ topic_question_candidate_set_id: string; title_card_id: string }> };
-    assert.ok(questionSetsPayload.items.length > 0);
-    assert.ok(questionSetsPayload.items.every((item) => item.title_card_id === result.titleCardId));
-
-    const valueAssessments = await app.inject({
-      method: 'GET',
-      url: `/topic-selection/v1b/title-cards/${encodeURIComponent(result.titleCardId)}/topic-value-assessments`,
-    });
-    assertStatus(valueAssessments, 200);
-    const valueAssessmentsPayload = valueAssessments.json() as { items: Array<{ topic_value_assessment_id: string; title_card_id: string }> };
-    assert.ok(valueAssessmentsPayload.items.length > 0);
-    assert.ok(valueAssessmentsPayload.items.every((item) => item.title_card_id === result.titleCardId));
-
-    const packages = await app.inject({
-      method: 'GET',
-      url: `/topic-selection/v1b/title-cards/${encodeURIComponent(result.titleCardId)}/topic-packages`,
-    });
-    assertStatus(packages, 200);
-    const packagesPayload = packages.json() as { items: Array<{ topic_package_id: string; title_card_id: string }> };
-    assert.ok(packagesPayload.items.length > 0);
-    assert.ok(packagesPayload.items.every((item) => item.title_card_id === result.titleCardId));
-  } finally {
-    await app.close();
-  }
-});
-
-test('topic-selection v1b HTTP loopback re-enters from refine_slice and advances after refinement', async () => {
-  const fakeLlmGateway = new FakeTopicSelectionV1bLlmGateway({
-    valueAssessmentSequence: ['needs_refinement', 'ready'],
-  });
-  const app = buildApp({ topicSelectionV1bLlmGateway: fakeLlmGateway });
-  try {
-    const firstPass = await runV1bHttpFlow(app, uniqueId('v1b-loopback'), { stopAtAssessment: true });
-    const firstAssessment = firstPass.valueAssessment.topic_value_assessment as unknown as {
-      topic_value_assessment_id: string;
-      readiness_status: string;
-    };
-    assert.equal(firstAssessment.readiness_status, 'needs_refinement');
-
-    const loopbackRes = await app.inject({
-      method: 'POST',
-      url: `/topic-selection/v1b/topic-value-assessments/${encodeURIComponent(firstAssessment.topic_value_assessment_id)}/disposition-decisions`,
-      payload: {
-        topic_value_assessment_id: 'ignored-by-path',
-        decision: 'refine_slice',
-        decided_by: 'human',
-        decision_rationale: 'Return to ResearchSlice because evidence sanity failed.',
-        required_actions: ['narrow slice and refresh baseline/challenge evidence'],
-      },
-    });
-    assertStatus(loopbackRes, 201);
-    const loopback = loopbackRes.json() as {
-      value_disposition_decision_id: string;
-      decision: string;
-      loopback_target_ref: TopicSelectionFunctionalRef;
-      package_draft_input: unknown;
-    };
-    assert.equal(loopback.decision, 'refine_slice');
-    assert.equal(loopback.loopback_target_ref.ref_type, 'research_slice');
-    assert.equal(
-      loopback.loopback_target_ref.ref_id,
-      firstPass.sliceSelection.research_slice?.research_slice_id,
-    );
-    assert.equal(loopback.package_draft_input, null);
-
-    const blockedPackageRes = await app.inject({
-      method: 'POST',
-      url: '/topic-selection/v1b/topic-packages/drafts',
-      payload: {
-        value_disposition_decision_id: loopback.value_disposition_decision_id,
-        created_by: 'system',
-      },
-    });
-    assert.equal(blockedPackageRes.statusCode, 409);
-    const blockedPackage = blockedPackageRes.json() as { error: { code: string; message: string } };
-    assert.equal(blockedPackage.error.code, 'GATE_CONSTRAINT_FAILED');
-    assert.match(blockedPackage.error.message, /advance_to_package/);
-
-    const refinedPass = await runV1bDraftingPassFromReadiness(
-      app,
-      firstPass.readiness.v1b_intake_readiness_assessment_id,
-    );
-    const refinedAssessment = refinedPass.valueAssessment.topic_value_assessment as unknown as {
-      readiness_status: string;
-    };
-    assert.equal(refinedAssessment.readiness_status, 'ready');
-    assert.notEqual(
-      refinedPass.sliceSelection.research_slice?.research_slice_id,
-      firstPass.sliceSelection.research_slice?.research_slice_id,
-    );
-    assert.notEqual(
-      refinedPass.questionSelection.materializations[0]?.topic_question_contract.topic_question_contract_id,
-      firstPass.questionSelection.materializations[0]?.topic_question_contract.topic_question_contract_id,
-    );
-    assert.equal(refinedPass.disposition?.decision, 'advance_to_package');
-    assert.equal(refinedPass.draftPackage?.topic_package.package_readiness_status, 'ready_for_promotion_review');
-    assert.deepEqual(
-      fakeLlmGateway.calls.map((call) => call.schemaName),
-      [
-        'topic_selection_research_slice_option_set',
-        'topic_selection_topic_question_candidate_set',
-        'topic_selection_topic_value_assessment',
-        'topic_selection_research_slice_option_set',
-        'topic_selection_topic_question_candidate_set',
-        'topic_selection_topic_value_assessment',
-      ],
-    );
-  } finally {
-    await app.close();
-  }
-});
-
-test('topic-selection v1b HTTP loopback re-enters from refine_question and advances after reframing', async () => {
-  const fakeLlmGateway = new FakeTopicSelectionV1bLlmGateway({
-    valueAssessmentSequence: ['refine_question', 'ready'],
-  });
-  const app = buildApp({ topicSelectionV1bLlmGateway: fakeLlmGateway });
-  try {
-    const firstPass = await runV1bHttpFlow(app, uniqueId('v1b-refine-question'), { stopAtAssessment: true });
-    const firstAssessment = firstPass.valueAssessment.topic_value_assessment as unknown as {
-      topic_value_assessment_id: string;
-      readiness_status: string;
-    };
-    const firstContractId =
-      firstPass.questionSelection.materializations[0]?.topic_question_contract.topic_question_contract_id;
-    assert.ok(firstContractId);
-    assert.equal(firstAssessment.readiness_status, 'needs_refinement');
-
-    const loopbackRes = await app.inject({
-      method: 'POST',
-      url: `/topic-selection/v1b/topic-value-assessments/${encodeURIComponent(firstAssessment.topic_value_assessment_id)}/disposition-decisions`,
-      payload: {
-        topic_value_assessment_id: 'ignored-by-path',
-        decision: 'refine_question',
-        decided_by: 'human',
-        decision_rationale: 'Return to TopicQuestionContract because the question framing failed value checks.',
-        required_actions: ['separate workflow value from metric scope and regenerate the question contract'],
-      },
-    });
-    assertStatus(loopbackRes, 201);
-    const loopback = loopbackRes.json() as {
-      value_disposition_decision_id: string;
-      decision: string;
-      loopback_target_ref: TopicSelectionFunctionalRef;
-      package_draft_input: unknown;
-    };
-    assert.equal(loopback.decision, 'refine_question');
-    assert.equal(loopback.loopback_target_ref.ref_type, 'topic_question_contract');
-    assert.equal(loopback.loopback_target_ref.ref_id, firstContractId);
-    assert.equal(loopback.package_draft_input, null);
-    assert.equal((loopback as { status?: string }).status, 'active');
-    assert.equal((loopback as { is_current?: boolean }).is_current, true);
-    assert.equal((loopback as { output_topic_package_id?: string | null }).output_topic_package_id, null);
-
-    const blockedPackageRes = await app.inject({
-      method: 'POST',
-      url: '/topic-selection/v1b/topic-packages/drafts',
-      payload: {
-        value_disposition_decision_id: loopback.value_disposition_decision_id,
-        created_by: 'system',
-      },
-    });
-    assert.equal(blockedPackageRes.statusCode, 409);
-    const blockedPackage = blockedPackageRes.json() as { error: { code: string; message: string } };
-    assert.equal(blockedPackage.error.code, 'GATE_CONSTRAINT_FAILED');
-    assert.match(blockedPackage.error.message, /advance_to_package/);
-
-    const forcedAdvanceRes = await app.inject({
-      method: 'POST',
-      url: `/topic-selection/v1b/topic-value-assessments/${encodeURIComponent(firstAssessment.topic_value_assessment_id)}/disposition-decisions`,
-      payload: {
-        topic_value_assessment_id: 'ignored-by-path',
-        decision: 'advance_to_package',
-        decided_by: 'human',
-        decision_rationale: 'This should fail because the original assessment was not ready.',
-      },
-    });
-    assert.equal(forcedAdvanceRes.statusCode, 409);
-    const forcedAdvance = forcedAdvanceRes.json() as { error: { code: string; message: string } };
-    assert.equal(forcedAdvance.error.code, 'GATE_CONSTRAINT_FAILED');
-    assert.match(forcedAdvance.error.message, /requires ready value assessment/);
-
-    const refinedPass = await runV1bQuestionValuePassFromSlice(
-      app,
-      firstPass.sliceSelection.research_slice?.research_slice_id ?? '',
-    );
-    const refinedAssessment = refinedPass.valueAssessment.topic_value_assessment as unknown as {
-      readiness_status: string;
-    };
-    const firstMaterialization = firstPass.questionSelection.materializations[0];
-    const refinedMaterialization = refinedPass.questionSelection.materializations[0];
-    assert.ok(firstMaterialization);
-    assert.ok(refinedMaterialization);
-    const sourceResearchSliceId = firstPass.sliceSelection.research_slice?.research_slice_id;
-    assert.ok(sourceResearchSliceId);
-    assert.equal(
-      refinedMaterialization.topic_question_contract.source_research_slice_id,
-      sourceResearchSliceId,
-    );
-    assert.equal(
-      refinedMaterialization.topic_question_contract.source_research_slice_version,
-      firstMaterialization.topic_question_contract.source_research_slice_version,
-    );
-    assert.deepEqual(
-      refinedMaterialization.topic_question_contract.accepted_risk_refs,
-      firstMaterialization.topic_question_contract.accepted_risk_refs,
-    );
-    const requiredEvidenceRoles = ['support', 'challenge', 'baseline', 'context'] as const;
-    const refinedEvidenceRoles = new Set(refinedMaterialization.evidence_refs.map((record) => record.evidence_role));
-    for (const requiredRole of requiredEvidenceRoles) {
-      assert.equal(refinedEvidenceRoles.has(requiredRole), true, `missing repaired evidence role ${requiredRole}`);
-    }
-    assert.equal(refinedMaterialization.boundary_refs.length > 0, true);
-    assert.equal(
-      refinedMaterialization.boundary_refs.every((record) => record.research_slice_boundary_id.length > 0),
-      true,
-    );
-    assert.equal(refinedMaterialization.assumption_refs.length > 0, true);
-    assert.equal(
-      refinedMaterialization.assumption_refs.some((record) => Boolean(record.source_assumption_id)),
-      true,
-    );
-    const refinedSnapshot = (refinedPass.valueAssessment as unknown as {
-      topic_value_input_snapshot: {
-        topic_question_contract_ref: TopicSelectionFunctionalRef;
-        research_slice_ref: TopicSelectionFunctionalRef;
-        evidence_refs: Array<{ evidence_role: string; evidence_ref: TopicSelectionFunctionalRef }>;
-        boundary_refs: unknown[];
-        assumption_refs: unknown[];
-      };
-    }).topic_value_input_snapshot;
-    assert.equal(refinedSnapshot.topic_question_contract_ref.ref_id, refinedMaterialization.topic_question_contract.topic_question_contract_id);
-    assert.equal(refinedSnapshot.research_slice_ref.ref_id, sourceResearchSliceId);
-    const refinedSnapshotEvidenceRoles = new Set(refinedSnapshot.evidence_refs.map((record) => record.evidence_role));
-    for (const requiredRole of requiredEvidenceRoles) {
-      assert.equal(
-        refinedSnapshotEvidenceRoles.has(requiredRole),
-        true,
-        `missing repaired value snapshot evidence role ${requiredRole}`,
-      );
-    }
-    assert.equal(refinedSnapshot.boundary_refs.length, refinedMaterialization.boundary_refs.length);
-    assert.equal(refinedSnapshot.assumption_refs.length, refinedMaterialization.assumption_refs.length);
-    assert.equal(refinedAssessment.readiness_status, 'ready');
-    assert.notEqual(
-      refinedPass.questionSelection.materializations[0]?.topic_question_contract.topic_question_contract_id,
-      firstContractId,
-    );
-    assert.equal(refinedPass.disposition?.decision, 'advance_to_package');
-    assert.equal(refinedPass.draftPackage?.topic_package.package_readiness_status, 'ready_for_promotion_review');
-
-    const staleLoopbackPackageRes = await app.inject({
-      method: 'POST',
-      url: '/topic-selection/v1b/topic-packages/drafts',
-      payload: {
-        value_disposition_decision_id: loopback.value_disposition_decision_id,
-        created_by: 'system',
-      },
-    });
-    assert.equal(staleLoopbackPackageRes.statusCode, 409);
-    const staleLoopbackPackage = staleLoopbackPackageRes.json() as { error: { code: string; message: string } };
-    assert.equal(staleLoopbackPackage.error.code, 'GATE_CONSTRAINT_FAILED');
-    assert.match(staleLoopbackPackage.error.message, /advance_to_package/);
-    assert.deepEqual(
-      fakeLlmGateway.calls.map((call) => call.schemaName),
-      [
-        'topic_selection_research_slice_option_set',
-        'topic_selection_topic_question_candidate_set',
-        'topic_selection_topic_value_assessment',
-        'topic_selection_topic_question_candidate_set',
-        'topic_selection_topic_value_assessment',
-      ],
-    );
-  } finally {
-    await app.close();
-  }
-});
-
-test('topic-selection v1b HTTP loopback rechecks evidence and advances after reassessment', async () => {
-  const fakeLlmGateway = new FakeTopicSelectionV1bLlmGateway({
-    valueAssessmentSequence: ['recheck_required', 'ready'],
-  });
-  const app = buildApp({ topicSelectionV1bLlmGateway: fakeLlmGateway });
-  try {
-    const firstPass = await runV1bHttpFlow(app, uniqueId('v1b-recheck-evidence'), { stopAtAssessment: true });
-    const firstAssessment = firstPass.valueAssessment.topic_value_assessment as unknown as {
-      topic_value_assessment_id: string;
-      readiness_status: string;
-    };
-    const contractId =
-      firstPass.questionSelection.materializations[0]?.topic_question_contract.topic_question_contract_id;
-    assert.ok(contractId);
-    assert.equal(firstAssessment.readiness_status, 'recheck_required');
-
-    const loopbackRes = await app.inject({
-      method: 'POST',
-      url: `/topic-selection/v1b/topic-value-assessments/${encodeURIComponent(firstAssessment.topic_value_assessment_id)}/disposition-decisions`,
-      payload: {
-        topic_value_assessment_id: 'ignored-by-path',
-        decision: 'recheck_evidence_or_search',
-        decided_by: 'human',
-        decision_rationale: 'Return to evidence/search recheck because freshness blocks package drafting.',
-        required_actions: ['refresh or recheck evidence before reassessing the question contract'],
-      },
-    });
-    assertStatus(loopbackRes, 201);
-    const loopback = loopbackRes.json() as {
-      value_disposition_decision_id: string;
-      decision: string;
-      loopback_target_ref: TopicSelectionFunctionalRef;
-      package_draft_input: unknown;
-    };
-    assert.equal(loopback.decision, 'recheck_evidence_or_search');
-    assert.equal(loopback.loopback_target_ref.ref_type, 'recheck_request');
-    assert.equal(loopback.loopback_target_ref.ref_id, 'pending');
-    assert.equal(loopback.package_draft_input, null);
-
-    const blockedPackageRes = await app.inject({
-      method: 'POST',
-      url: '/topic-selection/v1b/topic-packages/drafts',
-      payload: {
-        value_disposition_decision_id: loopback.value_disposition_decision_id,
-        created_by: 'system',
-      },
-    });
-    assert.equal(blockedPackageRes.statusCode, 409);
-    const blockedPackage = blockedPackageRes.json() as { error: { code: string; message: string } };
-    assert.equal(blockedPackage.error.code, 'GATE_CONSTRAINT_FAILED');
-    assert.match(blockedPackage.error.message, /advance_to_package/);
-
-    const reassessedPass = await runV1bValuePassFromQuestionContract(app, contractId);
-    const reassessed = reassessedPass.valueAssessment.topic_value_assessment as unknown as {
-      topic_value_assessment_id: string;
-      readiness_status: string;
-    };
-    assert.equal(reassessed.readiness_status, 'ready');
-    assert.notEqual(reassessed.topic_value_assessment_id, firstAssessment.topic_value_assessment_id);
-    assert.equal(reassessedPass.disposition?.decision, 'advance_to_package');
-    assert.equal(reassessedPass.draftPackage?.topic_package.package_readiness_status, 'ready_for_promotion_review');
-    assert.deepEqual(
-      fakeLlmGateway.calls.map((call) => call.schemaName),
-      [
-        'topic_selection_research_slice_option_set',
-        'topic_selection_topic_question_candidate_set',
-        'topic_selection_topic_value_assessment',
-        'topic_selection_topic_value_assessment',
-      ],
-    );
-  } finally {
-    await app.close();
-  }
-});
-
-test('topic-selection v1b routes reject malformed payloads and invalid enum decisions', async () => {
+test('topic-selection v1b legacy write routes are not registered', async () => {
   const app = buildApp({ topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway() });
   try {
-    const malformedRes = await app.inject({
+    for (const route of removedLegacyWriteRoutes) {
+      const response = await app.inject({
+        method: 'POST',
+        url: route,
+        payload: {},
+      });
+      assert.equal(response.statusCode, 404, route);
+      assert.equal(response.headers.deprecation, undefined);
+    }
+
+    const readOnlyProjection = await app.inject({
+      method: 'GET',
+      url: '/topic-selection/v1b/title-cards/title-card-route-noop/research-slice-option-sets',
+    });
+    assert.equal(readOnlyProjection.statusCode, 200);
+
+    const offlineReplay = await app.inject({
       method: 'POST',
-      url: '/topic-selection/v1b/research-slice-option-sets',
+      url: '/topic-selection/v1b/offline-evaluation/datasets/synthetic-baseline',
       payload: {},
     });
-    assert.equal(malformedRes.statusCode, 400);
-    const malformed = malformedRes.json() as { error: { code: string; message: string } };
-    assert.equal(malformed.error.code, 'INVALID_PAYLOAD');
-    assert.match(malformed.error.message, /readiness_assessment_id/);
+    assert.equal(offlineReplay.statusCode, 201);
+  } finally {
+    await app.close();
+  }
+});
 
-    const invalidEnumRes = await app.inject({
-      method: 'POST',
-      url: '/topic-selection/v1b/research-slice-option-sets/option-set-route/selection-decisions',
-      payload: {
-        decision: 'bogus',
-        selection_rationale: 'Should fail at route schema.',
-      },
-    });
-    assert.equal(invalidEnumRes.statusCode, 400);
-    const invalidEnum = invalidEnumRes.json() as { error: { code: string } };
-    assert.equal(invalidEnum.error.code, 'INVALID_PAYLOAD');
-
+test('topic-selection v1b offline replay routes reject invalid payloads', async () => {
+  const app = buildApp({ topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway() });
+  try {
     const invalidReplayCaseTypeRes = await app.inject({
       method: 'POST',
       url: '/topic-selection/v1b/offline-evaluation/cases',
@@ -1701,37 +1827,84 @@ test('topic-selection v1b routes reject malformed payloads and invalid enum deci
   }
 });
 
-test('topic-selection v1b draft package route maps non-advance disposition conflicts', async () => {
+test('topic-selection v1b workflow harness HTTP route invokes N1 without legacy write headers', async () => {
   const app = buildApp({ topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway() });
   try {
-    const flow = await runV1bHttpFlow(app, uniqueId('v1b-non-advance'), { stopAtAssessment: true });
-    const dispositionRes = await app.inject({
+    const suffix = uniqueId('v1b-harness-http');
+    const bundle = await createV1bInputBundle(app, suffix);
+    const request = v1bHarnessN1Request(bundle.v1bInputBundle, suffix);
+    const response = await app.inject({
       method: 'POST',
-      url: `/topic-selection/v1b/topic-value-assessments/${encodeURIComponent(flow.valueAssessment.topic_value_assessment.topic_value_assessment_id)}/disposition-decisions`,
-      payload: {
-        topic_value_assessment_id: 'ignored-by-path',
-        decision: 'park',
-        decided_by: 'human',
-        decision_rationale: 'Park until the question is narrowed.',
-        required_actions: ['narrow question'],
-      },
+      url: `/topic-selection/v1b/workflow-harness/nodes/${encodeURIComponent(request.node_id)}/invocations`,
+      payload: request,
     });
-    assertStatus(dispositionRes, 201);
-    const disposition = dispositionRes.json() as { value_disposition_decision_id: string; decision: string };
-    assert.equal(disposition.decision, 'park');
+    assertStatus(response, 201);
+    assert.equal(response.headers.deprecation, undefined);
 
-    const packageRes = await app.inject({
+    const result = response.json() as {
+      gate_status: string;
+      route_decision: string;
+      authority_ref: TopicSelectionFunctionalRef | null;
+      handoff_ref: TopicSelectionFunctionalRef | null;
+      hashes: { authority_hash: string | null };
+    };
+    assert.equal(result.gate_status, 'admitted', JSON.stringify(result));
+    assert.equal(result.route_decision, 'invoke_next');
+    assert.equal(result.authority_ref?.ref_type, 'v1b_intake_snapshot');
+    assert.equal(result.handoff_ref?.ref_type, 'artifact_ref');
+
+    const n2Request = v1bHarnessN2Request(
+      bundle.v1bInputBundle,
+      result,
+      suffix,
+      acceptedConstraintProfilePayload(),
+    );
+    const n2Response = await app.inject({
       method: 'POST',
-      url: '/topic-selection/v1b/topic-packages/drafts',
-      payload: {
-        value_disposition_decision_id: disposition.value_disposition_decision_id,
-        created_by: 'system',
-      },
+      url: `/topic-selection/v1b/workflow-harness/nodes/${encodeURIComponent(n2Request.node_id)}/invocations`,
+      payload: n2Request,
     });
-    assert.equal(packageRes.statusCode, 409);
-    const body = packageRes.json() as { error: { code: string; message: string } };
-    assert.equal(body.error.code, 'GATE_CONSTRAINT_FAILED');
-    assert.match(body.error.message, /advance_to_package/);
+    assertStatus(n2Response, 201);
+    assert.equal(n2Response.headers.deprecation, undefined);
+    const n2Result = n2Response.json() as {
+      gate_status: string;
+      route_decision: string;
+      authority_ref: TopicSelectionFunctionalRef | null;
+    };
+    assert.equal(n2Result.gate_status, 'admitted', JSON.stringify(n2Result));
+    assert.equal(n2Result.route_decision, 'invoke_next');
+    assert.equal(n2Result.authority_ref?.ref_type, 'research_constraint_profile');
+
+    const mismatch = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1b/workflow-harness/nodes/topic-selection.v1b.assess-intake-readiness.v1/invocations',
+      payload: request,
+    });
+    assert.equal(mismatch.statusCode, 400);
+    const mismatchPayload = mismatch.json() as { error: { code: string; message: string } };
+    assert.equal(mismatchPayload.error.code, 'INVALID_PAYLOAD');
+    assert.match(mismatchPayload.error.message, /node_id must match/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('topic-selection v1b workflow harness HTTP route drives N1-N11 without legacy writes', async () => {
+  const app = buildApp({ topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway() });
+  try {
+    const { bundle, n11 } = await runV1bHarnessHttpN1ToN11(app, uniqueId('v1b-harness-http-full'));
+    assert.equal(n11.gate_status, 'admitted_with_warnings', JSON.stringify(n11));
+    assert.equal(n11.route_decision, 'stop_v1b_complete');
+    assert.equal(n11.authority_ref?.ref_type, 'v1b_to_v1c_input_bundle');
+    assert.equal(n11.authority_ref?.title_card_id, bundle.title_card_id);
+    assert.match(n11.hashes.authority_hash ?? '', /^[a-f0-9]{64}$/);
+
+    const legacyWrite = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1b/research-slice-option-sets',
+      payload: {},
+    });
+    assert.equal(legacyWrite.statusCode, 404);
   } finally {
     await app.close();
   }
@@ -1817,7 +1990,7 @@ test('topic-selection v1b offline replay HTTP routes calculate metrics and expos
   }
 });
 
-test('T-054 Prisma HTTP smoke requires DATABASE_URL and drives v1b routes against Prisma repositories', async () => {
+test('T-054 Prisma HTTP smoke requires DATABASE_URL and drives v1b harness HTTP routes against Prisma repositories', async () => {
   await assertPrismaHttpSmokeDatabaseReady();
   const previousEnv = {
     TITLE_CARD_REPOSITORY: process.env.TITLE_CARD_REPOSITORY,
@@ -1834,8 +2007,10 @@ test('T-054 Prisma HTTP smoke requires DATABASE_URL and drives v1b routes agains
 
   const app = buildApp({ topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway() });
   try {
-    const result = await runV1bHttpFlow(app, uniqueId('v1b-prisma'));
-    assert.equal(result.draftPackage?.topic_package.package_readiness_status, 'ready_for_promotion_review');
+    const result = await runV1bHarnessHttpN1ToN11(app, uniqueId('v1b-prisma-harness'));
+    assert.equal(result.n11.gate_status, 'admitted_with_warnings', JSON.stringify(result.n11));
+    assert.equal(result.n11.route_decision, 'stop_v1b_complete');
+    assert.equal(result.n11.authority_ref?.ref_type, 'v1b_to_v1c_input_bundle');
   } finally {
     await app.close();
     for (const [key, value] of Object.entries(previousEnv)) {

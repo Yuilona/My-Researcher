@@ -445,6 +445,41 @@ test('LLM gateway retries rate limits and records canonical telemetry', async ()
   assert.equal(response.telemetry.rate_limit_count, 1);
 });
 
+test('LLM gateway honors provider retry budgets above three attempts', async () => {
+  let callCount = 0;
+  const gateway = new BackendLlmGateway({
+    settingsService: createSettingsService(),
+    fetchImpl: (async () => {
+      callCount += 1;
+      if (callCount <= 4) {
+        return new Response(JSON.stringify({ error: { message: 'transient rate limit' } }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/json', 'Retry-After': '0.001' },
+        });
+      }
+      return new Response(JSON.stringify({ output_text: JSON.stringify({ ok: true }) }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch,
+  });
+
+  const response = await gateway.createStructuredOutput<{ ok: boolean }>({
+    executionContext: { feature: 'test', operation: 'extended-retry' },
+    model: { providerId: 'openai', modelId: 'gpt-test' },
+    prompt: { promptTemplateId: 'extended-retry-prompt', version: 'v1' },
+    messages: [{ role: 'user', content: 'return ok' }],
+    schemaName: 'ok_schema',
+    schema: { type: 'object', properties: { ok: { type: 'boolean' } } },
+    policy: { maxRetries: 4, timeoutMs: 1_000 },
+  });
+
+  assert.equal(response.parsed.ok, true);
+  assert.equal(response.telemetry.request_count, 5);
+  assert.equal(response.telemetry.retry_count, 4);
+  assert.equal(response.telemetry.rate_limit_count, 4);
+});
+
 test('LLM gateway retries empty 404 provider responses as transient failures', async () => {
   let callCount = 0;
   const gateway = new BackendLlmGateway({

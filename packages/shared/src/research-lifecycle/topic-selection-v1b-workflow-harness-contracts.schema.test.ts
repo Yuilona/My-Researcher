@@ -14,6 +14,7 @@ import {
   topicSelectionV1bN4HarnessFrozenInputPayloadSchema,
   topicSelectionV1bN5HarnessFrozenInputPayloadSchema,
   topicSelectionV1bN6HarnessFrozenInputPayloadSchema,
+  topicSelectionV1bN6LoopbackTriageSupportPayloadSchema,
   topicSelectionV1bN7HarnessFrozenInputPayloadSchema,
   topicSelectionV1bN8HarnessFrozenInputPayloadSchema,
   topicSelectionV1bN9HarnessFrozenInputPayloadSchema,
@@ -35,6 +36,7 @@ import {
   type TopicSelectionV1bN4HarnessFrozenInputPayload,
   type TopicSelectionV1bN5HarnessFrozenInputPayload,
   type TopicSelectionV1bN6HarnessFrozenInputPayload,
+  type TopicSelectionV1bN6LoopbackTriageSupportPayload,
   type TopicSelectionV1bN7HarnessFrozenInputPayload,
   type TopicSelectionV1bN8HarnessFrozenInputPayload,
   type TopicSelectionV1bN9HarnessFrozenInputPayload,
@@ -469,6 +471,22 @@ function canonicalCandidateGroupingSupportPayload(
   };
 }
 
+function canonicalN6LoopbackTriageSupportPayload(
+  overrides: Partial<TopicSelectionV1bN6LoopbackTriageSupportPayload> = {},
+): TopicSelectionV1bN6LoopbackTriageSupportPayload {
+  return {
+    loopback_target_code: 'n6_regenerate_candidates',
+    failure_scope: 'candidate_level',
+    dominant_reason_codes: ['not_answerable'],
+    affected_refs: [ref('research_slice', 'research_slice_001')],
+    regeneration_hints: ['Regenerate a more bounded, answerable TopicQuestion candidate.'],
+    debate_escalation: null,
+    upstream_rollback: null,
+    rationale: 'The current candidate draft produced no deterministic-gate-admissible topic question.',
+    ...overrides,
+  };
+}
+
 function canonicalDebateAdmissionSupportPayload(
   overrides: Partial<TopicSelectionV1bN8DebateAdmissionReviewSupportPayload> = {},
 ): TopicSelectionV1bN8DebateAdmissionReviewSupportPayload {
@@ -791,6 +809,9 @@ function payloadForHandoff(kind: TopicSelectionV1bWorkflowHarnessHandoffKind): T
         topic_value_assessment_hash: HASH_A,
         topic_question_contract_ref: ref('topic_question_contract', 'question_contract_001'),
         topic_question_contract_hash: HASH_B,
+        value_reasoning_memo_ref: ref('value_reasoning_memo', 'value_memo_001'),
+        value_reasoning_memo_hash: HASH_C,
+        recommended_disposition: 'advance_to_package',
       };
     case 'N9ToN10Handoff':
       return {
@@ -806,6 +827,8 @@ function payloadForHandoff(kind: TopicSelectionV1bWorkflowHarnessHandoffKind): T
         draft_topic_package_hash: HASH_A,
         value_disposition_ref: ref('value_disposition_decision', 'value_disposition_001'),
         value_disposition_hash: HASH_B,
+        v1c_input_bundle_ref: ref('v1b_to_v1c_input_bundle', 'bundle_001'),
+        v1c_input_bundle_hash: HASH_C,
       };
     case 'V1cInputBundle':
       return {
@@ -888,7 +911,37 @@ test('topic-selection v1b N1-N11 frozen payload schemas accept canonical fixture
   );
 });
 
-test('topic-selection v1b N7 support payload schemas accept canonical fixtures', async () => {
+test('topic-selection v1b N6/N7 support payload schemas accept canonical fixtures', async () => {
+  assert.equal(
+    await validatesBody(topicSelectionV1bN6LoopbackTriageSupportPayloadSchema, canonicalN6LoopbackTriageSupportPayload()),
+    true,
+  );
+  assert.equal(
+    await validatesBody(topicSelectionV1bN6LoopbackTriageSupportPayloadSchema, canonicalN6LoopbackTriageSupportPayload({
+      loopback_target_code: 'n6_debate_escalation',
+      debate_escalation: {
+        debate_level: 'mixed_cost_control',
+        recommended_profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_question_candidates_single_agent,
+        sticky: true,
+        rationale: 'Escalate the next N6 generation pass through a debate-shaped prompt pack.',
+      },
+      upstream_rollback: null,
+    })),
+    true,
+  );
+  assert.equal(
+    await validatesBody(topicSelectionV1bN6LoopbackTriageSupportPayloadSchema, canonicalN6LoopbackTriageSupportPayload({
+      loopback_target_code: 'n6_loopback_to_n5_select_different_slice',
+      failure_scope: 'slice_level',
+      debate_escalation: null,
+      upstream_rollback: {
+        target_node_id: 'topic-selection.v1b.select-research-slice.v1',
+        repair_action: 'select_different_slice',
+        rationale: 'The selected ResearchSlice does not support a viable TopicQuestion.',
+      },
+    })),
+    true,
+  );
   assert.equal(
     await validatesBody(topicSelectionV1bCandidateGroupingSupportPayloadSchema, canonicalCandidateGroupingSupportPayload()),
     true,
@@ -997,6 +1050,55 @@ test('topic-selection v1b N7 payload and support schemas reject drift and side e
     await validatesBody(topicSelectionV1bCandidateGroupingSupportPayloadSchema, {
       ...canonicalCandidateGroupingSupportPayload(),
       topic_question_contract_ref: ref('topic_question_contract', 'contract_001'),
+    }),
+    false,
+  );
+  assert.equal(
+    await validatesBody(topicSelectionV1bN6LoopbackTriageSupportPayloadSchema, {
+      ...canonicalN6LoopbackTriageSupportPayload({
+        loopback_target_code: 'n6_debate_escalation',
+        debate_escalation: null,
+      }),
+    }),
+    false,
+  );
+  assert.equal(
+    await validatesBody(topicSelectionV1bN6LoopbackTriageSupportPayloadSchema, {
+      ...canonicalN6LoopbackTriageSupportPayload({
+        loopback_target_code: 'n6_debate_escalation',
+        failure_scope: 'upstream_context_level',
+        debate_escalation: {
+          debate_level: 'mixed_cost_control',
+          recommended_profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_question_candidates_single_agent,
+          sticky: true,
+          rationale: 'Escalate the next N6 generation pass through a debate-shaped prompt pack.',
+        },
+        upstream_rollback: null,
+      }),
+    }),
+    false,
+  );
+  assert.equal(
+    await validatesBody(topicSelectionV1bN6LoopbackTriageSupportPayloadSchema, {
+      ...canonicalN6LoopbackTriageSupportPayload({
+        loopback_target_code: 'n6_loopback_to_n5_select_different_slice',
+        upstream_rollback: null,
+      }),
+    }),
+    false,
+  );
+  assert.equal(
+    await validatesBody(topicSelectionV1bN6LoopbackTriageSupportPayloadSchema, {
+      ...canonicalN6LoopbackTriageSupportPayload({
+        loopback_target_code: 'n6_loopback_to_n5_select_different_slice',
+        failure_scope: 'candidate_level',
+        debate_escalation: null,
+        upstream_rollback: {
+          target_node_id: 'topic-selection.v1b.select-research-slice.v1',
+          repair_action: 'select_different_slice',
+          rationale: 'The selected ResearchSlice does not support a viable TopicQuestion.',
+        },
+      }),
     }),
     false,
   );
@@ -1147,11 +1249,28 @@ test('topic-selection v1b node policy registry validates full N1-N11 policy meta
   const n7Policy = TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_NODE_POLICIES
     .find((policy) => policy.node_id === 'topic-selection.v1b.materialize-topic-question-contract.v1');
   assert.deepEqual(n7Policy?.allowed_input_contracts, ['N6ToN7Handoff@v1', 'N8ToN7Feedback@v1']);
+  const n6Policy = TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_NODE_POLICIES
+    .find((policy) => policy.node_id === 'topic-selection.v1b.generate-topic-question-candidates.v1');
+  assert.deepEqual(n6Policy?.loopback_target_codes, [
+    'n6_regenerate_candidates',
+    'n6_debate_escalation',
+    'n6_loopback_to_n5_select_different_slice',
+  ]);
+  assert.deepEqual(
+    n6Policy?.route_edges
+      .filter((edge) => edge.route_decision === 'loopback')
+      .map((edge) => [edge.route_id, edge.next_node_id]),
+    [
+      ['RB_N6_REGENERATE', 'topic-selection.v1b.generate-topic-question-candidates.v1'],
+      ['RB_N6_DEBATE_ESCALATION', 'topic-selection.v1b.generate-topic-question-candidates.v1'],
+      ['RB_N6_N5_SELECT_DIFFERENT_SLICE', 'topic-selection.v1b.select-research-slice.v1'],
+    ],
+  );
 });
 
 test('topic-selection v1b handoff schemas accept canonical handoffs for every policy edge', async () => {
   for (const kind of TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_HANDOFF_KINDS) {
-    assert.equal(await validatesBody(topicSelectionV1bWorkflowHarnessHandoffSchema, canonicalHandoff(kind)), true);
+    assert.equal(await validatesBody(topicSelectionV1bWorkflowHarnessHandoffSchema, canonicalHandoff(kind)), true, kind);
   }
 });
 

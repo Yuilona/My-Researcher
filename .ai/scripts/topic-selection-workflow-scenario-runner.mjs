@@ -36,6 +36,7 @@ const EXISTING_NEGATIVE_RUN_ID = process.env.TOPIC_SELECTION_REAL_E2E_EXISTING_N
 
 const QUALITY_DIR = path.join(REPO_ROOT, '.ai/.tmp/topic-selection-real-e2e-quality', QUALITY_RUN_ID);
 const E2E_DIR = path.join(REPO_ROOT, '.ai/.tmp/topic-selection-real-e2e');
+const V1B_HARNESS_DIR = path.join(REPO_ROOT, '.ai/.tmp/topic-selection-v1b-harness-e2e');
 
 function parseScenarioArg(args) {
   for (let index = 0; index < args.length; index += 1) {
@@ -258,6 +259,66 @@ async function loadExistingE2e(runId, label) {
   };
 }
 
+async function runV1bProviderNegativeLoopbacks(runId, label) {
+  const logPath = path.join(QUALITY_DIR, `${label}.log`);
+  await fs.writeFile(logPath, '');
+  const childEnv = {
+    ...process.env,
+    TOPIC_SELECTION_V1B_HARNESS_RUN_ID: runId,
+    TOPIC_SELECTION_V1B_HARNESS_SCENARIO: 'provider_negative_loopbacks',
+    TOPIC_SELECTION_V1B_HARNESS_SEMANTIC_MODE: 'provider_llm',
+    TOPIC_SELECTION_V1B_HARNESS_PROVIDER_ID: process.env.TOPIC_SELECTION_REAL_PROVIDER_ID ?? 'openai',
+    TOPIC_SELECTION_V1B_HARNESS_LLM_MAX_RETRIES: process.env.TOPIC_SELECTION_REAL_LLM_MAX_RETRIES ?? '3',
+  };
+  const child = spawn(process.execPath, [
+    '--loader',
+    './apps/backend/node_modules/ts-node/esm.mjs',
+    '.ai/scripts/topic-selection-v1b-harness-e2e.mjs',
+  ], {
+    cwd: REPO_ROOT,
+    env: childEnv,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  child.stdout.on('data', (chunk) => {
+    void appendLog(logPath, chunk);
+  });
+  child.stderr.on('data', (chunk) => {
+    void appendLog(logPath, chunk);
+  });
+
+  const exitCode = await new Promise((resolve) => {
+    child.on('close', resolve);
+  });
+  const summaryPath = path.join(V1B_HARNESS_DIR, runId, 'result.json');
+  const summary = await readJson(summaryPath).catch(async (error) => ({
+    status: 'missing_summary',
+    run_id: runId,
+    error: { message: error instanceof Error ? error.message : String(error) },
+  }));
+  return {
+    exit_code: exitCode,
+    log_path: path.relative(REPO_ROOT, logPath),
+    summary_path: path.relative(REPO_ROOT, summaryPath),
+    summary,
+  };
+}
+
+async function loadExistingV1bProviderNegativeLoopbacks(runId, label) {
+  const summaryPath = path.join(V1B_HARNESS_DIR, runId, 'result.json');
+  const summary = await readJson(summaryPath).catch(async (error) => ({
+    status: 'missing_summary',
+    run_id: runId,
+    error: { message: error instanceof Error ? error.message : String(error) },
+  }));
+  return {
+    exit_code: summary.status === 'passed' ? 0 : 1,
+    log_path: path.relative(REPO_ROOT, path.join(QUALITY_DIR, `${label}.log`)),
+    summary_path: path.relative(REPO_ROOT, summaryPath),
+    summary,
+  };
+}
+
 async function loadSelectedDetails(runId) {
   const filePath = path.join(E2E_DIR, runId, '01-selected-literature.json');
   const payload = await readJson(filePath).catch(() => null);
@@ -454,24 +515,43 @@ function auditNegativeRun(run) {
   if (run.exit_code !== 0) {
     failures.push(`negative run exited with ${run.exit_code}`);
   }
-  if (summary.status !== 'passed_v1b_non_advance') {
-    failures.push(`negative run status=${summary.status}, expected passed_v1b_non_advance`);
+  if (summary.status !== 'passed') {
+    failures.push(`negative harness status=${summary.status}, expected passed`);
   }
-  if (summary.v1b?.advancedToPackage !== false) {
-    failures.push('negative run advanced to package');
+  if (summary.scenario !== 'provider_negative_loopbacks') {
+    failures.push(`negative harness scenario=${summary.scenario}, expected provider_negative_loopbacks`);
   }
-  if (summary.v1b?.valueDisposition === 'advance_to_package') {
-    failures.push('negative run disposition advanced to package');
+  const cases = summary.runs?.[0]?.cases ?? [];
+  const caseIds = new Set(cases.map((item) => item.case_id));
+  for (const requiredCase of [
+    'n6_regenerate_candidates',
+    'n6_debate_escalation',
+    'n6_loopback_to_n5_select_different_slice',
+    'n8_blocking_gate_to_n7_readmission',
+    'n7_trial_switch_and_exhaustion_to_n6_loopback',
+  ]) {
+    if (!caseIds.has(requiredCase)) {
+      failures.push(`negative harness missing case ${requiredCase}`);
+    }
   }
-  if (summary.v1c !== null || summary.paper_project_intake !== null) {
-    failures.push('negative run created downstream v1c or PaperProject intake artifacts');
+  for (const item of cases.filter((entry) => entry.case_id?.startsWith('n6_'))) {
+    const node = item.nodes?.n6;
+    if (node?.authority_ref !== null || node?.handoff_ref !== null) {
+      failures.push(`${item.case_id} wrote authority or handoff`);
+    }
+    if (node?.route_decision !== 'loopback') {
+      failures.push(`${item.case_id} route_decision=${node?.route_decision}, expected loopback`);
+    }
+    if (item.loopback_trace?.loopback_target_code !== item.expected_loopback_target_code) {
+      failures.push(`${item.case_id} loopback target mismatch`);
+    }
   }
   return {
     run_id: summary.run_id,
     status: summary.status,
-    readiness_status: summary.v1b?.topicValueReadinessStatus ?? null,
-    value_disposition: summary.v1b?.valueDisposition ?? null,
-    advanced_to_package: summary.v1b?.advancedToPackage ?? null,
+    scenario: summary.scenario ?? null,
+    provider_id: summary.provider_id ?? null,
+    covered_cases: cases.map((item) => item.case_id),
     failures,
   };
 }
@@ -545,13 +625,11 @@ async function runCanaryScenario() {
 
 async function runV1bNonAdvanceNegativeScenario() {
   await fs.mkdir(QUALITY_DIR, { recursive: true });
-  const runId = process.env.TOPIC_SELECTION_REAL_RUN_ID ?? `${QUALITY_RUN_ID}-v1b-negative`;
-  console.log(`[run] ${SCENARIO_IDS.v1bNonAdvanceNegative}: ${runId}`);
-  const run = await runRealE2e(runId, {
-    TOPIC_SELECTION_REAL_FLOW_MOCK_LLM: '1',
-    TOPIC_SELECTION_REAL_QUALITY_NEGATIVE_MODE: '1',
-    TOPIC_SELECTION_REAL_ALLOW_NON_ADVANCE_V1B: '1',
-  }, 'v1b-negative', SCENARIO_IDS.v1bNonAdvanceNegative);
+  const runId = EXISTING_NEGATIVE_RUN_ID ?? process.env.TOPIC_SELECTION_REAL_RUN_ID ?? `${QUALITY_RUN_ID}-v1b-negative`;
+  console.log(`[${EXISTING_NEGATIVE_RUN_ID ? 'load' : 'run'}] ${SCENARIO_IDS.v1bNonAdvanceNegative}: ${runId}`);
+  const run = EXISTING_NEGATIVE_RUN_ID
+    ? await loadExistingV1bProviderNegativeLoopbacks(runId, 'v1b-negative')
+    : await runV1bProviderNegativeLoopbacks(runId, 'v1b-negative');
   const negativeAudit = auditNegativeRun(run);
   const scenarioSummary = {
     status: negativeAudit.failures.length === 0 ? 'passed' : 'failed',
@@ -612,14 +690,10 @@ async function runScaleQualityScenario() {
     const runId = EXISTING_NEGATIVE_RUN_ID ?? `${QUALITY_RUN_ID}-v1b-negative`;
     if (EXISTING_NEGATIVE_RUN_ID) {
       console.log(`[load] ${SCENARIO_IDS.v1bNonAdvanceNegative}: ${runId}`);
-      negativeRun = await loadExistingE2e(runId, 'v1b-negative');
+      negativeRun = await loadExistingV1bProviderNegativeLoopbacks(runId, 'v1b-negative');
     } else {
       console.log(`[run] ${SCENARIO_IDS.v1bNonAdvanceNegative}: ${runId}`);
-      negativeRun = await runRealE2e(runId, {
-        TOPIC_SELECTION_REAL_FLOW_MOCK_LLM: '1',
-        TOPIC_SELECTION_REAL_QUALITY_NEGATIVE_MODE: '1',
-        TOPIC_SELECTION_REAL_ALLOW_NON_ADVANCE_V1B: '1',
-      }, 'v1b-negative', SCENARIO_IDS.v1bNonAdvanceNegative);
+      negativeRun = await runV1bProviderNegativeLoopbacks(runId, 'v1b-negative');
     }
     negativeAudit = auditNegativeRun(negativeRun);
   }
@@ -652,7 +726,7 @@ async function runScaleQualityScenario() {
       'carried_literature_evidence_ids_present',
       'downstream_feedback_recheck_counts',
       'selected_literature_role_semantics',
-      'v1b_non_advance_negative_stop',
+      'v1b_provider_negative_loopbacks_no_authority_leakage',
     ],
     node_authority_created_by:
       'child WorkflowScenario runs; this runner only aggregates scenario-level assertions and artifacts',

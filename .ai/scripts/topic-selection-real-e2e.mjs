@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1018,8 +1019,17 @@ function evidenceUnitRefsByRole(evidenceMap, role, titleCardId) {
     .map((unit) => ref('evidence_unit', unit.evidence_unit_id, titleCardId, unit.evidence_map_version ?? null));
 }
 
-function allEvidenceUnitRefs(evidenceMap, titleCardId) {
-  return ROLE_ORDER.flatMap((role) => evidenceUnitRefsByRole(evidenceMap, role, titleCardId));
+function evidenceRefTableEntries(evidenceMap, titleCardId) {
+  return evidenceMap.evidence_units.map((unit) => ({
+    evidence_ref: ref(
+      'evidence_unit',
+      unit.evidence_unit_id,
+      titleCardId,
+      unit.evidence_map_version ?? null,
+    ),
+    role: unit.evidence_role,
+    evidence_role: unit.evidence_role,
+  }));
 }
 
 function buildRealFlowRankedCandidateDraftBatch(input) {
@@ -1154,10 +1164,7 @@ function buildArbiterPayload(input) {
       candidate_entries: [],
     },
     evidence_ref_table: [
-      ...allEvidenceUnitRefs(input.evidenceMap, input.titleCardId).map((evidenceRef) => ({
-        evidence_ref: evidenceRef,
-        role: evidenceRef.ref_id.includes('challenge') ? 'challenge' : 'evidence',
-      })),
+      ...evidenceRefTableEntries(input.evidenceMap, input.titleCardId),
       { evidence_ref: input.evidenceStrengthRef, role: 'strength' },
       { evidence_ref: input.conflictRef, role: 'challenge' },
     ],
@@ -1467,223 +1474,111 @@ async function runV1a(app, workflowHarness, selectedResources, resourceSample) {
   };
 }
 
-async function runV1b(app, v1a) {
-  const intakeSnapshot = await requestJson(app, 'POST', '/topic-selection/v1b/intake-snapshots', 201, {
-    v1b_input_bundle_id: v1a.v1bInputBundleId,
-    created_by: 'system',
+async function runNodeScript(input) {
+  const stdoutChunks = [];
+  const stderrChunks = [];
+  const child = spawn(process.execPath, [
+    '--env-file=.env.local',
+    '--loader',
+    './apps/backend/node_modules/ts-node/esm.mjs',
+    input.script,
+  ], {
+    cwd: REPO_ROOT,
+    env: input.env,
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  const constraintProfile = await requestJson(app, 'POST', '/topic-selection/v1b/research-constraint-profiles', 201, {
-    v1b_intake_snapshot_id: intakeSnapshot.v1b_intake_snapshot_id,
-    target_community: 'AI systems and applied LLM evaluation researchers',
-    target_venue_class: 'systems_or_applied_ml',
-    intended_contribution_style: 'evaluation framework and decision protocol',
-    method_constraints: [
-      'offline benchmark synthesis from imported literature',
-      'evidence-linked qualitative decision analysis',
-      'no new model training in this rehearsal',
-    ],
-    resource_constraints: [
-      'single workstation',
-      'local literature resource pool only',
-      'limited to key-content and available fulltext assets',
-    ],
-    available_assets: [
-      'ai-rag-finetuning-2022-2026 literature scope',
-      'key content digests',
-      'raw fulltext local assets where available',
-      'topic-selection decision-chain contracts',
-    ],
-    feasibility_budget: { person_weeks: 2 },
-    non_goals: [
-      'production deployment',
-      'claiming universal RAG superiority',
-      'claiming universal fine-tuning superiority',
-      'running new large-scale model training',
-    ],
-    claim_ceiling:
-      'Claims must stay at evidence-backed topic feasibility and decision-boundary framing for RAG versus fine-tuning; do not assert production superiority.',
-    created_by: 'human',
+  child.stdout.on('data', (chunk) => stdoutChunks.push(Buffer.from(chunk)));
+  child.stderr.on('data', (chunk) => stderrChunks.push(Buffer.from(chunk)));
+
+  const exitCode = await new Promise((resolve) => {
+    child.on('close', resolve);
   });
+  const stdout = Buffer.concat(stdoutChunks).toString('utf8');
+  const stderr = Buffer.concat(stderrChunks).toString('utf8');
+  await fs.writeFile(input.stdoutPath, stdout, 'utf8');
+  await fs.writeFile(input.stderrPath, stderr, 'utf8');
+  return { exitCode, stdout, stderr };
+}
 
-  const readiness = await requestJson(app, 'POST', '/topic-selection/v1b/intake-readiness-assessments', 201, {
-    v1b_intake_snapshot_id: intakeSnapshot.v1b_intake_snapshot_id,
-    research_constraint_profile_id: constraintProfile.research_constraint_profile_id,
-    assessed_by: 'system',
-  });
-  assert.equal(readiness.recommendation, 'ready_for_slice');
-
-  const sliceOptionSet = await requestJson(app, 'POST', '/topic-selection/v1b/research-slice-option-sets', 201, {
-    readiness_assessment_id: readiness.v1b_intake_readiness_assessment_id,
-    triggered_by: 'system',
-    model: realFlowModel('topic-selection-research-slice-planning'),
-  }, 'v1b LLM research-slice option generation');
-  const selectedOption = sliceOptionSet.options?.find((option) => option.status !== 'blocked');
-  assert.ok(selectedOption, `slice planning returned no selectable option: ${JSON.stringify(sliceOptionSet.options)}`);
-
-  const sliceSelection = await requestJson(
-    app,
-    'POST',
-    `/topic-selection/v1b/research-slice-option-sets/${encodeURIComponent(sliceOptionSet.option_set.research_slice_option_set_id)}/selection-decisions`,
-    201,
-    {
-      decision: 'select',
-      selected_option_id: selectedOption.research_slice_option_id,
-      decided_by: 'human',
-      selection_rationale: 'Selected as the most bounded real-flow option for downstream decision-chain rehearsal.',
-      confidence: 0.82,
-    },
-  );
-  assert.ok(sliceSelection.research_slice?.research_slice_id);
-
-  const questionCandidateSet = await requestJson(app, 'POST', '/topic-selection/v1b/topic-question-candidate-sets', 201, {
-    research_slice_id: sliceSelection.research_slice.research_slice_id,
-    triggered_by: 'system',
-    model: realFlowModel('topic-selection-topic-question-formation'),
-  }, 'v1b LLM topic-question candidate generation');
-  const questionCandidates = questionCandidateSet.candidates ?? [];
-  const answerableCandidate = questionCandidates.find((candidate) =>
-    candidate.status !== 'blocked'
-    && candidate.answerability_verdict === 'answerable',
-  );
-  const riskCandidate = questionCandidates.find((candidate) =>
-    candidate.status !== 'blocked'
-    && candidate.answerability_verdict === 'answerable_with_risk',
-  );
-  const questionCandidate = answerableCandidate ?? riskCandidate;
-  assert.ok(questionCandidate?.topic_question_candidate_id, 'topic-question planning returned no candidate');
-
-  const acceptedRiskRefs = [];
-  if (questionCandidate.answerability_verdict === 'answerable_with_risk') {
-    const candidateRef = makeTopicQuestionCandidateRef(questionCandidate, v1a.titleCardId);
-    const researchSliceRef = makeResearchSliceRef(sliceSelection.research_slice, v1a.titleCardId);
-    const acceptedRisk = await requestJson(app, 'POST', '/topic-selection/v1a/accepted-risks', 201, {
-      title_card_id: v1a.titleCardId,
-      risk_type: 'topic_question_answerability_with_residual_evidence_risk',
-      source_type: 'pass_with_risk',
-      source_ref: candidateRef,
-      target_ref: candidateRef,
-      scope_refs: [researchSliceRef, candidateRef],
-      affected_object_refs: [researchSliceRef, candidateRef],
-      severity: 'warning',
-      rationale:
-        'Real-flow reviewer accepts residual answerability risk for this candidate so the chain can validate accepted-risk propagation without weakening downstream gates.',
-      accepted_by: { actor_type: 'human', actor_id: 'real-flow-reviewer' },
-      expiry_condition: 'Expires before downstream outline lock or any claim-strength escalation.',
-      recheck_condition:
-        'Recheck if additional fulltext resources, benchmark evidence, or challenge evidence materially changes answerability.',
-    }, 'create accepted risk for answerable-with-risk topic question');
-    acceptedRiskRefs.push(ref('accepted_risk', acceptedRisk.accepted_risk_id, v1a.titleCardId));
+async function readJsonIfExists(filePath) {
+  try {
+    return JSON.parse(await fs.readFile(filePath, 'utf8'));
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
   }
+}
 
-  const questionSelection = await requestJson(
-    app,
-    'POST',
-    `/topic-selection/v1b/topic-question-candidate-sets/${encodeURIComponent(questionCandidateSet.candidate_set.topic_question_candidate_set_id)}/selection-decisions`,
-    201,
-    {
-      decision: 'admit',
-      admitted_candidate_ids: [questionCandidate.topic_question_candidate_id],
-      decided_by: 'human',
-      decision_rationale: acceptedRiskRefs.length > 0
-        ? 'Question is bounded enough for real-flow validation with explicit accepted-risk carry-forward.'
-        : 'Question is bounded enough for real-flow validation.',
-      accepted_risk_refs: acceptedRiskRefs,
-      confidence: 0.82,
-    },
-  );
-  const contractId = questionSelection.materializations?.[0]?.topic_question_contract?.topic_question_contract_id;
-  assert.ok(contractId, 'question selection did not materialize a TopicQuestionContract');
+function authorityRefId(run, nodeKey) {
+  return run?.nodes?.[nodeKey]?.authority_ref?.ref_id ?? null;
+}
 
-  const valueAssessment = await requestJson(app, 'POST', '/topic-selection/v1b/topic-value-assessments', 201, {
-    topic_question_contract_id: contractId,
-    triggered_by: 'system',
-    model: realFlowModel('topic-selection-topic-value-assessment'),
-  }, 'v1b LLM topic-value assessment');
-
-  const dispositionPlan = valueDispositionForAssessment(valueAssessment);
-  if (dispositionPlan.decision !== 'advance_to_package' && !ALLOW_NON_ADVANCE_V1B) {
+async function runV1b(_app, v1a) {
+  if (QUALITY_NEGATIVE_MODE || ALLOW_NON_ADVANCE_V1B) {
     throw new Error(
-      `v1b value assessment is not advance-ready: readiness=${valueAssessment.topic_value_assessment.readiness_status}, `
-      + `recommended=${valueAssessment.value_reasoning_memo?.recommendation ?? 'unknown'}. `
-      + 'Set TOPIC_SELECTION_REAL_ALLOW_NON_ADVANCE_V1B=1 for v1b quality acceptance runs.',
+      'topic-selection:real-e2e quality-negative direct v1b mode was retired with legacy v1b write routes; '
+      + 'use pnpm topic-selection:v1b-provider-negative-loopbacks for current negative loopback/readmission coverage.',
     );
   }
-  const disposition = await requestJson(
-    app,
-    'POST',
-    `/topic-selection/v1b/topic-value-assessments/${encodeURIComponent(valueAssessment.topic_value_assessment.topic_value_assessment_id)}/disposition-decisions`,
-    201,
-    {
-      decision: dispositionPlan.decision,
-      decided_by: 'human',
-      decision_rationale: dispositionPlan.decision === 'advance_to_package'
-        ? 'Advance to package to validate v1c bridge over the real-flow result.'
-        : 'Respect value-assessment quality gates and stop before package creation in v1b quality acceptance.',
-      required_actions: dispositionPlan.decision === 'advance_to_package'
-        ? []
-        : ['Revise the v1b topic question or evidence basis before package creation.'],
-      loopback_target_ref: dispositionPlan.loopback_target_ref,
-      accepted_risk_refs: valueAssessment.topic_value_assessment.accepted_risk_refs ?? [],
-    },
+
+  const v1bRunId = `${RUN_ID}-v1b-harness`;
+  const summaryPath = path.join(
+    REPO_ROOT,
+    '.ai/.tmp/topic-selection-v1b-harness-e2e',
+    v1bRunId,
+    'result.json',
   );
-
-  if (dispositionPlan.decision !== 'advance_to_package') {
-    return {
-      v1bIntakeSnapshotId: intakeSnapshot.v1b_intake_snapshot_id,
-      researchConstraintProfileId: constraintProfile.research_constraint_profile_id,
-      readinessAssessmentId: readiness.v1b_intake_readiness_assessment_id,
-      researchSliceOptionSetId: sliceOptionSet.option_set.research_slice_option_set_id,
-      selectedResearchSliceOptionId: selectedOption.research_slice_option_id,
-      researchSliceId: sliceSelection.research_slice.research_slice_id,
-      topicQuestionCandidateSetId: questionCandidateSet.candidate_set.topic_question_candidate_set_id,
-      topicQuestionCandidateId: questionCandidate.topic_question_candidate_id,
-      topicQuestionAnswerabilityVerdict: questionCandidate.answerability_verdict,
-      acceptedRiskRefs,
-      topicQuestionContractId: contractId,
-      topicValueAssessmentId: valueAssessment.topic_value_assessment.topic_value_assessment_id,
-      topicValueReadinessStatus: valueAssessment.topic_value_assessment.readiness_status,
-      valueRecommendation: valueAssessment.value_reasoning_memo?.recommendation ?? null,
-      valueDispositionDecisionId: disposition.value_disposition_decision_id,
-      valueDisposition: disposition.decision,
-      advancedToPackage: false,
-      topicPackageId: null,
-      v1cInputBundleId: null,
-    };
-  }
-
-  const draftPackage = await requestJson(app, 'POST', '/topic-selection/v1b/topic-packages/drafts', 201, {
-    value_disposition_decision_id: disposition.value_disposition_decision_id,
-    created_by: 'system',
+  const env = {
+    ...process.env,
+    TOPIC_SELECTION_V1B_HARNESS_RUN_ID: v1bRunId,
+    TOPIC_SELECTION_V1B_HARNESS_INPUT_BUNDLE_ID: v1a.v1bInputBundleId,
+    TOPIC_SELECTION_V1B_HARNESS_SEMANTIC_MODE: USE_MOCK_LLM ? 'fixture' : 'provider_llm',
+    TOPIC_SELECTION_V1B_HARNESS_PROVIDER_ID: PROVIDER_ID,
+    TOPIC_SELECTION_V1B_HARNESS_LLM_TIMEOUT_MS: String(LLM_TIMEOUT_MS),
+    TOPIC_SELECTION_V1B_HARNESS_LLM_MAX_RETRIES: String(LLM_MAX_RETRIES),
+  };
+  const child = await runNodeScript({
+    script: '.ai/scripts/topic-selection-v1b-harness-e2e.mjs',
+    env,
+    stdoutPath: path.join(ARTIFACT_DIR, '03-v1b-harness.stdout.log'),
+    stderrPath: path.join(ARTIFACT_DIR, '03-v1b-harness.stderr.log'),
   });
-
-  const v1cBundle = await requestJson(
-    app,
-    'POST',
-    `/topic-selection/v1b/topic-packages/${encodeURIComponent(draftPackage.topic_package.topic_package_id)}/v1c-input-bundles`,
-    200,
-  );
-
+  const summary = await readJsonIfExists(summaryPath);
+  if (child.exitCode !== 0 || summary?.status !== 'passed') {
+    throw new Error(
+      `v1b WorkflowHarness runner failed for ${v1bRunId}; `
+      + `exit=${child.exitCode}; summary_status=${summary?.status ?? 'missing'}; stderr=${child.stderr.slice(-1000)}`,
+    );
+  }
+  const run = summary.runs?.[0];
+  if (!run?.nodes?.n11?.authority_ref?.ref_id) {
+    throw new Error(`v1b WorkflowHarness runner ${v1bRunId} did not publish a v1c input bundle.`);
+  }
   return {
-    v1bIntakeSnapshotId: intakeSnapshot.v1b_intake_snapshot_id,
-    researchConstraintProfileId: constraintProfile.research_constraint_profile_id,
-    readinessAssessmentId: readiness.v1b_intake_readiness_assessment_id,
-    researchSliceOptionSetId: sliceOptionSet.option_set.research_slice_option_set_id,
-    selectedResearchSliceOptionId: selectedOption.research_slice_option_id,
-    researchSliceId: sliceSelection.research_slice.research_slice_id,
-    topicQuestionCandidateSetId: questionCandidateSet.candidate_set.topic_question_candidate_set_id,
-    topicQuestionCandidateId: questionCandidate.topic_question_candidate_id,
-    topicQuestionAnswerabilityVerdict: questionCandidate.answerability_verdict,
-    acceptedRiskRefs,
-    topicQuestionContractId: contractId,
-    topicValueAssessmentId: valueAssessment.topic_value_assessment.topic_value_assessment_id,
-    topicValueReadinessStatus: valueAssessment.topic_value_assessment.readiness_status,
-    valueRecommendation: valueAssessment.value_reasoning_memo?.recommendation ?? null,
-    valueDispositionDecisionId: disposition.value_disposition_decision_id,
-    valueDisposition: disposition.decision,
+    v1bHarnessRunId: v1bRunId,
+    v1bHarnessSummaryPath: path.relative(REPO_ROOT, summaryPath),
+    v1bHarnessSemanticMode: summary.semantic_mode,
+    v1bHarnessProviderId: summary.provider_id,
+    v1bIntakeSnapshotId: authorityRefId(run, 'n1'),
+    researchConstraintProfileId: authorityRefId(run, 'n2'),
+    readinessAssessmentId: authorityRefId(run, 'n3'),
+    researchSliceOptionSetId: authorityRefId(run, 'n4'),
+    selectedResearchSliceOptionId: run.selected_option_id ?? null,
+    researchSliceSelectionDecisionId: authorityRefId(run, 'n5'),
+    topicQuestionCandidateSetId: authorityRefId(run, 'n6'),
+    topicQuestionContractId: authorityRefId(run, 'n7'),
+    topicValueAssessmentId: authorityRefId(run, 'n8'),
+    valueDispositionDecisionId: authorityRefId(run, 'n9'),
+    valueDisposition: 'advance_to_package',
     advancedToPackage: true,
-    topicPackageId: draftPackage.topic_package.topic_package_id,
-    v1cInputBundleId: v1cBundle.v1b_to_v1c_input_bundle_id,
+    topicPackageId: authorityRefId(run, 'n10'),
+    v1cInputBundleId: authorityRefId(run, 'n11'),
+    candidateCount: run.candidate_count ?? null,
+    valueAssessmentCount: run.value_assessment_count ?? null,
+    nodes: run.nodes,
   };
 }
 
