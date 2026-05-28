@@ -2,8 +2,8 @@ version: 1
 task_id: T-110
 project: main
 slug: experiment-foundation-research-workbench
-status: in-progress
-updated: "2026-05-28"
+status: archived
+updated: "2026-05-29"
 keywords:
   - experiment-foundation
   - parent-task:T-043

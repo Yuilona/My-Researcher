@@ -1,8 +1,8 @@
 # T-110 Experiment Foundation Research Workbench
 
 ## Status
-- State: in-progress
-- Active phase: S0–S5 all landed and verified. T-110 closure review pending.
+- State: done
+- Active phase: S0–S5 all landed, verified, post-review fixes applied. T-110 closure 2026-05-29.
 - Task ID: `T-110`
 - Mapping: `M-001 > F-001 > R-012 > T-110`
 - Parent task: `T-043 experiment-foundation-v1`
@@ -37,19 +37,19 @@
 - Does not own persistence, adapter execution, readiness rules, validation rules, or paper-claim semantics.
 
 ## Acceptance Criteria
-- [ ] An Overview page exists and is the default landing for `实验基座`; it shows in-flight job count, blocked readiness count, pending promotion candidate count, and a recent evidence list. "blocked readiness count" reads the canonical readiness report list (via a thin read-only GET endpoint, not via `record.status` proxy). All status classifications (blocked / pending / fresh) are imported from shared contract constants — no renderer-side status string sets.
-- [ ] DatasetAsset has a typed create/edit form with field-level validation, structured `dataset_locations`, `mirrors`, and `*_ref` fields driven by a reusable `RefPicker` component.
-- [ ] `RefPicker` is consumed by at least one non-Dataset surface (S2 or S3) to prove reusability.
-- [ ] Experiment flow tab renders a timeline for a selected `RunRecipe` covering materialization → task spec → external job → result → evidence with state badges and ref summaries.
-- [ ] Submit / sync / cancel / collect actions are surfaced as typed buttons on the relevant timeline node, with structured field forms replacing the textarea JSON editors for these requests.
-- [ ] Baseline, Benchmark, and Protocol have typed list+detail views; their typed edit forms may reuse the Dataset pattern or remain JSON-fallback per phase plan, but no surface regresses below the current T-078 capability.
-- [ ] `EvaluationFact` and `MetricObservation` are rendered as a sortable table plus inline SVG sparkline without adding chart-library dependencies.
-- [ ] A `论文绑定` view exists, lists `paper_experiment_sidecar` records, and supports navigating into the experiment flow for a selected sidecar.
-- [ ] The T-078 5-tab IA is retired phase by phase as the new IA absorbs each surface; no permanent generic JSON CRUD navigation tab remains by S2 cutover.
-- [ ] An "Advanced JSON" panel inside the selected record's detail view remains available for unfrozen/advanced fields (write path unchanged).
-- [ ] No renderer-side `*_STATUSES` sets exist for cross-kind status classification; every classification used by Overview or any later panel imports from `@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts`.
-- [ ] UI uses `data-ui` and token-governed styling; no entries are added under `apps/desktop/src/renderer/styles/**` or `app-layout.css`.
-- [ ] UI governance gate, desktop typecheck/build, desktop smoke, project governance lint, and `git diff --check` all pass for the landed state.
+- [x] An Overview page exists and is the default landing for `实验基座`; it shows in-flight job count, blocked readiness count, pending promotion candidate count, and a recent evidence list. "blocked readiness count" reads the canonical readiness report list (via a thin read-only GET endpoint, not via `record.status` proxy). All status classifications (blocked / pending / fresh) are imported from shared contract constants — no renderer-side status string sets.
+- [x] DatasetAsset has a typed create/edit form with field-level validation, structured `dataset_locations`, `mirrors`, and `*_ref` fields driven by a reusable `RefPicker` component.
+- [x] `RefPicker` is consumed by at least one non-Dataset surface (S2 or S3) to prove reusability. (Reused across Baseline/Benchmark/Protocol typed views in S3 and across all JobActionForms in S2.)
+- [x] Experiment flow tab renders a timeline for a selected `RunRecipe` covering materialization → task spec → external job → result → evidence with state badges and ref summaries.
+- [x] Submit / sync / cancel / collect actions are surfaced as typed buttons on the relevant timeline node, with structured field forms replacing the textarea JSON editors for these requests.
+- [x] Baseline, Benchmark, and Protocol have typed list+detail views; their typed edit forms may reuse the Dataset pattern or remain JSON-fallback per phase plan, but no surface regresses below the current T-078 capability. (All three landed as typed forms on the shared `useTypedAssetDraft` scaffold in S3.)
+- [x] `EvaluationFact` and `MetricObservation` are rendered as a sortable table plus inline SVG sparkline without adding chart-library dependencies.
+- [x] A `论文绑定` view exists, lists `paper_experiment_sidecar` records, and supports navigating into the experiment flow for a selected sidecar.
+- [x] The T-078 5-tab IA is retired phase by phase as the new IA absorbs each surface; no permanent generic JSON CRUD navigation tab remains by S2 cutover.
+- [x] An "Advanced JSON" panel inside the selected record's detail view remains available for unfrozen/advanced fields (write path unchanged).
+- [x] No renderer-side `*_STATUSES` sets exist for cross-kind status classification; every classification used by Overview or any later panel imports from `@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts`.
+- [x] UI uses `data-ui` and token-governed styling; no entries are added under `apps/desktop/src/renderer/styles/**` or `app-layout.css`.
+- [x] UI governance gate, desktop typecheck/build, desktop smoke, project governance lint, and `git diff --check` all pass for the landed state.
 
 > Note: the UI-driven full-flow smoke is co-owned with T-106. The implementation is delivered as part of S5 in this task, but the acceptance checkbox lives on T-106's `00-overview.md`. T-110 closure does not block on T-106's acceptance flip; T-110 only requires that S5's smoke command is reproducible and documented.
 

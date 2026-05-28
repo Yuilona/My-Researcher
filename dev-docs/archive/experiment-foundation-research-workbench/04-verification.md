@@ -206,8 +206,8 @@ S2 known-debt list in `03-implementation-notes.md` is now empty; the section tit
 - [x] `grep "_STATUSES = " apps/desktop/src/renderer/modules/experiment-foundation/` returns only `new Set<string>(SHARED_CONSTANT)` wrappers; no literal string sets.
 
 ## Review Checklist (final)
-- [ ] All Acceptance Criteria in `00-overview.md` are checked.
-- [ ] No legacy CSS paths recreated.
-- [ ] Generic JSON fallback remains reachable for every record kind.
-- [ ] T-106 UI smoke checkbox can be ticked.
-- [ ] Project governance sync + lint both pass.
+- [x] All Acceptance Criteria in `00-overview.md` are checked.
+- [x] No legacy CSS paths recreated.
+- [x] Generic JSON fallback remains reachable for every record kind. (Per-record "Advanced JSON" disclosure inside typed detail views; no top-level CRUD tab. Verified via S2 cutover acceptance.)
+- [x] T-106 UI smoke checkbox can be ticked. (Flipped to `[x]` in T-106 `00-overview.md` by commit `fd674d0`.)
+- [x] Project governance sync + lint both pass.
