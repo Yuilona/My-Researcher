@@ -30,6 +30,12 @@
 - Fix: Section subheadings render as `<p data-ui="text" data-variant="label" data-tone="primary">`.
 - Prevention: When introducing new text hierarchy, look up the allowed `data-variant` set in `ui/contract/contract.json` before writing the component. Do not assume `h4`/`h5`/`h6` exist just because they exist in HTML semantics.
 
+### 2026-05-29 — Dynamic `data-variant={ctaVariant}` rejected (S2)
+- Symptom: UI gate failed in `JobActionForms.tsx:52` with `contract-dynamic`: "Attribute data-variant is dynamic but contains no analyzable string literals."
+- Root cause: the action shell component accepted `ctaVariant?: 'primary' | 'danger'` and threaded it straight into `<button data-variant={ctaVariant}>`. Even with a tight union type, the UI gate's static analyzer can't see through the variable.
+- Fix: render two explicit JSX branches — `data-variant="danger"` for the cancel CTA, `data-variant="primary"` for the rest.
+- Prevention: same rule as S0's `data-tone` dynamic regression — for any `data-ui` enum attribute, render a conditional with explicit literal strings instead of binding a variable. The S0 pitfall covered tone; this one extends it to variant.
+
 ### 2026-05-28 — `data-variant="menu"` and `data-size` on `list`; `data-tone="warning"` on `text` (S1)
 - Symptom: First S1 UI gate run failed with 3 errors in `RefPicker.tsx`: `<ul data-ui="list" data-variant="menu" data-size="sm">` produced both a `contract-enum` error on `variant` and a `contract-attr` error because the `list` role does not accept `data-size`; `<p data-ui="text" data-tone="warning">` produced a `contract-enum` error because the `text` role's `tone` enum is `{primary, secondary, muted, danger}` only.
 - Root cause: muscle memory from `select`/`button` roles which both expose `data-size`. The `list` role exposes `density` and `variant ∈ {plain, rows, cards}` only. The `text` role does not have a `warning` tone — only `danger` for hard errors and `muted`/`secondary` for soft hints.

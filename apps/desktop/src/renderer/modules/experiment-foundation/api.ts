@@ -39,7 +39,8 @@ export function listExperimentFoundationRecords(
   appendParam(params, 'family', filters.family.trim());
   appendParam(params, 'parent_record_id', filters.parentRecordId.trim());
   appendParam(params, 'owner_ref_id', filters.ownerRefId.trim());
-  appendParam(params, 'limit', 50);
+  appendParam(params, 'limit', filters.limit ?? 50);
+  appendParam(params, 'cursor', filters.cursor);
   return requestGovernance<ListExperimentFoundationRecordsResponse>({
     method: 'GET',
     path: withQuery('/experiment-foundation/records', params),

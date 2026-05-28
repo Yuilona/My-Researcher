@@ -3,10 +3,8 @@ import type { ExperimentFoundationPanelKey } from './types';
 export const experimentFoundationTabs: Array<{ key: ExperimentFoundationPanelKey; label: string }> = [
   { key: 'overview', label: '概览' },
   { key: 'assets', label: '资产库' },
-  { key: 'readiness', label: 'Readiness' },
+  { key: 'flow', label: '实验流' },
   { key: 'promotion', label: '候选晋升' },
-  { key: 'recipes', label: 'Recipe/Materialization' },
-  { key: 'execution', label: '执行/证据' },
 ];
 
 export type ExperimentFoundationAssetSubTabKey =

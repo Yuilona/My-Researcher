@@ -7,10 +7,8 @@ import type {
 export type ExperimentFoundationPanelKey =
   | 'overview'
   | 'assets'
-  | 'readiness'
-  | 'promotion'
-  | 'recipes'
-  | 'execution';
+  | 'flow'
+  | 'promotion';
 
 export type ExperimentFoundationOperationStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -20,6 +18,11 @@ export type RecordListFilters = {
   family: string;
   parentRecordId: string;
   ownerRefId: string;
+  // Optional pagination knobs. When omitted, the API client falls back to a
+  // sensible default. Cursor is the opaque string returned by the previous
+  // page's `next_cursor`.
+  limit?: number;
+  cursor?: string;
 };
 
 export type JobListFilters = {

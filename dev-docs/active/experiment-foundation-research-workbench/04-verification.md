@@ -90,6 +90,40 @@
 - REGRESSION (shared): `pnpm --filter @paper-engineering-assistant/shared test` reports 196 pass / 1 fail. The single failure (test 132 `research-lifecycle barrel re-exports the runtime value surface of split modules`) is pre-existing T-088 in-flight work and not caused by S1. My S0+ classification subset test (test 46) still passes.
 - REGRESSION (backend): `node apps/backend/scripts/run-node-tests.mjs ...` reports 869 pass / 0 fail / 2 skipped. No regression from S1.
 
+### 2026-05-29 — S2 known-debt cleanup (preselect / pagination / payload accessors)
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop typecheck`.
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop build`.
+- PASS: UI gate (Errors 0, Warnings 0).
+- PASS: `node .ai/tests/run.mjs --suite ui` (4/4).
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop smoke:e2e`.
+- PASS: project governance sync + lint.
+- PASS: `git diff --check`.
+
+S2 known-debt list in `03-implementation-notes.md` is now empty; the section title was renamed to "S2 known-debt — closed before commit".
+
+### 2026-05-29 — S2 Experiment flow + Job typed actions + IA cutover
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop typecheck`.
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop build`.
+- PASS: `python3 .ai/skills/features/ui/ui-governance-gate/scripts/ui_gate.py run --mode full` after one round-trip.
+  - First run: 1 error in `JobActionForms.tsx`: `data-variant={ctaVariant}` on the action shell's CTA button was flagged as `contract-dynamic` (UI gate requires static literal `data-variant` values).
+  - Remediation: render two explicit branches — `data-variant="danger"` for the cancel CTA, `data-variant="primary"` for the rest.
+  - Passing report: Errors 0, Warnings 0.
+- PASS: `node .ai/tests/run.mjs --suite ui` (4/4).
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop smoke:e2e` — `[desktop-smoke] PASS`.
+- PASS: `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`.
+- PASS: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` (same unrelated T-088 warning).
+- PASS: `git diff --check`.
+
+### S2 Acceptance check
+- [x] `Recipe/Materialization`, `执行/证据`, and single-target `Readiness` top-level tabs removed; `flow` tab added in their place. `experimentFoundationTabs` now exposes 4 tabs: 概览 / 资产库 / 实验流 / 候选晋升.
+- [x] `ExperimentFlowPanel` mounted under the `flow` tab. Anchored by a `run_recipe` selector; renders the 10-stage timeline (`recipe_draft` → `run_recipe` → `materialize_request` → `materialization_result` → `training_task_spec` → `external_training_job` → `experiment_result` → `result_validation_report` → `evidence_candidate` → `paper_experiment_sidecar`). Stages without matching records render `pending（暂无记录）` placeholders.
+- [x] `external_training_job` stage card exposes typed Submit / Sync / Cancel / Collect forms (no JSON textarea). Forms use shared `RefPicker` / `RefPickerList`; submit form preserves the contract's required-field invariants with renderer-side validation messages.
+- [x] Every stage card has a "Advanced JSON" disclosure for the latest record and a "查看 readiness" deep-link into the inspector (where applicable).
+- [x] Single-target Readiness panel replaced by module-level `ReadinessInspector` (data-ui="modal"). Opened via `goToReadiness(kind, id)` deep-link or per-stage button. Refresh / Check actions reuse `getLatestExperimentFoundationReadiness` and `checkExperimentFoundationReadiness` via the existing api client.
+- [x] Deep links from Overview: `goToReadiness` → opens inspector (no panel switch); `goToPromotion` → switches to `promotion` tab with candidate kind/id preset; `goToJob` → switches to `flow` tab and signals preselect via `pendingFlowJobId`.
+- [x] Main controller trimmed to Promotion's needs only: dropped readiness/recipes/execution/jobs state and 11 unused callables. Cleanup useEffect retained for Promotion's selection invariant.
+- [x] Renderer utils trimmed: dropped `defaultSubmitJobJson` / `defaultCancelJobJson` / `defaultCollectJobJson` / `defaultSourceRefsJson` / `evidenceRecordKinds` / `recipeRecordKinds` / `experimentFoundationTrainingAdapterKinds` / `experimentFoundationExternalJobStatuses` — no remaining callers.
+
 ### S1 Acceptance check
 - [x] `资产/合同` top-level tab removed; `资产库` parent tab + sub-tabs Dataset / Benchmark / Baseline / Protocol present.
 - [x] DatasetAsset has a typed create/edit form covering canonical fields (`dataset_asset_id`, `name`, `description`, `aliases`, `task_types`, `source_refs`, `default_version_id`, `catalog_status`, `schema_summary`). Unknown contract fields are surfaced read-only via an "高级 JSON（未 typed 字段）" disclosure so frozen payloads round-trip without loss.

@@ -2,7 +2,7 @@
 
 ## Status
 - State: in-progress
-- Active phase: S1 DatasetAsset typed form + reusable RefPicker
+- Active phase: S3 typed Baseline/Benchmark/Protocol + light visualization
 - Task ID: `T-110`
 - Mapping: `M-001 > F-001 > R-012 > T-110`
 - Parent task: `T-043 experiment-foundation-v1`
