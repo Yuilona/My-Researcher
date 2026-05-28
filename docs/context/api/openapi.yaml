@@ -3506,6 +3506,82 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /topic-selection/v1b/workflow-harness/nodes/{nodeId}/invocations:
+    post:
+      operationId: invokeTopicSelectionV1bWorkflowHarnessNode
+      summary: Invoke one canonical v1b workflow harness node.
+      tags: [topic-selection-v1b]
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/TopicSelectionV1bWorkflowHarnessNodeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1bWorkflowHarnessNodeInvocationRequest'
+      responses:
+        '201':
+          description: Node invocation accepted and persisted through the v1b harness.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1bWorkflowHarnessNodeInvocationResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /topic-selection/v1b/workflow-harness/artifacts:
+    post:
+      operationId: recordTopicSelectionV1bWorkflowHarnessArtifact
+      summary: Record an artifact reference for v1b harness inputs, support outputs, traces, and handoffs.
+      tags: [topic-selection-v1b]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicSelectionV1bWorkflowHarnessArtifactRequest'
+      responses:
+        '201':
+          description: Artifact reference recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1bWorkflowHarnessArtifactRef'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /topic-selection/v1b/workflow-harness/artifacts/{artifactRefId}:
+    get:
+      operationId: getTopicSelectionV1bWorkflowHarnessArtifact
+      summary: Read a v1b harness artifact reference.
+      tags: [topic-selection-v1b]
+      parameters:
+        - name: artifactRefId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Artifact reference.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicSelectionV1bWorkflowHarnessArtifactRef'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /topic-selection/v1b/title-cards/{titleCardId}/research-slice-option-sets:
     get:
       operationId: listTopicSelectionV1bResearchSliceOptionSetsByTitleCard
@@ -3626,277 +3702,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/TopicSelectionV1bListResponse'
 
-  /topic-selection/v1b/intake-snapshots:
-    post:
-      operationId: createTopicSelectionV1bIntakeSnapshot
-      summary: Create a v1b intake snapshot from a v1a-to-v1b input bundle.
-      tags: [topic-selection-v1b]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TopicSelectionV1bIntakeSnapshotRequest'
-      responses:
-        '201':
-          description: v1b intake snapshot created.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /topic-selection/v1b/research-constraint-profiles:
-    post:
-      operationId: createTopicSelectionV1bResearchConstraintProfile
-      summary: Create the ResearchConstraintProfile consumed by ResearchSlice planning.
-      tags: [topic-selection-v1b]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TopicSelectionV1bResearchConstraintProfileRequest'
-      responses:
-        '201':
-          description: ResearchConstraintProfile created.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /topic-selection/v1b/intake-readiness-assessments:
-    post:
-      operationId: assessTopicSelectionV1bIntakeReadiness
-      summary: Assess whether v1b intake/profile is ready for ResearchSlice planning.
-      tags: [topic-selection-v1b]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TopicSelectionV1bIntakeReadinessRequest'
-      responses:
-        '201':
-          description: v1b intake readiness assessment created.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /topic-selection/v1b/research-slice-option-sets:
-    post:
-      operationId: createTopicSelectionV1bResearchSliceOptionSet
-      summary: Plan ResearchSlice options from a ready v1b intake handoff.
-      tags: [topic-selection-v1b]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TopicSelectionV1bResearchSliceOptionSetRequest'
-      responses:
-        '201':
-          description: ResearchSlice option set created.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TopicSelectionV1bResearchSliceOptionSetResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /topic-selection/v1b/research-slice-option-sets/{optionSetId}/selection-decisions:
-    post:
-      operationId: selectTopicSelectionV1bResearchSlice
-      summary: Select a ResearchSlice option and materialize the selected ResearchSlice.
-      tags: [topic-selection-v1b]
-      parameters:
-        - name: optionSetId
-          in: path
-          required: true
-          schema:
-            type: string
-            minLength: 1
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TopicSelectionV1bResearchSliceSelectionRequest'
-      responses:
-        '201':
-          description: ResearchSlice selection decision created.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /topic-selection/v1b/topic-question-candidate-sets:
-    post:
-      operationId: createTopicSelectionV1bTopicQuestionCandidateSet
-      summary: Form TopicQuestion candidates from a selected ResearchSlice.
-      tags: [topic-selection-v1b]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TopicSelectionV1bTopicQuestionCandidateSetRequest'
-      responses:
-        '201':
-          description: TopicQuestion candidate set created.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TopicSelectionV1bTopicQuestionCandidateSetResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /topic-selection/v1b/topic-question-candidate-sets/{candidateSetId}/selection-decisions:
-    post:
-      operationId: selectTopicSelectionV1bTopicQuestion
-      summary: Select/admit TopicQuestion candidates and create a TopicQuestionContract.
-      tags: [topic-selection-v1b]
-      parameters:
-        - name: candidateSetId
-          in: path
-          required: true
-          schema:
-            type: string
-            minLength: 1
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TopicSelectionV1bTopicQuestionSelectionRequest'
-      responses:
-        '201':
-          description: TopicQuestion selection decision created.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /topic-selection/v1b/topic-value-assessments:
-    post:
-      operationId: createTopicSelectionV1bTopicValueAssessment
-      summary: Assess value for an active TopicQuestionContract.
-      tags: [topic-selection-v1b]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TopicSelectionV1bTopicValueAssessmentRequest'
-      responses:
-        '201':
-          description: TopicValueAssessment and ValueReasoningMemo created.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /topic-selection/v1b/topic-value-assessments/{topicValueAssessmentId}/disposition-decisions:
-    post:
-      operationId: decideTopicSelectionV1bTopicValueDisposition
-      summary: Record the value disposition decision for a TopicValueAssessment.
-      tags: [topic-selection-v1b]
-      parameters:
-        - name: topicValueAssessmentId
-          in: path
-          required: true
-          schema:
-            type: string
-            minLength: 1
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TopicSelectionV1bValueDispositionRequest'
-      responses:
-        '201':
-          description: ValueDispositionDecision created.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  /topic-selection/v1b/topic-packages/drafts:
-    post:
-      operationId: createTopicSelectionV1bTopicPackageDraft
-      summary: Create a trace-ready TopicPackage draft from an advance_to_package disposition.
-      tags: [topic-selection-v1b]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TopicSelectionV1bDraftPackageRequest'
-      responses:
-        '201':
-          description: TopicPackage draft and readiness artifacts created.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TopicSelectionV1bTopicPackageCreationResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
   /topic-selection/v1b/topic-packages/{topicPackageId}:
     get:
       operationId: getTopicSelectionV1bTopicPackageDraft
@@ -3918,30 +3723,6 @@ paths:
                 $ref: '#/components/schemas/TopicSelectionV1bRecord'
         '404':
           $ref: '#/components/responses/NotFound'
-
-  /topic-selection/v1b/topic-packages/{topicPackageId}/v1c-input-bundles:
-    post:
-      operationId: publishTopicSelectionV1bToV1cInputBundle
-      summary: Publish the v1c input bundle for a ready TopicPackage draft.
-      tags: [topic-selection-v1b]
-      parameters:
-        - name: topicPackageId
-          in: path
-          required: true
-          schema:
-            type: string
-            minLength: 1
-      responses:
-        '200':
-          description: v1c input bundle.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
 
   /topic-selection/v1b/offline-evaluation/datasets:
     post:
@@ -5198,49 +4979,272 @@ components:
           items:
             $ref: '#/components/schemas/TopicSelectionV1bRecord'
 
-    TopicSelectionV1bResearchSliceOptionSetResponse:
+    TopicSelectionV1bWorkflowHarnessNodeId:
+      type: string
+      enum:
+        - topic-selection.v1b.create-intake-snapshot.v1
+        - topic-selection.v1b.record-research-constraint-profile.v1
+        - topic-selection.v1b.assess-intake-readiness.v1
+        - topic-selection.v1b.generate-research-slice-options.v1
+        - topic-selection.v1b.select-research-slice.v1
+        - topic-selection.v1b.generate-topic-question-candidates.v1
+        - topic-selection.v1b.materialize-topic-question-contract.v1
+        - topic-selection.v1b.assess-topic-value.v1
+        - topic-selection.v1b.decide-value-disposition.v1
+        - topic-selection.v1b.create-draft-topic-package.v1
+        - topic-selection.v1b.publish-v1c-input-bundle.v1
+
+    TopicSelectionGateIssue:
       type: object
-      required: [plan_run, option_set, options]
+      required: [code, message, severity]
       additionalProperties: true
       properties:
-        plan_run:
-          $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        option_set:
-          $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        options:
+        code: { type: string, minLength: 1 }
+        message: { type: string, minLength: 1 }
+        severity:
+          type: string
+          enum: [info, warning, blocking]
+        refs:
           type: array
           items:
-            $ref: '#/components/schemas/TopicSelectionV1bRecord'
+            $ref: '#/components/schemas/TopicSelectionFunctionalRef'
 
-    TopicSelectionV1bTopicQuestionCandidateSetResponse:
+    TopicSelectionV1bWorkflowHarnessFrozenInput:
       type: object
-      required: [form_topic_question_run, question_frame, candidate_set, candidates]
-      additionalProperties: true
+      required: [input_contract, snapshot_kind, source_refs, payload]
+      additionalProperties: false
       properties:
-        form_topic_question_run:
-          $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        question_frame:
-          $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        candidate_set:
-          $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        candidates:
+        input_contract: { type: string, minLength: 1 }
+        snapshot_kind: { type: string, minLength: 1 }
+        source_refs:
           type: array
           items:
-            $ref: '#/components/schemas/TopicSelectionV1bRecord'
+            $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+        payload:
+          $ref: '#/components/schemas/JsonObject'
+        frozen_input_hash:
+          type: string
+          nullable: true
 
-    TopicSelectionV1bTopicPackageCreationResponse:
+    TopicSelectionV1bWorkflowHarnessNodeInvocationRequest:
       type: object
-      required: [topic_package, package_trace_boundary_check, package_readiness_assessment]
+      required: [schema_version, workflow_run_id, node_attempt_id, node_id, policy_version, frozen_input]
+      additionalProperties: false
+      properties:
+        schema_version:
+          type: string
+          const: TopicSelectionV1bWorkflowHarnessRunRequest@v1
+        workspace_id: { type: string, nullable: true }
+        title_card_id: { type: string, nullable: true }
+        workflow_run_id: { type: string, minLength: 1 }
+        node_attempt_id: { type: string, minLength: 1 }
+        node_id:
+          $ref: '#/components/schemas/TopicSelectionV1bWorkflowHarnessNodeId'
+        attempt_family_key: { type: string, nullable: true }
+        policy_version: { type: string, minLength: 1 }
+        frozen_input:
+          $ref: '#/components/schemas/TopicSelectionV1bWorkflowHarnessFrozenInput'
+        run_mode:
+          type: string
+          enum: [test, acceptance, product]
+          nullable: true
+        profile_id: { type: string, nullable: true }
+        execution_spec:
+          anyOf:
+            - $ref: '#/components/schemas/JsonObject'
+            - type: 'null'
+        semantic_artifacts:
+          anyOf:
+            - type: array
+              items:
+                $ref: '#/components/schemas/JsonObject'
+            - type: 'null'
+        actor:
+          anyOf:
+            - $ref: '#/components/schemas/TopicSelectionActorRef'
+            - type: 'null'
+        created_by:
+          type: string
+          enum: [human, llm, system, hybrid]
+
+    TopicSelectionV1bWorkflowHarnessReplayIdentity:
+      type: object
+      required: [workflow_run_id, node_attempt_id, attempt_family_key, node_replay_key]
+      additionalProperties: false
+      properties:
+        workflow_run_id: { type: string, minLength: 1 }
+        node_attempt_id: { type: string, minLength: 1 }
+        attempt_family_key: { type: string, minLength: 1 }
+        node_replay_key: { type: string, minLength: 1 }
+
+    TopicSelectionV1bWorkflowHarnessHashes:
+      type: object
+      required: [frozen_input_hash, execution_spec_hash, semantic_artifact_hash, runtime_admission_hash, gate_result_hash, authority_hash, handoff_hash, route_hash]
+      additionalProperties: false
+      properties:
+        frozen_input_hash: { type: string, minLength: 1 }
+        execution_spec_hash: { type: string, minLength: 1 }
+        semantic_artifact_hash: { type: string, nullable: true }
+        runtime_admission_hash: { type: string, nullable: true }
+        gate_result_hash: { type: string, minLength: 1 }
+        authority_hash: { type: string, nullable: true }
+        handoff_hash: { type: string, nullable: true }
+        route_hash: { type: string, minLength: 1 }
+
+    TopicSelectionV1bWorkflowHarnessReplayProvenance:
+      type: object
+      required: [replayed]
+      additionalProperties: false
+      properties:
+        replayed: { type: boolean }
+        source_workflow_run_id: { type: string, nullable: true }
+        source_node_attempt_id: { type: string, nullable: true }
+        source_trace_artifact_ref:
+          anyOf:
+            - $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+            - type: 'null'
+        node_replay_key: { type: string, nullable: true }
+
+    TopicSelectionV1bWorkflowHarnessNodeInvocationResult:
+      type: object
+      required:
+        - schema_version
+        - node_id
+        - workflow_run_id
+        - node_attempt_id
+        - gate_status
+        - failure_class
+        - route_decision
+        - replay_identity
+        - hashes
+        - blockers
+        - warnings
+        - authority_ref
+        - handoff_ref
+        - gate_result_ref
+        - transition_attempt_ref
+        - trace_snapshot_ref
+        - harness_trace_artifact_ref
+        - replay_provenance
+        - error_code
+        - error_message
+      additionalProperties: false
+      properties:
+        schema_version:
+          type: string
+          const: TopicSelectionV1bWorkflowHarnessRunResult@v1
+        node_id:
+          $ref: '#/components/schemas/TopicSelectionV1bWorkflowHarnessNodeId'
+        workflow_run_id: { type: string, minLength: 1 }
+        node_attempt_id: { type: string, minLength: 1 }
+        gate_status:
+          type: string
+          enum: [admitted, admitted_with_warnings, blocked, retryable_failure, requires_human_review, terminal_no_advance]
+        failure_class:
+          type: string
+          enum: [technical_failure, policy_block, semantic_non_pass, human_or_delegated_required, terminal_no_advance]
+          nullable: true
+        route_decision:
+          type: string
+          enum: [invoke_next, blocked, wait, loopback, retry, stop_v1b_complete]
+        replay_identity:
+          $ref: '#/components/schemas/TopicSelectionV1bWorkflowHarnessReplayIdentity'
+        hashes:
+          $ref: '#/components/schemas/TopicSelectionV1bWorkflowHarnessHashes'
+        blockers:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionGateIssue'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSelectionGateIssue'
+        authority_ref:
+          anyOf:
+            - $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+            - type: 'null'
+        handoff_ref:
+          anyOf:
+            - $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+            - type: 'null'
+        gate_result_ref:
+          anyOf:
+            - $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+            - type: 'null'
+        transition_attempt_ref:
+          anyOf:
+            - $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+            - type: 'null'
+        trace_snapshot_ref:
+          anyOf:
+            - $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+            - type: 'null'
+        harness_trace_artifact_ref:
+          anyOf:
+            - $ref: '#/components/schemas/TopicSelectionFunctionalRef'
+            - type: 'null'
+        replay_provenance:
+          anyOf:
+            - $ref: '#/components/schemas/TopicSelectionV1bWorkflowHarnessReplayProvenance'
+            - type: 'null'
+        error_code: { type: string, nullable: true }
+        error_message: { type: string, nullable: true }
+
+    TopicSelectionV1bWorkflowHarnessArtifactRequest:
+      type: object
+      required: [artifact_kind]
       additionalProperties: true
       properties:
-        topic_package:
-          $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        package_trace_boundary_check:
-          $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        package_readiness_assessment:
-          $ref: '#/components/schemas/TopicSelectionV1bRecord'
-        v1c_input_bundle:
-          $ref: '#/components/schemas/TopicSelectionV1bRecord'
+        workspace_id: { type: string, nullable: true }
+        title_card_id: { type: string, nullable: true }
+        artifact_kind:
+          type: string
+          enum: [input, prompt, structured_output, raw_output, diagnostic, trace, other]
+        storage_kind:
+          type: string
+          enum: [inline, file, uri]
+        uri: { type: string, nullable: true }
+        payload:
+          anyOf:
+            - $ref: '#/components/schemas/JsonObject'
+            - type: 'null'
+        checksum: { type: string, nullable: true }
+        byte_size: { type: number, nullable: true }
+        mime_type: { type: string, nullable: true }
+        workflow_run_id: { type: string, nullable: true }
+        input_snapshot_id: { type: string, nullable: true }
+        created_by:
+          type: string
+          enum: [human, llm, system, hybrid]
+
+    TopicSelectionV1bWorkflowHarnessArtifactRef:
+      type: object
+      required: [artifact_ref_id, artifact_kind, storage_kind, created_by, created_at]
+      additionalProperties: false
+      properties:
+        artifact_ref_id: { type: string, minLength: 1 }
+        workspace_id: { type: string, nullable: true }
+        title_card_id: { type: string, nullable: true }
+        artifact_kind:
+          type: string
+          enum: [input, prompt, structured_output, raw_output, diagnostic, trace, other]
+        storage_kind:
+          type: string
+          enum: [inline, file, uri]
+        uri: { type: string, nullable: true }
+        payload:
+          anyOf:
+            - $ref: '#/components/schemas/JsonObject'
+            - type: 'null'
+        checksum: { type: string, nullable: true }
+        byte_size: { type: number, nullable: true }
+        mime_type: { type: string, nullable: true }
+        workflow_run_id: { type: string, nullable: true }
+        input_snapshot_id: { type: string, nullable: true }
+        created_by:
+          type: string
+          enum: [human, llm, system, hybrid]
+        created_at: { type: string, minLength: 1 }
 
     TopicSelectionV1bSyntheticOfflineDatasetResponse:
       type: object
@@ -5588,170 +5592,6 @@ components:
         case_id: { type: string, minLength: 1 }
         observed_output:
           $ref: '#/components/schemas/JsonObject'
-
-    TopicSelectionV1bIntakeSnapshotRequest:
-      type: object
-      required: [v1b_input_bundle_id]
-      additionalProperties: true
-      properties:
-        workspace_id: { type: string, nullable: true }
-        v1b_input_bundle_id: { type: string, minLength: 1 }
-        snapshot_version: { type: string }
-        created_by: { type: string, enum: [human, llm, system, hybrid] }
-        policy_version_id: { type: string, nullable: true }
-
-    TopicSelectionV1bResearchConstraintProfileRequest:
-      type: object
-      required: [v1b_intake_snapshot_id, target_community, claim_ceiling]
-      additionalProperties: true
-      properties:
-        workspace_id: { type: string, nullable: true }
-        v1b_intake_snapshot_id: { type: string, minLength: 1 }
-        previous_profile_id: { type: string, nullable: true }
-        profile_version: { type: string }
-        target_community: { type: string, minLength: 1 }
-        target_venue_class: { type: string, nullable: true }
-        intended_contribution_style: { type: string, nullable: true }
-        method_constraints:
-          type: array
-          items: { type: string }
-        resource_constraints:
-          type: array
-          items: { type: string }
-        available_assets:
-          type: array
-          items: { type: string }
-        feasibility_budget:
-          $ref: '#/components/schemas/JsonObject'
-        non_goals:
-          type: array
-          items: { type: string }
-        claim_ceiling: { type: string, minLength: 1 }
-        human_constraint_notes: { type: string, nullable: true }
-        constraint_payload:
-          $ref: '#/components/schemas/JsonObject'
-        created_by: { type: string, enum: [human, llm, system, hybrid] }
-        policy_version_id: { type: string, nullable: true }
-
-    TopicSelectionV1bIntakeReadinessRequest:
-      type: object
-      required: [v1b_intake_snapshot_id, research_constraint_profile_id]
-      additionalProperties: true
-      properties:
-        workspace_id: { type: string, nullable: true }
-        v1b_intake_snapshot_id: { type: string, minLength: 1 }
-        research_constraint_profile_id: { type: string, minLength: 1 }
-        policy_version_id: { type: string, nullable: true }
-        assessed_by: { type: string, enum: [human, llm, system, hybrid] }
-
-    TopicSelectionV1bResearchSliceOptionSetRequest:
-      type: object
-      required: [readiness_assessment_id]
-      additionalProperties: true
-      properties:
-        workspace_id: { type: string, nullable: true }
-        readiness_assessment_id: { type: string, minLength: 1 }
-        triggered_by: { type: string, enum: [human, llm, system, hybrid] }
-        workflow_profile_version: { type: string, nullable: true }
-        prompt_template_version: { type: string, nullable: true }
-        policy_version_id: { type: string, nullable: true }
-        model:
-          $ref: '#/components/schemas/JsonObject'
-
-    TopicSelectionV1bResearchSliceSelectionRequest:
-      type: object
-      required: [decision, selection_rationale]
-      additionalProperties: true
-      properties:
-        option_set_id: { type: string, minLength: 1 }
-        decision:
-          type: string
-          enum: [select, request_more_options, park, reject]
-        selected_option_id: { type: string, nullable: true }
-        decided_by: { type: string, enum: [human, llm, system, hybrid] }
-        selection_policy_version: { type: string }
-        selection_rationale: { type: string, minLength: 1 }
-        decision_basis:
-          $ref: '#/components/schemas/JsonObject'
-        required_actions:
-          type: array
-          items: { type: string }
-        confidence: { type: number, nullable: true }
-        policy_version_id: { type: string, nullable: true }
-
-    TopicSelectionV1bTopicQuestionCandidateSetRequest:
-      type: object
-      required: [research_slice_id]
-      additionalProperties: true
-      properties:
-        research_slice_id: { type: string, minLength: 1 }
-        workspace_id: { type: string, nullable: true }
-        triggered_by: { type: string, enum: [human, llm, system, hybrid] }
-        workflow_profile_version: { type: string, nullable: true }
-        prompt_template_version: { type: string, nullable: true }
-        policy_version_id: { type: string, nullable: true }
-        model:
-          $ref: '#/components/schemas/JsonObject'
-
-    TopicSelectionV1bTopicQuestionSelectionRequest:
-      type: object
-      required: [decision, decision_rationale]
-      additionalProperties: true
-      properties:
-        candidate_set_id: { type: string, minLength: 1 }
-        decision:
-          type: string
-          enum: [admit, admit_multiple, merge_then_admit, park, reject_all, no_admissible_candidate]
-        admitted_candidate_ids:
-          type: array
-          items: { type: string }
-        decided_by: { type: string, enum: [human, llm, system, hybrid] }
-        selection_policy_version: { type: string }
-        decision_rationale: { type: string, minLength: 1 }
-        confidence: { type: number, nullable: true }
-        policy_version_id: { type: string, nullable: true }
-
-    TopicSelectionV1bTopicValueAssessmentRequest:
-      type: object
-      required: [topic_question_contract_id]
-      additionalProperties: true
-      properties:
-        topic_question_contract_id: { type: string, minLength: 1 }
-        workspace_id: { type: string, nullable: true }
-        triggered_by: { type: string, enum: [human, llm, system, hybrid] }
-        workflow_profile_version: { type: string, nullable: true }
-        prompt_template_version: { type: string, nullable: true }
-        policy_version_id: { type: string, nullable: true }
-        model:
-          $ref: '#/components/schemas/JsonObject'
-
-    TopicSelectionV1bValueDispositionRequest:
-      type: object
-      required: [decision, decision_rationale]
-      additionalProperties: true
-      properties:
-        topic_value_assessment_id: { type: string, minLength: 1 }
-        decision:
-          type: string
-          enum: [advance_to_package, refine_question, refine_slice, recheck_evidence_or_search, park, drop]
-        decided_by: { type: string, enum: [human, llm, system, hybrid] }
-        decision_rationale: { type: string, minLength: 1 }
-        required_actions:
-          type: array
-          items: { type: string }
-        loopback_target_ref:
-          $ref: '#/components/schemas/TopicSelectionFunctionalRef'
-        policy_version_id: { type: string, nullable: true }
-
-    TopicSelectionV1bDraftPackageRequest:
-      type: object
-      required: [value_disposition_decision_id]
-      additionalProperties: true
-      properties:
-        value_disposition_decision_id: { type: string, minLength: 1 }
-        workspace_id: { type: string, nullable: true }
-        created_by: { type: string, enum: [human, llm, system, hybrid] }
-        policy_version_id: { type: string, nullable: true }
 
     TopicSelectionV1bOfflineDatasetRequest:
       type: object

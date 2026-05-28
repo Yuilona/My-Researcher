@@ -1548,3 +1548,27 @@ Verification is running incrementally as each implementation slice lands.
 
 - Command: `git diff --check`
 - Result: passed.
+
+## 2026-05-28 Follow-Up Cleanup Verification
+
+- Command: `node .ai/scripts/ctl-openapi-quality.mjs verify --source docs/context/api/openapi.yaml --strict`
+- Result: passed.
+- Note: OpenAPI now exposes only v1b harness write/invocation routes plus read-only projections and offline replay routes. Retired direct v1b write routes and their request/response schemas are absent from the API SSOT.
+
+- Command: `node .ai/scripts/ctl-api-index.mjs generate --touch`
+- Result: passed. Regenerated API index from the updated OpenAPI SSOT; total endpoint count is now 186 and `topic-selection-v1b` has 18 indexed endpoints.
+
+- Command: `node .ai/scripts/ctl-api-index.mjs verify --strict`
+- Result: passed.
+
+- Command: `node .ai/skills/features/context-awareness/scripts/ctl-context.mjs verify --strict`
+- Result: passed.
+
+- Command: `pnpm --filter @paper-engineering-assistant/desktop build`
+- Result: passed in a temporary clean HEAD worktree outside the repo. The generated renderer dist was copied back so tracked desktop dist reflects T-107 source state without unrelated dirty experiment-foundation source edits.
+
+- Command: `rg -n "topic-selection/v1b/(intake-snapshots|research-constraint-profiles|intake-readiness-assessments|topic-packages/drafts)|selection-decisions|disposition-decisions|v1c-input-bundles|TopicSelectionV1b(IntakeSnapshotRequest|ResearchConstraintProfileRequest|IntakeReadinessRequest|ResearchSliceOptionSetRequest|ResearchSliceSelectionRequest|TopicQuestionCandidateSetRequest|TopicQuestionSelectionRequest|TopicValueAssessmentRequest|ValueDispositionRequest|DraftPackageRequest|TopicPackageCreationResponse|ResearchSliceOptionSetResponse|TopicQuestionCandidateSetResponse)" docs/context/api`
+- Result: passed with no matches.
+
+- Command: `rg -n "selection-decisions|disposition-decisions|v1c-input-bundles|intake-snapshots|research-constraint-profiles|intake-readiness-assessments|topic-packages/drafts|提交 SliceSelectionDecision|提交 QuestionSelectionDecision|提交 ValueDispositionDecision" apps/desktop/dist/renderer apps/desktop/src/renderer/modules/topic-workbench`
+- Result: passed with no matches.

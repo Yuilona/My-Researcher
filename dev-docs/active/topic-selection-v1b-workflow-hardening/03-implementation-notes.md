@@ -705,3 +705,10 @@ Implementation is complete for T-107. v1b has shared harness contracts, policy/r
 - Removed desktop v1b direct write helpers and inline submit forms. The v1b workbench now displays read-only authority written by the WorkflowHarness path and uses copy that points reviewers to N5/N7/N9/N10 harness-owned progression.
 - Tightened N6 loopback triage integrity: the service now requires support, normalized, and provenance artifact refs to exist, and verifies support/normalized artifact checksums against semantic artifact hashes before applying triage routing. A mismatched support artifact blocks with `N6_LOOPBACK_TRIAGE_ARTIFACT_HASH_MISMATCH` before routing or authority writes.
 - Cleaned stale local v1b tmp run directories that were unreferenced failed/no-result probes or redundant generated fixture runs. Deliberately documented acceptance evidence under `.ai/.tmp/topic-selection-v1b-harness-e2e/` was preserved.
+
+## 2026-05-28 Follow-Up Cleanup Of Generated Contracts And Dist
+
+- Removed retired v1b direct write routes from the OpenAPI SSOT and regenerated `docs/context/api/API-INDEX.md` / `docs/context/api/api-index.json`. The only formal v1b write/invocation surface in API context is now the harness trio: node invocation, artifact record, and artifact read.
+- Removed obsolete OpenAPI request/response schemas for the old direct route path (`TopicSelectionV1bIntakeSnapshotRequest`, direct slice/question/value/package request schemas, and direct creation response schemas). The API context now models harness request/result/artifact contracts instead.
+- Rebuilt the tracked desktop renderer bundle from a clean HEAD worktree outside the repo to avoid embedding unrelated dirty experiment-foundation source changes into T-107 dist artifacts. The new tracked bundle no longer contains old v1b submit forms or direct route strings.
+- Old direct-route strings intentionally remain only in the v1b harness e2e script and backend route integration test as 404 negative assertions. They are not formal API, UI, package, shared-contract, or process-context entrypoints.
