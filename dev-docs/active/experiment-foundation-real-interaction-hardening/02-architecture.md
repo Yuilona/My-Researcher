@@ -105,12 +105,29 @@ T-106 defines the UI proof target before implementing UI automation. The executa
 5. In Execution/Evidence, submit or inspect a job, run sync/cancel/collect where available, and display result/evidence refs.
 6. Trigger at least one malformed payload or gate failure and verify the error state is readable and contained.
 
+### Mapping to the S2/S3 IA (post-T-110 cutover)
+
+The T-078 5-tab IA the contract was authored against has been retired through T-110 S1–S3. The flow steps now map as follows; the UI smoke (`apps/desktop/scripts/smoke-e2e.mjs`) asserts each step against the new mounts.
+
+| Contract step | New surface (post-T-110) | Smoke assertions (sample) |
+|---|---|---|
+| 1. Open 实验基座 | `coreNavItems` includes 实验基座; `<ExperimentFoundationModule>` mounted; Topbar exposes `aria-label="实验基座标签页"`. | `assertExperimentFoundationWorkbenchSource` — nav order + module mount + topbar label. |
+| 2. Registry create / upsert | `资产库` parent tab with sub-tabs Dataset / Benchmark / Baseline / Protocol / Facts. Each typed view uses `useTypedAssetDraft` + `AssetFilterToolbar` + `MutationFeedback`. | Asserts on `<DatasetAssetView>` / `<BaselineAssetView>` / `<BenchmarkAssetView>` / `<EvaluationProtocolView>` / `<FactsView>` mounts; backend POST `/records` for `dataset_asset`. |
+| 3. Readiness check | Module-level `<ReadinessInspector>` (`data-ui="modal"`) opened by `goToReadiness(kind, id)` deep-links from Overview or per-stage buttons. Drives `getLatestExperimentFoundationReadiness` + `checkExperimentFoundationReadiness`. | Smoke calls `POST /readiness/check` then `GET /readiness?status=blocked` (S0+ canonical list endpoint) and asserts the previously-created report's id appears, plus rejection of `status=not_a_status`. |
+| 4. Recipe / Materialization inspect | Absorbed into `实验流` Tab via `<ExperimentFlowPanel>`. Per-stage cards for `recipe_draft` / `run_recipe` / `materialize_request` / `materialization_result` / `training_task_spec`. Each surfaces an Advanced JSON disclosure. | `useExperimentFlowController` covers the 10 canonical stages; timeline mounts each card; renderer reads via `getRunRecipePayload(...)`. |
+| 5. Submit / Sync / Cancel / Collect + Evidence refs | Absorbed into `实验流`'s `external_training_job` stage. Typed `SubmitJobForm` / `SyncJobForm` / `CancelJobForm` / `CollectJobForm` replace the legacy JSON-textarea editors. Sync/Cancel/Collect are gated on `disabled={!hasSelectedJob}`. | Asserts each form declared + mounted; gated state assertion; Cancel CTA uses literal `data-variant="danger"` per UI gate. Backend `POST /execution/jobs/submit` with empty body returns 400 (boundary verification). |
+| 6. Malformed payload + error rendering | `data-tone="danger"` branches in `OverviewPanel`, `ReadinessInspector`, `JobActionForms`. | Source assertions on all three surfaces; backend `POST /records` with empty payload returns 4xx. |
+
 The UI proof must assert:
 
 - backend APIs remain the source of readiness, promotion, materialization, execution, validation, and evidence decisions;
 - renderer code does not invent statuses, hashes, promotion eligibility, result validity, or evidence eligibility;
 - UI state is only filters, selected ids, editor content, loading/error state, and display formatting;
 - screenshots, traces, and logs are redacted before being stored as artifacts.
+
+### Smoke entrypoint
+
+`pnpm --filter @paper-engineering-assistant/desktop smoke:e2e` is the official UI-driven full-flow smoke. It boots a memory-backed backend on a held port, starts the desktop dev server, runs the source-level + API-level assertions, and tears down both processes. Implementation lives at `apps/desktop/scripts/smoke-e2e.mjs`; the assertion catalogue lives in `assertExperimentFoundationWorkbenchSource` and `smokeExperimentFoundationApis`. Co-owned with `T-110 S5` per the soft-preference decision in `dev-docs/active/experiment-foundation-research-workbench/03-implementation-notes.md`.
 
 ## LocalScript Robustness Contract
 

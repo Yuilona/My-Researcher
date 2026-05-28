@@ -2,7 +2,7 @@
 
 ## Status
 - State: in-progress
-- Active phase: S4 paper-binding reverse drill (next)
+- Active phase: S4 paper-binding reverse drill (next). S5 UI smoke landed in 2026-05-29 commit; closes the open acceptance on T-106.
 - Task ID: `T-110`
 - Mapping: `M-001 > F-001 > R-012 > T-110`
 - Parent task: `T-043 experiment-foundation-v1`

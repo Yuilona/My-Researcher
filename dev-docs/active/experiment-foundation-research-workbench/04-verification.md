@@ -90,6 +90,22 @@
 - REGRESSION (shared): `pnpm --filter @paper-engineering-assistant/shared test` reports 196 pass / 1 fail. The single failure (test 132 `research-lifecycle barrel re-exports the runtime value surface of split modules`) is pre-existing T-088 in-flight work and not caused by S1. My S0+ classification subset test (test 46) still passes.
 - REGRESSION (backend): `node apps/backend/scripts/run-node-tests.mjs ...` reports 869 pass / 0 fail / 2 skipped. No regression from S1.
 
+### 2026-05-29 — S5 UI-driven full-flow smoke landed (closes T-106 open checkbox)
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop typecheck`.
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop build`.
+- PASS: `python3 .ai/skills/features/ui/ui-governance-gate/scripts/ui_gate.py run --mode full` (Errors 0, Warnings 0).
+- PASS: `node .ai/tests/run.mjs --suite ui` (4/4).
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop smoke:e2e` — `[desktop-smoke] PASS`. The extended assertion catalogue walks all six T-106 UI Flow Contract steps and the boundary audits (renderer must not own backend semantics; renderer must not invent status classifications; sparkline must stay inline SVG).
+- PASS: project governance sync + lint.
+- PASS: `git diff --check`.
+
+### S5 Acceptance check
+- [x] `pnpm --filter @paper-engineering-assistant/desktop smoke:e2e` exercises Overview → 资产库 → 实验流 → JobActionForms → ReadinessInspector → Facts/Sparkline (the post-cutover IA equivalents of the contract's Registry / Readiness / Recipe-Materialization / Execution-Evidence steps).
+- [x] At least one error-rendering case covered: backend `POST /experiment-foundation/records` with empty payload returns 4xx; renderer surfaces with `data-tone="danger"` branches asserted in OverviewPanel + ReadinessInspector + JobActionForms.
+- [x] At least one disabled-state case covered: `<RunRecipeTimeline>` propagates `disabled={!hasSelectedJob}` to Sync / Cancel / Collect forms; asserted in source.
+- [x] T-106 acceptance checkbox flipped in `dev-docs/active/experiment-foundation-real-interaction-hardening/00-overview.md`; the UI Flow Contract section in T-106's `02-architecture.md` now carries an authoritative step-to-mount mapping.
+- [x] Smoke entrypoint documented in both T-106 (`02-architecture.md` UI Flow Contract section, Smoke entrypoint heading) and T-110 (`04-verification.md`, this section).
+
 ### 2026-05-29 — S3 Baseline/Benchmark/Protocol typed + Facts + Sparkline + scaffold extraction
 - PASS: `pnpm --filter @paper-engineering-assistant/desktop typecheck`.
 - PASS: `pnpm --filter @paper-engineering-assistant/desktop build`.

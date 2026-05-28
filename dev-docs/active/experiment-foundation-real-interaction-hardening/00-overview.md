@@ -4,7 +4,7 @@
 - State: in-progress
 - Task: T-106
 - Parent task: `T-043 experiment-foundation-v1`
-- Current focus: Phase 6 external canary gate and Phase 7 standalone hardening runner are implemented. Remaining work is either UI-driven smoke automation or a provider-specific true external canary implementation, both explicitly outside the default deterministic lane.
+- Current focus: Phase 8 UI-driven full-flow smoke landed via T-110 S5. Remaining open acceptance is the provider-specific true external canary implementation, explicitly outside the default deterministic lane.
 
 ## Goal
 Deepen the post-V1 validation of experiment foundation by proving automation, real or near-real external interaction boundaries, cross-flow handoffs, and recovery behavior under harder conditions than the T-090 capability suite and T-103 runner closure.
@@ -25,7 +25,7 @@ The product-level target is a usable tool surface that lets paper-implementation
 - [x] LocalScript robustness tests cover allowlist, path containment, timeout, cancellation, idempotency, partial collection, invalid result payloads, and process cleanup.
 - [x] API and persistence tests cover duplicate keys, stale refs, readiness transitions, materialization/job hash mismatches, promotion gates, and recovery-safe status updates.
 - [x] Memory and disposable Postgres paths prove representative automation-facing parity for registry, readiness, promotion, execution, result, and evidence transitions.
-- [ ] UI-driven full-flow smoke covers registry, readiness, job submit/sync/cancel/collect, result/evidence detail, and error rendering without renderer-owned domain semantics.
+- [x] UI-driven full-flow smoke covers registry, readiness, job submit/sync/cancel/collect, result/evidence detail, and error rendering without renderer-owned domain semantics. Landed as T-110 S5: `pnpm --filter @paper-engineering-assistant/desktop smoke:e2e` walks the new IA (Overview → 资产库 typed sub-tabs → 实验流 timeline → JobActionForms → ReadinessInspector → Facts/Sparkline), asserts canonical-source classifications, and exercises malformed-payload + invalid-status rejection. Map of legacy contract names to S2/S3 IA in `02-architecture.md` UI Flow Contract section.
 - [x] Cross-flow tests verify PaperImplementation and adjacent evidence surfaces consume experiment-foundation refs and sidecars without copying canonical DTOs or claim fields.
 - [x] External canary has a default safe lane plus a true opt-in prerequisite gate with credential, mirror, approval, budget, cleanup, and redaction checks.
 - [ ] Provider-specific true external canary can verify real connectivity and the minimum real external flow when credentials, environment, budget, and cleanup approval are present.

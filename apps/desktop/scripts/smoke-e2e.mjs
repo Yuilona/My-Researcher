@@ -136,7 +136,31 @@ function assertIncludes(source, snippet, label) {
 }
 
 async function assertExperimentFoundationWorkbenchSource() {
-  const [constants, app, api, controller, moduleSource, utils, topbar, efConstants] = await Promise.all([
+  const [
+    constants,
+    app,
+    api,
+    controller,
+    moduleSource,
+    utils,
+    topbar,
+    efConstants,
+    assetLibraryPanel,
+    datasetView,
+    baselineView,
+    benchmarkView,
+    protocolView,
+    factsView,
+    sparklineSvg,
+    overviewPanel,
+    overviewController,
+    flowPanel,
+    flowController,
+    runRecipeTimeline,
+    jobActionForms,
+    readinessInspector,
+    payloads,
+  ] = await Promise.all([
     readDesktopSource('src/renderer/literature/shared/constants.ts'),
     readDesktopSource('src/renderer/App.tsx'),
     readDesktopSource('src/renderer/modules/experiment-foundation/api.ts'),
@@ -145,20 +169,162 @@ async function assertExperimentFoundationWorkbenchSource() {
     readDesktopSource('src/renderer/modules/experiment-foundation/utils.ts'),
     readDesktopSource('src/renderer/shell/components/Topbar.tsx'),
     readDesktopSource('src/renderer/modules/experiment-foundation/constants.ts'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/assets/AssetLibraryPanel.tsx'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/assets/DatasetAssetView.tsx'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/assets/BaselineAssetView.tsx'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/assets/BenchmarkAssetView.tsx'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/assets/EvaluationProtocolView.tsx'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/assets/FactsView.tsx'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/viz/SparklineSvg.tsx'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/overview/OverviewPanel.tsx'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/overview/useOverviewController.ts'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/experiment-flow/ExperimentFlowPanel.tsx'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/experiment-flow/useExperimentFlowController.ts'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/experiment-flow/RunRecipeTimeline.tsx'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/experiment-flow/JobActionForms.tsx'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/components/ReadinessInspector.tsx'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/payloads.ts'),
   ]);
 
+  // Step 1 of T-106 UI Flow Contract: navigation entry to 实验基座.
   assertIncludes(constants, "['文献管理', '实验基座', '选题管理', '论文管理']", 'desktop nav order');
   assertIncludes(app, "activeModule === '实验基座'", 'desktop module mount');
   assertIncludes(app, '<ExperimentFoundationModule', 'desktop module mount');
   assertIncludes(topbar, 'aria-label="实验基座标签页"', 'experiment foundation topbar tabs');
+
+  // S2/S3 IA: 4 top-level tabs (Overview / Assets / Flow / Promotion).
   assertIncludes(efConstants, "{ key: 'overview', label: '概览' }", 'experiment foundation tab labels');
   assertIncludes(efConstants, "{ key: 'assets', label: '资产库' }", 'experiment foundation tab labels');
+  assertIncludes(efConstants, "{ key: 'flow', label: '实验流' }", 'experiment foundation tab labels');
+  assertIncludes(efConstants, "{ key: 'promotion', label: '候选晋升' }", 'experiment foundation tab labels');
   assertIncludes(moduleSource, "activePanel === 'assets'", 'experiment foundation panel routing');
+  assertIncludes(moduleSource, "activePanel === 'flow'", 'experiment foundation panel routing');
+  assertIncludes(moduleSource, "activePanel === 'overview'", 'experiment foundation panel routing');
+  assertIncludes(moduleSource, "activePanel === 'promotion'", 'experiment foundation panel routing');
 
+  // Step 2: Asset Library (replaces legacy Registry). Five typed sub-tabs.
+  assertIncludes(efConstants, "{ key: 'dataset', label: 'Dataset' }", 'asset sub-tabs');
+  assertIncludes(efConstants, "{ key: 'benchmark', label: 'Benchmark' }", 'asset sub-tabs');
+  assertIncludes(efConstants, "{ key: 'baseline', label: 'Baseline' }", 'asset sub-tabs');
+  assertIncludes(efConstants, "{ key: 'protocol', label: 'Protocol' }", 'asset sub-tabs');
+  assertIncludes(efConstants, "{ key: 'facts', label: 'Facts' }", 'asset sub-tabs');
+  assertIncludes(assetLibraryPanel, '<DatasetAssetView', 'asset library dataset mount');
+  assertIncludes(assetLibraryPanel, '<BaselineAssetView', 'asset library baseline mount');
+  assertIncludes(assetLibraryPanel, '<BenchmarkAssetView', 'asset library benchmark mount');
+  assertIncludes(assetLibraryPanel, '<EvaluationProtocolView', 'asset library protocol mount');
+  assertIncludes(assetLibraryPanel, '<FactsView', 'asset library facts mount');
+  for (const [source, label] of [
+    [datasetView, 'dataset typed form'],
+    [baselineView, 'baseline typed form'],
+    [benchmarkView, 'benchmark typed form'],
+    [protocolView, 'evaluation protocol typed form'],
+  ]) {
+    assertIncludes(source, 'useTypedAssetDraft<', `${label} uses shared scaffold`);
+    assertIncludes(source, '<AssetFilterToolbar', `${label} mounts shared filter toolbar`);
+    assertIncludes(source, '<MutationFeedback', `${label} mounts shared mutation feedback`);
+    assertIncludes(source, '<JsonAdvancedPanel', `${label} keeps Advanced JSON disclosure`);
+  }
+
+  // Step 3: Readiness inspector (replaces legacy Readiness tab).
+  assertIncludes(moduleSource, '<ReadinessInspector', 'readiness inspector module mount');
+  assertIncludes(readinessInspector, 'data-ui="modal"', 'readiness inspector is a modal');
+  assertIncludes(readinessInspector, 'getLatestExperimentFoundationReadiness', 'readiness inspector pulls latest');
+  assertIncludes(readinessInspector, 'checkExperimentFoundationReadiness', 'readiness inspector runs new check');
+  assertIncludes(readinessInspector, 'data-tone="danger"', 'readiness inspector error rendering');
+
+  // Steps 4 + 5: Experiment flow (replaces legacy Recipe/Materialization and Execution/Evidence).
+  assertIncludes(flowPanel, '<RunRecipeTimeline', 'flow panel mounts timeline');
+  assertIncludes(flowPanel, 'preselectJobId', 'flow panel accepts deep-link preselect');
+  assertIncludes(flowPanel, 'onPreselectConsumed', 'flow panel signals preselect consumption');
+  for (const stageKey of [
+    'recipe_draft',
+    'run_recipe',
+    'materialize_request',
+    'materialization_result',
+    'training_task_spec',
+    'external_training_job',
+    'experiment_result',
+    'result_validation_report',
+    'evidence_candidate',
+    'paper_experiment_sidecar',
+  ]) {
+    assertIncludes(flowController, `'${stageKey}'`, `flow controller covers stage ${stageKey}`);
+  }
+  assertIncludes(flowController, 'FLOW_STAGE_PAGE_SIZE', 'flow controller paginates per stage');
+  assertIncludes(flowController, 'loadMoreStage', 'flow controller exposes load-more');
+  assertIncludes(runRecipeTimeline, 'nextCursor', 'timeline cards surface cursor state');
+  assertIncludes(runRecipeTimeline, '加载更多', 'timeline exposes load-more CTA');
+  assertIncludes(runRecipeTimeline, 'getRunRecipePayload', 'timeline reads via typed payload accessor');
+
+  // Step 5: typed job action forms — each action plus disabled-state propagation.
+  for (const form of ['SubmitJobForm', 'SyncJobForm', 'CancelJobForm', 'CollectJobForm']) {
+    assertIncludes(jobActionForms, `function ${form}(`, `${form} declared`);
+    assertIncludes(runRecipeTimeline, `<${form}`, `timeline mounts ${form}`);
+  }
+  // Disabled-state plumbing: Sync/Cancel/Collect must be gated on selectedJob.
+  assertIncludes(runRecipeTimeline, 'disabled={!hasSelectedJob}', 'job actions gated on selectedJob');
+  assertIncludes(jobActionForms, 'data-tone="danger"', 'job action forms render danger tone for errors');
+  assertIncludes(jobActionForms, 'data-variant="danger"', 'cancel CTA uses danger variant literal');
+
+  // Step 6: error rendering across surfaces (Overview, Inspector, JobActions).
+  for (const [source, label] of [
+    [overviewPanel, 'overview error rendering'],
+    [readinessInspector, 'readiness inspector error rendering'],
+    [jobActionForms, 'job action forms error rendering'],
+  ]) {
+    if (!source.includes('data-tone="danger"')) {
+      throw new Error(`${label} missing danger tone branch.`);
+    }
+  }
+
+  // S3 Facts view + sparkline.
+  assertIncludes(factsView, 'getEvaluationFactPayload', 'facts view typed read');
+  assertIncludes(factsView, 'getMetricObservationPayload', 'facts view typed read');
+  assertIncludes(factsView, 'getComparisonObservationPayload', 'facts view typed read');
+  assertIncludes(factsView, '<SparklineSvg', 'facts view sparkline mount');
+  assertIncludes(sparklineSvg, '<svg', 'sparkline is inline SVG');
+  if (sparklineSvg.includes("import 'recharts'") || sparklineSvg.includes("import 'd3'")) {
+    throw new Error('Sparkline must not import a chart library.');
+  }
+
+  // S0+ canonical-source contract: Overview reads canonical readiness reports
+  // and uses shared classification constants; no renderer-side STATUSES sets.
+  assertIncludes(
+    overviewController,
+    'listExperimentFoundationReadinessReports',
+    'overview reads canonical readiness reports',
+  );
+  for (const constantName of [
+    'EXPERIMENT_FOUNDATION_READINESS_BLOCKED_STATUSES',
+    'EXPERIMENT_FOUNDATION_ASSET_CANDIDATE_ATTENTION_STATUSES',
+    'EXPERIMENT_FOUNDATION_EVIDENCE_CANDIDATE_REVIEW_STATUSES',
+    'EXPERIMENT_FOUNDATION_EXTERNAL_TRAINING_JOB_IN_FLIGHT_STATUSES',
+  ]) {
+    assertIncludes(overviewController, constantName, `overview uses shared ${constantName}`);
+  }
+
+  // S2 typed payload accessor surface.
+  for (const accessor of [
+    'getRunRecipePayload',
+    'getTrainingTaskSpecPayload',
+    'getMaterializeTrainingTaskSpecRequestPayload',
+    'getExperimentResultPayload',
+    'getBaselineAssetPayload',
+    'getBenchmarkAssetPayload',
+    'getEvaluationProtocolPayload',
+    'getEvaluationFactPayload',
+    'getMetricObservationPayload',
+    'getComparisonObservationPayload',
+  ]) {
+    assertIncludes(payloads, `export function ${accessor}`, `payloads exports ${accessor}`);
+  }
+
+  // Existing API endpoint coverage.
   for (const endpoint of [
     '/experiment-foundation/records',
     '/experiment-foundation/readiness/',
     '/experiment-foundation/readiness/check',
+    '/experiment-foundation/readiness',
     '/experiment-foundation/candidates/',
     '/experiment-foundation/execution/jobs',
     '/experiment-foundation/execution/jobs/submit',
@@ -169,7 +335,9 @@ async function assertExperimentFoundationWorkbenchSource() {
     assertIncludes(api, endpoint, 'experiment foundation desktop API client');
   }
   assertIncludes(api, 'requestGovernance<', 'experiment foundation desktop API client');
+  assertIncludes(api, 'listExperimentFoundationReadinessReports', 'readiness list api client');
 
+  // Renderer must not own backend / materialization / classification semantics.
   const rendererSources = [api, controller, moduleSource, utils];
   for (const forbidden of [
     'fetch(',
@@ -232,6 +400,72 @@ async function smokeExperimentFoundationApis(backendBaseUrl) {
   const jobs = await getJson(`${backendBaseUrl}/experiment-foundation/execution/jobs`);
   if (!Array.isArray(jobs.jobs)) {
     throw new Error('Experiment foundation execution jobs smoke check failed.');
+  }
+
+  // S0+: thin readiness list endpoint. Verify the canonical-source surface that
+  // Overview's "blocked readiness" counter reads from.
+  const readinessList = await getJson(
+    `${backendBaseUrl}/experiment-foundation/readiness?limit=10`,
+  );
+  if (!Array.isArray(readinessList.reports)) {
+    throw new Error('Experiment foundation readiness list smoke check failed.');
+  }
+  if (!readinessList.reports.some((report) => report.readiness_report_id === readiness.readiness_report_id)) {
+    throw new Error(
+      'Experiment foundation readiness list smoke check failed: previously created report missing from list.',
+    );
+  }
+  const blockedList = await getJson(
+    `${backendBaseUrl}/experiment-foundation/readiness?status=blocked&limit=10`,
+  );
+  if (!Array.isArray(blockedList.reports)) {
+    throw new Error('Experiment foundation readiness list (status filter) smoke check failed.');
+  }
+  for (const report of blockedList.reports) {
+    if (report.readiness_status !== 'blocked') {
+      throw new Error(
+        `Readiness list status filter contract violated: got readiness_status=${report.readiness_status}.`,
+      );
+    }
+  }
+
+  // T-106 UI Flow Contract step 6: malformed payload triggers a backend-side
+  // error that the renderer's danger-tone branches surface. Exercise both the
+  // records create path and the job submit path with empty bodies so we cover
+  // both the read-write registry boundary and the execution boundary.
+  const malformedRecord = await fetch(`${backendBaseUrl}/experiment-foundation/records`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ record_kind: 'dataset_asset', payload: {} }),
+  });
+  if (malformedRecord.ok) {
+    throw new Error(
+      `Malformed record smoke check failed: expected 4xx for empty payload but got ${malformedRecord.status}.`,
+    );
+  }
+
+  const malformedJobSubmit = await fetch(
+    `${backendBaseUrl}/experiment-foundation/execution/jobs/submit`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    },
+  );
+  if (malformedJobSubmit.status !== 400) {
+    throw new Error(
+      `Malformed job-submit smoke check failed: expected 400 for empty body, got ${malformedJobSubmit.status}.`,
+    );
+  }
+
+  // Status filter accepted only against the canonical readiness_status enum.
+  const invalidStatusList = await fetch(
+    `${backendBaseUrl}/experiment-foundation/readiness?status=not_a_status`,
+  );
+  if (invalidStatusList.status !== 400) {
+    throw new Error(
+      `Readiness list invalid-status smoke check failed: expected 400, got ${invalidStatusList.status}.`,
+    );
   }
 }
 
