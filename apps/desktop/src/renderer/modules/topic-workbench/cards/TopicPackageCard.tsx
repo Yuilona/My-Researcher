@@ -1,13 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ReviewerCard, ReviewerCardEmpty } from './ReviewerCard';
 import type {
   TopicSelectionTopicPackageRecord,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-topic-package-contracts';
-import { publishV1cInputBundle } from '../api/v1b';
 
 type TopicPackageCardProps = {
   topicPackages: TopicSelectionTopicPackageRecord[];
-  onMutated?: () => void;
 };
 
 function readinessTone(status: string): 'neutral' | 'info' | 'success' | 'warning' | 'danger' {
@@ -19,11 +17,10 @@ function readinessTone(status: string): 'neutral' | 'info' | 'success' | 'warnin
 /**
  * v1b TopicPackage(draft) surface — Phase 3.1 read-only view.
  *
- * Lists package drafts produced by `CreateDraftPackage`. v1b's success
- * outlet. V1cInputBundle publish (analogous to v1a → v1b bundle publish)
- * is wired in Phase 3.5 once interactive forms land.
+ * Lists package drafts produced by the v1b harness. v1b's success outlet is
+ * now published by the harness-native N11 path rather than this card.
  */
-export function TopicPackageCard({ topicPackages, onMutated }: TopicPackageCardProps) {
+export function TopicPackageCard({ topicPackages }: TopicPackageCardProps) {
   const [selectedId, setSelectedId] = useState<string | null>(
     topicPackages[0]?.topic_package_id ?? null,
   );
@@ -37,7 +34,7 @@ export function TopicPackageCard({ topicPackages, onMutated }: TopicPackageCardP
         <div data-ui="stack" data-direction="col" data-gap="2">
           <p data-ui="text" data-variant="label" data-tone="primary">TopicPackage(draft)</p>
           <p data-ui="text" data-variant="caption" data-tone="muted">
-            该题目卡还没有 TopicPackage 草案。先在 Value surface 触发 advance_to_package disposition。
+            该题目卡还没有 TopicPackage 草案。先通过 v1b WorkflowHarness 完成 N9/N10。
           </p>
         </div>
       </article>
@@ -141,78 +138,16 @@ export function TopicPackageCard({ topicPackages, onMutated }: TopicPackageCardP
         <div data-ui="stack" data-direction="col" data-gap="2">
           {active.package_readiness_status === 'ready_for_promotion_review' ? (
             <p data-ui="text" data-variant="caption" data-tone="primary">
-              → 已 ready_for_promotion_review，可发布 V1bToV1cInputBundle 进入 v1c 晋升桥。
+              → 已 ready_for_promotion_review。
             </p>
           ) : (
             <p data-ui="text" data-variant="caption" data-tone="muted">
-              package_readiness_status={active.package_readiness_status}，发布将由后端按当前状态决定接受/拒绝。
+              package_readiness_status={active.package_readiness_status}
             </p>
           )}
-          <PublishV1cBundleAction topicPackageId={active.topic_package_id} onPublished={onMutated} />
         </div>
       }
       footer={`research_record=${active.research_record_id}`}
     />
-  );
-}
-
-type PublishV1cBundleActionProps = {
-  topicPackageId: string;
-  onPublished?: () => void;
-};
-
-/**
- * Phase 3.5 — publish a V1bToV1cInputBundle from a TopicPackage. Endpoint
- * accepts an empty body and is idempotent; backend derives the bundle from
- * the current package state. UI just exposes a single primary button.
- */
-function PublishV1cBundleAction({ topicPackageId, onPublished }: PublishV1cBundleActionProps) {
-  const [publishing, setPublishing] = useState(false);
-  const [bundleId, setBundleId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setBundleId(null);
-    setError(null);
-  }, [topicPackageId]);
-
-  const handlePublish = async () => {
-    setPublishing(true);
-    setError(null);
-    try {
-      const result = await publishV1cInputBundle(topicPackageId);
-      setBundleId(result.v1b_to_v1c_input_bundle_id);
-      onPublished?.();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '发布 V1bToV1cInputBundle 失败。');
-    } finally {
-      setPublishing(false);
-    }
-  };
-
-  return (
-    <section data-ui="section" data-padding="sm">
-      <div data-ui="stack" data-direction="col" data-gap="1">
-        <p data-ui="text" data-variant="label" data-tone="muted">V1bToV1cInputBundle · publish</p>
-        <div data-ui="stack" data-direction="row" data-gap="1" data-wrap="wrap" data-align="center">
-          <button
-            type="button"
-            data-ui="button"
-            data-variant="primary"
-            data-size="sm"
-            disabled={publishing}
-            onClick={() => void handlePublish()}
-          >
-            {publishing ? '发布中…' : '发布 V1bToV1cInputBundle'}
-          </button>
-          {bundleId ? (
-            <span data-ui="badge" data-variant="subtle" data-tone="success">已发布：{bundleId}</span>
-          ) : null}
-        </div>
-        {error ? (
-          <p data-ui="text" data-variant="caption" data-tone="danger">{error}</p>
-        ) : null}
-      </div>
-    </section>
   );
 }

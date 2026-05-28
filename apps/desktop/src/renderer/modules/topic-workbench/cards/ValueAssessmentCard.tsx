@@ -1,14 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ReviewerCard, ReviewerCardEmpty } from './ReviewerCard';
 import type {
   TopicSelectionTopicValueAssessmentRecord,
-  TopicSelectionValueDisposition,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-value-assessment-contracts';
-import { submitValueDispositionDecision } from '../api/v1b';
 
 type ValueAssessmentCardProps = {
   valueAssessments: TopicSelectionTopicValueAssessmentRecord[];
-  onMutated?: () => void;
 };
 
 function readinessTone(status: string): 'neutral' | 'info' | 'success' | 'warning' | 'danger' {
@@ -26,10 +23,10 @@ function freshnessTone(freshness: string): 'neutral' | 'info' | 'success' | 'war
 /**
  * v1b TopicValueAssessment surface — Phase 3.1 read-only view.
  *
- * Lists value assessments with hard_gates, dimension scores, and legacy
- * verdict. ValueDispositionDecision human-confirm UI lands in Phase 3.4.
+ * Lists value assessments with hard_gates, dimension scores, and verdict
+ * context. Write actions are owned by the harness-native v1b path.
  */
-export function ValueAssessmentCard({ valueAssessments, onMutated }: ValueAssessmentCardProps) {
+export function ValueAssessmentCard({ valueAssessments }: ValueAssessmentCardProps) {
   const [selectedId, setSelectedId] = useState<string | null>(
     valueAssessments[0]?.topic_value_assessment_id ?? null,
   );
@@ -164,151 +161,12 @@ export function ValueAssessmentCard({ valueAssessments, onMutated }: ValueAssess
             <p data-ui="text" data-variant="caption" data-tone="primary">
               → 已有 disposition decision：{active.active_disposition_decision_id}
             </p>
-          ) : null}
-          <ValueDispositionForm assessment={active} onSubmitted={onMutated} />
+          ) : (
+            <ReviewerCardEmpty label="等待 v1b WorkflowHarness N9 写入 disposition。" />
+          )}
         </div>
       }
       footer={`assess_run=${active.assess_topic_value_run_id}`}
     />
-  );
-}
-
-const VALUE_DISPOSITIONS: Array<{ value: TopicSelectionValueDisposition; label: string }> = [
-  { value: 'advance_to_package', label: 'advance_to_package · 进入 v1b 出口（创建 TopicPackage）' },
-  { value: 'refine_question', label: 'refine_question · 回流到 QuestionSelection' },
-  { value: 'refine_slice', label: 'refine_slice · 回流到 SliceSelection' },
-  { value: 'recheck_evidence_or_search', label: 'recheck_evidence_or_search · 回流 v1a recheck' },
-  { value: 'park', label: 'park · 暂搁' },
-  { value: 'drop', label: 'drop · 放弃' },
-];
-
-type ValueDispositionFormProps = {
-  assessment: TopicSelectionTopicValueAssessmentRecord;
-  onSubmitted?: () => void;
-};
-
-/**
- * Phase 3.4 inline form — submit a ValueDispositionDecision.
- *
- * 6 个出口，对应 design-spec v1b 链路：advance_to_package 是成功出口；其它
- * 是回流/暂搁/放弃路径。Rationale 必填。
- */
-function ValueDispositionForm({ assessment, onSubmitted }: ValueDispositionFormProps) {
-  const recommended: TopicSelectionValueDisposition = assessment.legacy_verdict === 'promote'
-    ? 'advance_to_package'
-    : assessment.legacy_verdict === 'refine'
-      ? 'refine_question'
-      : assessment.legacy_verdict === 'park'
-        ? 'park'
-        : 'drop';
-  const [decision, setDecision] = useState<TopicSelectionValueDisposition>(recommended);
-  const [rationale, setRationale] = useState('');
-  const [requiredActionsText, setRequiredActionsText] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submittedId, setSubmittedId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDecision(recommended);
-    setRationale('');
-    setRequiredActionsText('');
-    setSubmitError(null);
-    setSubmittedId(null);
-  }, [assessment.topic_value_assessment_id, recommended]);
-
-  const isTerminal = Boolean(assessment.active_disposition_decision_id);
-  const canSubmit = !submitting && !isTerminal && rationale.trim().length > 0;
-
-  const handleSubmit = useCallback(async () => {
-    if (!canSubmit) return;
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      const required = requiredActionsText.split('\n').map((s) => s.trim()).filter((s) => s.length > 0);
-      const result = await submitValueDispositionDecision(assessment.topic_value_assessment_id, {
-        decision,
-        decision_rationale: rationale.trim(),
-        decided_by: 'human',
-        required_actions: required,
-      });
-      setSubmittedId(result.value_disposition_decision_id);
-      onSubmitted?.();
-    } catch (caught) {
-      setSubmitError(caught instanceof Error ? caught.message : '提交 ValueDispositionDecision 失败。');
-    } finally {
-      setSubmitting(false);
-    }
-  }, [canSubmit, assessment.topic_value_assessment_id, decision, rationale, requiredActionsText, onSubmitted]);
-
-  return (
-    <section data-ui="section" data-padding="sm">
-      <div data-ui="stack" data-direction="col" data-gap="1">
-        <p data-ui="text" data-variant="label" data-tone="muted">ValueDispositionDecision · human confirm</p>
-        {isTerminal ? (
-          <p data-ui="text" data-variant="caption" data-tone="muted">
-            该 assessment 已经存在生效中的 disposition decision（{assessment.active_disposition_decision_id}）；如需重做，需 agent 层重新触发 AssessTopicValue。
-          </p>
-        ) : (
-          <>
-            <select
-              data-ui="select"
-              data-size="md"
-              value={decision}
-              onChange={(event) => setDecision(event.target.value as TopicSelectionValueDisposition)}
-            >
-              {VALUE_DISPOSITIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-            <textarea
-              data-ui="textarea"
-              data-size="md"
-              rows={3}
-              placeholder="decision_rationale（必填）"
-              value={rationale}
-              onChange={(event) => setRationale(event.target.value)}
-            />
-            <textarea
-              data-ui="textarea"
-              data-size="sm"
-              rows={2}
-              placeholder="required_actions（每行一条，可选）"
-              value={requiredActionsText}
-              onChange={(event) => setRequiredActionsText(event.target.value)}
-            />
-            <div data-ui="stack" data-direction="row" data-gap="1" data-wrap="wrap" data-align="center">
-              {canSubmit ? (
-                <button
-                  type="button"
-                  data-ui="button"
-                  data-variant="primary"
-                  data-size="sm"
-                  disabled={submitting}
-                  onClick={() => void handleSubmit()}
-                >
-                  {submitting ? '提交中…' : '提交 ValueDispositionDecision'}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  data-ui="button"
-                  data-variant="secondary"
-                  data-size="sm"
-                  disabled
-                >
-                  提交 ValueDispositionDecision
-                </button>
-              )}
-              {submittedId ? (
-                <span data-ui="badge" data-variant="subtle" data-tone="success">已创建：{submittedId}</span>
-              ) : null}
-            </div>
-            {submitError ? (
-              <p data-ui="text" data-variant="caption" data-tone="danger">{submitError}</p>
-            ) : null}
-          </>
-        )}
-      </div>
-    </section>
   );
 }

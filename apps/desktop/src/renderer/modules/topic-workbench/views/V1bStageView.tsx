@@ -20,13 +20,9 @@ const SUB_TABS = ['slice', 'question', 'value', 'package'] as const;
 /**
  * v1b stage view — composes 4 reviewer surfaces.
  *
- * Phase 3.1 shipped the read-only ReviewerCard renders for each v1b
- * authority object. Phase 3.2-3.5 added inline interactive forms:
- *   - SliceSelectionDecision / QuestionSelectionDecision / ValueDisposition
- *     human-confirm forms (Phase 3.2-3.4)
- *   - V1bToV1cInputBundle publish action (Phase 3.5)
- * Mutations bubble up via `onMutated → reload()` so every form refresh keeps
- * the active stage data fresh after a write.
+ * This surface is read-only for v1b authorities. Writes are owned by the
+ * v1b WorkflowHarness path so the desktop UI does not reintroduce direct
+ * route orchestration.
  */
 export function V1bStageView({
   titleCardId,
@@ -76,28 +72,33 @@ export function V1bStageView({
         </button>
       </div>
 
+      <article data-ui="card" data-padding="sm">
+        <div data-ui="stack" data-direction="row" data-gap="2" data-wrap="wrap" data-align="center">
+          <span data-ui="badge" data-variant="subtle" data-tone="warning">验收口径</span>
+          <span data-ui="text" data-variant="caption" data-tone="muted">
+            当前页展示 harness 写入的 v1b authority。快速本地 smoke 默认 1 轮；provider 验收使用 3 轮独立 canary，失败即停；重试预算由 provider retry 配置控制。
+          </span>
+        </div>
+      </article>
+
       {activeSubTab === 'slice' ? (
         <SliceOptionSetCard
           sliceOptionSets={data.sliceOptionSets}
-          onMutated={() => void reload()}
         />
       ) : null}
       {activeSubTab === 'question' ? (
         <QuestionCandidateSetCard
           candidateSets={data.questionCandidateSets}
-          onMutated={() => void reload()}
         />
       ) : null}
       {activeSubTab === 'value' ? (
         <ValueAssessmentCard
           valueAssessments={data.valueAssessments}
-          onMutated={() => void reload()}
         />
       ) : null}
       {activeSubTab === 'package' ? (
         <TopicPackageCard
           topicPackages={data.topicPackages}
-          onMutated={() => void reload()}
         />
       ) : null}
 

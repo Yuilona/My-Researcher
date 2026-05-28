@@ -1,18 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ReviewerCard, ReviewerCardEmpty } from './ReviewerCard';
 import type {
-  TopicSelectionTopicQuestionCandidateRecord,
   TopicSelectionTopicQuestionCandidateSetRecord,
-  TopicSelectionTopicQuestionSelectionDecision,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-topic-question-contracts';
-import {
-  listTopicQuestionCandidatesByCandidateSet,
-  submitQuestionSelectionDecision,
-} from '../api/v1b';
 
 type QuestionCandidateSetCardProps = {
   candidateSets: TopicSelectionTopicQuestionCandidateSetRecord[];
-  onMutated?: () => void;
 };
 
 function statusTone(status: string): 'neutral' | 'info' | 'success' | 'warning' | 'danger' {
@@ -25,10 +18,9 @@ function statusTone(status: string): 'neutral' | 'info' | 'success' | 'warning' 
  * v1b TopicQuestionCandidateSet surface — Phase 3.1 read-only view.
  *
  * Lists candidate sets produced by `FormTopicQuestion` runs. Selection
- * decisions / materialization (TopicQuestion + TopicQuestionContract)
- * land in Phase 3.3 (interactive forms).
+ * decisions / materialization are owned by the harness-native v1b path.
  */
-export function QuestionCandidateSetCard({ candidateSets, onMutated }: QuestionCandidateSetCardProps) {
+export function QuestionCandidateSetCard({ candidateSets }: QuestionCandidateSetCardProps) {
   const [selectedId, setSelectedId] = useState<string | null>(
     candidateSets[0]?.topic_question_candidate_set_id ?? null,
   );
@@ -130,216 +122,16 @@ export function QuestionCandidateSetCard({ candidateSets, onMutated }: QuestionC
       }
       nextActions={
         <div data-ui="stack" data-direction="col" data-gap="2">
-          <QuestionSelectionForm candidateSet={active} onSubmitted={onMutated} />
           {active.generation_notes.length > 0 ? (
             <p data-ui="text" data-variant="caption" data-tone="muted">
               generation_notes: {active.generation_notes.join(' · ')}
             </p>
-          ) : null}
+          ) : (
+            <ReviewerCardEmpty label="等待 v1b WorkflowHarness N7 materialize contract。" />
+          )}
         </div>
       }
       footer={`created_at=${active.created_at} · updated_at=${active.updated_at}`}
     />
-  );
-}
-
-const QUESTION_DECISIONS: Array<{
-  value: TopicSelectionTopicQuestionSelectionDecision;
-  label: string;
-  needsAdmitted: boolean;
-}> = [
-  { value: 'admit', label: 'admit · 选定 1 个 candidate', needsAdmitted: true },
-  { value: 'admit_multiple', label: 'admit_multiple · 选定多个 candidate', needsAdmitted: true },
-  { value: 'merge_then_admit', label: 'merge_then_admit · 合并后再选', needsAdmitted: true },
-  { value: 'park', label: 'park · 暂搁', needsAdmitted: false },
-  { value: 'reject_all', label: 'reject_all · 全部否决', needsAdmitted: false },
-  { value: 'no_admissible_candidate', label: 'no_admissible_candidate · 无可纳入 candidate', needsAdmitted: false },
-];
-
-type QuestionSelectionFormProps = {
-  candidateSet: TopicSelectionTopicQuestionCandidateSetRecord;
-  onSubmitted?: () => void;
-};
-
-/**
- * Phase 3.3 inline form — submit a TopicQuestionSelectionDecision.
- *
- * `admit / admit_multiple / merge_then_admit` 路径需要勾选 candidate_ids；
- * 其它路径不需要。Rationale 必填（design-spec §4039 红线）。
- */
-function QuestionSelectionForm({ candidateSet, onSubmitted }: QuestionSelectionFormProps) {
-  const initialDecision: TopicSelectionTopicQuestionSelectionDecision = candidateSet.recommended_candidate_ids.length > 1
-    ? 'admit_multiple'
-    : 'admit';
-  const [decision, setDecision] = useState<TopicSelectionTopicQuestionSelectionDecision>(initialDecision);
-  const [admittedIds, setAdmittedIds] = useState<string[]>(candidateSet.recommended_candidate_ids);
-  const [rationale, setRationale] = useState('');
-  const [candidates, setCandidates] = useState<TopicSelectionTopicQuestionCandidateRecord[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submittedId, setSubmittedId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDecision(initialDecision);
-    setAdmittedIds(candidateSet.recommended_candidate_ids);
-    setRationale('');
-    setSubmitError(null);
-    setSubmittedId(null);
-  }, [candidateSet.topic_question_candidate_set_id, initialDecision, candidateSet.recommended_candidate_ids]);
-
-  useEffect(() => {
-    let mounted = true;
-    setLoading(true);
-    setLoadError(null);
-    void listTopicQuestionCandidatesByCandidateSet(candidateSet.topic_question_candidate_set_id)
-      .then((records) => {
-        if (mounted) setCandidates(records);
-      })
-      .catch((caught) => {
-        if (mounted) setLoadError(caught instanceof Error ? caught.message : '加载 candidates 失败。');
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [candidateSet.topic_question_candidate_set_id]);
-
-  const activeDecision = QUESTION_DECISIONS.find((opt) => opt.value === decision) ?? QUESTION_DECISIONS[0];
-  const isTerminal = candidateSet.status === 'selected'
-    || candidateSet.status === 'rejected'
-    || candidateSet.status === 'parked'
-    || candidateSet.status === 'no_admissible_candidate';
-  const canSubmit = !submitting
-    && !isTerminal
-    && rationale.trim().length > 0
-    && (!activeDecision.needsAdmitted || admittedIds.length > 0);
-
-  const toggleAdmittedId = (id: string) => {
-    setAdmittedIds((current) => {
-      if (current.includes(id)) {
-        return current.filter((item) => item !== id);
-      }
-      return decision === 'admit' ? [id] : [...current, id];
-    });
-  };
-
-  const handleSubmit = useCallback(async () => {
-    if (!canSubmit) return;
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      const result = await submitQuestionSelectionDecision(candidateSet.topic_question_candidate_set_id, {
-        decision,
-        decision_rationale: rationale.trim(),
-        admitted_candidate_ids: activeDecision.needsAdmitted ? admittedIds : [],
-        decided_by: 'human',
-      });
-      setSubmittedId(result.topic_question_selection_decision_id);
-      onSubmitted?.();
-    } catch (caught) {
-      setSubmitError(caught instanceof Error ? caught.message : '提交 QuestionSelectionDecision 失败。');
-    } finally {
-      setSubmitting(false);
-    }
-  }, [canSubmit, candidateSet.topic_question_candidate_set_id, decision, rationale, activeDecision.needsAdmitted, admittedIds, onSubmitted]);
-
-  return (
-    <section data-ui="section" data-padding="sm">
-      <div data-ui="stack" data-direction="col" data-gap="1">
-        <p data-ui="text" data-variant="label" data-tone="muted">QuestionSelectionDecision · human confirm</p>
-        {isTerminal ? (
-          <p data-ui="text" data-variant="caption" data-tone="muted">
-            该 candidate set 已 {candidateSet.status}；如需新一轮，需 agent 层重新触发 FormTopicQuestion。
-          </p>
-        ) : (
-          <>
-            <select
-              data-ui="select"
-              data-size="md"
-              value={decision}
-              onChange={(event) => setDecision(event.target.value as TopicSelectionTopicQuestionSelectionDecision)}
-            >
-              {QUESTION_DECISIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-            {activeDecision.needsAdmitted ? (
-              loading ? (
-                <p data-ui="text" data-variant="caption" data-tone="muted">加载 candidates…</p>
-              ) : loadError ? (
-                <p data-ui="text" data-variant="caption" data-tone="danger">{loadError}</p>
-              ) : candidates.length === 0 ? (
-                <p data-ui="text" data-variant="caption" data-tone="muted">该 candidate set 无可勾选 candidate。</p>
-              ) : (
-                <div data-ui="stack" data-direction="col" data-gap="0">
-                  {candidates.map((cand) => {
-                    const checked = admittedIds.includes(cand.topic_question_candidate_id);
-                    return (
-                      <label
-                        key={cand.topic_question_candidate_id}
-                        data-ui="field"
-                        data-state="default"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleAdmittedId(cand.topic_question_candidate_id)}
-                        />
-                        <span data-ui="text" data-variant="caption" data-tone="primary">
-                          {' '}
-                          [{cand.candidate_ordinal}] {cand.main_question.slice(0, 100) || cand.topic_question_candidate_id}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )
-            ) : null}
-            <textarea
-              data-ui="textarea"
-              data-size="md"
-              rows={3}
-              placeholder="decision_rationale（必填）"
-              value={rationale}
-              onChange={(event) => setRationale(event.target.value)}
-            />
-            <div data-ui="stack" data-direction="row" data-gap="1" data-wrap="wrap" data-align="center">
-              {canSubmit ? (
-                <button
-                  type="button"
-                  data-ui="button"
-                  data-variant="primary"
-                  data-size="sm"
-                  disabled={submitting}
-                  onClick={() => void handleSubmit()}
-                >
-                  {submitting ? '提交中…' : '提交 QuestionSelectionDecision'}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  data-ui="button"
-                  data-variant="secondary"
-                  data-size="sm"
-                  disabled
-                >
-                  提交 QuestionSelectionDecision
-                </button>
-              )}
-              {submittedId ? (
-                <span data-ui="badge" data-variant="subtle" data-tone="success">已创建：{submittedId}</span>
-              ) : null}
-            </div>
-            {submitError ? (
-              <p data-ui="text" data-variant="caption" data-tone="danger">{submitError}</p>
-            ) : null}
-          </>
-        )}
-      </div>
-    </section>
   );
 }
