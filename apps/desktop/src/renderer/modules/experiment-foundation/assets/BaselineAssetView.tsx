@@ -1,16 +1,18 @@
 import {
-  EXPERIMENT_FOUNDATION_DATASET_CATALOG_STATUSES,
-  type DatasetAsset,
-  type ExperimentFoundationDatasetCatalogStatus,
+  EXPERIMENT_FOUNDATION_BASELINE_CATALOG_STATUSES,
+  EXPERIMENT_FOUNDATION_BASELINE_FAMILIES,
+  type ExperimentFoundationBaselineCatalogStatus,
+  type ExperimentFoundationBaselineFamily,
   type ExperimentFoundationRef,
   type ExperimentFoundationStoredRecord,
 } from '@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts';
 import { AssetFilterToolbar } from '../components/AssetFilterToolbar';
 import { JsonAdvancedPanel } from '../components/JsonAdvancedPanel';
 import { MutationFeedback } from '../components/MutationFeedback';
-import { RefPicker, RefPickerList } from '../components/RefPicker';
+import { RefPickerList } from '../components/RefPicker';
 import { StatusBadge } from '../components/StatusBadge';
 import { StringListEditor } from '../components/StringListEditor';
+import { getBaselineAssetPayload } from '../payloads';
 import type { JsonObject } from '../types';
 import { shortText } from '../utils';
 import {
@@ -24,42 +26,42 @@ import {
 import { useTypedAssetDraft, type BuildResult } from './useTypedAssetDraft';
 
 const KNOWN_FIELDS = new Set<string>([
-  'dataset_asset_id',
+  'baseline_asset_id',
   'name',
   'aliases',
   'description',
+  'baseline_family',
   'source_refs',
-  'task_types',
-  'schema_summary',
-  'default_version_id',
+  'supported_benchmark_refs',
+  'recommended_use',
   'catalog_status',
   'created_at',
   'updated_at',
 ]);
 
 type Draft = {
-  dataset_asset_id: string;
+  baseline_asset_id: string;
   name: string;
-  description: string;
   aliases: string[];
-  task_types: string[];
+  description: string;
+  baseline_family: ExperimentFoundationBaselineFamily;
   source_refs: ExperimentFoundationRef[];
-  default_version_ref: ExperimentFoundationRef | null;
-  catalog_status: ExperimentFoundationDatasetCatalogStatus;
-  schema_summary_json: string;
+  supported_benchmark_refs: ExperimentFoundationRef[];
+  recommended_use: string;
+  catalog_status: ExperimentFoundationBaselineCatalogStatus;
   extras: JsonObject;
 };
 
 const BLANK: Draft = {
-  dataset_asset_id: '',
+  baseline_asset_id: '',
   name: '',
-  description: '',
   aliases: [],
-  task_types: [],
+  description: '',
+  baseline_family: 'method',
   source_refs: [],
-  default_version_ref: null,
+  supported_benchmark_refs: [],
+  recommended_use: '',
   catalog_status: 'registered',
-  schema_summary_json: '{}',
   extras: {},
 };
 
@@ -69,55 +71,42 @@ function derive(record: ExperimentFoundationStoredRecord): Draft {
   for (const key of Object.keys(payload)) {
     if (!KNOWN_FIELDS.has(key)) extras[key] = payload[key];
   }
-  const defaultVersionId = asString(payload.default_version_id);
   return {
-    dataset_asset_id: asString(payload.dataset_asset_id, record.record_id),
+    baseline_asset_id: asString(payload.baseline_asset_id, record.record_id),
     name: asString(payload.name),
-    description: asString(payload.description),
     aliases: asStringArray(payload.aliases),
-    task_types: asStringArray(payload.task_types),
+    description: asString(payload.description),
+    baseline_family: asEnum(payload.baseline_family, EXPERIMENT_FOUNDATION_BASELINE_FAMILIES, 'method'),
     source_refs: asRefArray(payload.source_refs),
-    default_version_ref: defaultVersionId
-      ? { ref_type: 'dataset_version', ref_id: defaultVersionId }
-      : null,
+    supported_benchmark_refs: asRefArray(payload.supported_benchmark_refs),
+    recommended_use: asString(payload.recommended_use),
     catalog_status: asEnum(
       payload.catalog_status,
-      EXPERIMENT_FOUNDATION_DATASET_CATALOG_STATUSES,
+      EXPERIMENT_FOUNDATION_BASELINE_CATALOG_STATUSES,
       'registered',
     ),
-    schema_summary_json: JSON.stringify(payload.schema_summary ?? {}, null, 2),
     extras,
   };
 }
 
 function build(draft: Draft, base: Record<string, unknown> | null): BuildResult {
-  if (!draft.dataset_asset_id.trim()) {
-    return { payload: {}, error: 'dataset_asset_id is required.' };
+  if (!draft.baseline_asset_id.trim()) {
+    return { payload: {}, error: 'baseline_asset_id is required.' };
   }
   if (!draft.name.trim()) {
     return { payload: {}, error: 'name is required.' };
   }
-  let schemaSummary: Record<string, unknown> = {};
-  try {
-    const parsed = JSON.parse(draft.schema_summary_json) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return { payload: {}, error: 'schema_summary must be a JSON object.' };
-    }
-    schemaSummary = parsed as Record<string, unknown>;
-  } catch (caught) {
-    return { payload: {}, error: caught instanceof Error ? caught.message : String(caught) };
-  }
   const now = new Date().toISOString();
   const payload: JsonObject = {
     ...draft.extras,
-    dataset_asset_id: draft.dataset_asset_id.trim(),
+    baseline_asset_id: draft.baseline_asset_id.trim(),
     name: draft.name.trim(),
     aliases: trimAndCompact(draft.aliases),
     description: draft.description.trim() ? draft.description.trim() : null,
+    baseline_family: draft.baseline_family,
     source_refs: draft.source_refs,
-    task_types: trimAndCompact(draft.task_types),
-    schema_summary: schemaSummary,
-    default_version_id: draft.default_version_ref?.ref_id.trim() || null,
+    supported_benchmark_refs: draft.supported_benchmark_refs,
+    recommended_use: draft.recommended_use.trim() ? draft.recommended_use.trim() : null,
     catalog_status: draft.catalog_status,
     created_at: preserveCreatedAt(base),
     updated_at: now,
@@ -127,23 +116,16 @@ function build(draft: Draft, base: Record<string, unknown> | null): BuildResult 
 
 const HELPERS = { blank: BLANK, derive, build };
 
-export function DatasetAssetView() {
-  const {
-    controller,
-    draft,
-    update,
-    draftError,
-    isEditing,
-    handleNew,
-    handleSave,
-  } = useTypedAssetDraft<Draft>('dataset_asset', HELPERS);
+export function BaselineAssetView() {
+  const { controller, draft, update, draftError, isEditing, handleNew, handleSave } =
+    useTypedAssetDraft<Draft>('baseline_asset', HELPERS);
 
   return (
     <div data-ui="stack" data-direction="col" data-gap="4">
       <AssetFilterToolbar controller={controller} onNew={handleNew} />
       <div data-ui="grid" data-cols="2" data-gap="4">
         <section data-ui="section" data-padding="none">
-          <DatasetAssetTable
+          <BaselineAssetTable
             records={controller.records}
             selectedRecord={controller.selectedRecord}
             onSelect={controller.selectRecord}
@@ -152,16 +134,16 @@ export function DatasetAssetView() {
         <section data-ui="section" data-padding="none">
           <div data-ui="stack" data-direction="col" data-gap="3">
             <p data-ui="text" data-variant="label" data-tone="primary">
-              {isEditing ? '编辑 dataset_asset' : '新建 dataset_asset'}
+              {isEditing ? '编辑 baseline_asset' : '新建 baseline_asset'}
             </p>
             <label data-ui="field">
-              <span data-slot="label">dataset_asset_id *</span>
+              <span data-slot="label">baseline_asset_id *</span>
               <input
                 data-ui="input"
                 data-size="sm"
-                value={draft.dataset_asset_id}
+                value={draft.baseline_asset_id}
                 disabled={isEditing}
-                onChange={(event) => update('dataset_asset_id', event.target.value)}
+                onChange={(event) => update('baseline_asset_id', event.target.value)}
               />
             </label>
             <label data-ui="field">
@@ -184,21 +166,51 @@ export function DatasetAssetView() {
               />
             </label>
             <label data-ui="field">
-              <span data-slot="label">catalog_status</span>
+              <span data-slot="label">baseline_family *</span>
               <select
                 data-ui="select"
                 data-size="sm"
-                value={draft.catalog_status}
+                value={draft.baseline_family}
                 onChange={(event) =>
-                  update('catalog_status', event.target.value as ExperimentFoundationDatasetCatalogStatus)
+                  update('baseline_family', event.target.value as ExperimentFoundationBaselineFamily)
                 }
               >
-                {EXPERIMENT_FOUNDATION_DATASET_CATALOG_STATUSES.map((kind) => (
+                {EXPERIMENT_FOUNDATION_BASELINE_FAMILIES.map((kind) => (
                   <option key={kind} value={kind}>
                     {kind}
                   </option>
                 ))}
               </select>
+            </label>
+            <label data-ui="field">
+              <span data-slot="label">catalog_status *</span>
+              <select
+                data-ui="select"
+                data-size="sm"
+                value={draft.catalog_status}
+                onChange={(event) =>
+                  update(
+                    'catalog_status',
+                    event.target.value as ExperimentFoundationBaselineCatalogStatus,
+                  )
+                }
+              >
+                {EXPERIMENT_FOUNDATION_BASELINE_CATALOG_STATUSES.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {kind}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label data-ui="field">
+              <span data-slot="label">recommended_use</span>
+              <textarea
+                data-ui="textarea"
+                data-size="sm"
+                rows={2}
+                value={draft.recommended_use}
+                onChange={(event) => update('recommended_use', event.target.value)}
+              />
             </label>
             <StringListEditor
               label="aliases"
@@ -206,38 +218,26 @@ export function DatasetAssetView() {
               onChange={(next) => update('aliases', next)}
               placeholder="alias"
             />
-            <StringListEditor
-              label="task_types"
-              values={draft.task_types}
-              onChange={(next) => update('task_types', next)}
-              placeholder="task type"
-            />
             <RefPickerList
               label="source_refs"
               refType="literature_record"
               values={draft.source_refs}
               onChange={(next) => update('source_refs', next)}
-              helpText="证据来源（典型为 literature_record / manual_observation 等 ref）。"
+              helpText="证据来源（文献 / 手动观察）。"
             />
-            <RefPicker
-              label="default_version"
-              refType="dataset_version"
-              value={draft.default_version_ref}
-              onChange={(next) => update('default_version_ref', next)}
-              helpText="可留空；选中 dataset_version 时将其 ref_id 写入 default_version_id。"
-            />
-            <JsonAdvancedPanel
-              title="schema_summary"
-              value={draft.schema_summary_json}
-              editable
-              onChange={(next) => update('schema_summary_json', next)}
-              helpText="自由 JSON 对象，描述数据集字段/列。"
+            <RefPickerList
+              label="supported_benchmark_refs"
+              refType="benchmark_asset"
+              allowedRefTypes={['benchmark_asset']}
+              values={draft.supported_benchmark_refs}
+              onChange={(next) => update('supported_benchmark_refs', next)}
+              helpText="该基线在哪些 benchmark 上经过验证。"
             />
             {Object.keys(draft.extras).length > 0 ? (
               <JsonAdvancedPanel
                 title="高级 JSON（未 typed 字段）"
                 value={draft.extras}
-                helpText="此处只读：本表单未覆盖的契约字段。后续 typed 完整化后会消失。"
+                helpText="此处只读：本表单未覆盖的契约字段。"
               />
             ) : null}
             {draftError ? (
@@ -258,7 +258,7 @@ export function DatasetAssetView() {
   );
 }
 
-function DatasetAssetTable({
+function BaselineAssetTable({
   records,
   selectedRecord,
   onSelect,
@@ -270,7 +270,7 @@ function DatasetAssetTable({
   if (records.length === 0) {
     return (
       <div data-ui="empty-state" data-variant="compact" data-tone="neutral">
-        <p data-slot="title">No dataset_asset</p>
+        <p data-slot="title">No baseline_asset</p>
       </div>
     );
   }
@@ -280,15 +280,17 @@ function DatasetAssetTable({
         <tr>
           <th>id</th>
           <th>name</th>
-          <th>catalog_status</th>
+          <th>family</th>
+          <th>catalog</th>
           <th>updated</th>
         </tr>
       </thead>
       <tbody>
         {records.map((record) => {
-          const payload = (record.payload ?? {}) as Partial<DatasetAsset>;
+          const payload = getBaselineAssetPayload(record);
           const isSelected =
-            selectedRecord?.record_kind === record.record_kind && selectedRecord.record_id === record.record_id;
+            selectedRecord?.record_kind === record.record_kind &&
+            selectedRecord.record_id === record.record_id;
           return (
             <tr key={`${record.record_kind}:${record.record_id}`}>
               <td>
@@ -300,12 +302,13 @@ function DatasetAssetTable({
                   onClick={() => onSelect(record)}
                   title={record.record_id}
                 >
-                  {shortText(record.record_id, 34)}
+                  {shortText(record.record_id, 30)}
                 </button>
               </td>
-              <td>{shortText(payload.name, 30)}</td>
+              <td>{shortText(payload?.name, 26)}</td>
+              <td>{payload?.baseline_family ?? '--'}</td>
               <td>
-                <StatusBadge value={record.status ?? payload.catalog_status ?? null} />
+                <StatusBadge value={record.status ?? payload?.catalog_status ?? null} />
               </td>
               <td>{shortText(record.updated_at, 24)}</td>
             </tr>

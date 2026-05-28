@@ -11,7 +11,8 @@ export type ExperimentFoundationAssetSubTabKey =
   | 'dataset'
   | 'benchmark'
   | 'baseline'
-  | 'protocol';
+  | 'protocol'
+  | 'facts';
 
 export const experimentFoundationAssetSubTabs: Array<{
   key: ExperimentFoundationAssetSubTabKey;
@@ -21,6 +22,7 @@ export const experimentFoundationAssetSubTabs: Array<{
   { key: 'benchmark', label: 'Benchmark' },
   { key: 'baseline', label: 'Baseline' },
   { key: 'protocol', label: 'Protocol' },
+  { key: 'facts', label: 'Facts' },
 ];
 
 // Runtime-checkable membership list for guarding sub-tab writes from the

@@ -2,7 +2,7 @@
 
 ## Status
 - State: in-progress
-- Active phase: S3 typed Baseline/Benchmark/Protocol + light visualization
+- Active phase: S4 paper-binding reverse drill (next)
 - Task ID: `T-110`
 - Mapping: `M-001 > F-001 > R-012 > T-110`
 - Parent task: `T-043 experiment-foundation-v1`

@@ -108,7 +108,42 @@ Key deltas:
 - ~~Untyped `run_recipe_hash` access~~ → closed. New `modules/experiment-foundation/payloads.ts` exposes typed payload accessors: `getRunRecipePayload`, `getTrainingTaskSpecPayload`, `getMaterializeTrainingTaskSpecRequestPayload`, `getExperimentResultPayload`. Each accessor enforces a kind-check then casts to the contract interface. The SubmitJobForm preset now reads `recipe.run_recipe_hash` through `getRunRecipePayload(...)`. Same trust model as the rest of the typed views (backend AJV honors the schema on writes).
 
 
-- [ ] S3: type Baseline / Benchmark / Protocol; inline SVG sparkline for evaluation facts.
+- [x] S3: type Baseline / Benchmark / Protocol; inline SVG sparkline for evaluation facts.
+
+## 2026-05-29 — S3 Baseline/Benchmark/Protocol typed + Facts + Sparkline + scaffold extraction
+Implemented S3 per `01-plan.md`. The 资产库 now has 5 sub-tabs (Dataset/Benchmark/Baseline/Protocol/Facts); Benchmark / Baseline / Protocol are typed forms (no more GenericAssetKindView fallback). Facts is a new sub-tab with three sortable sections + a sparkline visualization for MetricObservation.
+
+Key deliverables:
+
+- **payloads.ts** extended with 6 new typed accessors: `getBaselineAssetPayload`, `getBenchmarkAssetPayload`, `getEvaluationProtocolPayload`, `getEvaluationFactPayload`, `getMetricObservationPayload`, `getComparisonObservationPayload`. Same trust-model as the S2 accessors.
+- **assets/BaselineAssetView.tsx** — typed form for `baseline_asset` (9 typed fields + Advanced JSON extras).
+- **assets/BenchmarkAssetView.tsx** — typed form for `benchmark_asset` (11 typed fields).
+- **assets/EvaluationProtocolView.tsx** — typed form for `evaluation_protocol`. The 8 free-shape policy/aggregation/comparison/etc. blocks render as editable `JsonAdvancedPanel` cards; the rest are typed.
+- **assets/FactsView.tsx** — Facts sub-tab. Three sections (EvaluationFact / MetricObservation / ComparisonObservation), each a sortable table (column-click toggles direction). The MetricObservation section exposes a `metric_definition_ref` dropdown that drives an inline-SVG sparkline of numeric values over `created_at`, with latest/min/max/n chips beside the chart.
+- **viz/SparklineSvg.tsx** — pure inline SVG. Computes path + last-point dot from `{x, y}` points. No external chart library.
+
+**Scaffold extraction (post-review of duplication across 4 typed views)** — the review pass after first-draft S3 surfaced ~1500 lines of near-identical code across Dataset/Baseline/Benchmark/Protocol. Closed before commit:
+
+- **assets/useTypedAssetDraft.ts** — shared hook owning controller wiring, draft state, `previousRecordIdRef` (so refresh of the SAME record does not stomp in-progress edits), `basePayload` tracking for round-tripping extras, `update` / `replaceDraft` / `handleNew` / `handleSave` lifecycle, and renderer-side validation routing.
+- **assets/asset-helpers.ts** — `asStringArray` / `asRefArray` / `asString` / `asEnum` / `trimAndCompact` / `preserveCreatedAt`. Previously duplicated in each view.
+- **components/AssetFilterToolbar.tsx** — shared "status filter + 刷新 + 新建" toolbar.
+- **components/StringListEditor.tsx** — extracted from Dataset/Baseline.
+- **components/MutationFeedback.tsx** — extracted success/error caption pair (kept static literal tones to satisfy the UI gate).
+
+Each typed view now is purely declarative: declares its `Draft` shape, `BLANK`, `derive`, `build`, and the JSX field layout. Boilerplate per view dropped from ~470 lines avg to ~325 lines avg (≈30% reduction). Adding a 5th typed view (e.g. when `base_model_asset` lands) now means writing only the field-specific code.
+
+- **assets/GenericAssetKindView.tsx deleted** — no remaining callers after S3 lands. The S1 placeholder is gone.
+- **constants.ts** — `experimentFoundationAssetSubTabs` and `experimentFoundationAssetSubTabKeys` grew to 5 entries (added `facts`).
+
+### S3 known-debt — none open
+- Carried-forward S2 known-debt (renderer-stamped `created_at` / `updated_at`): still deferred but now centralised in `preserveCreatedAt(base)`. When the backend service starts auto-stamping, this helper changes in one place.
+- Renderer test infrastructure (vitest scaffold) still absent. Recorded as a known follow-up since S1; no S3 code change without coverage was substantial enough to escalate.
+
+### Decisions made while implementing S3
+- The Facts sub-tab keeps three independent `selected` states (one per section). Cross-section coordination (e.g. "selecting a fact also highlights its observations") is out of scope for V1 visualization. Marked for re-evaluation when the user reports needing it.
+- Sparkline X-axis sort uses lexicographic string compare on ISO timestamps. ISO 8601 is sortable, so this works. If a future caller passes non-ISO strings (e.g. arbitrary run_recipe_id), the chart order will be alphabetic; doc'd in the component header.
+- Non-numeric `MetricObservation.value` entries silently skip the sparkline (`readNumericValue` returns null). The table still shows their other fields. Could surface a warning later if needed.
+- All four typed forms preserve `created_at` from `basePayload` on edit via `preserveCreatedAt(base)`. New records still get a renderer-side `new Date().toISOString()`; centralising this leaves a single site to flip when backend stamping lands.
 - [ ] S4: read-only `PaperBindingPanel` with jump-to-flow.
 - [ ] S5: land UI-driven full-flow smoke and update T-106 acceptance.
 

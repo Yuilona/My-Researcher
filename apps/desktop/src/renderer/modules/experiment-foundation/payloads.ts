@@ -1,7 +1,13 @@
 import type {
+  BaselineAsset,
+  BenchmarkAsset,
+  ComparisonObservation,
+  EvaluationFact,
+  EvaluationProtocol,
   ExperimentFoundationStoredRecord,
   ExperimentResult,
   MaterializeTrainingTaskSpecRequest,
+  MetricObservation,
   RunRecipe,
   TrainingTaskSpec,
 } from '@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts';
@@ -52,4 +58,58 @@ export function getExperimentResultPayload(
     return null;
   }
   return record.payload as unknown as ExperimentResult;
+}
+
+export function getBenchmarkAssetPayload(
+  record: ExperimentFoundationStoredRecord | null,
+): BenchmarkAsset | null {
+  if (!record || record.record_kind !== 'benchmark_asset') {
+    return null;
+  }
+  return record.payload as unknown as BenchmarkAsset;
+}
+
+export function getBaselineAssetPayload(
+  record: ExperimentFoundationStoredRecord | null,
+): BaselineAsset | null {
+  if (!record || record.record_kind !== 'baseline_asset') {
+    return null;
+  }
+  return record.payload as unknown as BaselineAsset;
+}
+
+export function getEvaluationProtocolPayload(
+  record: ExperimentFoundationStoredRecord | null,
+): EvaluationProtocol | null {
+  if (!record || record.record_kind !== 'evaluation_protocol') {
+    return null;
+  }
+  return record.payload as unknown as EvaluationProtocol;
+}
+
+export function getEvaluationFactPayload(
+  record: ExperimentFoundationStoredRecord | null,
+): EvaluationFact | null {
+  if (!record || record.record_kind !== 'evaluation_fact') {
+    return null;
+  }
+  return record.payload as unknown as EvaluationFact;
+}
+
+export function getMetricObservationPayload(
+  record: ExperimentFoundationStoredRecord | null,
+): MetricObservation | null {
+  if (!record || record.record_kind !== 'metric_observation') {
+    return null;
+  }
+  return record.payload as unknown as MetricObservation;
+}
+
+export function getComparisonObservationPayload(
+  record: ExperimentFoundationStoredRecord | null,
+): ComparisonObservation | null {
+  if (!record || record.record_kind !== 'comparison_observation') {
+    return null;
+  }
+  return record.payload as unknown as ComparisonObservation;
 }

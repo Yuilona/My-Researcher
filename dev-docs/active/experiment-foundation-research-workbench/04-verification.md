@@ -90,6 +90,29 @@
 - REGRESSION (shared): `pnpm --filter @paper-engineering-assistant/shared test` reports 196 pass / 1 fail. The single failure (test 132 `research-lifecycle barrel re-exports the runtime value surface of split modules`) is pre-existing T-088 in-flight work and not caused by S1. My S0+ classification subset test (test 46) still passes.
 - REGRESSION (backend): `node apps/backend/scripts/run-node-tests.mjs ...` reports 869 pass / 0 fail / 2 skipped. No regression from S1.
 
+### 2026-05-29 — S3 Baseline/Benchmark/Protocol typed + Facts + Sparkline + scaffold extraction
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop typecheck`.
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop build`.
+- PASS: `python3 .ai/skills/features/ui/ui-governance-gate/scripts/ui_gate.py run --mode full` after one round-trip.
+  - First run: 1 error on `SparklineSvg.tsx`: `no-inline-style` (the SVG carried `style={{ overflow: 'visible' }}`).
+  - Remediation: dropped the inline `style`; the sparkline's padding (2px on each side) already keeps the last-point dot inside the viewBox.
+  - Passing report: Errors 0, Warnings 0.
+- PASS: `node .ai/tests/run.mjs --suite ui` (4/4).
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop smoke:e2e`.
+- PASS: project governance sync + lint.
+- PASS: `git diff --check`.
+
+### S3 Acceptance check
+- [x] `BaselineAssetView` typed form (`baseline_asset_id` / `name` / `aliases` / `description` / `baseline_family` (enum) / `source_refs` / `supported_benchmark_refs` / `recommended_use` / `catalog_status` (enum)). Unknown contract fields round-trip via "高级 JSON（未 typed 字段）".
+- [x] `BenchmarkAssetView` typed form (`benchmark_asset_id` / `name` / `description` / `task` / `domain` / `dataset_version_refs` / `default_evaluation_protocol_refs` / `source_refs` / `community_refs` / `catalog_status` / `verification_status`).
+- [x] `EvaluationProtocolView` typed form (`evaluation_protocol_id` / `benchmark_asset_ref` via RefPicker / `protocol_version` / `protocol_hash` / `metric_definition_refs` / `evaluator_refs` + 8 free-shape config blocks as `JsonAdvancedPanel` editors).
+- [x] `FactsView` sub-tab with three sortable sections (`evaluation_fact` / `metric_observation` / `comparison_observation`). Column-click toggles sort direction.
+- [x] `MetricObservation` section exposes a metric-ref dropdown and renders an inline-SVG sparkline of numeric values across `created_at`. `latest / min / max / n` chips beside the chart. No chart library introduced.
+- [x] All 4 typed asset views (Dataset / Baseline / Benchmark / Protocol) now share a single scaffold: `useTypedAssetDraft<Draft>(recordKind, { blank, derive, build })` plus `AssetFilterToolbar` / `StringListEditor` / `MutationFeedback` shared components, and `asEnum` / `asRefArray` / `asString` / `asStringArray` / `preserveCreatedAt` / `trimAndCompact` shared helpers. Per-view boilerplate cut from ~470 lines avg to ~325 lines avg.
+- [x] `资产库` sub-tab list grew from 4 to 5: Dataset / Benchmark / Baseline / Protocol / Facts.
+- [x] `GenericAssetKindView.tsx` deleted (no remaining callers).
+- [x] Renderer-side classifications remain Shared-sourced; no new literal `*_STATUSES` sets introduced.
+
 ### 2026-05-29 — S2 known-debt cleanup (preselect / pagination / payload accessors)
 - PASS: `pnpm --filter @paper-engineering-assistant/desktop typecheck`.
 - PASS: `pnpm --filter @paper-engineering-assistant/desktop build`.

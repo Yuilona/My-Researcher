@@ -1,6 +1,9 @@
 import type { ExperimentFoundationAssetSubTabKey } from '../constants';
+import { BaselineAssetView } from './BaselineAssetView';
+import { BenchmarkAssetView } from './BenchmarkAssetView';
 import { DatasetAssetView } from './DatasetAssetView';
-import { GenericAssetKindView } from './GenericAssetKindView';
+import { EvaluationProtocolView } from './EvaluationProtocolView';
+import { FactsView } from './FactsView';
 
 export type AssetLibraryPanelProps = {
   activeSubTab: ExperimentFoundationAssetSubTabKey;
@@ -15,24 +18,10 @@ export function AssetLibraryPanel({ activeSubTab }: AssetLibraryPanelProps) {
   return (
     <div data-ui="stack" data-direction="col" data-gap="4">
       {activeSubTab === 'dataset' ? <DatasetAssetView /> : null}
-      {activeSubTab === 'benchmark' ? (
-        <GenericAssetKindView
-          recordKind="benchmark_asset"
-          description="基准（comparison rules）。S1 阶段以契约 JSON 写入；typed 表单在 S3 落地。"
-        />
-      ) : null}
-      {activeSubTab === 'baseline' ? (
-        <GenericAssetKindView
-          recordKind="baseline_asset"
-          description="基线（comparison target）。S1 阶段以契约 JSON 写入；typed 表单在 S3 落地。"
-        />
-      ) : null}
-      {activeSubTab === 'protocol' ? (
-        <GenericAssetKindView
-          recordKind="evaluation_protocol"
-          description="评测协议。S1 阶段以契约 JSON 写入；typed 表单在 S3 落地。"
-        />
-      ) : null}
+      {activeSubTab === 'benchmark' ? <BenchmarkAssetView /> : null}
+      {activeSubTab === 'baseline' ? <BaselineAssetView /> : null}
+      {activeSubTab === 'protocol' ? <EvaluationProtocolView /> : null}
+      {activeSubTab === 'facts' ? <FactsView /> : null}
     </div>
   );
 }
