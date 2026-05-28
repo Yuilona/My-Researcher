@@ -521,3 +521,187 @@ Implementation is complete for T-107. v1b has shared harness contracts, policy/r
 - Normalized runtime trace labels and missing-artifact messages so production trace evidence names final N1-N11 node semantics instead of implementation-slice phases.
 - Marked `06-current-state-mapping.md` as a historical Phase 1 baseline and `07-node-policy-alignment.md` as a finalized policy discussion log. Executable shared contracts and `08-exit-gate-review.md` are the live authority when there is any conflict.
 - Confirmed there are no temporary logs, coverage artifacts, `.tmp` files, `.bak` files, `.orig` files, or `tsbuildinfo` files created by this work.
+
+## 2026-05-27 Deep Acceptance Matrix Supplement
+- Added `09-deep-acceptance-matrix.md` to make the T-107 acceptance surface explicit after exit-gate acceptance.
+- Matrix separates harness acceptance, per-node behavior, output-quality expectations, and non-blocking residual gaps.
+- Clarified the original T-107 exit-gate boundary: frozen artifact plus deterministic gate behavior were accepted before route exposure, Prisma-backed route smoke, and v1c promotion/bridge authority. Later supplements added Prisma rollback coverage, full harness-native HTTP invocation, standalone runner coverage, DashScope/OpenAI provider-backed repeat coverage, and Prisma-backed harness HTTP route smoke while keeping external interactive Codex variance, broader multi-sample operational stability, and v1c promotion/bridge authority out of scope.
+
+## 2026-05-27 Legacy V1b Write Route Freeze
+- This was an intermediate stabilization step only. The temporary compatibility headers and opt-in route-freeze mechanism were superseded by the later hard-removal pass.
+- The current accepted surface does not retain legacy v1b HTTP orchestration writes. Local automation uses harness-native node invocation and artifact routes only.
+
+## 2026-05-27 Transaction Failure Matrix
+- Added a reusable harness test helper that asserts an injected authority-write failure leaves no replayable admitted trace for the failed node attempt, leaves no captured authority rows, retries as a fresh successful invocation, and only exact-replays after that successful retry.
+- Extended service-level failure injection beyond the existing N5 case to N4, N6, N7, N8, and N10 multi-record authority writes:
+  - N4 `createPlanRunWithOptionSet`
+  - N6 `createFormationRunWithCandidates`
+  - N7 `createSelectionDecisionWithMaterializations`
+  - N8 `createAssessmentWithMemo`
+  - N10 `createDraftPackageAuthority`
+- The matrix stays in harness unit fixtures. It strengthens T-107 service-level transaction consistency evidence but does not claim exhaustive Prisma-backed rollback coverage.
+
+## 2026-05-27 Prisma Transaction Rollback Fix
+- Added real Prisma-backed repository rollback coverage for every v1b multi-record authority write used by the harness:
+  - N4 `createPlanRunWithOptionSet`
+  - N5 `createSelectionDecisionWithSlice`
+  - N6 `createFormationRunWithCandidates`
+  - N7 `createSelectionDecisionWithMaterializations`
+  - N8 `createAssessmentWithMemo`
+  - N10 `createDraftPackageAuthority`
+- Each test injects a real database failure after one or more earlier writes in the same repository method, verifies no partial authority rows or status patches remain, then retries with the same authority ids after correcting the failure input.
+- The production implementation already had the required `$transaction` boundaries, so the fix is executable integration coverage rather than a transaction refactor.
+- N10 coverage specifically verifies the late `ValueDispositionDecision` patch failure path: package research record, package, trace check, readiness assessment, and v1c bundle are all rolled back when the final disposition update fails, and the same package ids retry cleanly after the disposition row exists.
+
+## 2026-05-27 Harness-Native HTTP Invocation Surface
+- Added a topic-selection v1b WorkflowHarness-native HTTP invocation route: `POST /topic-selection/v1b/workflow-harness/nodes/:nodeId/invocations`.
+- The route is not marked as a legacy write route and does not emit the legacy deprecation/compatibility headers. It is the HTTP entrypoint for `TopicSelectionV1bWorkflowHarnessService.invokeNode`.
+- The controller validates that route `nodeId` matches body `node_id` before calling the harness service, preventing accidental cross-node submission through a valid-looking request body.
+- `buildApp` now constructs `TopicSelectionV1bWorkflowHarnessService` with the same v1b repositories already used by the product services, so the HTTP path uses the accepted harness authority and repository wiring rather than a parallel orchestration stack.
+- Route-level regression coverage now creates a real in-memory v1a-to-v1b bundle, invokes N1 through the harness-native HTTP route, then invokes N2 through the same route with a `codex_assisted` semantic artifact. This proves Codex-assisted artifact admission can cross the HTTP boundary for delegated v1b support.
+- The change deliberately does not add a separate v1b live-runner script or duplicate N1-N11 orchestration loop. Full HTTP N1-N11 chain coverage can be added later using the same route if automation needs a single command runner.
+
+## 2026-05-27 Legacy Default Closure And Full HTTP Chain
+- Added harness-native artifact routes for local automation: `POST /topic-selection/v1b/workflow-harness/artifacts` records frozen semantic/support artifacts through the control plane, and `GET /topic-selection/v1b/workflow-harness/artifacts/:artifactRefId` reads them back for downstream node requests.
+- Extended `N8ToN9Handoff` and `N10ToN11Handoff` so HTTP clients can build downstream frozen inputs without repository-private reads. N8 now carries `value_reasoning_memo_ref`, `value_reasoning_memo_hash`, and `recommended_disposition`; N10 now carries `v1c_input_bundle_ref` and `v1c_input_bundle_hash`.
+- Added full route-level N1-N11 harness HTTP coverage using the current in-memory app wiring. The test creates a v1a-to-v1b input bundle, invokes every v1b harness node through `/topic-selection/v1b/workflow-harness/nodes/:nodeId/invocations`, records frozen Codex-assisted semantic artifacts through the harness artifact route for N2/N4/N6/N8, follows typed handoffs through N11, and verifies terminal `stop_v1b_complete` publication.
+- The accepted local path is harness-native HTTP plus shared contracts. This section was originally paired with a disabled legacy-write compatibility mode; that compatibility mode has since been removed.
+
+## 2026-05-27 Legacy Route Hard Removal And Phased V1b Testing
+- Removed the legacy v1b HTTP orchestration write route registrations entirely, including intake snapshot, constraint profile, readiness assessment, slice option set/selection, question candidate set/selection, value assessment/disposition, draft package, and v1c bundle publication POST routes.
+- Removed legacy route mode headers, env opt-in constants, marker middleware, and direct-write controller methods. Old POST route strings now exist only inside route integration tests that assert HTTP 404.
+- Removed desktop workbench calls to the deleted v1b write APIs. The topic workbench cards now display persisted v1b projections and leave writes to the harness-native path.
+- Retired the old direct-route T-068 decision-chain acceptance path and the direct v1b section of `.ai/scripts/topic-selection-real-e2e.mjs`. At this phase boundary, the accepted local automation path was the harness HTTP route plus artifact routes; the standalone harness runner was added in the following phase.
+- Phase 1 v1b testing after hard removal covered shared schemas, the full N1-N11 harness service suite, real Prisma rollback tests, full N1-N11 harness HTTP route integration with `.env.local`, Prisma-backed harness HTTP smoke, desktop/shared/backend typechecks, and `git diff --check`.
+
+## 2026-05-27 Standalone V1b Harness Runner
+- Added `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` and package script `pnpm topic-selection:v1b-harness-e2e`.
+- The runner creates a minimal v1a validated-need handoff through existing v1a HTTP routes, then invokes v1b N1-N11 exclusively through `/topic-selection/v1b/workflow-harness/nodes/:nodeId/invocations`.
+- Model-like/delegated v1b nodes receive frozen Codex-assisted semantic artifacts through `POST /topic-selection/v1b/workflow-harness/artifacts`; the runner does not call legacy v1b write routes and does not live-call provider models.
+- The runner asserts every removed legacy v1b write route returns HTTP 404 before executing the harness chain.
+- The runner writes machine-readable evidence under `.ai/.tmp/topic-selection-v1b-harness-e2e/<run-id>/result.json`, including node status, route decision, authority refs, handoff refs, and hashes for N1-N11.
+- `TOPIC_SELECTION_V1B_HARNESS_REPEAT=<n>` can run repeated independent chains in one process to catch ID, route, and persistence collisions.
+
+## 2026-05-27 Provider-Backed Standalone V1b Harness Runner
+- Extended `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` with `TOPIC_SELECTION_V1B_HARNESS_SEMANTIC_MODE=provider_llm` while keeping the default fixture mode for fast local smoke.
+- Provider mode still uses the accepted harness HTTP route and artifact routes. It creates N4/N6/N8 semantic drafts through `BackendLlmGateway`, normalizes the provider JSON into the shared draft schemas, records the normalized artifact through the harness artifact route, then lets deterministic node gates decide authority.
+- Provider/model selection is registry-backed. The runner resolves `openai` or `dashscope` provider options from `TopicSelectionModelProfileRegistryService`, supports explicit model override through env, and defaults to bounded timeouts/retries for canary use.
+- The runner does not persist raw provider responses. Result artifacts keep normalized output summaries, provider/model provenance, and telemetry such as elapsed time, retry count, and token counts.
+- Live canary failures drove prompt and allowlist hardening before acceptance:
+  - N4 now constrains target community, contribution type, claim ceiling, selectable option shape, safe claim language, exact allowed evidence refs, and empty hard blockers.
+  - N6 now constrains admissible question shape, answerability verdict, evidence-role coverage, claim ceiling, exact allowed refs, traceability evidence, and blocker-free candidate admission.
+  - N8 now constrains value refs to topic question, contract, answerability plan, candidate, slice, and evidence refs, and explicitly excludes artifact, trace, transition, gate, intake, readiness, constraint, and selection refs from value citations.
+- Added runner-level output-quality assertions for provider mode so a schema-valid provider draft is not enough: N4 must have a selected supported option, N6 must produce an answerable research question with falsification conditions and support evidence, and N8 must produce a ready or accepted-risk value assessment with the exact gate/dimension surface and sufficient score.
+- DashScope provider repeat=2 passed as the first repeated live-provider canary. Initial OpenAI standalone provider attempts exposed two separate issues: N8 could recommend package advancement with too-low value scores, and OpenAI TLS connection resets could exhaust the previous low retry cap. Both are addressed in the follow-up OpenAI fix section below.
+
+## 2026-05-27 OpenAI Provider Canary Fix
+- Hardened the N8 provider prompt for the standalone v1b harness runner so OpenAI treats the canary as package-drafting readiness rather than promotion readiness. The prompt now explicitly requires `ready_with_accepted_risk`, `advance_to_package`, `total_score >= 72`, no blocking hard gates, dimension scores above the deterministic quality floor, and reviewer-risk scoring that treats explicit risk handling as value-positive.
+- Increased `BackendLlmGateway` provider retry cap from 3 to 8 so caller-supplied retry budgets can absorb transient OpenAI transport failures such as TLS `ECONNRESET` before a secure connection is established.
+- Set the standalone v1b harness OpenAI provider default retry budget to 6 while keeping DashScope/default provider canary retries lower unless explicitly overridden.
+- Added `llm-gateway.unit.test.ts` coverage proving retry budgets above three attempts are honored.
+- OpenAI provider canaries now pass both repeat=1 and repeat=2 through the full v1b N1-N11 harness path using `gpt-5.4-mini` for N4/N6/N8 semantic drafts. The fix does not bypass deterministic gates and does not mutate provider output after generation.
+
+## 2026-05-27 Provider Soak And DashScope Schema-Adherence Fix
+- Extended provider soak evidence to repeat=3 for both OpenAI and DashScope through the standalone v1b harness runner.
+- A DashScope repeat=3 attempt exposed a schema-adherence edge in N8: the provider produced a high-quality value draft but emitted `reasoning_memo.effort_to_value_fit` instead of the exact contract field `reasoning_memo.effort_to_value`, causing the deterministic N8 gate to block before authority writes.
+- Hardened the N8 prompt to explicitly require `reasoning_memo.effort_to_value` and forbid `effort_to_value_fit`.
+- Added a conservative harness provider-output normalization step before semantic artifact admission for the known N8 alias only. The service gate remains strict: normalized artifacts must still pass the exact N8 value draft contract, hash checks, gate/dimension coverage, citation allowlists, and output-quality assertions.
+- Provider provenance now records `normalization_repairs` alongside telemetry so any future repair is visible in the result evidence. The passing DashScope repeat=3 soak required zero repairs after the prompt hardening.
+
+## 2026-05-27 Multi-Sample Provider Batch Entry
+- Extended `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` so it can consume an existing persisted v1b input bundle through `TOPIC_SELECTION_V1B_HARNESS_INPUT_BUNDLE_ID` or `TOPIC_SELECTION_REAL_V1B_INPUT_BUNDLE_ID`.
+- Added `.ai/scripts/topic-selection-multisample-provider-batch.mjs` and package script `pnpm topic-selection:multisample-provider-batch`.
+- The batch runner discovers the latest ready or ready-with-warning resource sample sets, runs the existing v1a harness in Codex-assisted modes for each sample, extracts the published `v1b_input_bundle_id`, and invokes the v1b harness runner against that exact bundle.
+- This gives a local one-command path for current-content v1a+v1b linked acceptance without resurrecting the retired direct v1b route runner or legacy v1b write routes.
+- A real OpenAI batch attempt exposed another N8 provider adherence edge: a value draft cited allowed refs but added non-canonical ref fields, and an earlier attempt showed the same class can corrupt copied `title_card_id` strings. The deterministic N8 gate correctly rejected unknown/non-canonical frozen refs before authority writes.
+- Added a conservative N8-only ref canonicalization pass in the provider runner: if a provider ref uniquely matches `allowed_functional_refs_json` by `ref_type`, `ref_id`, and compatible `version_id`, the runner replaces it with the exact frozen allowed ref object and records `N8_ALLOWED_REF_CANONICALIZED` in `normalization_repairs`.
+- The repair does not weaken service gates or widen the ref allowlist. Ambiguous refs, wrong ids, and wrong explicit versions still pass through to the deterministic gate and fail normally.
+- Hardened the provider prompt to require whole-object ref copying, including exact `title_card_id` and `version_id`.
+
+## 2026-05-27 N6-N8 Closed-Loop Scenario Coverage
+- Added a reusable `runTerminalPackageFromN8` helper to the v1b WorkflowHarness service test suite so loopback/readmission tests can prove downstream N9/N10/N11 closure instead of stopping at a branch decision.
+- Added a closed-loop N6 semantic loopback scenario: an all-failed candidate draft blocks with `N6_NO_ADMISSIBLE_TOPIC_QUESTION_CANDIDATE`, leaves no candidate-set authority, then a regenerated N6 candidate set advances through N7, N8, N9, N10, and terminal N11 `stop_v1b_complete`.
+- Added a closed-loop N7 semantic-trial switch scenario: N8 semantic feedback rejects the first active candidate, N7 records the failed trial and selects the second candidate, then that second candidate passes N8 and closes through N11.
+- Added a closed-loop N8 gate-rejection readmission scenario: an invalid N8 draft blocks at the deterministic value gate, N7 consumes gate-rejected feedback, readmits the same candidate with a changed N8 debate-admission hash, and the same contract then passes N8 and closes through N11.
+- Added a closed-loop exhausted-trials scenario: N7 exhausts all candidate trials with complete failed-trial synthesis and loops back to N6; a regenerated N6 candidate set then advances through N7/N8 and closes through N11.
+- These tests keep the loopback/retry mechanics deterministic and service-level. Provider live batches still cover successful N4/N6/N8 semantic drafts, not all negative loopback variants.
+
+## 2026-05-28 N6/N7 Loopback Policy Implementation Alignment
+- Aligned N6 and N7 loopback trace payloads with the executable shared policy `loopback_target_codes` instead of free-text `loopback_target` values.
+- N6 all-candidate semantic failure now emits `loopback_target_code: n6_regenerate_candidates`, matching the N6 shared policy allowlist. The baseline route target stays on `topic-selection.v1b.generate-topic-question-candidates.v1` so local regeneration does not imply an upstream N5 rollback.
+- N7 all-trial exhaustion now emits and persists `loopback_target_code: n7_loopback_to_n6`, matching the N7 shared policy allowlist and the documented N7-to-N6 regeneration path.
+- Added service-level assertions that read the persisted trace snapshot, verify `loopback_target_code`, verify legacy `loopback_target` is absent, and verify the emitted code exists in `TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_NODE_POLICIES`.
+- This alignment established the baseline `n6_regenerate_candidates`/`n7_loopback_to_n6` codes; the follow-up N6 triage implementation below adds the executable debate-escalation and N5 rollback variants.
+
+## 2026-05-28 N6/N7/N8 Deep Variant Coverage
+- Added N6 partial semantic-failure coverage: mixed failed/admissible candidates now prove the runner admits only passing candidates, carries `BLOCKED_CANDIDATES_PRESENT`, preserves compact blocked-candidate context in `admission_readiness`, emits no loopback target code, and leaves N5 selection authority unchanged.
+- Added an explicit N6 guard for unsupported debate execution config. A request carrying `execution_spec.debate_config` is rejected by request validation before any control-plane or candidate-set persistence. This prevents policy-declared `n6_debate_escalation` from being accidentally treated as implemented debate execution.
+- Tightened N7 gate-rejected feedback handling: `gate_rejected` feedback now requires frozen `n7_n8_debate_admission_review` support before readmission. Without that support, N7 blocks with `N7_GATE_READMISSION_DEBATE_ADMISSION_REQUIRED` instead of falling through to exhausted-trial synthesis semantics.
+- Added N7 scheduler/coordination negative variants for duplicate grouping priority and illegal initial failed-trial synthesis. Both block before `TopicQuestionContract` materialization.
+- Added N8 deterministic value-gate variants for memo/disposition mismatch, blocking gate with advance, non-ready advance, low-score advance, missing memo citations, and unknown frozen value refs. All block before value-assessment authority writes.
+- Remaining scope after this slice was specifically N6 triage-backed debate-escalation and upstream rollback; both are now implemented in the policy/contract section below.
+
+## 2026-05-28 N6 Loopback Triage Contract And Harness Routing
+- Added executable shared contract `N6LoopbackTriageSupport@v1` for N6 all-candidate semantic failure triage. The payload declares `loopback_target_code`, failure scope, dominant reason codes, affected refs, regeneration hints, optional debate escalation, optional upstream rollback, and rationale.
+- Expanded the N6 shared policy allowlist to three target codes: `n6_regenerate_candidates`, `n6_debate_escalation`, and `n6_loopback_to_n5_select_different_slice`.
+- Added explicit N6 loopback route edges in `TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_NODE_POLICIES`: default regeneration and debate escalation route back to N6; slice-level rollback routes to N5 `select-research-slice`.
+- The N6 harness now consumes frozen `n6_loopback_triage` support only on all-candidate semantic failure. Without triage it preserves the deterministic default `n6_regenerate_candidates`; with valid triage it writes the target code, route target node id, debate escalation/upstream rollback payload, reason codes, and triage hashes into the trace snapshot and route hash.
+- Inconsistent triage is blocked before routing and before any candidate-set authority write. Examples: `n6_debate_escalation` without `debate_escalation`, N5 rollback without `upstream_rollback`, target/scope mismatches, regeneration carrying debate/rollback side effects, or `affected_refs` outside the frozen N6 lineage.
+- The shared schema now constrains target/scope combinations: N6 regeneration and debate escalation require `candidate_level` or `question_frame_level`; N5 rollback requires `slice_level` or `upstream_context_level`.
+- The service now verifies `affected_refs` against the current frozen N6 lineage (`constraint_profile_ref`, `intake_readiness_ref`, `research_slice_ref`, `research_slice_selection_ref`, `research_slice_option_set_ref`, `selected_slice_option_ref`) and requires the selected `ResearchSlice` ref to be included.
+- This implements route-level debate switching and upstream rollback signaling. It does not introduce a hidden live debate executor inside N6; the next N6 attempt must still arrive as a frozen semantic artifact through the existing harness admission boundary.
+
+## 2026-05-28 Provider-Backed Negative Loopback Runner
+- Extended `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` with `TOPIC_SELECTION_V1B_HARNESS_SCENARIO=provider_negative_loopbacks` and package script `pnpm topic-selection:v1b-provider-negative-loopbacks`.
+- The new scenario keeps the default positive N1-N11 runner unchanged. It builds a fixture-backed N1-N5 setup, then uses live provider artifacts for negative N6/N8 semantic outputs while retaining deterministic harness gates as the authority boundary.
+- Covered provider-backed N6 all-failed candidate variants for default `n6_regenerate_candidates`, Codex-triage-backed `n6_debate_escalation`, and Codex-triage-backed `n6_loopback_to_n5_select_different_slice`.
+- Covered provider-backed N8 blocking-gate rejection followed by N7 gate-rejected feedback readmission with frozen `n7_n8_debate_admission_review` support.
+- Covered provider-backed N8 non-advance assessments across two candidate trials, N7 semantic feedback scheduling of the second candidate, complete failed-trial synthesis, and final `n7_loopback_to_n6` exhaustion.
+- Fixed the runner admission shape for mixed provider/Codex support artifacts: mixed-artifact node invocations omit global `execution_spec/profile_id/run_mode` and let each frozen semantic artifact admit against its own slot policy. This avoids a false `RUNTIME_ADMISSION_ARTIFACT_MISMATCH` when provider N6 drafts are combined with Codex N6 triage support.
+- Added runner assertions against persisted N6 trace snapshots so provider-negative N6 cases prove the exact `loopback_target_code`, `route_target_node_id`, and debate/upstream rollback payload presence, not just a generic blocked loopback result.
+
+## 2026-05-28 Repeat Semantics And LLM-Facing Runner Guidance
+
+- Kept the low-level v1b harness runner default at `TOPIC_SELECTION_V1B_HARNESS_REPEAT=1`. This remains the right local smoke default and the right default for provider-negative loopback probes because those runs are expensive and intentionally fail-fast on the first broken chain.
+- Added package script `pnpm topic-selection:v1b-provider-canary` as the explicit provider acceptance entry. It runs `TOPIC_SELECTION_V1B_HARNESS_SEMANTIC_MODE=provider_llm` with `TOPIC_SELECTION_V1B_HARNESS_REPEAT=3`, while still allowing the provider id to be selected by `TOPIC_SELECTION_V1B_HARNESS_PROVIDER_ID`.
+- Added `docs/context/process/topic-selection-v1b-harness-runner.md` as the LLM-facing runner guide and routed `docs/context/AGENTS.md` / `docs/context/INDEX.md` to it. The guide states that `repeat` is exact independent-chain count and fail-fast, not retry budget or an upper bound.
+- Added a compact v1b desktop workbench hint that mirrors the operational口径: UI displays harness-written authority, local smoke defaults to one run, provider canary acceptance uses three independent runs, and provider transport retries are configured separately.
+
+## 2026-05-28 External Codex CLI N6 Variance Entry
+
+- Added `TOPIC_SELECTION_V1B_HARNESS_SCENARIO=external_codex_n6_variance` and package script `pnpm topic-selection:v1b-external-codex-n6-variance`. The initial generic N6 entry was renamed during final cleanup so N4/N6/N8 variance probes cannot be confused.
+- The scenario keeps setup deterministic through N5, then asks independent external `codex exec` sessions to produce N6 `TopicQuestionCandidateSetDraft` JSON. Each result is parsed, frozen as a `codex_assisted` semantic artifact, admitted through the same harness artifact path, and invoked through deterministic N6 gates.
+- The external Codex sample count is controlled by `TOPIC_SELECTION_V1B_HARNESS_CODEX_VARIANCE_COUNT` and defaults to 3. This is intentionally separate from `TOPIC_SELECTION_V1B_HARNESS_REPEAT`, which remains the whole-run repeat count.
+- External Codex CLI calls prefer the Codex app bundled CLI at `/Applications/Codex.app/Contents/Resources/codex` when present, falling back to `CODEX_CLI_PATH` or `codex`. This avoids stale PATH CLIs that reject current ChatGPT-account model ids. Calls also override local global reasoning effort with `TOPIC_SELECTION_V1B_HARNESS_CODEX_REASONING_EFFORT` (default `high`; `minimal` is avoided because the bundled CLI rejects it when default tools such as web search/image generation are present). `TOPIC_SELECTION_V1B_HARNESS_CODEX_MODEL` is optional and should be set only when a compatible CLI model override is known.
+- Evidence is stored under `.ai/.tmp/topic-selection-v1b-harness-e2e/<run-id>/external-codex-n6-variance/sample-<n>/`, including prompt, last message, stdout, stderr, prompt hash, output hash, parsed payload hash, and the N6 gate result.
+- This is an external Codex CLI exec-session variance probe for N6 draft quality and harness admission. It does not yet claim full multi-turn human-interactive Codex session variance or live Codex execution for N4/N8.
+
+## 2026-05-28 External Codex CLI N4 Variance Entry
+
+- Added `TOPIC_SELECTION_V1B_HARNESS_SCENARIO=external_codex_n4_variance` and package script `pnpm topic-selection:v1b-external-codex-n4-variance`.
+- The scenario creates a deterministic N1-N3 setup, then asks independent external bundled `codex exec` sessions to produce N4 `ResearchSliceOptionSetDraft` JSON.
+- Each external N4 result is parsed, frozen as a `codex_assisted` `n4_research_slice_option_draft` semantic artifact, submitted through the harness artifact path, and admitted only by deterministic N4 gates before any `ResearchSliceOptionSet` authority write.
+- The N4 prompt keeps refs, option keys, risk enums, selectable conditions, non-goal exclusions, blockers, and `details_payload` structurally strict while allowing bounded natural-language variation in slice statements, expected/fallback claims, evidence-trace rationale, and assumptions.
+- A first 3-sample attempt exposed the useful negative edge: Codex paraphrased `excluded_boundaries`, so N4 blocked with `N4_NON_GOAL_NOT_EXCLUDED` before authority writes. The prompt was tightened to preserve excluded non-goals byte-for-byte; the follow-up 1-sample canary and 3-sample run both passed.
+- Evidence is stored under `.ai/.tmp/topic-selection-v1b-harness-e2e/<run-id>/external-codex-n4-variance/sample-<n>/`, including prompt, last message, stdout, stderr, prompt hash, output hash, parsed payload hash, and the N4 gate result.
+- This is an external Codex CLI exec-session variance probe for N4 slice-option draft quality and harness admission. It still does not claim full multi-turn human-interactive Codex session variance.
+
+## 2026-05-28 External Codex CLI N8 Variance Entry
+
+- Added `TOPIC_SELECTION_V1B_HARNESS_SCENARIO=external_codex_n8_variance` and package script `pnpm topic-selection:v1b-external-codex-n8-variance`.
+- The scenario reuses the deterministic N1-N5 setup and creates an independent fixture N6/N7 contract per sample, then asks external bundled `codex exec` sessions to produce N8 `TopicValueAssessmentDraft` JSON.
+- Each external N8 result is parsed, frozen as a `codex_assisted` `n8_value_assessment_draft` semantic artifact, submitted through the harness artifact path, and admitted only by deterministic N8 value gates.
+- The prompt keeps N8 structurally strict: exact hard-gate order, exact dimension order, exact refs, exact numeric scores, exact `reasoning_memo.effort_to_value`, no `effort_to_value_fit`, and no added/removed memo fields. Only natural-language rationales and memo text may vary.
+- Evidence is stored under `.ai/.tmp/topic-selection-v1b-harness-e2e/<run-id>/external-codex-n8-variance/sample-<n>/`, including prompt, last message, stdout, stderr, prompt hash, output hash, parsed payload hash, and the N8 gate result.
+- A first N8 run exposed local dev DB schema drift rather than an N8 issue: `.env.local` selected Prisma repositories, but the target schema had not applied repo migrations. Running `pnpm db:dev:migrate` applied the missing migrations before the passing N8 variance run.
+- This is an external Codex CLI exec-session variance probe for N8 value-draft quality and harness admission. It still does not claim full multi-turn human-interactive Codex session variance.
+
+## 2026-05-28 Final Cleanup And Dual-Track Risk Review
+
+- Removed obsolete `apps/backend/src/routes/topic-selection-decision-chain-acceptance.test.ts`. Its cross-stage acceptance shape depended on retired direct v1b write routes; retained coverage now lives in per-stage route tests, offline replay route tests, v1c route tests, and the v1b harness HTTP N1-N11 smoke.
+- Renamed the ambiguous N6 external Codex entry to `topic-selection:v1b-external-codex-n6-variance` and `external_codex_n6_variance`; no generic `external_codex_variance` or `v1b-external-codex-variance` entry remains.
+- Rewired `.ai/scripts/topic-selection-real-e2e.mjs` so the v1b leg invokes `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` with `TOPIC_SELECTION_V1B_HARNESS_INPUT_BUNDLE_ID` instead of recreating retired direct write-route orchestration. The quality-negative direct-route mode now fails fast with a pointer to `pnpm topic-selection:v1b-provider-negative-loopbacks`.
+- Updated `.ai/scripts/topic-selection-workflow-scenario-runner.mjs` so the `topic-selection.v1b.non-advance-negative.v1` child scenario uses the provider-backed v1b harness negative loopback runner instead of setting retired real-e2e quality-negative direct-route env vars.
+- Removed desktop v1b direct write helpers and inline submit forms. The v1b workbench now displays read-only authority written by the WorkflowHarness path and uses copy that points reviewers to N5/N7/N9/N10 harness-owned progression.
+- Tightened N6 loopback triage integrity: the service now requires support, normalized, and provenance artifact refs to exist, and verifies support/normalized artifact checksums against semantic artifact hashes before applying triage routing. A mismatched support artifact blocks with `N6_LOOPBACK_TRIAGE_ARTIFACT_HASH_MISMATCH` before routing or authority writes.
+- Cleaned stale local v1b tmp run directories that were unreferenced failed/no-result probes or redundant generated fixture runs. Deliberately documented acceptance evidence under `.ai/.tmp/topic-selection-v1b-harness-e2e/` was preserved.

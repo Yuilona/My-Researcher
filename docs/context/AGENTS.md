@@ -43,6 +43,8 @@ Only if implementation detail is needed, follow `info.x-source-mapping` in `open
 
 Select artifacts from `registry.json` by tag or type. Open files by path. Do NOT scan folders.
 
+For Topic Selection v1b WorkflowHarness runner, CLI acceptance, provider canary, repeat, or legacy-route questions, read `docs/context/process/topic-selection-v1b-harness-runner.md` before inspecting scripts.
+
 ## Rules
 
 - **MUST** check context artifacts before reading source code for any context-available topic (API, DB, terms, architecture).
@@ -80,3 +82,11 @@ Select artifacts from `registry.json` by tag or type. Open files by path. Do NOT
 5. For any doc update, run:
    - `node .ai/skills/features/context-awareness/scripts/ctl-context.mjs touch`
    - `node .ai/skills/features/context-awareness/scripts/ctl-context.mjs verify --strict`
+
+### Recipe: Run or interpret Topic Selection v1b harness acceptance
+
+1. Read `docs/context/process/topic-selection-v1b-harness-runner.md`.
+2. Use `pnpm topic-selection:v1b-harness-e2e` for fast local fixture smoke unless provider evidence is explicitly needed.
+3. Use `pnpm topic-selection:v1b-provider-canary` for provider-backed acceptance canaries; this is the explicit repeat=3 path.
+4. Use `pnpm topic-selection:v1b-provider-negative-loopbacks` for provider-backed negative loopback/readmission probes; keep repeat=1 unless the user requests repeated negative canaries.
+5. Treat `repeat` as exact independent-chain count and fail-fast, not as provider retry budget.

@@ -20,6 +20,7 @@ Typical artifacts (not exhaustive):
 - UI spec contract: `docs/context/ui/ui-spec.json`
 - UI current-state alignment: `docs/context/ui/current-state-alignment.md`
 - Business processes: `docs/context/process/*.bpmn`
+- Topic Selection v1b harness runner guide: `docs/context/process/topic-selection-v1b-harness-runner.md`
 - Domain glossary: `docs/context/glossary.json` (structured term definitions)
 - Architecture principles: `docs/context/architecture-principles.md` (cross-cutting constraints)
 
@@ -34,7 +35,8 @@ All artifacts MUST be registered in `docs/context/registry.json`.
 5. For terminology/concept questions: read `docs/context/glossary.json`.
 6. For architecture constraints: read `docs/context/architecture-principles.md`.
 7. For UI tasks: read `docs/context/ui/ui-spec.json` first, then `docs/context/ui/current-state-alignment.md`.
-8. Select only the artifacts needed for the current task. Open those files by path (do not scan folders).
+8. For Topic Selection v1b harness runner or CLI acceptance tasks: read `docs/context/process/topic-selection-v1b-harness-runner.md`.
+9. Select only the artifacts needed for the current task. Open those files by path (do not scan folders).
 
 ## Database schema contract
 

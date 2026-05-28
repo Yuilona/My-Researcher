@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-21T10:41:41.779Z",
+  "updatedAt": "2026-05-28T10:08:09.868Z",
   "artifacts": [
     {
       "id": "api-openapi",
@@ -210,6 +210,27 @@
       ],
       "checksumSha256": "21591c2e1ac1c1b60f51db51875e0a26d3af4d4f2698ca0a2e17404f4e6a1c18",
       "lastUpdated": "2026-03-31T09:27:36.120Z",
+      "source": {
+        "kind": "command",
+        "command": "ctl-context add-artifact",
+        "cwd": "."
+      }
+    },
+    {
+      "id": "topic-selection-v1b-harness-runner",
+      "type": "markdown",
+      "path": "docs/context/process/topic-selection-v1b-harness-runner.md",
+      "mode": "contract",
+      "format": "topic-selection-v1b-harness-runner-v1",
+      "tags": [
+        "process",
+        "llm",
+        "topic-selection",
+        "v1b",
+        "harness"
+      ],
+      "checksumSha256": "51a60ceaf563995638be46ff5b8a30b2980cb6e326d6af7a4d600e55b7136dab",
+      "lastUpdated": "2026-05-28T10:08:09.867Z",
       "source": {
         "kind": "command",
         "command": "ctl-context add-artifact",
