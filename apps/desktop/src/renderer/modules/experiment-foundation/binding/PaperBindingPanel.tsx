@@ -191,7 +191,7 @@ function SidecarGroupedList({
                       >
                         {shortText(entry.record.record_id, 42)}
                       </button>
-                      <StatusBadge value={entry.payload?.sidecar_status ?? entry.record.status ?? null} />
+                      <StatusBadge value={entry.payload?.sidecar_status ?? null} />
                     </div>
                   </li>
                 );

@@ -169,6 +169,19 @@ Key deltas:
 - The binding panel is a leaf — it does NOT plug into `useExperimentFoundationController`. The shared controller is Promotion-only post-S2; binding has its own minimal fetch state because its model (group by paper_project_id) doesn't overlap with promotion's record-editor model.
 - Jump-to-flow uses the sidecar's `run_recipe_ref.ref_id` (the record's id), not its hash. The flow controller's `selectRunRecipeById` fetches via `GET /records/run_recipe/:id`. If the run_recipe was deleted upstream while a sidecar still references it, the fetch returns 404 and the flow panel surfaces `selectRunRecipeStatus = 'error'`. Acceptable: the sidecar's trace chain still renders fully in the binding panel, only the jump becomes a dead link.
 - `paper_project_id` shown as `(unknown paper)` if the payload fails the typed cast. This is defensive; the typed accessor returns null only when the record kind mismatches (which shouldn't happen since we query exactly `paper_experiment_sidecar`).
+
+### 2026-05-29 — S4 post-review fixes + dual-track audit
+Self-review surfaced one real bug and one cosmetic inconsistency; both closed before declaring S4 done.
+
+1. **Flow panel did not surface jump-to-flow load errors.** `selectRunRecipeStatus` / `selectRunRecipeError` were added to the flow controller but `RunRecipeSelector` did not render them. Result: when a sidecar referenced a deleted run_recipe, the user landed on the flow tab with a silent "未选 recipe" hint and no explanation of the silent fetch failure. Fix: `RunRecipeSelector` header renders a `data-tone="danger"` caption when `selectRunRecipeStatus === 'error'` (carrying `selectRunRecipeError`) and a `data-tone="muted"` caption when `'loading'`. The error path is now visible without changing the deep-link contract.
+2. **`entry.payload?.sidecar_status ?? entry.record.status` defensive fallback was dead code.** Backend service derives `record.status` from `payload.sidecar_status` via the `statusFields` config (single-sourced upstream). Simplified to `entry.payload?.sidecar_status ?? null` so the rendering path matches the upstream contract.
+
+Dual-track audit (explicit, requested by user during S4 review):
+- Sidecar's frozen `run_recipe_hash` vs canonical run_recipe's current `run_recipe_hash`: not dual-track — temporal snapshot pattern. Sidecar is "as bound at experiment-paper binding time"; canonical record is "current state". UX shows them in distinct surfaces (binding panel renders snapshot; flow tab renders current). Both can legitimately differ.
+- Sidecar's `sidecar_status` vs `record.status`: kept in sync by the backend service. Rendering single-sourced after fix #2.
+- No new renderer-side classification sets introduced. All status classifications remain imported from shared.
+- Renderer error rendering surface: `data-tone="danger"` branches now exist in OverviewPanel, ReadinessInspector, JobActionForms, AND the new RunRecipeSelector preselect error path.
+
 - [x] S5: land UI-driven full-flow smoke and update T-106 acceptance.
 
 ## 2026-05-29 — S5 UI-driven full-flow smoke landed (closes T-106 open checkbox)

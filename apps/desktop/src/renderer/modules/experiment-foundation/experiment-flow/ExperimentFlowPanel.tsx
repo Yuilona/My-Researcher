@@ -128,6 +128,16 @@ function RunRecipeSelector({ controller, runRecipes }: RunRecipeSelectorProps) {
             刷新整条流
           </button>
         </div>
+        {controller.selectRunRecipeStatus === 'error' && controller.selectRunRecipeError ? (
+          <p data-ui="text" data-variant="caption" data-tone="danger">
+            跳转目标 run_recipe 未能加载：{controller.selectRunRecipeError}
+          </p>
+        ) : null}
+        {controller.selectRunRecipeStatus === 'loading' ? (
+          <p data-ui="text" data-variant="caption" data-tone="muted">
+            正在加载跳转目标 run_recipe…
+          </p>
+        ) : null}
         {runRecipes.length === 0 ? (
           <div data-ui="empty-state" data-variant="compact" data-tone="neutral">
             <p data-slot="title">尚无 run_recipe；先在 资产库 / Recipe 之后的流程中创建</p>

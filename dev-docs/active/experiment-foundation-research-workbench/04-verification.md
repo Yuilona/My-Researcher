@@ -90,6 +90,14 @@
 - REGRESSION (shared): `pnpm --filter @paper-engineering-assistant/shared test` reports 196 pass / 1 fail. The single failure (test 132 `research-lifecycle barrel re-exports the runtime value surface of split modules`) is pre-existing T-088 in-flight work and not caused by S1. My S0+ classification subset test (test 46) still passes.
 - REGRESSION (backend): `node apps/backend/scripts/run-node-tests.mjs ...` reports 869 pass / 0 fail / 2 skipped. No regression from S1.
 
+### 2026-05-29 — S4 post-review fixes (jump-to-flow error visibility + status fallback cleanup)
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop typecheck`.
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop build`.
+- PASS: `python3 .ai/skills/features/ui/ui-governance-gate/scripts/ui_gate.py run --mode full` (Errors 0, Warnings 0).
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop smoke:e2e`.
+
+Fixes recorded in 03-implementation-notes "S4 post-review fixes + dual-track audit" section. No new known-debt opened.
+
 ### 2026-05-29 — S4 PaperBindingPanel (reverse drill) landed
 - PASS: `pnpm --filter @paper-engineering-assistant/desktop typecheck`.
 - PASS: `pnpm --filter @paper-engineering-assistant/desktop build`.
