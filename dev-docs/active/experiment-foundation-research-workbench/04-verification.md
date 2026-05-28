@@ -90,6 +90,22 @@
 - REGRESSION (shared): `pnpm --filter @paper-engineering-assistant/shared test` reports 196 pass / 1 fail. The single failure (test 132 `research-lifecycle barrel re-exports the runtime value surface of split modules`) is pre-existing T-088 in-flight work and not caused by S1. My S0+ classification subset test (test 46) still passes.
 - REGRESSION (backend): `node apps/backend/scripts/run-node-tests.mjs ...` reports 869 pass / 0 fail / 2 skipped. No regression from S1.
 
+### 2026-05-29 — S4 PaperBindingPanel (reverse drill) landed
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop typecheck`.
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop build`.
+- PASS: `python3 .ai/skills/features/ui/ui-governance-gate/scripts/ui_gate.py run --mode full` (Errors 0, Warnings 0).
+- PASS: `node .ai/tests/run.mjs --suite ui` (4/4).
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop smoke:e2e` — extended with S4 assertions; `[desktop-smoke] PASS`.
+- PASS: project governance sync + lint.
+- PASS: `git diff --check`.
+
+### S4 Acceptance check
+- [x] `论文绑定` Tab landed and routed to `<PaperBindingPanel>`.
+- [x] Sidecars are reachable and groupable: `PaperBindingPanel` queries `paper_experiment_sidecar` records and groups by `paper_project_id` (Map → sorted array). `paper_project_id` filter input narrows the list.
+- [x] Selecting a sidecar populates a read-only summary: 9 ref summaries (run_recipe / dataset_version_lock / evaluation_protocol_lock / benchmark_asset / training_task_spec / materialization_result / optional external_job + 5 ref-list summaries) plus the full payload `JsonAdvancedPanel`.
+- [x] "跳到 实验流" button preselects the corresponding `run_recipe`: module raises `pendingFlowRunRecipeId`, switches to `flow` tab, the flow panel consumes via `selectRunRecipeById` (in-page first, single-record fetch fallback).
+- [x] No write or attach action is exposed: smoke asserts the binding panel does NOT import `createExperimentFoundationRecord` / `upsertExperimentFoundationRecord` / `decideExperimentFoundationPromotion`. Sidecar attach path remains in paper-implementation (T-100) surfaces per the S4 boundary decision.
+
 ### 2026-05-29 — S5 UI-driven full-flow smoke landed (closes T-106 open checkbox)
 - PASS: `pnpm --filter @paper-engineering-assistant/desktop typecheck`.
 - PASS: `pnpm --filter @paper-engineering-assistant/desktop build`.

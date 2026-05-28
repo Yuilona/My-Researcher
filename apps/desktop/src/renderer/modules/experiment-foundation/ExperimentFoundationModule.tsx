@@ -4,6 +4,7 @@ import type {
   ExperimentFoundationStoredRecord,
 } from '@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts';
 import { AssetLibraryPanel } from './assets/AssetLibraryPanel';
+import { PaperBindingPanel } from './binding/PaperBindingPanel';
 import type { ExperimentFoundationAssetSubTabKey } from './constants';
 import {
   ReadinessInspector,
@@ -41,6 +42,9 @@ export function ExperimentFoundationModule({
   // consumes it via onPreselectConsumed. Currently advisory: the flow panel
   // reads it on mount and selects the matching job.
   const [pendingFlowJobId, setPendingFlowJobId] = useState<string | null>(null);
+  // S4 reverse-drill bridge: PaperBindingPanel raises this; module switches to
+  // the 实验流 tab and the panel preselects the matching run_recipe.
+  const [pendingFlowRunRecipeId, setPendingFlowRunRecipeId] = useState<string | null>(null);
 
   const openReadinessInspector = useCallback(
     (kind: ExperimentFoundationRecordKind, recordId: string) => {
@@ -53,6 +57,14 @@ export function ExperimentFoundationModule({
   const requestFlowJobPreselect = useCallback((externalJobId: string) => {
     setPendingFlowJobId(externalJobId);
   }, []);
+
+  const handleJumpToFlowRunRecipe = useCallback(
+    (runRecipeId: string) => {
+      setPendingFlowRunRecipeId(runRecipeId);
+      onSelectPanel('flow');
+    },
+    [onSelectPanel],
+  );
 
   const controller = useExperimentFoundationController({
     activePanel,
@@ -85,7 +97,12 @@ export function ExperimentFoundationModule({
             onInspectReadiness={openReadinessInspector}
             preselectJobId={pendingFlowJobId}
             onPreselectConsumed={() => setPendingFlowJobId(null)}
+            preselectRunRecipeId={pendingFlowRunRecipeId}
+            onPreselectRunRecipeConsumed={() => setPendingFlowRunRecipeId(null)}
           />
+        ) : null}
+        {activePanel === 'binding' ? (
+          <PaperBindingPanel onJumpToFlowRunRecipe={handleJumpToFlowRunRecipe} />
         ) : null}
         {activePanel === 'promotion' ? <PromotionPanel controller={controller} /> : null}
       </div>

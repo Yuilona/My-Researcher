@@ -144,7 +144,31 @@ Each typed view now is purely declarative: declares its `Draft` shape, `BLANK`, 
 - Sparkline X-axis sort uses lexicographic string compare on ISO timestamps. ISO 8601 is sortable, so this works. If a future caller passes non-ISO strings (e.g. arbitrary run_recipe_id), the chart order will be alphabetic; doc'd in the component header.
 - Non-numeric `MetricObservation.value` entries silently skip the sparkline (`readNumericValue` returns null). The table still shows their other fields. Could surface a warning later if needed.
 - All four typed forms preserve `created_at` from `basePayload` on edit via `preserveCreatedAt(base)`. New records still get a renderer-side `new Date().toISOString()`; centralising this leaves a single site to flip when backend stamping lands.
-- [ ] S4: read-only `PaperBindingPanel` with jump-to-flow.
+- [x] S4: read-only `PaperBindingPanel` with jump-to-flow.
+
+## 2026-05-29 — S4 PaperBindingPanel (sidecar reverse drill) landed
+Implemented S4 per `01-plan.md`. The `论文绑定` Tab is a strictly read-only surface that lists `paper_experiment_sidecar` records grouped by `paper_project_id`, surfaces the sidecar's full trace chain, and exposes a "跳到 实验流" button that preselects the matching `run_recipe`.
+
+Key deltas:
+
+- **`types.ts`** — `ExperimentFoundationPanelKey` extended with `'binding'`.
+- **`constants.ts`** — `experimentFoundationTabs` grew from 4 to 5; the new `{ key: 'binding', label: '论文绑定' }` slot lives between `flow` and `promotion`.
+- **`payloads.ts`** — added `getPaperExperimentSidecarPayload`.
+- **`api.ts`** — added `getExperimentFoundationRecord(kind, id)` thin wrapper over the existing `GET /experiment-foundation/records/:kind/:id` endpoint. Required by the run_recipe preselect fallback.
+- **`experiment-flow/useExperimentFlowController.ts`** — exposed `selectRunRecipeById(recordId)` + `selectRunRecipeStatus` + `selectRunRecipeError`. Mirrors the existing job preselect lifecycle.
+- **`experiment-flow/ExperimentFlowPanel.tsx`** — accepts `preselectRunRecipeId` + `onPreselectRunRecipeConsumed`. Same in-page → single-record fetch fallback pattern as the job preselect.
+- **`binding/PaperBindingPanel.tsx`** — new panel. Owns its own fetch state (no shared controller; binding is a leaf panel). Filters by `paper_project_id` partial match, groups by exact `paper_project_id`, renders a sortable grouped list. The detail pane shows nine ref summaries (run_recipe / dataset_version_lock / evaluation_protocol_lock / benchmark_asset / training_task_spec / materialization_result / optional external_job / and five ref arrays: result / validation_report / evidence_candidate / evaluation_fact / paper_table_fact_set) plus a full payload `JsonAdvancedPanel`. Jump-to-flow button uses the sidecar's `run_recipe_ref.ref_id`.
+- **`ExperimentFoundationModule.tsx`** — owns the `pendingFlowRunRecipeId` sentinel and `handleJumpToFlowRunRecipe(id)` bridge. Switches activePanel to `'flow'` after raising the sentinel; the flow panel consumes and clears.
+- **`smoke-e2e.mjs`** — assertions extended: `binding` tab label + activePanel routing; `<PaperBindingPanel>` mount + `handleJumpToFlowRunRecipe` + `pendingFlowRunRecipeId`; PaperBindingPanel reads `paper_experiment_sidecar` / `paper_project_id` / `getPaperExperimentSidecarPayload`; boundary check that the binding panel does NOT import `createExperimentFoundationRecord` / `upsertExperimentFoundationRecord` / `decideExperimentFoundationPromotion` (write paths stay in paper-implementation); flow controller exposes `selectRunRecipeById`; flow panel accepts the new preselect props; payloads exports `getPaperExperimentSidecarPayload`.
+
+### S4 known-debt — none open
+- Considered but explicitly NOT done: cursor pagination for the sidecar list. Reasoning: paper_experiment_sidecar volume per workspace is bounded (a few per paper × small number of active papers ≪ 50 default limit). The `paper_project_id` filter input handles search. Adding cursor here would complicate the grouped rendering for no current user benefit. This is YAGNI, not debt; if the workspace grows enough that 50 is hit in practice, the existing flow-controller cursor pattern is easy to drop in.
+- Carried-forward from S2 (`preserveCreatedAt(base)` centralisation) and S5 (headless browser automation, full job lifecycle in smoke) still apply; not new with S4.
+
+### Decisions made while implementing S4
+- The binding panel is a leaf — it does NOT plug into `useExperimentFoundationController`. The shared controller is Promotion-only post-S2; binding has its own minimal fetch state because its model (group by paper_project_id) doesn't overlap with promotion's record-editor model.
+- Jump-to-flow uses the sidecar's `run_recipe_ref.ref_id` (the record's id), not its hash. The flow controller's `selectRunRecipeById` fetches via `GET /records/run_recipe/:id`. If the run_recipe was deleted upstream while a sidecar still references it, the fetch returns 404 and the flow panel surfaces `selectRunRecipeStatus = 'error'`. Acceptable: the sidecar's trace chain still renders fully in the binding panel, only the jump becomes a dead link.
+- `paper_project_id` shown as `(unknown paper)` if the payload fails the typed cast. This is defensive; the typed accessor returns null only when the record kind mismatches (which shouldn't happen since we query exactly `paper_experiment_sidecar`).
 - [x] S5: land UI-driven full-flow smoke and update T-106 acceptance.
 
 ## 2026-05-29 — S5 UI-driven full-flow smoke landed (closes T-106 open checkbox)

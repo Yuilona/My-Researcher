@@ -160,6 +160,7 @@ async function assertExperimentFoundationWorkbenchSource() {
     jobActionForms,
     readinessInspector,
     payloads,
+    paperBindingPanel,
   ] = await Promise.all([
     readDesktopSource('src/renderer/literature/shared/constants.ts'),
     readDesktopSource('src/renderer/App.tsx'),
@@ -184,6 +185,7 @@ async function assertExperimentFoundationWorkbenchSource() {
     readDesktopSource('src/renderer/modules/experiment-foundation/experiment-flow/JobActionForms.tsx'),
     readDesktopSource('src/renderer/modules/experiment-foundation/components/ReadinessInspector.tsx'),
     readDesktopSource('src/renderer/modules/experiment-foundation/payloads.ts'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/binding/PaperBindingPanel.tsx'),
   ]);
 
   // Step 1 of T-106 UI Flow Contract: navigation entry to 实验基座.
@@ -196,10 +198,12 @@ async function assertExperimentFoundationWorkbenchSource() {
   assertIncludes(efConstants, "{ key: 'overview', label: '概览' }", 'experiment foundation tab labels');
   assertIncludes(efConstants, "{ key: 'assets', label: '资产库' }", 'experiment foundation tab labels');
   assertIncludes(efConstants, "{ key: 'flow', label: '实验流' }", 'experiment foundation tab labels');
+  assertIncludes(efConstants, "{ key: 'binding', label: '论文绑定' }", 'experiment foundation tab labels');
   assertIncludes(efConstants, "{ key: 'promotion', label: '候选晋升' }", 'experiment foundation tab labels');
   assertIncludes(moduleSource, "activePanel === 'assets'", 'experiment foundation panel routing');
   assertIncludes(moduleSource, "activePanel === 'flow'", 'experiment foundation panel routing');
   assertIncludes(moduleSource, "activePanel === 'overview'", 'experiment foundation panel routing');
+  assertIncludes(moduleSource, "activePanel === 'binding'", 'experiment foundation panel routing');
   assertIncludes(moduleSource, "activePanel === 'promotion'", 'experiment foundation panel routing');
 
   // Step 2: Asset Library (replaces legacy Registry). Five typed sub-tabs.
@@ -277,6 +281,29 @@ async function assertExperimentFoundationWorkbenchSource() {
     }
   }
 
+  // S4 论文绑定 reverse-drill panel.
+  assertIncludes(moduleSource, '<PaperBindingPanel', 'paper binding panel module mount');
+  assertIncludes(moduleSource, 'handleJumpToFlowRunRecipe', 'paper binding jump-to-flow bridge declared');
+  assertIncludes(moduleSource, 'pendingFlowRunRecipeId', 'paper binding pending preselect state');
+  assertIncludes(paperBindingPanel, 'paper_experiment_sidecar', 'binding panel reads sidecar records');
+  assertIncludes(paperBindingPanel, 'getPaperExperimentSidecarPayload', 'binding panel uses typed accessor');
+  assertIncludes(paperBindingPanel, 'paper_project_id', 'binding panel groups by paper_project_id');
+  assertIncludes(paperBindingPanel, 'onJumpToFlowRunRecipe', 'binding panel exposes jump-to-flow callback');
+  // S4 boundary: read-only surface — no write / attach actions.
+  for (const forbidden of [
+    'createExperimentFoundationRecord',
+    'upsertExperimentFoundationRecord',
+    'decideExperimentFoundationPromotion',
+  ]) {
+    if (paperBindingPanel.includes(forbidden)) {
+      throw new Error(`Paper binding panel must remain read-only; found forbidden API call: ${forbidden}`);
+    }
+  }
+  // S4 plumbing for run_recipe preselect through the flow controller.
+  assertIncludes(flowController, 'selectRunRecipeById', 'flow controller exposes single-record run_recipe lookup');
+  assertIncludes(flowPanel, 'preselectRunRecipeId', 'flow panel accepts run_recipe preselect');
+  assertIncludes(flowPanel, 'onPreselectRunRecipeConsumed', 'flow panel signals run_recipe preselect consumption');
+
   // S3 Facts view + sparkline.
   assertIncludes(factsView, 'getEvaluationFactPayload', 'facts view typed read');
   assertIncludes(factsView, 'getMetricObservationPayload', 'facts view typed read');
@@ -315,6 +342,7 @@ async function assertExperimentFoundationWorkbenchSource() {
     'getEvaluationFactPayload',
     'getMetricObservationPayload',
     'getComparisonObservationPayload',
+    'getPaperExperimentSidecarPayload',
   ]) {
     assertIncludes(payloads, `export function ${accessor}`, `payloads exports ${accessor}`);
   }

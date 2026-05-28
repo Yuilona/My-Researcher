@@ -12,6 +12,7 @@ import {
   cancelExperimentFoundationJob,
   collectExperimentFoundationJob,
   getExperimentFoundationJob,
+  getExperimentFoundationRecord,
   listExperimentFoundationJobs,
   listExperimentFoundationRecords,
   submitExperimentFoundationJob,
@@ -69,6 +70,9 @@ const FLOW_STAGE_PAGE_SIZE = 10;
 export type ExperimentFlowController = {
   selectedRunRecipe: ExperimentFoundationStoredRecord | null;
   selectRunRecipe: (record: ExperimentFoundationStoredRecord | null) => void;
+  selectRunRecipeById: (recordId: string) => Promise<void>;
+  selectRunRecipeStatus: 'idle' | 'loading' | 'success' | 'error';
+  selectRunRecipeError: string | null;
 
   stages: Record<FlowStageKey, FlowStageState>;
   refreshStage: (key: FlowStageKey) => Promise<void>;
@@ -107,6 +111,10 @@ function buildInitialStages(): Record<FlowStageKey, FlowStageState> {
 
 export function useExperimentFlowController(): ExperimentFlowController {
   const [selectedRunRecipe, setSelectedRunRecipe] = useState<ExperimentFoundationStoredRecord | null>(null);
+  const [selectRunRecipeStatus, setSelectRunRecipeStatus] = useState<
+    'idle' | 'loading' | 'success' | 'error'
+  >('idle');
+  const [selectRunRecipeError, setSelectRunRecipeError] = useState<string | null>(null);
   const [stages, setStages] = useState<Record<FlowStageKey, FlowStageState>>(buildInitialStages);
 
   const [jobs, setJobs] = useState<ExternalTrainingJob[]>([]);
@@ -225,6 +233,21 @@ export function useExperimentFlowController(): ExperimentFlowController {
 
   const selectRunRecipe = useCallback((record: ExperimentFoundationStoredRecord | null) => {
     setSelectedRunRecipe(record);
+    setSelectRunRecipeStatus(record ? 'success' : 'idle');
+    setSelectRunRecipeError(null);
+  }, []);
+
+  const selectRunRecipeById = useCallback(async (recordId: string) => {
+    setSelectRunRecipeStatus('loading');
+    setSelectRunRecipeError(null);
+    try {
+      const record = await getExperimentFoundationRecord('run_recipe', recordId);
+      setSelectedRunRecipe(record);
+      setSelectRunRecipeStatus('success');
+    } catch (caught) {
+      setSelectRunRecipeStatus('error');
+      setSelectRunRecipeError(toErrorMessage(caught));
+    }
   }, []);
 
   const selectJobLocally = useCallback((job: ExternalTrainingJob | null) => {
@@ -342,6 +365,9 @@ export function useExperimentFlowController(): ExperimentFlowController {
   return {
     selectedRunRecipe,
     selectRunRecipe,
+    selectRunRecipeById,
+    selectRunRecipeStatus,
+    selectRunRecipeError,
     stages,
     refreshStage,
     loadMoreStage,

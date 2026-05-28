@@ -4,6 +4,7 @@ export const experimentFoundationTabs: Array<{ key: ExperimentFoundationPanelKey
   { key: 'overview', label: '概览' },
   { key: 'assets', label: '资产库' },
   { key: 'flow', label: '实验流' },
+  { key: 'binding', label: '论文绑定' },
   { key: 'promotion', label: '候选晋升' },
 ];
 

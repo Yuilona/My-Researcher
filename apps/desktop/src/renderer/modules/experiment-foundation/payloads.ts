@@ -8,6 +8,7 @@ import type {
   ExperimentResult,
   MaterializeTrainingTaskSpecRequest,
   MetricObservation,
+  PaperExperimentSidecar,
   RunRecipe,
   TrainingTaskSpec,
 } from '@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts';
@@ -112,4 +113,13 @@ export function getComparisonObservationPayload(
     return null;
   }
   return record.payload as unknown as ComparisonObservation;
+}
+
+export function getPaperExperimentSidecarPayload(
+  record: ExperimentFoundationStoredRecord | null,
+): PaperExperimentSidecar | null {
+  if (!record || record.record_kind !== 'paper_experiment_sidecar') {
+    return null;
+  }
+  return record.payload as unknown as PaperExperimentSidecar;
 }

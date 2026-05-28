@@ -8,6 +8,7 @@ export type ExperimentFoundationPanelKey =
   | 'overview'
   | 'assets'
   | 'flow'
+  | 'binding'
   | 'promotion';
 
 export type ExperimentFoundationOperationStatus = 'idle' | 'loading' | 'success' | 'error';

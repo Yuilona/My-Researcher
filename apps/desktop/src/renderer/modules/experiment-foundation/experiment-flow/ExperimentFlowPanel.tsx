@@ -18,12 +18,19 @@ export type ExperimentFlowPanelProps = {
   // sentinel does not refire on subsequent renders.
   preselectJobId?: string | null;
   onPreselectConsumed?: () => void;
+  // Advisory deep-link target from PaperBindingPanel → jump-to-flow. The panel
+  // selects the matching run_recipe (in-page first, single-record fetch
+  // fallback), then signals consumption.
+  preselectRunRecipeId?: string | null;
+  onPreselectRunRecipeConsumed?: () => void;
 };
 
 export function ExperimentFlowPanel({
   onInspectReadiness,
   preselectJobId,
   onPreselectConsumed,
+  preselectRunRecipeId,
+  onPreselectRunRecipeConsumed,
 }: ExperimentFlowPanelProps) {
   const controller = useExperimentFlowController();
 
@@ -49,6 +56,28 @@ export function ExperimentFlowPanel({
       onPreselectConsumed?.();
     })();
   }, [preselectJobId, controller, onPreselectConsumed]);
+
+  // Same in-page → single-record fallback pattern for the run_recipe preselect.
+  useEffect(() => {
+    if (!preselectRunRecipeId) {
+      return;
+    }
+    if (controller.stages.run_recipe.status !== 'success') {
+      return;
+    }
+    const local = controller.stages.run_recipe.records.find(
+      (record) => record.record_id === preselectRunRecipeId,
+    );
+    if (local) {
+      controller.selectRunRecipe(local);
+      onPreselectRunRecipeConsumed?.();
+      return;
+    }
+    void (async () => {
+      await controller.selectRunRecipeById(preselectRunRecipeId);
+      onPreselectRunRecipeConsumed?.();
+    })();
+  }, [preselectRunRecipeId, controller, onPreselectRunRecipeConsumed]);
   const runRecipes = controller.stages.run_recipe.records;
 
   return (

@@ -47,6 +47,16 @@ export function listExperimentFoundationRecords(
   });
 }
 
+export function getExperimentFoundationRecord(
+  recordKind: ExperimentFoundationRecordKind,
+  recordId: string,
+): Promise<ExperimentFoundationStoredRecord> {
+  return requestGovernance<ExperimentFoundationStoredRecord>({
+    method: 'GET',
+    path: `/experiment-foundation/records/${encodeURIComponent(recordKind)}/${encodeURIComponent(recordId)}`,
+  });
+}
+
 export function createExperimentFoundationRecord(
   recordKind: ExperimentFoundationRecordKind,
   payload: JsonObject,
