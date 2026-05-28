@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   CancelExternalTrainingJobRequest,
   CollectExternalTrainingJobRequest,
@@ -55,11 +55,6 @@ const blankRecordFilterFields = {
   ownerRefId: '',
 };
 
-const initialRegistryFilters: RecordListFilters = {
-  recordKind: 'dataset_asset',
-  ...blankRecordFilterFields,
-};
-
 const initialCandidateFilters: RecordListFilters = {
   recordKind: 'dataset_asset_candidate',
   ...blankRecordFilterFields,
@@ -86,9 +81,15 @@ function parseSourceRefs(input: string): ExperimentFoundationRef[] {
   return parseJsonArray(input) as ExperimentFoundationRef[];
 }
 
-export function useExperimentFoundationController() {
-  const [activePanel, setActivePanel] = useState<ExperimentFoundationPanelKey>('overview');
-  const [registryFilters, setRegistryFilters] = useState<RecordListFilters>(initialRegistryFilters);
+export type UseExperimentFoundationControllerArgs = {
+  activePanel: ExperimentFoundationPanelKey;
+  setActivePanel: (panel: ExperimentFoundationPanelKey) => void;
+};
+
+export function useExperimentFoundationController({
+  activePanel,
+  setActivePanel,
+}: UseExperimentFoundationControllerArgs) {
   const [candidateFilters, setCandidateFilters] = useState<RecordListFilters>(initialCandidateFilters);
   const [recipeFilters, setRecipeFilters] = useState<RecordListFilters>(initialRecipeFilters);
   const [evidenceFilters, setEvidenceFilters] = useState<RecordListFilters>(initialEvidenceFilters);
@@ -133,57 +134,79 @@ export function useExperimentFoundationController() {
   );
 
   const activeRecordFilters = useMemo(() => {
-    if (activePanel === 'promotion') {
-      return candidateFilters;
-    }
     if (activePanel === 'recipes') {
       return recipeFilters;
     }
     if (activePanel === 'execution') {
       return evidenceFilters;
     }
-    return registryFilters;
-  }, [activePanel, candidateFilters, evidenceFilters, recipeFilters, registryFilters]);
+    return candidateFilters;
+  }, [activePanel, candidateFilters, evidenceFilters, recipeFilters]);
 
-  const activatePanel = useCallback((nextPanel: ExperimentFoundationPanelKey) => {
-    setActivePanel(nextPanel);
-    setSelectedRecord(null);
-    if (nextPanel === 'promotion') {
-      setRecordEditorKind('dataset_asset_candidate');
-    } else if (nextPanel === 'recipes') {
-      setRecordEditorKind('run_recipe');
-    } else if (nextPanel === 'execution') {
-      setRecordEditorKind('evidence_candidate');
-    } else if (nextPanel === 'registry') {
-      setRecordEditorKind('dataset_asset');
+  // Cleanup-on-panel-change: when the parent flips activePanel via a Topbar
+  // click, reset scoped editor state so panel switching does not silently
+  // carry forward a stale selection (T-078 post-review rule). Deep-link
+  // helpers (goToJob / goToReadiness / goToPromotion) set their own
+  // panel-specific overrides synchronously alongside the panel flip; they
+  // raise `skipNextPanelCleanupRef` so this useEffect does not stomp those
+  // overrides one tick later.
+  const skipNextPanelCleanupRef = useRef<boolean>(false);
+  const previousPanelRef = useRef<ExperimentFoundationPanelKey>(activePanel);
+  useEffect(() => {
+    if (previousPanelRef.current === activePanel) {
+      return;
     }
-    if (nextPanel !== 'readiness') {
+    previousPanelRef.current = activePanel;
+    if (skipNextPanelCleanupRef.current) {
+      skipNextPanelCleanupRef.current = false;
+      return;
+    }
+    setSelectedRecord(null);
+    if (activePanel === 'promotion') {
+      setRecordEditorKind('dataset_asset_candidate');
+    } else if (activePanel === 'recipes') {
+      setRecordEditorKind('run_recipe');
+    } else if (activePanel === 'execution') {
+      setRecordEditorKind('evidence_candidate');
+    }
+    if (activePanel !== 'readiness') {
       setRecordEditorId('');
       setRecordEditorPayload(emptyObjectJson);
     }
-  }, []);
+  }, [activePanel]);
 
   const goToReadiness = useCallback(
     (targetKind: ExperimentFoundationRecordKind, targetId: string) => {
+      // Deep-link applies its own preset (target kind + id); skip the auto
+      // cleanup that would otherwise clear readiness target state one tick
+      // later.
+      skipNextPanelCleanupRef.current = true;
       setActivePanel('readiness');
       setSelectedRecord(null);
       setReadinessTargetKind(targetKind);
       setReadinessTargetId(targetId);
     },
-    [],
+    [setActivePanel],
   );
 
   const goToPromotion = useCallback(
     (candidateKind: ExperimentFoundationRecordKind, candidateId: string) => {
+      // Deep-link sets the specific candidate kind on the editor; skip the
+      // auto cleanup that would force it back to 'dataset_asset_candidate'.
+      skipNextPanelCleanupRef.current = true;
       setActivePanel('promotion');
       setSelectedRecord(null);
       if ((promotionCandidateRecordKinds as readonly string[]).includes(candidateKind)) {
         setCandidateFilters((current) => ({ ...current, recordKind: candidateKind }));
         setRecordEditorKind(candidateKind);
+      } else {
+        setRecordEditorKind('dataset_asset_candidate');
       }
+      setRecordEditorId('');
+      setRecordEditorPayload(emptyObjectJson);
       setPromotionCandidateId(candidateId);
     },
-    [],
+    [setActivePanel],
   );
 
   const loadRecords = useCallback(async () => {
@@ -353,6 +376,9 @@ export function useExperimentFoundationController() {
 
   const goToJob = useCallback(
     async (externalJobId: string) => {
+      // Deep-link selects a specific job; skip the panel-cleanup useEffect
+      // so it cannot stomp the editor kind one tick after we set it.
+      skipNextPanelCleanupRef.current = true;
       setActivePanel('execution');
       setSelectedRecord(null);
       setRecordEditorKind('evidence_candidate');
@@ -360,7 +386,7 @@ export function useExperimentFoundationController() {
       setRecordEditorPayload(emptyObjectJson);
       await selectJobById(externalJobId);
     },
-    [selectJobById],
+    [selectJobById, setActivePanel],
   );
 
   const submitJob = useCallback(async () => {
@@ -440,15 +466,24 @@ export function useExperimentFoundationController() {
   }, [collectJobPayload, loadJobs, loadRecords, selectedJob]);
 
   useEffect(() => {
+    // Panels that own their own fetch path (overview, assets) or that do not
+    // consume controller.records (readiness) should not trigger the shared
+    // loadRecords. Skipping here also avoids a wasted candidate fetch on first
+    // mount because the default activePanel is 'overview'.
+    if (activePanel === 'overview' || activePanel === 'assets' || activePanel === 'readiness') {
+      return;
+    }
     void loadRecords();
-  }, [loadRecords]);
+  }, [activePanel, loadRecords]);
 
   useEffect(() => {
+    if (activePanel !== 'execution') {
+      return;
+    }
     void loadJobs();
-  }, [loadJobs]);
+  }, [activePanel, loadJobs]);
 
   return {
-    activePanel,
     candidateFilters,
     collectJob,
     collectJobPayload,
@@ -487,7 +522,6 @@ export function useExperimentFoundationController() {
     recordEditorKind,
     recordEditorPayload,
     recordError,
-    registryFilters,
     recordMutationMessage,
     recordMutationStatus,
     recordStatus,
@@ -497,7 +531,6 @@ export function useExperimentFoundationController() {
     selectedRecordRef,
     selectJobById,
     selectRecord,
-    setActivePanel: activatePanel,
     setCancelJobPayload,
     setCollectJobPayload,
     setJobFilters,
@@ -514,7 +547,6 @@ export function useExperimentFoundationController() {
     setRecordEditorKind,
     setRecordEditorPayload,
     setRecipeFilters,
-    setRegistryFilters,
     setSubmitJobPayload,
     submitJob,
     submitJobPayload,

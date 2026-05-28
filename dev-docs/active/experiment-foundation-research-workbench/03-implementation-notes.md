@@ -69,14 +69,52 @@ Recorded for downstream-session continuity. These are the load-bearing decisions
 
 ## Follow-up TODOs (actionable)
 - [x] S0: scaffold `OverviewPanel`, wire counters, add deep-links.
-- [x] S0 side-task: extract `StatusBadge` (and `statusTone` helper) into `components/StatusBadge.tsx` so OverviewPanel and future panels reuse a single source. `JsonAdvancedPanel` extraction stays deferred to S1 since no S0 surface needs it yet.
-- [ ] S1: implement `RefPicker` and `RefPickerList`.
-- [ ] S1: type DatasetAsset form against shared `dataset_asset` record contract.
-- [ ] S1: extract `JsonAdvancedPanel` from `ExperimentFoundationModule.tsx` to back the typed form's "Advanced JSON" toggle.
+- [x] S0 side-task: extract `StatusBadge` (and `statusTone` helper) into `components/StatusBadge.tsx` so OverviewPanel and future panels reuse a single source.
+- [x] S0+ side-task: extract `JsonAdvancedPanel` into `components/JsonAdvancedPanel.tsx` (landed during S1 since the typed form needs it as the "Advanced JSON" disclosure).
+- [x] S1: implement `RefPicker` and `RefPickerList`.
+- [x] S1: type DatasetAsset form against shared `dataset_asset` record contract.
+- [x] S1: retire `资产/合同` top-level tab; replace with `资产库` parent + sub-tabs (Dataset typed, Benchmark/Baseline/Protocol list+Advanced JSON).
+- [ ] S2 known-debt (carried from S1 review):
+  - Move `created_at` / `updated_at` stamping into the backend service so the renderer can omit timestamps from typed-form payloads. Today `DatasetAssetView.buildPayloadFromDraft` stamps ISO `now()` on the renderer side because the shared schemas require these fields and the existing service does not auto-fill. This is a borderline domain leak (mechanical bookkeeping, not a rule) but should be moved to the service layer for cleanliness when S2/S3 lands.
+  - Scaffold a renderer test runner (vitest) under `apps/desktop` and add starter unit tests for `RefPicker` debounce/clear, `useAssetKindController` filter ref behavior, and `DatasetAssetView.buildPayloadFromDraft` validation branches. There is currently no renderer test infrastructure at all; S1 introduced ~1100 lines of new renderer code without coverage.
 - [ ] S2: implement `RunRecipeTimeline` and typed `JobActionForms`.
 - [ ] S3: type Baseline / Benchmark / Protocol; inline SVG sparkline for evaluation facts.
 - [ ] S4: read-only `PaperBindingPanel` with jump-to-flow.
 - [ ] S5: land UI-driven full-flow smoke and update T-106 acceptance.
+
+## 2026-05-28 — S1 DatasetAsset typed form + RefPicker landed
+Implemented S1 per `01-plan.md` with the scope adjusted to match the actual shared contract for `DatasetAsset` (the canonical fields are `name / aliases / description / source_refs / task_types / schema_summary / default_version_id / catalog_status`, not the version/location/mirror fields that the original plan optimistically listed).
+
+Key deltas:
+
+- New `components/RefPicker.tsx` exposing `RefPicker` (single ref) and `RefPickerList` (array variant). Type-ahead is backed by the existing `/records?record_kind=...` endpoint with a 220ms debounce and a 20-result page cap. Free `refType` values (e.g. `desktop_workbench`, `literature_record` for source_refs) skip the candidate lookup. If a typed `ref_id` does not match a recent candidate, the component renders a soft "未匹配候选" hint and lets the backend take the final say — it never blocks submission.
+- New `components/JsonAdvancedPanel.tsx` providing a collapsible "高级 JSON" disclosure usable both as a read-only viewer and as an editable textarea. Used by the typed form for `schema_summary` (free-shape) and by the generic asset views for the whole payload.
+- New `assets/useAssetKindController.ts` is a per-record-kind controller used by every sub-tab inside the asset library. Filter and selection state reset on `recordKind` change so sub-tab switching cannot pollute another sub-tab's state (the analog of T-078's post-review fix at the sub-tab level).
+- New `assets/DatasetAssetView.tsx` is the first researcher-facing typed surface: typed fields for `dataset_asset_id` (locked on edit), `name`, `description`, `catalog_status` (enum select from shared `EXPERIMENT_FOUNDATION_DATASET_CATALOG_STATUSES`), `aliases` and `task_types` (small string-list editors), `source_refs` (RefPickerList), `default_version` (RefPicker constrained to `dataset_version`), and `schema_summary` (Advanced JSON). Any contract fields the form does not yet cover are surfaced read-only under "高级 JSON（未 typed 字段）" so frozen payloads round-trip without loss.
+- New `assets/GenericAssetKindView.tsx` is the placeholder typed-form for Benchmark / Baseline / Protocol sub-tabs: list + record_id input + Advanced JSON payload editor. It uses the same `useAssetKindController`. Real typed forms for these three kinds are S3 work.
+- New `assets/AssetLibraryPanel.tsx` is the sub-tab shell (4 sub-tabs: Dataset / Benchmark / Baseline / Protocol). Model is deliberately absent: `base_model_*` exists only as a candidate kind in V1; the canonical `base_model_asset` is V1 follow-up scope.
+- `ExperimentFoundationModule.tsx`: removed the local `RegistryPanel`, `RegistryFilters`, `RegistryFilters` helpers, and the unused `RecordEditor` shape. The renamed `资产库` tab now renders `<AssetLibraryPanel />`.
+- `useExperimentFoundationController.ts`: removed `registryFilters`, `setRegistryFilters`, `initialRegistryFilters`. The `activeRecordFilters` memo now falls through to `candidateFilters` (used by Promotion / no-panel cases), and the `activatePanel` switch no longer references the retired `'registry'` key. Promotion / Recipes / Execution panels continue to use the shared controller as before; Overview and the new Assets tab own their fetch state through their own controllers.
+- `types.ts`: `ExperimentFoundationPanelKey` `'registry' → 'assets'`.
+
+### Decisions made while implementing S1
+- DatasetAsset typed form does not stamp `created_at` on edit — it preserves the original from the selected record and updates `updated_at` only. New records receive both timestamps from the renderer (ISO now) since the backend's schema requires them; future S2/S3 may move this to the backend instead. Recorded as a follow-up known-debt above.
+- `default_version` is a `RefPicker` constrained to `dataset_version` even though `default_version_id` is contractually just a string id, not a ref. The renderer-side RefPicker stores `{ref_type: 'dataset_version', ref_id: ...}` for UX continuity; only the `ref_id` portion is written into the payload.
+- The 01-plan field list (canonical_name / version_label / family / etc.) was inaccurate — those fields live on `DatasetVersion`, `DatasetLocation`, and `DatasetMirror`, not on `DatasetAsset`. S1 acceptance was updated in 04-verification to match the actual contract.
+- Model sub-tab is deferred until a canonical `base_model_asset` record kind ships (V1 follow-up scope per T-043).
+- `useAssetKindController.createRecord` keeps a `_recordId` parameter for API symmetry with `upsertRecord`, even though the backend derives the id from the payload — kept underscore-prefixed so TS6133 doesn't fire and call sites stay uniform. **Updated 2026-05-28 post-review:** the signature was tightened to `createRecord(payload)` so the API matches reality; both call sites updated.
+
+## 2026-05-28 — S1 post-review fixes
+Self-review of the S1 implementation surfaced six concrete issues; all but two were fixed before moving on. The two deferred items are tracked above under "S2 known-debt".
+
+1. **Draft preservation in `DatasetAssetView` and `GenericAssetKindView`** — the prior `useEffect([controller.selectedRecord])` overwrote the in-progress draft whenever the selectedRecord reference changed (e.g. after `refresh()` returned a new object for the same record id). Fix: hold the previously seen `record_id` in a ref and only re-derive the draft when the id actually changes. Saving the same record (upsert returns the canonical version with the same id) now preserves the user's in-progress edits; switching to another record or to "新建" still triggers a clean derivation.
+2. **Auto-fetch on every filter keystroke in `useAssetKindController`** — `refresh` previously depended on `filters.status`, so each character typed into the status filter input triggered a network request. Fix: hold `filters` in a ref; `refresh` reads `filtersRef.current` and only `recordKind` remains as a `useCallback` dependency. Filter edits update local state for the controlled input; the user must click "刷新" (or change sub-tab) to refetch.
+3. **Wasted `loadRecords` / `loadJobs` on panels that don't consume them** — the main controller previously fired `loadRecords` on every render where `loadRecords` identity changed (which is every `activePanel` flip). Overview, Assets, and Readiness panels do not consume `controller.records`; Overview/Assets/Readiness also don't need `controller.jobs`. Fix: guard the `useEffect` so `loadRecords` runs only on Promotion / Recipes / Execution, and `loadJobs` runs only on Execution. Eliminates an extra round-trip on first mount (default activePanel is `overview`) and on every navigation that doesn't touch the shared list.
+4. **`RefPicker` invariant: `value.ref_type` MUST land inside `allowedRefTypes`** — when a caller passed mismatched `refType="X"` and `allowedRefTypes=["Y"]`, the internal select could end up displaying an out-of-options value. Fix: in both the initial state and the external-value-sync `useEffect`, prefer the incoming `value.ref_type` only when it is in the allowlist (or when there is no allowlist), otherwise fall back to the first allowlist entry.
+5. **`useAssetKindController.createRecord(_recordId, payload)` → `createRecord(payload)`** — the unused `_recordId` was a vestigial parameter from a misread of the backend behavior (the service derives the id from the payload). Both call sites updated.
+6. **`JsonAdvancedPanel` editable/onChange coupling** — `editable: true` previously did not require an `onChange`, allowing a silent downgrade to readonly. Fix: the prop type is now a discriminated union — `editable: true` requires `onChange`; `editable: false` (or omitted) forbids `onChange`. Compiler enforces it at every call site.
+
+Verification: desktop typecheck + build PASS after these fixes; UI gate + UI test suite + smoke + governance lint all re-run green.
 
 ## 2026-05-28 — S0 Overview shell landed
 Implemented S0 per `01-plan.md`. Key deltas:

@@ -7,6 +7,7 @@ import type {
   ManualImportSubTabKey,
   TitleCardPrimaryTabKey,
 } from '../literature/shared/types';
+import type { ExperimentFoundationPanelKey } from '../modules/experiment-foundation/types';
 
 export type TopbarProps = {
   activeModule: string;
@@ -26,6 +27,14 @@ export type TopbarProps = {
   titleCardSubTabsByTab: Partial<Record<TitleCardPrimaryTabKey, Array<{ key: string; label: string }>>>;
   onSelectTitleCardTab: (tab: TitleCardPrimaryTabKey) => void;
   onSelectTitleCardSubTab: (tab: TitleCardPrimaryTabKey, subTab: string) => void;
+  activeExperimentFoundationTab: ExperimentFoundationPanelKey;
+  activeExperimentFoundationSubTab: string | null;
+  experimentFoundationTabs: Array<{ key: ExperimentFoundationPanelKey; label: string }>;
+  experimentFoundationSubTabsByTab: Partial<
+    Record<ExperimentFoundationPanelKey, Array<{ key: string; label: string }>>
+  >;
+  onSelectExperimentFoundationTab: (tab: ExperimentFoundationPanelKey) => void;
+  onSelectExperimentFoundationSubTab: (tab: ExperimentFoundationPanelKey, subTab: string) => void;
   toolbarSearchInput: string;
   onToolbarSearchInputChange: (value: string) => void;
   themeModeOptions: Array<{ value: ThemeMode; label: string }>;

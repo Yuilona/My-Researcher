@@ -30,6 +30,12 @@
 - Fix: Section subheadings render as `<p data-ui="text" data-variant="label" data-tone="primary">`.
 - Prevention: When introducing new text hierarchy, look up the allowed `data-variant` set in `ui/contract/contract.json` before writing the component. Do not assume `h4`/`h5`/`h6` exist just because they exist in HTML semantics.
 
+### 2026-05-28 — `data-variant="menu"` and `data-size` on `list`; `data-tone="warning"` on `text` (S1)
+- Symptom: First S1 UI gate run failed with 3 errors in `RefPicker.tsx`: `<ul data-ui="list" data-variant="menu" data-size="sm">` produced both a `contract-enum` error on `variant` and a `contract-attr` error because the `list` role does not accept `data-size`; `<p data-ui="text" data-tone="warning">` produced a `contract-enum` error because the `text` role's `tone` enum is `{primary, secondary, muted, danger}` only.
+- Root cause: muscle memory from `select`/`button` roles which both expose `data-size`. The `list` role exposes `density` and `variant ∈ {plain, rows, cards}` only. The `text` role does not have a `warning` tone — only `danger` for hard errors and `muted`/`secondary` for soft hints.
+- Fix: suggestion list now uses `data-variant="plain" data-density="compact"`; the "未匹配候选" soft hint uses `data-tone="muted"`.
+- Prevention: cross-check `ui/contract/contract.json` for the target role's `attrs` block before introducing new components. The pattern "this role accepts `data-size`" is **NOT** consistent across roles. The `text` role's tone enum is the tightest in the contract and most likely to need a re-think for soft warnings — prefer `muted` + caption variant, not `warning` + body variant.
+
 ### 2026-05-28 — Forward reference of `selectJobById` in `goToJob` (S0)
 - Symptom: Initial `goToJob` was placed directly after `activatePanel` and referenced a non-existent `selectJobByIdInternal` (a placeholder I introduced before the real definition). TypeScript caught the missing identifier at typecheck.
 - Root cause: I tried to attach a `useCallback` deep-link helper before the function it depended on existed in the file.

@@ -136,19 +136,24 @@ function assertIncludes(source, snippet, label) {
 }
 
 async function assertExperimentFoundationWorkbenchSource() {
-  const [constants, app, api, controller, moduleSource, utils] = await Promise.all([
+  const [constants, app, api, controller, moduleSource, utils, topbar, efConstants] = await Promise.all([
     readDesktopSource('src/renderer/literature/shared/constants.ts'),
     readDesktopSource('src/renderer/App.tsx'),
     readDesktopSource('src/renderer/modules/experiment-foundation/api.ts'),
     readDesktopSource('src/renderer/modules/experiment-foundation/useExperimentFoundationController.ts'),
     readDesktopSource('src/renderer/modules/experiment-foundation/ExperimentFoundationModule.tsx'),
     readDesktopSource('src/renderer/modules/experiment-foundation/utils.ts'),
+    readDesktopSource('src/renderer/shell/components/Topbar.tsx'),
+    readDesktopSource('src/renderer/modules/experiment-foundation/constants.ts'),
   ]);
 
   assertIncludes(constants, "['文献管理', '实验基座', '选题管理', '论文管理']", 'desktop nav order');
   assertIncludes(app, "activeModule === '实验基座'", 'desktop module mount');
-  assertIncludes(app, '<ExperimentFoundationModule />', 'desktop module mount');
-  assertIncludes(moduleSource, 'aria-label="实验基座工作台"', 'experiment foundation workbench');
+  assertIncludes(app, '<ExperimentFoundationModule', 'desktop module mount');
+  assertIncludes(topbar, 'aria-label="实验基座标签页"', 'experiment foundation topbar tabs');
+  assertIncludes(efConstants, "{ key: 'overview', label: '概览' }", 'experiment foundation tab labels');
+  assertIncludes(efConstants, "{ key: 'assets', label: '资产库' }", 'experiment foundation tab labels');
+  assertIncludes(moduleSource, "activePanel === 'assets'", 'experiment foundation panel routing');
 
   for (const endpoint of [
     '/experiment-foundation/records',

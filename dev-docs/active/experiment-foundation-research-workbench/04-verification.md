@@ -75,6 +75,29 @@
 - PASS: `pnpm --filter @paper-engineering-assistant/backend typecheck`.
 - PASS: `node apps/backend/scripts/run-node-tests.mjs src/services/experiment-foundation-service.unit.test.ts` — full backend suite reports 869 pass / 0 fail / 2 skipped over 871 subtests. The readiness-list integration test ("experiment-foundation readiness list route filters by status and target_kind") is included.
 
+### 2026-05-28 — S1 DatasetAsset typed form + RefPicker + 资产库 IA
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop typecheck` (after one cleanup pass: an unused `recordId` parameter inside the new `useAssetKindController.createRecord` got renamed to `_recordId` to satisfy `noUnusedParameters`).
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop build`.
+- PASS: `python3 .ai/skills/features/ui/ui-governance-gate/scripts/ui_gate.py run --mode full` after one round-trip:
+  - First run: 3 errors in `RefPicker.tsx` — `<ul data-ui="list" data-variant="menu" data-size="sm">` (the `list` role accepts `variant ∈ {plain, rows, cards}` and does NOT accept a `data-size` attribute), and `<p data-tone="warning">` (the `text` role's `tone` enum is `{primary, secondary, muted, danger}` only).
+  - Remediation: list suggestion uses `data-variant="plain" data-density="compact"`; the "未匹配候选" hint uses `data-tone="muted"`.
+  - Passing report: Errors 0, Warnings 0.
+- PASS: `node .ai/tests/run.mjs --suite ui` (4/4).
+- PASS: `pnpm --filter @paper-engineering-assistant/desktop smoke:e2e` — `[desktop-smoke] PASS`.
+- PASS: `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main`.
+- PASS: `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` — same unrelated T-088 in-flight warning.
+- PASS: `git diff --check`.
+- REGRESSION (shared): `pnpm --filter @paper-engineering-assistant/shared test` reports 196 pass / 1 fail. The single failure (test 132 `research-lifecycle barrel re-exports the runtime value surface of split modules`) is pre-existing T-088 in-flight work and not caused by S1. My S0+ classification subset test (test 46) still passes.
+- REGRESSION (backend): `node apps/backend/scripts/run-node-tests.mjs ...` reports 869 pass / 0 fail / 2 skipped. No regression from S1.
+
+### S1 Acceptance check
+- [x] `资产/合同` top-level tab removed; `资产库` parent tab + sub-tabs Dataset / Benchmark / Baseline / Protocol present.
+- [x] DatasetAsset has a typed create/edit form covering canonical fields (`dataset_asset_id`, `name`, `description`, `aliases`, `task_types`, `source_refs`, `default_version_id`, `catalog_status`, `schema_summary`). Unknown contract fields are surfaced read-only via an "高级 JSON（未 typed 字段）" disclosure so frozen payloads round-trip without loss.
+- [x] `RefPicker` exists at `components/RefPicker.tsx` and is consumed inside DatasetAssetView for both `default_version` (single ref) and `source_refs` (RefPickerList). It performs list-API-backed type-ahead only — no graph navigation, no inline-create.
+- [x] Benchmark / Baseline / Protocol sub-tabs render list + detail + Advanced JSON disclosure (no top-level generic JSON CRUD remains).
+- [x] Filter scope per sub-tab — `useAssetKindController` resets selection and filters on `recordKind` change; sub-tab switching does not pollute another sub-tab's state.
+- [x] Renderer-side classifications remain Shared-sourced; no new `*_STATUSES` literal sets introduced.
+
 ### S0+ Acceptance check
 - [x] `EXPERIMENT_FOUNDATION_READINESS_BLOCKED_STATUSES`, `EXPERIMENT_FOUNDATION_ASSET_CANDIDATE_ATTENTION_STATUSES`, `EXPERIMENT_FOUNDATION_EVIDENCE_CANDIDATE_REVIEW_STATUSES`, `EXPERIMENT_FOUNDATION_EXTERNAL_TRAINING_JOB_IN_FLIGHT_STATUSES` exist in shared and each member is asserted to be a subset of its canonical enum.
 - [x] `ListExperimentFoundationReadinessReportsResponse` + `listExperimentFoundationReadinessReportsQuerySchema` exist in shared as thin pagination wrappers around the existing readiness-report DTO; no item DTO shape changes.

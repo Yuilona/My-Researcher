@@ -81,6 +81,13 @@ import { PaperModule } from './modules/PaperModule';
 import { TopicWorkbenchModule } from './modules/topic-workbench/TopicWorkbenchModule';
 import { WritingModule } from './modules/WritingModule';
 import { ExperimentFoundationModule } from './modules/experiment-foundation/ExperimentFoundationModule';
+import {
+  experimentFoundationAssetSubTabKeys,
+  experimentFoundationSubTabsByTab,
+  experimentFoundationTabs,
+  type ExperimentFoundationAssetSubTabKey,
+} from './modules/experiment-foundation/constants';
+import type { ExperimentFoundationPanelKey } from './modules/experiment-foundation/types';
 import { LiteratureWorkspace } from './literature/LiteratureWorkspace';
 import { useOverviewController } from './literature/overview/useOverviewController';
 import { useOverviewActionsController } from './literature/overview/useOverviewActionsController';
@@ -168,6 +175,10 @@ export function App({ initialThemeMode }: AppProps) {
   const [autoImportSubTab, setAutoImportSubTab] = useState<AutoImportSubTabKey>('topic-settings');
   const [activeTitleCardTab, setActiveTitleCardTab] = useState<TitleCardPrimaryTabKey>('overview');
   const [titleCardSubTabs, setTitleCardSubTabs] = useState<TitleCardSubTabState>(initialTitleCardSubTabs);
+  const [activeExperimentFoundationTab, setActiveExperimentFoundationTab] =
+    useState<ExperimentFoundationPanelKey>('overview');
+  const [activeExperimentFoundationAssetSubTab, setActiveExperimentFoundationAssetSubTab] =
+    useState<ExperimentFoundationAssetSubTabKey>('dataset');
   const [topicProfiles, setTopicProfiles] = useState<AutoPullTopicProfile[]>([]);
   const [topicProfilesStatus, setTopicProfilesStatus] = useState<UiOperationStatus>('idle');
   const [topicProfilesError, setTopicProfilesError] = useState<string | null>(null);
@@ -1238,6 +1249,24 @@ export function App({ initialThemeMode }: AppProps) {
         titleCardSubTabsByTab={titleCardSubTabsByTab}
         onSelectTitleCardTab={handleSelectTitleCardTab}
         onSelectTitleCardSubTab={handleSelectTitleCardSubTab}
+        activeExperimentFoundationTab={activeExperimentFoundationTab}
+        activeExperimentFoundationSubTab={
+          activeExperimentFoundationTab === 'assets' ? activeExperimentFoundationAssetSubTab : null
+        }
+        experimentFoundationTabs={experimentFoundationTabs}
+        experimentFoundationSubTabsByTab={experimentFoundationSubTabsByTab}
+        onSelectExperimentFoundationTab={setActiveExperimentFoundationTab}
+        onSelectExperimentFoundationSubTab={(tab, subTab) => {
+          // Route sub-tab writes by parent tab so future tabs that add their
+          // own sub-tabs (S2 experiment-flow, S3 baseline/benchmark detail)
+          // cannot silently corrupt the asset library's selection.
+          if (tab === 'assets') {
+            const allowed: ReadonlyArray<string> = experimentFoundationAssetSubTabKeys;
+            if (allowed.includes(subTab)) {
+              setActiveExperimentFoundationAssetSubTab(subTab as ExperimentFoundationAssetSubTabKey);
+            }
+          }
+        }}
         toolbarSearchInput={toolbarSearchInput}
         onToolbarSearchInputChange={setToolbarSearchInput}
         themeModeOptions={themeModeOptions}
@@ -1292,7 +1321,12 @@ export function App({ initialThemeMode }: AppProps) {
           ) : null}
 
           {activeModule === '实验基座' ? (
-            <ExperimentFoundationModule />
+            <ExperimentFoundationModule
+              activePanel={activeExperimentFoundationTab}
+              onSelectPanel={setActiveExperimentFoundationTab}
+              assetSubTab={activeExperimentFoundationAssetSubTab}
+              onSelectAssetSubTab={setActiveExperimentFoundationAssetSubTab}
+            />
           ) : null}
 
           {activeModule === '选题管理' ? (

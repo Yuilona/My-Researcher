@@ -3,8 +3,11 @@ import type {
   ExperimentFoundationStoredRecord,
   ExternalTrainingJob,
 } from '@paper-engineering-assistant/shared/research-lifecycle/experiment-foundation-contracts';
+import { AssetLibraryPanel } from './assets/AssetLibraryPanel';
+import type { ExperimentFoundationAssetSubTabKey } from './constants';
 import { StatusBadge } from './components/StatusBadge';
 import { OverviewPanel } from './overview/OverviewPanel';
+import type { ExperimentFoundationPanelKey } from './types';
 import { useExperimentFoundationController } from './useExperimentFoundationController';
 import {
   experimentFoundationExternalJobStatuses,
@@ -14,19 +17,14 @@ import {
   shortText,
 } from './utils';
 
-const panelTabs: Array<{
-  key: ReturnType<typeof useExperimentFoundationController>['activePanel'];
-  label: string;
-}> = [
-  { key: 'overview', label: '概览' },
-  { key: 'registry', label: '资产/合同' },
-  { key: 'readiness', label: 'Readiness' },
-  { key: 'promotion', label: '候选晋升' },
-  { key: 'recipes', label: 'Recipe/Materialization' },
-  { key: 'execution', label: '执行/证据' },
-];
-
 type Controller = ReturnType<typeof useExperimentFoundationController>;
+
+export type ExperimentFoundationModuleProps = {
+  activePanel: ExperimentFoundationPanelKey;
+  onSelectPanel: (panel: ExperimentFoundationPanelKey) => void;
+  assetSubTab: ExperimentFoundationAssetSubTabKey;
+  onSelectAssetSubTab: (sub: ExperimentFoundationAssetSubTabKey) => void;
+};
 
 function StatusLine({ status, message }: { status: string; message?: string | null }) {
   if (!message) {
@@ -123,72 +121,6 @@ function RecordKindSelect({
         </option>
       ))}
     </select>
-  );
-}
-
-function RegistryFilters({ controller }: { controller: Controller }) {
-  return (
-    <section data-ui="section" data-padding="none">
-      <div data-ui="toolbar" data-align="between" data-wrap="wrap">
-        <div data-ui="stack" data-direction="row" data-gap="2" data-wrap="wrap" data-align="center">
-          <label data-ui="field">
-            <span data-slot="label">record_kind</span>
-            <RecordKindSelect
-              value={controller.registryFilters.recordKind}
-              onChange={(recordKind) => controller.setRegistryFilters((current) => ({ ...current, recordKind }))}
-            />
-          </label>
-          <label data-ui="field">
-            <span data-slot="label">status</span>
-            <input
-              data-ui="input"
-              data-size="sm"
-              value={controller.registryFilters.status}
-              onChange={(event) =>
-                controller.setRegistryFilters((current) => ({ ...current, status: event.target.value }))
-              }
-            />
-          </label>
-          <label data-ui="field">
-            <span data-slot="label">family</span>
-            <input
-              data-ui="input"
-              data-size="sm"
-              value={controller.registryFilters.family}
-              onChange={(event) =>
-                controller.setRegistryFilters((current) => ({ ...current, family: event.target.value }))
-              }
-            />
-          </label>
-          <label data-ui="field">
-            <span data-slot="label">parent</span>
-            <input
-              data-ui="input"
-              data-size="sm"
-              value={controller.registryFilters.parentRecordId}
-              onChange={(event) =>
-                controller.setRegistryFilters((current) => ({ ...current, parentRecordId: event.target.value }))
-              }
-            />
-          </label>
-          <label data-ui="field">
-            <span data-slot="label">owner</span>
-            <input
-              data-ui="input"
-              data-size="sm"
-              value={controller.registryFilters.ownerRefId}
-              onChange={(event) =>
-                controller.setRegistryFilters((current) => ({ ...current, ownerRefId: event.target.value }))
-              }
-            />
-          </label>
-        </div>
-        <button data-ui="button" data-variant="secondary" data-size="sm" type="button" onClick={() => void controller.loadRecords()}>
-          刷新
-        </button>
-      </div>
-      <StatusLine status={controller.recordStatus} message={controller.recordError} />
-    </section>
   );
 }
 
@@ -299,21 +231,6 @@ function RecordEditor({
         <StatusLine status={controller.recordMutationStatus} message={controller.recordMutationMessage} />
       </div>
     </section>
-  );
-}
-
-function RegistryPanel({ controller }: { controller: Controller }) {
-  return (
-    <div data-ui="stack" data-direction="col" data-gap="4">
-      <RegistryFilters controller={controller} />
-      <div data-ui="grid" data-cols="2" data-gap="4">
-        <section data-ui="section" data-padding="none">
-          <RecordTable records={controller.records} selectedRecord={controller.selectedRecord} onSelect={controller.selectRecord} />
-        </section>
-        <RecordEditor controller={controller} />
-      </div>
-      {controller.selectedRecord ? <JsonViewer label="Selected record" value={controller.selectedRecord} /> : null}
-    </div>
   );
 }
 
@@ -680,42 +597,21 @@ function ExecutionPanel({ controller }: { controller: Controller }) {
   );
 }
 
-export function ExperimentFoundationModule() {
-  const controller = useExperimentFoundationController();
+export function ExperimentFoundationModule({
+  activePanel,
+  onSelectPanel,
+  assetSubTab,
+  onSelectAssetSubTab,
+}: ExperimentFoundationModuleProps) {
+  const controller = useExperimentFoundationController({
+    activePanel,
+    setActivePanel: onSelectPanel,
+  });
 
   return (
     <section className="module-dashboard" data-ui="page" data-density="compact">
       <div data-ui="stack" data-direction="col" data-gap="4">
-        <div data-ui="toolbar" data-align="between" data-wrap="wrap">
-          <div data-ui="stack" data-direction="col" data-gap="1">
-            <p data-ui="text" data-variant="h3" data-tone="primary">实验基座</p>
-            <div data-ui="stack" data-direction="row" data-gap="2" data-wrap="wrap">
-              <span data-ui="badge" data-variant="subtle" data-tone="neutral">
-                records {controller.records.length}
-              </span>
-              <span data-ui="badge" data-variant="subtle" data-tone="neutral">
-                jobs {controller.jobs.length}
-              </span>
-            </div>
-          </div>
-          <div data-ui="tabs" data-variant="pill" data-size="sm" role="tablist" aria-label="实验基座工作台">
-            {panelTabs.map((tab) => (
-              <button
-                key={tab.key}
-                data-ui="tab"
-                data-state={controller.activePanel === tab.key ? 'active' : 'inactive'}
-                type="button"
-                role="tab"
-                aria-selected={controller.activePanel === tab.key}
-                onClick={() => controller.setActivePanel(tab.key)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {controller.activePanel === 'overview' ? (
+        {activePanel === 'overview' ? (
           <OverviewPanel
             deepLinks={{
               goToJob: (externalJobId) => void controller.goToJob(externalJobId),
@@ -724,11 +620,13 @@ export function ExperimentFoundationModule() {
             }}
           />
         ) : null}
-        {controller.activePanel === 'registry' ? <RegistryPanel controller={controller} /> : null}
-        {controller.activePanel === 'readiness' ? <ReadinessPanel controller={controller} /> : null}
-        {controller.activePanel === 'promotion' ? <PromotionPanel controller={controller} /> : null}
-        {controller.activePanel === 'recipes' ? <RecipePanel controller={controller} /> : null}
-        {controller.activePanel === 'execution' ? <ExecutionPanel controller={controller} /> : null}
+        {activePanel === 'assets' ? (
+          <AssetLibraryPanel activeSubTab={assetSubTab} onSelectSubTab={onSelectAssetSubTab} />
+        ) : null}
+        {activePanel === 'readiness' ? <ReadinessPanel controller={controller} /> : null}
+        {activePanel === 'promotion' ? <PromotionPanel controller={controller} /> : null}
+        {activePanel === 'recipes' ? <RecipePanel controller={controller} /> : null}
+        {activePanel === 'execution' ? <ExecutionPanel controller={controller} /> : null}
       </div>
     </section>
   );

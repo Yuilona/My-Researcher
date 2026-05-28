@@ -6,7 +6,7 @@ import type {
 
 export type ExperimentFoundationPanelKey =
   | 'overview'
-  | 'registry'
+  | 'assets'
   | 'readiness'
   | 'promotion'
   | 'recipes'

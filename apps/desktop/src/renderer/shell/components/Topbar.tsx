@@ -18,6 +18,12 @@ export function Topbar({
   titleCardSubTabsByTab,
   onSelectTitleCardTab,
   onSelectTitleCardSubTab,
+  activeExperimentFoundationTab,
+  activeExperimentFoundationSubTab,
+  experimentFoundationTabs,
+  experimentFoundationSubTabsByTab,
+  onSelectExperimentFoundationTab,
+  onSelectExperimentFoundationSubTab,
   toolbarSearchInput,
   onToolbarSearchInputChange,
   themeModeOptions,
@@ -87,6 +93,63 @@ export function Topbar({
                               className={`topbar-subtab-button${isSubTabActive ? ' is-active' : ''}`}
                               aria-pressed={isSubTabActive}
                               onClick={() => onSelectLiteratureSubTab(tab.key, subTab.key)}
+                            >
+                              {subTab.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+          {activeModule === '实验基座' ? (
+            <div className="topbar-literature-tabs" role="tablist" aria-label="实验基座标签页">
+              {experimentFoundationTabs.map((tab) => {
+                const subTabs = experimentFoundationSubTabsByTab[tab.key] ?? [];
+                const shouldShowSubTabs =
+                  activeExperimentFoundationTab === tab.key && subTabs.length > 0;
+                return (
+                  <div
+                    key={tab.key}
+                    className={`topbar-tab-cluster${
+                      activeExperimentFoundationTab === tab.key ? ' is-active' : ''
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      className={`topbar-tab-button${
+                        activeExperimentFoundationTab === tab.key ? ' is-active' : ''
+                      }`}
+                      aria-selected={activeExperimentFoundationTab === tab.key}
+                      onClick={() => onSelectExperimentFoundationTab(tab.key)}
+                    >
+                      {tab.label}
+                    </button>
+                    {shouldShowSubTabs ? (
+                      <div
+                        className="topbar-inline-subtabs"
+                        role="group"
+                        aria-label={`${tab.label} 子标签`}
+                      >
+                        {subTabs.map((subTab) => {
+                          const isSubTabActive =
+                            activeExperimentFoundationTab === tab.key &&
+                            activeExperimentFoundationSubTab === subTab.key;
+                          return (
+                            <button
+                              key={`${tab.key}-${subTab.key}`}
+                              type="button"
+                              className={`topbar-subtab-button${
+                                isSubTabActive ? ' is-active' : ''
+                              }`}
+                              aria-pressed={isSubTabActive}
+                              onClick={() =>
+                                onSelectExperimentFoundationSubTab(tab.key, subTab.key)
+                              }
                             >
                               {subTab.label}
                             </button>
