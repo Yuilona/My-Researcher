@@ -39,7 +39,7 @@ Project: `main`
 | T-083 backend-full-suite-environment-isolation | done | dev-docs/active/backend-full-suite-environment-isolation |
 | T-084 topic-selection-real-e2e-canary | done | dev-docs/active/topic-selection-real-e2e-canary |
 | T-085 topic-selection-real-e2e-scale-quality | done | dev-docs/active/topic-selection-real-e2e-scale-quality |
-| T-111 topic-selection-v1a-production-orchestration | planned | dev-docs/active/topic-selection-v1a-production-orchestration |
+| T-111 topic-selection-v1a-production-orchestration | done | dev-docs/active/topic-selection-v1a-production-orchestration |
 
 ### F-001 Research Lifecycle Governance Core
 
@@ -122,7 +122,7 @@ Project: `main`
 | T-105 paper-implementation-provider-variance-evaluation | done | dev-docs/active/paper-implementation-provider-variance-evaluation |
 | T-106 experiment-foundation-real-interaction-hardening | in-progress | dev-docs/active/experiment-foundation-real-interaction-hardening |
 | T-107 topic-selection-v1b-workflow-hardening | done | dev-docs/active/topic-selection-v1b-workflow-hardening |
-| T-108 topic-selection-v1c-workflow-hardening | in-progress | dev-docs/active/topic-selection-v1c-workflow-hardening |
+| T-108 topic-selection-v1c-workflow-hardening | done | dev-docs/active/topic-selection-v1c-workflow-hardening |
 | T-109 paper-implementation-v1-runnable-closure | done | dev-docs/active/paper-implementation-v1-runnable-closure |
 | T-110 experiment-foundation-research-workbench | archived | dev-docs/archive/experiment-foundation-research-workbench |
 | T-112 topic-selection-llm-context-cache-runtime | planned | dev-docs/active/topic-selection-llm-context-cache-runtime |

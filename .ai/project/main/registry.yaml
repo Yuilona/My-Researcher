@@ -1013,7 +1013,7 @@ tasks:
     updated: 2026-05-27
   - id: T-108
     slug: topic-selection-v1c-workflow-hardening
-    status: in-progress
+    status: done
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
@@ -1040,11 +1040,11 @@ tasks:
     updated: 2026-05-29
   - id: T-111
     slug: topic-selection-v1a-production-orchestration
-    status: planned
+    status: done
     milestone_id: M-000
     feature_id: F-000
     dev_docs_path: dev-docs/active/topic-selection-v1a-production-orchestration
-    updated: 2026-05-28
+    updated: 2026-05-29
   - id: T-112
     slug: topic-selection-llm-context-cache-runtime
     status: planned
