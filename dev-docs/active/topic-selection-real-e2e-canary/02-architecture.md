@@ -9,7 +9,7 @@
 - Topic id: `TOPIC_SELECTION_REAL_TOPIC_ID`, default `ai-rag-finetuning-2022-2026`.
 - Literature limit: `TOPIC_SELECTION_REAL_LITERATURE_LIMIT`, default `16`.
 - LLM mode: `TOPIC_SELECTION_REAL_FLOW_MOCK_LLM=1` for deterministic local execution; unset/`0` for provider mode.
-- Model: `TOPIC_SELECTION_REAL_MODEL_ID`, default `gpt-5.4-mini`.
+- Model: `TOPIC_SELECTION_REAL_MODEL_ID`, default `gpt-5.5`.
 
 ## Artifacts
 - Resource sample payload.

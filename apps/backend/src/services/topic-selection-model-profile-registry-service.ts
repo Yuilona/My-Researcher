@@ -85,6 +85,12 @@ const SUPPORT_PROFILE_RUN_MODE_ELIGIBILITY: TopicSelectionModelProfileRunModeEli
   provider_llm: [],
 };
 
+const PROVIDER_CANARY_RUN_MODE_ELIGIBILITY: TopicSelectionModelProfileRunModeEligibility = {
+  mocked_llm: [],
+  codex_assisted: [],
+  provider_llm: ['acceptance'],
+};
+
 const PROVIDER_REQUIRED_CAPABILITIES = [
   'structured_output',
   'json_schema',
@@ -127,6 +133,17 @@ export const TOPIC_SELECTION_V1B_N7_FAILED_TRIAL_SYNTHESIS_SUPPORT_PROFILE_ID =
 export const TOPIC_SELECTION_V1B_N7_N8_DEBATE_ADMISSION_SUPPORT_PROFILE_ID =
   TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_n8_debate_admission_support;
 
+export const TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS = {
+  n2_bounded_micro_debate:
+    'topic-selection.v1c.promotion-support.bounded-micro-debate.provider-canary.v1',
+  n3_gate_diagnostic_adjunct:
+    'topic-selection.v1c.gate-diagnostic-adjunct.provider-canary.v1',
+  n4_delegated_promotion_decision:
+    'topic-selection.v1c.delegated-promotion-decision.provider-canary.v1',
+  n6_downstream_feedback_normalization:
+    'topic-selection.v1c.downstream-feedback-normalization.provider-canary.v1',
+} as const;
+
 const DEBATE_WORKER_DEEPSEEK_ELIGIBLE_PROFILE_IDS = new Set<string>([
   TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
   TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID,
@@ -137,7 +154,7 @@ function normalizedParams(
 ): TopicSelectionModelOption['normalized_params'] {
   return {
     creativity: 'medium',
-    reasoning_depth: 'medium',
+    reasoning_depth: 'high',
     output_budget: 'medium',
     structured_output_required: true,
     output_format: 'json_schema',
@@ -151,7 +168,7 @@ function providerOptions(profileKey: string): TopicSelectionModelOption[] {
       option_id: `${profileKey}.openai-balanced`,
       option_purpose: 'default_balanced_provider_run',
       provider_id: 'openai',
-      model_id: 'gpt-5.4-mini',
+      model_id: 'gpt-5.5',
       use_when: ['default_provider_run'],
       request_policy: {
         timeout_ms: 180000,
@@ -172,7 +189,7 @@ function providerOptions(profileKey: string): TopicSelectionModelOption[] {
         timeout_ms: 300000,
       },
       normalized_params: normalizedParams({
-        reasoning_depth: 'medium',
+        reasoning_depth: 'high',
         output_budget: 'large',
       }),
       provider_overrides: {},
@@ -259,6 +276,17 @@ function providerOptions(profileKey: string): TopicSelectionModelOption[] {
   }
 
   return options;
+}
+
+function providerCanaryOptions(profileKey: string): TopicSelectionModelOption[] {
+  return providerOptions(profileKey).map((option) => ({
+    ...option,
+    normalized_params: {
+      ...option.normalized_params,
+      creativity: 'low',
+      reasoning_depth: 'high',
+    },
+  }));
 }
 
 function profileBase(input: {
@@ -489,7 +517,7 @@ const DEFAULT_TOPIC_SELECTION_MODEL_PROFILE_REGISTRY: TopicSelectionModelProfile
           ...option,
           normalized_params: normalizedParams({
             creativity: 'medium',
-            reasoning_depth: 'medium',
+            reasoning_depth: 'high',
             output_budget: 'large',
           }),
         }),
@@ -645,6 +673,66 @@ const DEFAULT_TOPIC_SELECTION_MODEL_PROFILE_REGISTRY: TopicSelectionModelProfile
       run_mode_eligibility: SUPPORT_PROFILE_RUN_MODE_ELIGIBILITY,
       output_contract: 'N8DebateAdmissionReviewSupport@v1',
       model_options: [],
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n2_bounded_micro_debate,
+      profile_function: 'v1c_provider_canary_bounded_micro_debate',
+      role_family: 'single_agent',
+      stage_family: 'v1c_promotion_support',
+      quality_objectives: [
+        'exercise_provider_structured_output_against_n2_micro_debate_contract',
+        'preserve_n1_frozen_context_refs',
+        'surface_provider_schema_or_semantic_drift_without_fallback',
+      ],
+      allowed_execution_modes: ['provider_llm'],
+      run_mode_eligibility: PROVIDER_CANARY_RUN_MODE_ELIGIBILITY,
+      output_contract: 'TopicSelectionV1cBoundedMicroDebateRoleOrFinal@v1',
+      model_options: providerCanaryOptions(TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n2_bounded_micro_debate),
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n3_gate_diagnostic_adjunct,
+      profile_function: 'v1c_provider_canary_gate_diagnostic_adjunct',
+      role_family: 'single_agent',
+      stage_family: 'v1c_promotion_gate',
+      quality_objectives: [
+        'exercise_provider_structured_output_against_n3_diagnostic_contract',
+        'preserve_deterministic_gate_routing_outcome',
+        'surface_provider_repair_suggestion_drift_without_authority_change',
+      ],
+      allowed_execution_modes: ['provider_llm'],
+      run_mode_eligibility: PROVIDER_CANARY_RUN_MODE_ELIGIBILITY,
+      output_contract: 'TopicSelectionV1cGateDiagnosticAdjunct@v1',
+      model_options: providerCanaryOptions(TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n3_gate_diagnostic_adjunct),
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n4_delegated_promotion_decision,
+      profile_function: 'v1c_provider_canary_delegated_promotion_decision',
+      role_family: 'single_agent',
+      stage_family: 'v1c_human_promotion_decision',
+      quality_objectives: [
+        'exercise_provider_structured_output_against_n4_delegated_candidate_contract',
+        'preserve_explicit_authorization_and_snapshot_hash',
+        'surface_provider_authority_boundary_drift_before_deterministic_admission',
+      ],
+      allowed_execution_modes: ['provider_llm'],
+      run_mode_eligibility: PROVIDER_CANARY_RUN_MODE_ELIGIBILITY,
+      output_contract: 'TopicSelectionV1cDelegatedPromotionDecisionCandidate@v1',
+      model_options: providerCanaryOptions(TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n4_delegated_promotion_decision),
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n6_downstream_feedback_normalization,
+      profile_function: 'v1c_provider_canary_downstream_feedback_normalization',
+      role_family: 'single_agent',
+      stage_family: 'v1c_downstream_feedback_recheck',
+      quality_objectives: [
+        'exercise_provider_structured_output_against_n6_feedback_candidate_contract',
+        'preserve_bridge_and_feedback_source_refs',
+        'surface_provider_invented_ref_or_forbidden_mutation_drift_without_downstream_side_effects',
+      ],
+      allowed_execution_modes: ['provider_llm'],
+      run_mode_eligibility: PROVIDER_CANARY_RUN_MODE_ELIGIBILITY,
+      output_contract: 'TopicSelectionV1cDownstreamFeedbackCandidate@v1',
+      model_options: providerCanaryOptions(TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n6_downstream_feedback_normalization),
     }),
   ],
 };

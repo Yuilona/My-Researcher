@@ -17,7 +17,12 @@ import type {
 } from '../repositories/literature-repository.js';
 import type { LiteratureContentProcessingSettingsService, OpenAIExtractionConfig } from './literature-content-processing-settings-service.js';
 import { normalizeWhitespace, sha256Text, stableStringify } from './literature-content-processing-utils.js';
-import { BackendLlmGateway, LlmGatewayError, type LlmCallTelemetry } from './llm-gateway.js';
+import {
+  BackendLlmGateway,
+  DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
+  LlmGatewayError,
+  type LlmCallTelemetry,
+} from './llm-gateway.js';
 
 const KEY_CONTENT_SCHEMA_VERSION = 'key_content.v1' as const;
 const KEY_CONTENT_EXTRACTION_PROFILE = 'paper_semantic_dossier.v1' as const;
@@ -398,6 +403,7 @@ export class LiteratureKeyContentExtractionService {
       ],
       schemaName: 'literature_key_content_section',
       schema: this.openAIOutputSchema(),
+      normalizedParams: DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
       policy: {
         timeoutMs: config.runtime.request_timeout_ms,
         maxRetries: config.runtime.max_retries,
@@ -486,6 +492,7 @@ export class LiteratureKeyContentExtractionService {
       ],
       schemaName: 'literature_key_content_consolidation',
       schema: this.openAIOutputSchema(),
+      normalizedParams: DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
       policy: {
         timeoutMs: config.runtime.request_timeout_ms,
         maxRetries: config.runtime.max_retries,

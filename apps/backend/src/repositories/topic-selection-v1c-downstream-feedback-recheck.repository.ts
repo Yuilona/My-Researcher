@@ -15,6 +15,10 @@ export interface TopicSelectionV1cDownstreamFeedbackRecheckRepository {
     downstreamRecheckRequestId: string,
   ): Promise<TopicSelectionDownstreamTopicFeedbackRecord | null>;
 
+  findFeedbackByFingerprint(
+    feedbackFingerprint: string,
+  ): Promise<TopicSelectionDownstreamTopicFeedbackRecord | null>;
+
   listFeedbackByBridgeId(
     paperProjectBridgeId: string,
   ): Promise<TopicSelectionDownstreamTopicFeedbackRecord[]>;

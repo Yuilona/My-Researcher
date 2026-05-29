@@ -38,6 +38,7 @@ import {
 } from './literature-content-processing-utils.js';
 import {
   BackendLlmGateway,
+  DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
   LlmGatewayError,
   type LlmCallTelemetry,
   type LlmModelRef,
@@ -49,7 +50,7 @@ const PROMPT_TEMPLATE_ID = 'topic-selection-topic-question-formation';
 const PROMPT_TEMPLATE_VERSION = '1';
 const DEFAULT_MODEL: LlmModelRef = {
   providerId: 'openai',
-  modelId: 'gpt-5.4-mini',
+  modelId: 'gpt-5.5',
   profileId: WORKFLOW_PROFILE_KEY,
 };
 const ADMITTABLE_ANSWERABILITY_VERDICTS = new Set(['answerable', 'answerable_with_risk']);
@@ -233,6 +234,7 @@ export class TopicSelectionV1bTopicQuestionService {
           ],
           schemaName: 'topic_selection_topic_question_candidate_set',
           schema: topicSelectionFormTopicQuestionLlmOutputSchema as unknown as Record<string, unknown>,
+          normalizedParams: DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
         });
       llmOutput = response.parsed;
       telemetry = response.telemetry;

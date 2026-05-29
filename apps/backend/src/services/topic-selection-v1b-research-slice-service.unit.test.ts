@@ -144,7 +144,7 @@ function makeLlmOutput(
 function telemetry(): LlmCallTelemetry {
   return {
     provider_id: 'openai',
-    model_id: 'gpt-5.4-mini',
+    model_id: 'gpt-5.5',
     profile_id: 'topic-selection-research-slice-planning',
     prompt_template_id: 'topic-selection-research-slice-planning',
     prompt_template_version: '1',

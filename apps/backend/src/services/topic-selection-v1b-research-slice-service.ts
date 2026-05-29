@@ -31,6 +31,7 @@ import type {
 } from '../repositories/topic-selection-v1b-research-slice.repository.js';
 import {
   BackendLlmGateway,
+  DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
   LlmGatewayError,
   type LlmCallTelemetry,
   type LlmModelRef,
@@ -42,7 +43,7 @@ const PROMPT_TEMPLATE_ID = 'topic-selection-research-slice-planning';
 const PROMPT_TEMPLATE_VERSION = '1';
 const DEFAULT_MODEL: LlmModelRef = {
   providerId: 'openai',
-  modelId: 'gpt-5.4-mini',
+  modelId: 'gpt-5.5',
   profileId: WORKFLOW_PROFILE_KEY,
 };
 
@@ -220,6 +221,7 @@ export class TopicSelectionV1bResearchSliceService {
               string,
               unknown
             >,
+          normalizedParams: DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
         });
       llmOutput = response.parsed;
       telemetry = response.telemetry;

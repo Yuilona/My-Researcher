@@ -112,6 +112,14 @@ export type LlmStructuredOutputResponse<T> = {
   telemetry: LlmCallTelemetry;
 };
 
+export const DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS: TopicSelectionModelProfileNormalizedParams = {
+  creativity: 'medium',
+  reasoning_depth: 'high',
+  output_budget: 'medium',
+  structured_output_required: true,
+  output_format: 'json_schema',
+};
+
 export type LlmEmbeddingRequest = {
   executionContext: LlmExecutionContext;
   model: LlmModelRef;

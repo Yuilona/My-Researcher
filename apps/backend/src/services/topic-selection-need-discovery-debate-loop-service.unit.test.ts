@@ -447,10 +447,10 @@ test('need-discovery debate loop uses contract defaults for provider role instan
     ],
   );
   assert.equal(llmGateway.calls.every((call) => call.model.providerId === 'openai'), true);
-  assert.equal(llmGateway.calls.every((call) => call.model.modelId === 'gpt-5.4-mini'), true);
+  assert.equal(llmGateway.calls.every((call) => call.model.modelId === 'gpt-5.5'), true);
   assert.equal(
     llmGateway.calls.every((call) =>
-      (call.normalizedParams as { reasoning_depth?: string } | undefined)?.reasoning_depth === 'medium',
+      (call.normalizedParams as { reasoning_depth?: string } | undefined)?.reasoning_depth === 'high',
     ),
     true,
   );
@@ -628,7 +628,7 @@ test('need-discovery debate loop supports canonical execution plan with instance
     llmGateway.calls.map((call) =>
       (call.normalizedParams as { reasoning_depth?: string } | undefined)?.reasoning_depth,
     ),
-    ['medium', 'medium', 'high', 'medium', 'high'],
+    ['high', 'high', 'high', 'high', 'high'],
   );
   assert.deepEqual(
     result.role_invocation_results.map((invocation) => invocation.provenance.model_option_id),

@@ -37,7 +37,7 @@ test('literature content-processing settings default to redacted OpenAI and larg
     assert.equal(settings.embedding.profiles.find((profile) => profile.profile_id === 'default')?.model, 'text-embedding-3-large');
     assert.equal(settings.embedding.profiles.find((profile) => profile.profile_id === 'economy')?.model, 'text-embedding-3-small');
     assert.equal(settings.extraction.active_profile_id, 'default');
-    assert.equal(settings.extraction.profiles.find((profile) => profile.profile_id === 'default')?.model, 'gpt-5.4-mini');
+    assert.equal(settings.extraction.profiles.find((profile) => profile.profile_id === 'default')?.model, 'gpt-5.5');
     assert.equal(settings.extraction.profiles.find((profile) => profile.profile_id === 'high_accuracy')?.model, 'gpt-5.5');
     assert.deepEqual(settings.extraction.runtime, {
       preferred_key_content_method: 'llm_gateway',
@@ -122,7 +122,7 @@ test('literature content-processing settings preserve, replace, and clear secret
   const extractionConfig = await service.resolveOpenAIExtractionConfig();
   assert.equal(extractionConfig?.apiKey, 'sk-test-secret');
   assert.equal(extractionConfig?.provider, 'openai');
-  assert.equal(extractionConfig?.model, 'gpt-5.4-mini');
+  assert.equal(extractionConfig?.model, 'gpt-5.5');
   assert.equal(extractionConfig?.runtime.preferred_key_content_method, 'llm_gateway');
   assert.equal(extractionConfig?.runtime.section_concurrency, 3);
   assert.equal(await service.resolvePreferredKeyContentMethod(), 'llm_gateway');
@@ -222,8 +222,8 @@ test('literature content-processing settings migrate legacy extraction defaults 
     value: {
       active_profile_id: 'high_accuracy',
       profiles: [
-        { profile_id: 'default', provider: 'openai', model: 'gpt-5-mini' },
-        { profile_id: 'high_accuracy', provider: 'openai', model: 'gpt-5.2' },
+        { profile_id: 'default', provider: 'openai', model: 'gpt-5.5' },
+        { profile_id: 'high_accuracy', provider: 'openai', model: 'gpt-5.5' },
       ],
     },
     secretValue: null,
@@ -234,7 +234,7 @@ test('literature content-processing settings migrate legacy extraction defaults 
 
   const settings = await service.getSettings();
 
-  assert.equal(settings.extraction.profiles.find((profile) => profile.profile_id === 'default')?.model, 'gpt-5.4-mini');
+  assert.equal(settings.extraction.profiles.find((profile) => profile.profile_id === 'default')?.model, 'gpt-5.5');
   assert.equal(settings.extraction.profiles.find((profile) => profile.profile_id === 'high_accuracy')?.model, 'gpt-5.5');
   assert.equal(settings.extraction.active_profile_id, 'high_accuracy');
 });

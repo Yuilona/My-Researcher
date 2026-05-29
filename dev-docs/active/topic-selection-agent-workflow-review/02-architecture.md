@@ -126,7 +126,7 @@ Profile ids:
 - `topic-selection.search-plan-blueprint.review.v1`
 
 Provider model options:
-- default balanced: OpenAI `gpt-5.4-mini`
+- default balanced: OpenAI `gpt-5.5`
 - high-accuracy explicit override: OpenAI `gpt-5.5`
 - budget explicit override: DashScope `qwen3.6-plus`
 - DeepSeek is excluded until registered as a provider.

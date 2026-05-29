@@ -60,7 +60,7 @@ Precedence is `instance > slot > default > node input`. Instance-level specs are
 
 Default option for every current v1a debate profile:
 - `provider_id`: `openai`
-- `model_id`: `gpt-5.4-mini`
+- `model_id`: `gpt-5.5`
 - `use_when`: `default_provider_run`
 - `timeout_ms`: `180000`
 
@@ -74,7 +74,7 @@ Manual budget option:
 - legacy compatibility alias: `<profile_id>.dashscope-budget`; it remains thinking-enabled and must not be reused for a non-thinking DashScope option.
 
 Manual quality options:
-- `openai-quality`: `provider_id=openai`, `model_id=gpt-5.5`, `reasoning_depth=medium`, `output_budget=large`, `timeout_ms=300000`
+- `openai-quality`: `provider_id=openai`, `model_id=gpt-5.5`, `reasoning_depth=high`, `output_budget=large`, `timeout_ms=300000`
 - `openai-deep-reasoning`: `provider_id=openai`, `model_id=gpt-5.5`, `reasoning_depth=high`, `output_budget=large`, `timeout_ms=450000`
 
 Manual DeepSeek V4 thinking option:
@@ -90,7 +90,7 @@ Manual DeepSeek V4 thinking option:
 
 Normalized params for default/budget model options:
 - `creativity`: `medium`
-- `reasoning_depth`: `medium`
+- `reasoning_depth`: `high`
 - `output_budget`: `medium`
 - `structured_output_required`: `true`
 - `output_format`: `json_schema`

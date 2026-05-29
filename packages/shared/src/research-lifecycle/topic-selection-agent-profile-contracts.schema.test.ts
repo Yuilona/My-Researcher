@@ -32,14 +32,14 @@ function validRegistry(): TopicSelectionModelProfileRegistry {
             option_id: 'topic-selection.need-discovery.explorer.v1.openai-balanced',
             option_purpose: 'default_balanced_provider_run',
             provider_id: 'openai',
-            model_id: 'gpt-5.4-mini',
+            model_id: 'gpt-5.5',
             use_when: ['default_provider_run'],
             request_policy: {
               timeout_ms: 180000,
             },
             normalized_params: {
               creativity: 'medium',
-              reasoning_depth: 'medium',
+              reasoning_depth: 'high',
               output_budget: 'medium',
               structured_output_required: true,
               output_format: 'json_schema',

@@ -162,6 +162,24 @@ export class TopicSelectionV1cDownstreamFeedbackRecheckService {
     const requiresRecheck = input.feedback_signal !== 'no_recheck_needed';
     const affectedRef = this.resolveAffectedRef(loopbackTarget, bridgeHandoff);
     const requiredActions = this.resolveRequiredActions(input, requiresRecheck);
+    const fingerprint = sha256Text(stableStringify({
+      paper_project_bridge_id: bridgeHandoff.paper_project_bridge_id,
+      downstream_source_kind: input.downstream_source_kind,
+      downstream_source_ref: input.downstream_source_ref,
+      feedback_signal: input.feedback_signal,
+      affected_ref: affectedRef,
+      summary: input.summary.trim(),
+      required_actions: requiredActions,
+    }));
+    const existing = await this.repository.findFeedbackByFingerprint(fingerprint);
+    if (existing) {
+      return {
+        downstream_topic_feedback: existing,
+        classification: existing.classification,
+        recheck_request: existing.recheck_request ?? null,
+        impact_summary: existing.impact_summary,
+      };
+    }
     const sourceRefs = this.uniqueRefs([
       bridgeRef,
       input.downstream_source_ref,
@@ -250,15 +268,6 @@ export class TopicSelectionV1cDownstreamFeedbackRecheckService {
         ? `Downstream feedback requires ${loopbackTarget} recheck.`
         : 'Downstream feedback recorded with no upstream recheck required.',
     };
-    const fingerprint = sha256Text(stableStringify({
-      paper_project_bridge_id: bridgeHandoff.paper_project_bridge_id,
-      downstream_source_kind: input.downstream_source_kind,
-      downstream_source_ref: input.downstream_source_ref,
-      feedback_signal: input.feedback_signal,
-      affected_ref: affectedRef,
-      summary: input.summary.trim(),
-      required_actions: requiredActions,
-    }));
     const record: TopicSelectionDownstreamTopicFeedbackRecord = {
       downstream_topic_feedback_id: feedbackId,
       feedback_fingerprint: fingerprint,

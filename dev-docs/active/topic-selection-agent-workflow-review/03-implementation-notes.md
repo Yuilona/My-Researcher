@@ -558,7 +558,7 @@
   - `arbiter.final_synthesis`, exactly 1 instance, profile `topic-selection.need-discovery.arbiter-final.v1`.
 - The executable contract makes `arbiter.final_synthesis` Codex-forbidden in v1, aligning DMP-04 with the current profile registry/runtime strictness and avoiding an operator-approval dual track.
 - Provider/model/parameter details remain profile-registry-owned:
-  - default provider option is OpenAI `gpt-5.4-mini` with medium normalized params;
+  - default provider option is OpenAI `gpt-5.5` with high reasoning normalized params;
   - manual budget option is DashScope `qwen3.6-plus` with `enable_thinking` under provider overrides;
   - automatic fallback remains disabled.
 - `TopicSelectionNeedDiscoveryDebateLoopService` now consumes the shared scenario contract for role/stage slot metadata, instance defaults, prompt/template ids, output contracts, schema names, debate policy id, node id, and round cap.
@@ -777,7 +777,7 @@
 ## 2026-05-21 v1a Node 3 Alignment: Blueprint LLM Profiles
 - Locked N3-D04 for `TopicSelectionSearchPlanBlueprint` semantic draft/review model policy.
 - Codex is the default local low-cost execution path for draft and review; provider execution is explicit upgrade/provider-quality only.
-- Draft profile `topic-selection.search-plan-blueprint.draft.v1` uses `creativity=medium`, `reasoning_depth=high`, `output_budget=large`, structured JSON schema output, and provider options OpenAI `gpt-5.4-mini`, OpenAI `gpt-5.5`, and DashScope `qwen3.6-plus`.
+- Draft profile `topic-selection.search-plan-blueprint.draft.v1` uses `creativity=medium`, `reasoning_depth=high`, `output_budget=large`, structured JSON schema output, and provider options OpenAI `gpt-5.5`, OpenAI `gpt-5.5`, and DashScope `qwen3.6-plus`.
 - Review profile `topic-selection.search-plan-blueprint.review.v1` uses `creativity=low`, `reasoning_depth=high`, `output_budget=medium`, structured JSON schema output, and the same provider family.
 - DeepSeek is not included until registered in the provider registry.
 - `create-search-plan` itself stays `execution_mode=none`; model-like draft/review output must pass schema and deterministic validators before authority creation.
@@ -1334,7 +1334,7 @@
 - Instance keys use `<slot_id>#<agent_instance_id>`, for example `explorer.round_1_discovery#explorer_2`; single-instance arbiter slots should use slot-level specs.
 - Legacy `slot_execution_overrides` / `slot_model_option_overrides` remain only for compatibility and cannot be mixed with `execution_plan`.
 - Provider mapping is centralized in `BackendLlmGateway`: OpenAI maps normalized `reasoning_depth` to `reasoning.effort`; DashScope maps it to `extra_body.enable_thinking`.
-- Added explicit `gpt-5.5` model options (`openai-quality`, `openai-deep-reasoning`) without changing current defaults, so v1a node alignment can choose stronger models intentionally.
+- Added explicit `gpt-5.5` model options (`openai-quality`, `openai-deep-reasoning`) while keeping provider selection explicit; current OpenAI defaults use high reasoning.
 - N5, N6 single-agent, N7, and N8 model-like WorkflowHarness call sites now pass canonical `execution_spec`; N6 multi-agent passes `debate_execution_plan`. `none` and `deterministic_parser` paths reject provider model options instead of silently ignoring them.
 
 ## 2026-05-25 SO-01 Invocation Slot Override Boundary

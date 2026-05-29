@@ -63,7 +63,7 @@ const extractionChoices: ExtractionChoice[] = [
   {
     id: 'default',
     label: '通用',
-    defaultModel: 'gpt-5.4-mini',
+    defaultModel: 'gpt-5.5',
   },
   {
     id: 'high_accuracy',
@@ -221,7 +221,6 @@ function formatTimestamp(value: string | null | undefined): string {
 }
 
 function formatModelName(value: string): string {
-  if (value === 'gpt-5.4-mini') return 'GPT-5.4 mini';
   if (value === 'gpt-5.5') return 'GPT-5.5';
   return value;
 }

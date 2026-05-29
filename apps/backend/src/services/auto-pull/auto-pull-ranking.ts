@@ -1,7 +1,10 @@
 import { AppError } from '../../errors/app-error.js';
 import type { LiteratureAcquisitionSettingsService } from '../literature-acquisition-settings-service.js';
 import type { LiteratureContentProcessingSettingsService } from '../literature-content-processing-settings-service.js';
-import { BackendLlmGateway } from '../llm-gateway.js';
+import {
+  BackendLlmGateway,
+  DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
+} from '../llm-gateway.js';
 import { AUTOPULL_ALERT_CODES } from './auto-pull-alert-codes.js';
 import type {
   AutoPullRankingMode,
@@ -127,7 +130,7 @@ async function resolveQualityScorerConfig(dependencies: {
   return {
     endpoint: null,
     apiKey: null,
-    model: profile?.model ?? 'gpt-5.4-mini',
+    model: profile?.model ?? 'gpt-5.5',
     promptVersion: profile?.prompt_version ?? 'auto_pull_quality.v1',
     enabled: true,
     llmGateway: dependencies.llmGateway ?? new BackendLlmGateway({
@@ -253,6 +256,7 @@ async function scoreQualityCandidateViaOpenAI(
           quality_score: { type: 'number', minimum: 0, maximum: 100 },
         },
       },
+      normalizedParams: DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
     });
     const parsed = readQualityScore(response.parsed);
     if (parsed === null) {

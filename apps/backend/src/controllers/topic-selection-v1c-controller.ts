@@ -12,6 +12,10 @@ type ParamsRequest<T> = FastifyRequest<{ Params: T }>;
 
 type PromotionInputSnapshotBody = Parameters<TopicSelectionV1cPromotionInputService['createPromotionInputSnapshot']>[0];
 type PromotionGateSupportBody = Parameters<TopicSelectionV1cPromotionGateService['createPromotionGateSupport']>[0];
+type PromotionDecisionSupportBody = Parameters<TopicSelectionV1cPromotionGateService['createPromotionDecisionSupport']>[0];
+type PromotionGateCheckBody =
+  Parameters<TopicSelectionV1cPromotionGateService['createPromotionGateCheckFromSupport']>[0]
+  & Partial<PromotionGateSupportBody>;
 type HumanPromotionDecisionBody = Parameters<TopicSelectionV1cHumanPromotionDecisionService['recordHumanPromotionDecision']>[0];
 type PaperProjectBridgeBody = Parameters<TopicSelectionV1cPaperProjectBridgeService['createPaperProjectBridge']>[0];
 type PaperProjectBridgeIntakeBody = Omit<
@@ -83,12 +87,27 @@ export class TopicSelectionV1cController {
     }
   };
 
-  createPromotionGateSupport = async (
-    request: BodyRequest<PromotionGateSupportBody>,
+  createPromotionDecisionSupport = async (
+    request: BodyRequest<PromotionDecisionSupportBody>,
     reply: FastifyReply,
   ) => {
     try {
-      const result = await this.promotionGate.createPromotionGateSupport(request.body);
+      const result = await this.promotionGate.createPromotionDecisionSupport(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  createPromotionGateCheck = async (
+    request: BodyRequest<PromotionGateCheckBody>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const body = request.body;
+      const result = body.promotion_decision_support_id || body.support_run_key
+        ? await this.promotionGate.createPromotionGateCheckFromSupport(body)
+        : await this.promotionGate.createPromotionGateSupport(body as PromotionGateSupportBody);
       return reply.status(201).send(result);
     } catch (error) {
       return handleError(reply, error);

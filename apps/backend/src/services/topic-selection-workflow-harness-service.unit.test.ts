@@ -32,6 +32,13 @@ import {
   type TopicSelectionEvidenceMapExtractionDraft,
   type TopicSelectionEvidenceSourceLocator,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-evidence-map-contracts';
+import {
+  TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+  TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1a-workflow-harness-contracts';
+import type {
+  TopicSelectionV1cHarnessNodeResult,
+} from './topic-selection-v1c-harness-adapter.js';
 import { AppError } from '../errors/app-error.js';
 import { InMemoryTopicSelectionEvidenceMapRepository } from '../repositories/in-memory-topic-selection-evidence-map-repository.js';
 import { InMemoryLiteratureRepository } from '../repositories/in-memory-literature-repository.js';
@@ -224,6 +231,27 @@ function artifactRef(refId: string): TopicSelectionArtifactFunctionalRef {
     ref_type: 'artifact_ref',
     ref_id: refId,
     title_card_id: 'title_card_001',
+  };
+}
+
+function v1cNodeResult(
+  overrides: Partial<TopicSelectionV1cHarnessNodeResult> & Pick<TopicSelectionV1cHarnessNodeResult, 'node_id' | 'routing_outcome' | 'automation'>,
+): TopicSelectionV1cHarnessNodeResult {
+  const { node_id, routing_outcome, automation, ...rest } = overrides;
+  return {
+    node_id,
+    node_name: `v1c-${node_id}`,
+    routing_outcome,
+    automation,
+    authority_refs: [],
+    diagnostic_refs: [],
+    required_actions: [],
+    loopback_hints: [],
+    source_refs: [],
+    snapshot_hashes: {},
+    provider_involved: false,
+    notes: [],
+    ...rest,
   };
 }
 
@@ -1374,6 +1402,94 @@ function scenarioInput(
   };
 }
 
+test('workflow harness consumes v1c adapter node results through a forward-only native path', async () => {
+  const { workflowHarness } = await makeRuntime();
+
+  const result = workflowHarness.runV1cHarnessConsumptionScenario({
+    scenario_id: 'topic-selection-v1c-native-consumption',
+    scenario_case_id: 'happy-chain-to-bridge',
+    workflow_run_id: 'workflow_run_v1c_001',
+    node_attempt_id: 'node_attempt_v1c_001',
+    node_results: [
+      v1cNodeResult({ node_id: 'N1', routing_outcome: 'ready_for_gate', automation: 'advance' }),
+      v1cNodeResult({ node_id: 'N2', routing_outcome: 'support_ready', automation: 'advance', provider_involved: true }),
+      v1cNodeResult({ node_id: 'N3', routing_outcome: 'ready_for_human_decision', automation: 'advance' }),
+      v1cNodeResult({ node_id: 'N4', routing_outcome: 'bridge_authorized', automation: 'advance' }),
+      v1cNodeResult({ node_id: 'N5', routing_outcome: 'bridge_ready', automation: 'stop' }),
+    ],
+    expectations: {
+      status: 'passed',
+      accepted_node_count: 5,
+      terminal_node_id: 'N5',
+      terminal_routing_outcome: 'bridge_ready',
+      error_code: null,
+    },
+  });
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.deepEqual(result.consumed_node_ids, ['N1', 'N2', 'N3', 'N4', 'N5']);
+  assert.equal(result.terminal_node_id, 'N5');
+  assert.equal(result.error_code, null);
+  assert.equal(result.harness_trace_snapshot.payload_schema, 'WorkflowHarnessV1cConsumptionScenarioTrace@v1');
+  assert.equal(result.harness_trace_snapshot.adapter_version, 'topic-selection-v1c-harness-adapter-v0');
+});
+
+test('workflow harness rejects v1c node progress after a stop result', async () => {
+  const { workflowHarness } = await makeRuntime();
+
+  const result = workflowHarness.runV1cHarnessConsumptionScenario({
+    scenario_id: 'topic-selection-v1c-native-consumption',
+    scenario_case_id: 'n3-action-required-stop',
+    workflow_run_id: 'workflow_run_v1c_002',
+    node_attempt_id: 'node_attempt_v1c_002',
+    node_results: [
+      v1cNodeResult({ node_id: 'N1', routing_outcome: 'ready_for_gate', automation: 'advance' }),
+      v1cNodeResult({ node_id: 'N2', routing_outcome: 'support_ready', automation: 'advance' }),
+      v1cNodeResult({ node_id: 'N3', routing_outcome: 'action_required', automation: 'stop' }),
+      v1cNodeResult({ node_id: 'N4', routing_outcome: 'bridge_authorized', automation: 'advance' }),
+    ],
+    expectations: {
+      status: 'failed',
+      accepted_node_count: 3,
+      terminal_node_id: 'N3',
+      terminal_routing_outcome: 'action_required',
+      error_code: 'node_after_terminal',
+    },
+  });
+
+  assert.equal(result.scenario_status, 'failed');
+  assert.equal(result.error_code, 'node_after_terminal');
+  assert.deepEqual(result.consumed_node_ids, ['N1', 'N2', 'N3']);
+});
+
+test('workflow harness consumes v1c N6 as record-only downstream ingress without loopback automation', async () => {
+  const { workflowHarness } = await makeRuntime();
+
+  const result = workflowHarness.runV1cHarnessConsumptionScenario({
+    scenario_id: 'topic-selection-v1c-native-consumption',
+    scenario_case_id: 'bridge-then-downstream-feedback',
+    workflow_run_id: 'workflow_run_v1c_003',
+    node_attempt_id: 'node_attempt_v1c_003',
+    node_results: [
+      v1cNodeResult({ node_id: 'N4', routing_outcome: 'bridge_authorized', automation: 'advance' }),
+      v1cNodeResult({ node_id: 'N5', routing_outcome: 'bridge_ready', automation: 'stop' }),
+      v1cNodeResult({ node_id: 'N6', routing_outcome: 'recheck_opened', automation: 'record_only' }),
+    ],
+    expectations: {
+      status: 'passed',
+      accepted_node_count: 3,
+      terminal_node_id: 'N6',
+      terminal_routing_outcome: 'recheck_opened',
+      error_code: null,
+    },
+  });
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.deepEqual(result.consumed_node_ids, ['N4', 'N5', 'N6']);
+  assert.equal(result.terminal_node_id, 'N6');
+  assert.equal(result.terminal_automation, 'record_only');
+});
+
 test('workflow harness runs create-topic-seed through the search resource authority boundary', async () => {
   const { workflowHarness, controlPlaneRepository, searchResourceRepository, titleCards } = await makeRuntime();
   const titleCard = await titleCards.createTitleCard({
@@ -2071,6 +2187,114 @@ test('workflow harness records failed SearchRun as audit-only loopback signal', 
   assert.ok(result.node_result.loopback_signal?.target_actions.includes('upstream_search_execution_or_input_preparation'));
   assert.ok(result.node_result.warning_codes.includes('NON_CONSUMABLE_SEARCH_RUN'));
   assert.equal(result.node_result.authority_refs.some((ref) => ref.ref_type === 'search_run'), true);
+});
+
+test('workflow harness native runner routes failed SearchRun to N4 retry loopback', async () => {
+  const ctx = await seedRecordSearchRunRuntime();
+  const bundle = searchRunBundle({
+    title_card_id: ctx.titleCard.title_card_id,
+    search_plan_ref: ctx.searchPlanRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_literature_snapshot_hash: ctx.snapshotHash,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+  }, {
+    run_status: 'failed',
+    result_accounting: {
+      total_result_count: 0,
+      unique_literature_count: 0,
+      duplicate_result_count: 0,
+      failed_source_count: 1,
+      skipped_source_count: 0,
+    },
+    source_health_summary: {
+      failed_source_count: 1,
+      warning_codes: [],
+    },
+    evidence_map_input_refs: [],
+    coverage_observations: [{
+      coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+      status: 'failed',
+      result_count: 0,
+      source_count: 1,
+      missing_reason_codes: ['SEARCH_PROVIDER_FAILED'],
+      notes: 'Fixture search provider failure.',
+    }],
+    evidence_bindings: [],
+  });
+
+  const result = await ctx.workflowHarness.invokeNode({
+    schema_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    node_id: 'topic-selection.v1a.record-search-run.v1',
+    workflow_run_id: 'workflow_run_native_record_search_run_failed',
+    node_attempt_id: 'node_attempt_native_record_search_run_failed',
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+    title_card_id: ctx.titleCard.title_card_id,
+    scenario_input: {
+      scenario_id: 'topic-selection.native-runner.policy.v1',
+      scenario_case_id: 'record-search-run-failed-loopback',
+      title_card_id: ctx.titleCard.title_card_id,
+      bundle,
+      expectations: {
+        status: 'succeeded',
+        consumable_for_evidence_map: false,
+        downstream_handoff_present: false,
+        loopback_signal_present: true,
+      },
+    },
+  });
+
+  assert.equal(result.route_signal, 'search_execution_retry_required');
+  assert.equal(result.route_decision, 'loopback');
+  assert.equal(result.route_target_node_id, 'topic-selection.v1a.record-search-run.v1');
+  assert.equal(result.harness_trace_artifact_ref?.ref_type, 'artifact_ref');
+});
+
+test('workflow harness native runner routes source-health SearchRun failure to N2 snapshot loopback', async () => {
+  const ctx = await seedRecordSearchRunRuntime();
+  const bundle = searchRunBundle({
+    title_card_id: ctx.titleCard.title_card_id,
+    search_plan_ref: ctx.searchPlanRef,
+    literature_resource_pool_snapshot_ref: ctx.literatureSnapshotRef,
+    expected_literature_snapshot_hash: ctx.snapshotHash,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+  }, {
+    run_status: 'failed',
+    source_health_summary: {
+      failed_source_count: 1,
+      warning_codes: ['SOURCE_STALE_OR_UNAVAILABLE'],
+    },
+    evidence_map_input_refs: [],
+    evidence_bindings: [],
+  });
+
+  const result = await ctx.workflowHarness.invokeNode({
+    schema_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    node_id: 'topic-selection.v1a.record-search-run.v1',
+    workflow_run_id: 'workflow_run_native_record_search_run_source_health',
+    node_attempt_id: 'node_attempt_native_record_search_run_source_health',
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+    title_card_id: ctx.titleCard.title_card_id,
+    scenario_input: {
+      scenario_id: 'topic-selection.native-runner.policy.v1',
+      scenario_case_id: 'record-search-run-source-health-loopback',
+      title_card_id: ctx.titleCard.title_card_id,
+      bundle,
+      expectations: {
+        status: 'succeeded',
+        consumable_for_evidence_map: false,
+        downstream_handoff_present: false,
+        loopback_signal_present: true,
+      },
+    },
+  });
+
+  assert.equal(result.route_signal, 'source_health_snapshot_refresh');
+  assert.equal(result.route_decision, 'loopback');
+  assert.equal(result.route_target_node_id, 'topic-selection.v1a.snapshot-literature-resource-pool.v1');
 });
 
 test('workflow harness blocks SearchRun snapshot hash drift before authority creation', async () => {
@@ -3583,6 +3807,107 @@ test('workflow harness blocks return-to-candidate recommendation without actiona
   assert.equal(result.node_result.adjudication_result_ref, null);
 });
 
+test('workflow harness native runner routes N7 return-to-candidate to N6 repair loopback', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const packet = needAdjudicationRecommendationPacket(ctx, { final_decision: 'return_to_candidate' }, {
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+  });
+  const result = await ctx.workflowHarness.invokeNode({
+    schema_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    node_id: 'topic-selection.v1a.validate-need-adjudication.v1',
+    workflow_run_id: packet.workflow_run_id,
+    node_attempt_id: packet.node_attempt_id,
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+    title_card_id: ctx.titleCard.title_card_id,
+    scenario_input: validateNeedAdjudicationScenarioInput(ctx, packet, {
+      expectations: {
+        status: 'ready',
+        route_outcome: 'repair_need_candidate',
+        final_decision: 'return_to_candidate',
+        adjudication_created: true,
+      },
+    }),
+  });
+
+  assert.equal(result.route_signal, 'need_candidate_repair_required');
+  assert.equal(result.route_decision, 'loopback');
+  assert.equal(result.route_target_node_id, 'topic-selection.v1a.generate-need-candidate.v1');
+});
+
+test('workflow harness native runner routes N7 park to hold without auto-advance', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const packet = needAdjudicationRecommendationPacket(ctx, { final_decision: 'park' }, {
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+  });
+  const result = await ctx.workflowHarness.invokeNode({
+    schema_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    node_id: 'topic-selection.v1a.validate-need-adjudication.v1',
+    workflow_run_id: packet.workflow_run_id,
+    node_attempt_id: packet.node_attempt_id,
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+    title_card_id: ctx.titleCard.title_card_id,
+    scenario_input: validateNeedAdjudicationScenarioInput(ctx, packet, {
+      adjudication_actor: { actor_type: 'human', actor_id: 'reviewer_park' },
+      expectations: {
+        status: 'ready',
+        route_outcome: 'hold_candidate',
+        final_decision: 'park',
+        adjudication_created: true,
+      },
+    }),
+  });
+
+  assert.equal(result.route_signal, 'candidate_parked');
+  assert.equal(result.route_decision, 'hold');
+  assert.equal(result.route_target_node_id, null);
+});
+
+test('workflow harness native runner routes N7 merge to stop-no-advance', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const mergeTarget = await ctx.needService.createNeedCandidateFromEvidenceMap({
+    title_card_id: ctx.titleCard.title_card_id,
+    evidence_map_id: ctx.evidenceMap.evidence_map_id,
+    candidate_need: 'Related need that should absorb the duplicate candidate.',
+    unmet_need_statement: 'A nearby validated workflow gap already covers this candidate.',
+    mechanism_type: 'workflow_gap',
+    mechanism_summary: 'Duplicate evidence lineage can be consolidated.',
+    scope_notes: 'Merge target fixture.',
+    prior_art_status: 'no_strong_solution_found',
+    gap_codes: [],
+    created_by: 'system',
+  });
+  const packet = needAdjudicationRecommendationPacket(ctx, { final_decision: 'merge' }, {
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+    merge_target_need_candidate_ref: refForTitleCard(
+      'need_candidate',
+      mergeTarget.need_candidate_id,
+      mergeTarget.title_card_id,
+      mergeTarget.candidate_version,
+    ),
+  });
+  const result = await ctx.workflowHarness.invokeNode({
+    schema_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    node_id: 'topic-selection.v1a.validate-need-adjudication.v1',
+    workflow_run_id: packet.workflow_run_id,
+    node_attempt_id: packet.node_attempt_id,
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+    title_card_id: ctx.titleCard.title_card_id,
+    scenario_input: validateNeedAdjudicationScenarioInput(ctx, packet, {
+      adjudication_actor: { actor_type: 'human', actor_id: 'reviewer_merge' },
+      expectations: {
+        status: 'ready',
+        route_outcome: 'stop_merged',
+        final_decision: 'merge',
+        adjudication_created: true,
+      },
+    }),
+  });
+
+  assert.equal(result.route_signal, 'candidate_merged');
+  assert.equal(result.route_decision, 'stop_no_advance');
+  assert.equal(result.route_target_node_id, null);
+});
+
 test('workflow harness blocks recommendation packets that try to carry orchestration fields', async () => {
   const ctx = await seedValidateNeedAdjudicationRuntime();
   const packet = needAdjudicationRecommendationPacket(ctx);
@@ -4039,6 +4364,80 @@ test('workflow harness can route supplemental rounds without authority persisten
   assert.deepEqual(result.adapter_result.supplemental_round_routing_decision?.allowed_roles, ['explorer', 'deep_critic']);
   assert.equal(result.adapter_result.persist_need_candidate_batch_command, null);
   assert.equal((await needValidationRepository.listNeedCandidatesByTitleCardId('title_card_001')).length, 0);
+});
+
+test('workflow harness native runner maps N6 supplemental output to policy loopback', async () => {
+  const { workflowHarness } = await makeRuntime();
+  const nodeAttemptId = 'node_attempt_native_n6_supplemental';
+  const supplementalBatch = rankedBatch(nodeAttemptId);
+  supplementalBatch.drafts[0] = {
+    ...supplementalBatch.drafts[0],
+    speculative: true,
+    scope_notes: null,
+    non_goal_notes: null,
+    conflict_refs: [],
+    evidence_role_bundle: {
+      ...supplementalBatch.drafts[0].evidence_role_bundle,
+      challenge_unit_refs: [],
+    },
+  };
+
+  const result = await workflowHarness.invokeNode({
+    schema_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+    node_id: 'topic-selection.v1a.generate-need-candidate.v1',
+    workflow_run_id: 'workflow_run_native_n6_supplemental',
+    node_attempt_id: nodeAttemptId,
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+    title_card_id: 'title_card_001',
+    scenario_input: scenarioInput({
+      scenario_case_id: 'native-n6-supplemental-loopback',
+      workflow_run_id: 'ignored_by_envelope',
+      node_attempt_id: 'ignored_by_envelope',
+      policy_version: 'scenario-input-policy-should-not-win',
+      mocked_output: {
+        fixture_id: 'fixture_native_supplemental_round_candidate',
+        output: supplementalBatch,
+      },
+      current_round_index: 1,
+      remaining_round_budget: 1,
+      persist_admitted_candidates: true,
+      expectations: {
+        status: 'succeeded',
+        routing_decision: 'run_supplemental_round',
+        admitted_draft_count: 0,
+        persisted_candidate_count: 0,
+        persistence: 'forbidden',
+      },
+    }),
+  });
+
+  assert.equal(result.route_signal, 'need_candidate_supplemental_round');
+  assert.equal(result.route_decision, 'loopback');
+  assert.equal(result.route_target_node_id, 'topic-selection.v1a.generate-need-candidate.v1');
+  assert.equal(result.harness_trace_artifact_ref?.ref_type, 'artifact_ref');
+  assert.equal(
+    (result.scenario_result as any).node_input.policy_version,
+    TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+  );
+});
+
+test('workflow harness native runner rejects unsupported route policy versions before node execution', async () => {
+  const { workflowHarness } = await makeRuntime();
+
+  await assert.rejects(
+    () => workflowHarness.invokeNode({
+      schema_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+      node_id: 'topic-selection.v1a.generate-need-candidate.v1',
+      workflow_run_id: 'workflow_run_native_unsupported_policy',
+      node_attempt_id: 'node_attempt_native_unsupported_policy',
+      policy_version: 'topic-selection-v1a-workflow-route-policy-v0' as any,
+      title_card_id: 'title_card_001',
+      scenario_input: scenarioInput(),
+    }),
+    (error: unknown) => error instanceof AppError
+      && error.statusCode === 400
+      && error.errorCode === 'INVALID_PAYLOAD',
+  );
 });
 
 test('workflow harness captures negative admission blockers and stops before persistence', async () => {

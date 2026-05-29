@@ -46,10 +46,14 @@ import {
 import {
   TOPIC_SELECTION_SEARCH_RUN_RECORD_BUNDLE_SCHEMA_VERSION,
 } from '../../packages/shared/src/research-lifecycle/topic-selection-search-resource-contracts.ts';
+import {
+  TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+  TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+} from '../../packages/shared/src/research-lifecycle/topic-selection-v1a-workflow-harness-contracts.ts';
 
 const TOPIC_ID = process.env.TOPIC_SELECTION_REAL_TOPIC_ID ?? 'ai-rag-finetuning-2022-2026';
 const PROVIDER_ID = process.env.TOPIC_SELECTION_REAL_PROVIDER_ID === 'dashscope' ? 'dashscope' : 'openai';
-const MODEL_ID = process.env.TOPIC_SELECTION_REAL_MODEL_ID ?? 'gpt-5.4-mini';
+const MODEL_ID = process.env.TOPIC_SELECTION_REAL_MODEL_ID ?? 'gpt-5.5';
 const LITERATURE_LIMIT = positiveInt(process.env.TOPIC_SELECTION_REAL_LITERATURE_LIMIT, 16);
 const LLM_TIMEOUT_MS = positiveInt(process.env.TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS, 180000);
 const LLM_MAX_RETRIES = positiveInt(process.env.TOPIC_SELECTION_REAL_LLM_MAX_RETRIES, 3);
@@ -855,6 +859,68 @@ async function requestJson(app, method, url, expected, payload, label = `${metho
   return response.json();
 }
 
+function nativeRouteSnapshot(envelope) {
+  return {
+    route_decision: envelope.route_decision,
+    route_signal: envelope.route_signal,
+    route_target_node_id: envelope.route_target_node_id,
+    handoff_kind: envelope.handoff_kind,
+    route_policy_ref: envelope.route_policy_ref,
+    harness_trace_artifact_ref: envelope.harness_trace_artifact_ref,
+    error_code: envelope.error_code,
+    error_message: envelope.error_message,
+  };
+}
+
+function attachNativeRoute(result, envelope) {
+  return {
+    ...result,
+    native_runner: nativeRouteSnapshot(envelope),
+  };
+}
+
+function assertNativeRoute(envelope, expected, label) {
+  if (!expected) {
+    return;
+  }
+  if (expected.route_decision !== undefined) {
+    assert.equal(envelope.route_decision, expected.route_decision, `${label} route_decision`);
+  }
+  if (expected.route_signal !== undefined) {
+    assert.equal(envelope.route_signal, expected.route_signal, `${label} route_signal`);
+  }
+  if (expected.route_target_node_id !== undefined) {
+    assert.equal(envelope.route_target_node_id, expected.route_target_node_id, `${label} route_target_node_id`);
+  }
+}
+
+async function invokeV1aHarnessScenario(app, nodeId, scenarioInput, label, expectedRoute = null, options = {}) {
+  currentStage = label;
+  const response = await app.inject({
+    method: 'POST',
+    url: `/topic-selection/v1a/workflow-harness/nodes/${encodeURIComponent(nodeId)}/invocations`,
+    payload: {
+      schema_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+      node_id: nodeId,
+      workflow_run_id: scenarioInput.workflow_run_id,
+      node_attempt_id: scenarioInput.node_attempt_id,
+      policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+      workspace_id: scenarioInput.workspace_id ?? null,
+      title_card_id: scenarioInput.title_card_id ?? null,
+      scenario_input: scenarioInput,
+      created_by: scenarioInput.created_by ?? 'system',
+    },
+  });
+  assertStatus(response, 201, label);
+  const envelope = response.json();
+  assertNativeRoute(envelope, expectedRoute, label);
+  const result = attachNativeRoute(envelope.scenario_result, envelope);
+  if (options.assertScenario !== false) {
+    assertScenarioPassed(result, label);
+  }
+  return result;
+}
+
 async function writeJson(relativeName, payload) {
   await fs.writeFile(path.join(ARTIFACT_DIR, relativeName), `${JSON.stringify(payload, null, 2)}\n`);
 }
@@ -1054,7 +1120,7 @@ function buildSearchPlanBlueprint(input) {
     },
     role_coverage_expectation: roleCoverageExpectation(input.selectedResources),
     method_family_targets: TOPIC_METHOD_FAMILY_TARGETS,
-    policy_version: 'v1',
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
     output_schema_version: 'v1',
   };
 }
@@ -1154,7 +1220,7 @@ function buildSearchRunBundle(input) {
       selected_literature_ids: selectedResources.map((resource) => resource.id),
       resource_sample_set_id: selectedResources[0]?.sampleSetId ?? null,
     },
-    policy_version: 'v1',
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
     output_schema_version: 'v1',
   };
 }
@@ -1241,7 +1307,7 @@ function buildEvidenceMapExtractionDraft(input) {
       issue_codes: ['risk_carry_forward_required'],
     }],
     warning_codes: [],
-    policy_version: 'v1',
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
     output_schema_version: 'v1',
   };
 }
@@ -1291,7 +1357,7 @@ function buildEvidenceMapExtractionContextPacket(input) {
     input_refs_hash: inputRefsHash,
     search_run_handoff_hash: inputRefsHash,
     context_compiler_version: 'v1a-harness-evidence-extraction-context-v1',
-    policy_version: 'v1',
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
     output_schema_version: 'v1',
     execution_mode: input.executionMode,
     profile_id: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
@@ -1779,7 +1845,7 @@ function needAdjudicationNegativeProbeExpectation() {
   return null;
 }
 
-async function runGenerateNeedCandidate(runtime, input) {
+async function runGenerateNeedCandidate(app, input) {
   assertSupportedDebateSlotFixtures();
   const nodeAttemptId = `node_attempt_generate_need_candidate_${RUN_ID}`;
   const workflowRunId = `workflow_run_generate_need_candidate_${RUN_ID}`;
@@ -1823,7 +1889,7 @@ async function runGenerateNeedCandidate(runtime, input) {
     candidate_pool_projection_ref: null,
     search_snapshot_refs: [input.searchRunRef],
     resource_snapshot_refs: [input.literatureSnapshotRef],
-    policy_version: 'v1',
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
     output_schema_version: 'v1',
     profile_id: TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
     execution_mode: GENERATE_NEED_CANDIDATE_EXECUTION_MODE,
@@ -1891,7 +1957,17 @@ async function runGenerateNeedCandidate(runtime, input) {
     },
     created_by: 'system',
   };
-  const result = await runtime.workflowHarness.runGenerateNeedCandidateScenario(harnessInput);
+  const result = await invokeV1aHarnessScenario(
+    app,
+    'topic-selection.v1a.generate-need-candidate.v1',
+    harnessInput,
+    'harness generate-need-candidate',
+    {
+      route_decision: 'invoke_next',
+      route_signal: 'need_candidate_batch_finalized',
+      route_target_node_id: 'topic-selection.v1a.validate-need-adjudication.v1',
+    },
+  );
   try {
     assertScenarioPassed(result, 'generate-need-candidate');
   } catch (error) {
@@ -1985,7 +2061,7 @@ async function prepareValidationInputs(runtime, candidates, titleCardId) {
       ref('validation_decision_support_packet', supportPacket.validation_support_packet_id, titleCardId),
     ],
     recommendation_payload: { confidence: 0.82, run_id: RUN_ID },
-    policy_version: 'v1',
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
     output_schema_version: 'v1',
   };
   return {
@@ -1998,7 +2074,7 @@ async function prepareValidationInputs(runtime, candidates, titleCardId) {
   };
 }
 
-async function runValidateNeedAdjudication(runtime, input) {
+async function runValidateNeedAdjudication(app, input) {
   const negativeProbeInstruction = needAdjudicationNegativeProbeInstruction();
   const negativeProbeExpectation = needAdjudicationNegativeProbeExpectation();
   const isNegativeProbe = negativeProbeInstruction !== null && negativeProbeExpectation !== null;
@@ -2059,7 +2135,23 @@ async function runValidateNeedAdjudication(runtime, input) {
     },
     created_by: 'system',
   };
-  const result = await runtime.workflowHarness.runValidateNeedAdjudicationScenario(harnessInput);
+  const result = await invokeV1aHarnessScenario(
+    app,
+    'topic-selection.v1a.validate-need-adjudication.v1',
+    harnessInput,
+    'harness validate-need-adjudication',
+    isNegativeProbe
+      ? {
+          route_decision: 'blocked',
+          route_signal: 'adjudication_blocked',
+          route_target_node_id: null,
+        }
+      : {
+          route_decision: 'invoke_next',
+          route_signal: 'need_adjudication_validated',
+          route_target_node_id: 'topic-selection.v1a.human-confirm-need.v1',
+        },
+  );
   assertScenarioPassed(result, 'validate-need-adjudication');
   return { result, harnessInput };
 }
@@ -2080,7 +2172,7 @@ function humanConfirmationInput(supportPacket) {
   };
 }
 
-async function runHumanConfirmNeed(runtime, input) {
+async function runHumanConfirmNeed(app, input) {
   const harnessInput = {
     scenario_id: SCENARIO_ID,
     scenario_case_id: `v1a-harness-human-confirm-need-${RUN_ID}`,
@@ -2114,12 +2206,22 @@ async function runHumanConfirmNeed(runtime, input) {
     },
     created_by: 'system',
   };
-  const result = await runtime.workflowHarness.runHumanConfirmNeedScenario(harnessInput);
+  const result = await invokeV1aHarnessScenario(
+    app,
+    'topic-selection.v1a.human-confirm-need.v1',
+    harnessInput,
+    'harness human-confirm-need',
+    {
+      route_decision: 'invoke_next',
+      route_signal: 'human_confirmation_ready',
+      route_target_node_id: 'topic-selection.v1a.publish-v1b-input-bundle.v1',
+    },
+  );
   assertScenarioPassed(result, 'human-confirm-need');
   return { result, harnessInput };
 }
 
-async function runPublishV1bInputBundle(runtime, input) {
+async function runPublishV1bInputBundle(app, runtime, input) {
   const validatedNeedId = input.humanConfirmResult.node_result.validated_need_ref.ref_id;
   const validatedNeed = await runtime.needValidation.getValidatedNeedById(validatedNeedId);
   assert.ok(validatedNeed, `ValidatedNeed ${validatedNeedId} not found after human confirmation.`);
@@ -2163,7 +2265,17 @@ async function runPublishV1bInputBundle(runtime, input) {
     },
     created_by: 'system',
   };
-  const result = await runtime.workflowHarness.runPublishV1bInputBundleScenario(harnessInput);
+  const result = await invokeV1aHarnessScenario(
+    app,
+    'topic-selection.v1a.publish-v1b-input-bundle.v1',
+    harnessInput,
+    'harness publish-v1b-input-bundle',
+    {
+      route_decision: 'stop_v1a_complete',
+      route_signal: 'v1b_input_bundle_published',
+      route_target_node_id: 'v1b.entry',
+    },
+  );
   assertScenarioPassed(result, 'publish-v1b-input-bundle');
   return { result, harnessInput };
 }
@@ -2337,6 +2449,7 @@ async function expectReplayInputHashMismatch(label, run) {
 
 async function runN6ToN9ReplaySmoke(input) {
   const {
+    app,
     runtime,
     prisma,
     harnessLlmGateway,
@@ -2350,17 +2463,29 @@ async function runN6ToN9ReplaySmoke(input) {
   currentStage = 'harness n6-n9 exact replay smoke';
   const exactCountsBefore = await replayAuthorityCounts(prisma, titleCardId);
   const exactLlmCallsBefore = harnessLlmGateway.callCount;
-  const generateReplay = await runtime.workflowHarness.runGenerateNeedCandidateScenario(
+  const generateReplay = await invokeV1aHarnessScenario(
+    app,
+    'topic-selection.v1a.generate-need-candidate.v1',
     generateNeedCandidate.harnessInput,
+    'harness replay generate-need-candidate',
   );
-  const validateReplay = await runtime.workflowHarness.runValidateNeedAdjudicationScenario(
+  const validateReplay = await invokeV1aHarnessScenario(
+    app,
+    'topic-selection.v1a.validate-need-adjudication.v1',
     validateNeed.harnessInput,
+    'harness replay validate-need-adjudication',
   );
-  const humanReplay = await runtime.workflowHarness.runHumanConfirmNeedScenario(
+  const humanReplay = await invokeV1aHarnessScenario(
+    app,
+    'topic-selection.v1a.human-confirm-need.v1',
     humanConfirmNeed.harnessInput,
+    'harness replay human-confirm-need',
   );
-  const publishReplay = await runtime.workflowHarness.runPublishV1bInputBundleScenario(
+  const publishReplay = await invokeV1aHarnessScenario(
+    app,
+    'topic-selection.v1a.publish-v1b-input-bundle.v1',
     publishV1bInputBundle.harnessInput,
+    'harness replay publish-v1b-input-bundle',
   );
   const exactCountsAfter = await replayAuthorityCounts(prisma, titleCardId);
   const exactLlmCallsAfter = harnessLlmGateway.callCount;
@@ -2376,28 +2501,56 @@ async function runN6ToN9ReplaySmoke(input) {
   const driftLlmCallsBefore = harnessLlmGateway.callCount;
   const drift = {
     generate_need_candidate: await expectReplayInputHashMismatch('generate_need_candidate', () =>
-      runtime.workflowHarness.runGenerateNeedCandidateScenario({
-        ...generateNeedCandidate.harnessInput,
-        policy_version: 'v1-replay-drift',
-      })
+      invokeV1aHarnessScenario(
+        app,
+        'topic-selection.v1a.generate-need-candidate.v1',
+        {
+          ...generateNeedCandidate.harnessInput,
+          policy_version: 'v1-replay-drift',
+        },
+        'harness drift generate-need-candidate',
+        null,
+        { assertScenario: false },
+      )
     ),
     validate_need_adjudication: await expectReplayInputHashMismatch('validate_need_adjudication', () =>
-      runtime.workflowHarness.runValidateNeedAdjudicationScenario({
-        ...validateNeed.harnessInput,
-        policy_version: 'v1-replay-drift',
-      })
+      invokeV1aHarnessScenario(
+        app,
+        'topic-selection.v1a.validate-need-adjudication.v1',
+        {
+          ...validateNeed.harnessInput,
+          policy_version: 'v1-replay-drift',
+        },
+        'harness drift validate-need-adjudication',
+        null,
+        { assertScenario: false },
+      )
     ),
     human_confirm_need: await expectReplayInputHashMismatch('human_confirm_need', () =>
-      runtime.workflowHarness.runHumanConfirmNeedScenario({
-        ...humanConfirmNeed.harnessInput,
-        policy_version: 'v1-replay-drift',
-      })
+      invokeV1aHarnessScenario(
+        app,
+        'topic-selection.v1a.human-confirm-need.v1',
+        {
+          ...humanConfirmNeed.harnessInput,
+          policy_version: 'v1-replay-drift',
+        },
+        'harness drift human-confirm-need',
+        null,
+        { assertScenario: false },
+      )
     ),
     publish_v1b_input_bundle: await expectReplayInputHashMismatch('publish_v1b_input_bundle', () =>
-      runtime.workflowHarness.runPublishV1bInputBundleScenario({
-        ...publishV1bInputBundle.harnessInput,
-        policy_version: 'v1-replay-drift',
-      })
+      invokeV1aHarnessScenario(
+        app,
+        'topic-selection.v1a.publish-v1b-input-bundle.v1',
+        {
+          ...publishV1bInputBundle.harnessInput,
+          policy_version: 'v1-replay-drift',
+        },
+        'harness drift publish-v1b-input-bundle',
+        null,
+        { assertScenario: false },
+      )
     ),
   };
   const driftCountsAfter = await replayAuthorityCounts(prisma, titleCardId);
@@ -2504,7 +2657,7 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
   });
 
   currentStage = 'harness create-topic-seed';
-  const topicSeed = await runtime.workflowHarness.runCreateTopicSeedScenario({
+  const topicSeed = await invokeV1aHarnessScenario(app, 'topic-selection.v1a.create-topic-seed.v1', {
     scenario_id: SCENARIO_ID,
     scenario_case_id: `v1a-harness-create-topic-seed-${RUN_ID}`,
     title_card_id: titleCardId,
@@ -2521,11 +2674,15 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
       seed_version: 'v1',
     },
     created_by: 'system',
+  }, 'harness create-topic-seed', {
+    route_decision: 'invoke_next',
+    route_signal: 'topic_seed_created',
+    route_target_node_id: 'topic-selection.v1a.snapshot-literature-resource-pool.v1',
   });
   assertScenarioPassed(topicSeed, 'create-topic-seed');
 
   currentStage = 'harness snapshot-literature-resource-pool';
-  const snapshot = await runtime.workflowHarness.runSnapshotLiteratureResourcePoolScenario({
+  const snapshot = await invokeV1aHarnessScenario(app, 'topic-selection.v1a.snapshot-literature-resource-pool.v1', {
     scenario_id: SCENARIO_ID,
     scenario_case_id: `v1a-harness-snapshot-literature-resource-pool-${RUN_ID}`,
     title_card_id: titleCardId,
@@ -2541,6 +2698,10 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
       included_literature_count: selectedResources.length,
     },
     created_by: 'system',
+  }, 'harness snapshot-literature-resource-pool', {
+    route_decision: 'invoke_next',
+    route_signal: 'literature_resource_pool_snapshot_created',
+    route_target_node_id: 'topic-selection.v1a.create-search-plan.v1',
   });
   assertScenarioPassed(snapshot, 'snapshot-literature-resource-pool');
 
@@ -2553,7 +2714,7 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
     literatureSnapshotRef: snapshot.node_result.literature_resource_pool_snapshot_ref,
     snapshotHash: snapshot.node_result.snapshot_hash,
   });
-  const searchPlan = await runtime.workflowHarness.runCreateSearchPlanScenario({
+  const searchPlan = await invokeV1aHarnessScenario(app, 'topic-selection.v1a.create-search-plan.v1', {
     scenario_id: SCENARIO_ID,
     scenario_case_id: `v1a-harness-create-search-plan-${RUN_ID}`,
     title_card_id: titleCardId,
@@ -2566,6 +2727,10 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
       plan_version: 'v1',
     },
     created_by: 'system',
+  }, 'harness create-search-plan', {
+    route_decision: 'invoke_next',
+    route_signal: 'search_plan_created',
+    route_target_node_id: 'topic-selection.v1a.record-search-run.v1',
   });
   assertScenarioPassed(searchPlan, 'create-search-plan');
 
@@ -2579,7 +2744,7 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
     literatureSnapshotRef: snapshot.node_result.literature_resource_pool_snapshot_ref,
     snapshotHash: snapshot.node_result.snapshot_hash,
   });
-  const searchRun = await runtime.workflowHarness.runRecordSearchRunScenario({
+  const searchRun = await invokeV1aHarnessScenario(app, 'topic-selection.v1a.record-search-run.v1', {
     scenario_id: SCENARIO_ID,
     scenario_case_id: `v1a-harness-record-search-run-${RUN_ID}`,
     title_card_id: titleCardId,
@@ -2592,6 +2757,10 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
       downstream_handoff_present: true,
     },
     created_by: 'system',
+  }, 'harness record-search-run', {
+    route_decision: 'invoke_next',
+    route_signal: 'search_run_consumable',
+    route_target_node_id: 'topic-selection.v1a.build-evidence-map.v1',
   });
   assertScenarioPassed(searchRun, 'record-search-run');
   if (!sameStringSet(searchRun.node_result.downstream_handoff?.method_family_targets, blueprint.method_family_targets)) {
@@ -2627,7 +2796,7 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
         workflowRunId: evidenceMapWorkflowRunId,
         nodeAttemptId: evidenceMapNodeAttemptId,
       });
-  const evidenceMap = await runtime.workflowHarness.runBuildEvidenceMapScenario({
+  const evidenceMap = await invokeV1aHarnessScenario(app, 'topic-selection.v1a.build-evidence-map.v1', {
     scenario_id: SCENARIO_ID,
     scenario_case_id: `v1a-harness-build-evidence-map-${RUN_ID}`,
     title_card_id: titleCardId,
@@ -2666,6 +2835,10 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
       downstream_handoff_present: true,
     },
     created_by: 'system',
+  }, 'harness build-evidence-map', {
+    route_decision: 'invoke_next',
+    route_signal: 'evidence_map_ready',
+    route_target_node_id: 'topic-selection.v1a.generate-need-candidate.v1',
   });
   assertScenarioPassed(evidenceMap, 'build-evidence-map');
   if (EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE !== 'none') {
@@ -2684,7 +2857,7 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
   }
 
   currentStage = 'harness generate-need-candidate';
-  const generateNeedCandidate = await runGenerateNeedCandidate(runtime, {
+  const generateNeedCandidate = await runGenerateNeedCandidate(app, {
     titleCardId,
     selectedResources,
     resourceSampleSetId: resourceSample.sample_set.resource_sample_set_id,
@@ -2705,7 +2878,7 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
   const candidate = validationInputs.candidate;
 
   currentStage = 'harness validate-need-adjudication';
-  const validateNeed = await runValidateNeedAdjudication(runtime, {
+  const validateNeed = await runValidateNeedAdjudication(app, {
     titleCardId,
     candidate,
     readiness: validationInputs.readiness,
@@ -2753,7 +2926,7 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
   }
 
   currentStage = 'harness human-confirm-need';
-  const humanConfirmNeed = await runHumanConfirmNeed(runtime, {
+  const humanConfirmNeed = await runHumanConfirmNeed(app, {
     titleCardId,
     candidate,
     supportPacket: validationInputs.supportPacket,
@@ -2761,7 +2934,7 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
   });
 
   currentStage = 'harness publish-v1b-input-bundle';
-  const publishV1bInputBundle = await runPublishV1bInputBundle(runtime, {
+  const publishV1bInputBundle = await runPublishV1bInputBundle(app, runtime, {
     titleCardId,
     candidate,
     humanConfirmResult: humanConfirmNeed.result,
@@ -2769,6 +2942,7 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
 
   const replaySmoke = RUN_REPLAY_SMOKE
     ? await runN6ToN9ReplaySmoke({
+      app,
       runtime,
       prisma,
       harnessLlmGateway,
@@ -2827,6 +3001,7 @@ try {
   const runtime = makeWorkflowHarness(prisma, harnessLlmGateway);
   app = buildApp({
     topicSelectionResourceSamplingLlmGateway: makeSamplingLlmGateway(),
+    topicSelectionV1aLlmGateway: harnessLlmGateway,
   });
 
   currentStage = EXISTING_RESOURCE_SAMPLE_SET_ID ? 'load existing resource sample set' : 'create resource sample set';

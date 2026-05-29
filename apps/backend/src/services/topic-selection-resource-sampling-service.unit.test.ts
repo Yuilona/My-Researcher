@@ -45,7 +45,7 @@ function ref(id: string): TopicSelectionFunctionalRef {
 function makeTelemetry(): LlmCallTelemetry {
   return {
     provider_id: 'openai',
-    model_id: 'gpt-5.4-mini',
+    model_id: 'gpt-5.5',
     profile_id: 'topic-selection-resource-sampling-classification',
     prompt_template_id: 'topic-selection-resource-sampling-classification',
     prompt_template_version: '1',

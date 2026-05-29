@@ -645,6 +645,31 @@ class FakeDownstreamFeedbackModel {
     return this.rows.get(where.id) ?? null;
   }
 
+  async findFirst({
+    where,
+  }: {
+    where: {
+      feedbackFingerprint?: string;
+      recheckRequest?: { path: string[]; equals: string };
+    };
+    orderBy?: { createdAt: 'desc' };
+  }) {
+    const rows = [...this.rows.values()]
+      .filter((row) => {
+        if (where.feedbackFingerprint) {
+          return row.feedbackFingerprint === where.feedbackFingerprint;
+        }
+        if (where.recheckRequest) {
+          const recheckRequest = row.recheckRequest as { downstream_recheck_request_id?: string } | undefined;
+          return recheckRequest?.downstream_recheck_request_id === where.recheckRequest.equals;
+        }
+        return false;
+      })
+      .sort((left, right) =>
+        (right.createdAt as Date).getTime() - (left.createdAt as Date).getTime());
+    return rows[0] ?? null;
+  }
+
   async findMany({
     where,
   }: {

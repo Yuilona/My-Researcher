@@ -71,7 +71,7 @@ function makeIdFactory() {
 function makeTelemetry(): LlmCallTelemetry {
   return {
     provider_id: 'openai',
-    model_id: 'gpt-5.4-mini',
+    model_id: 'gpt-5.5',
     profile_id: 'topic-selection-topic-value-assessment',
     prompt_template_id: 'topic-selection-topic-value-assessment',
     prompt_template_version: '1',

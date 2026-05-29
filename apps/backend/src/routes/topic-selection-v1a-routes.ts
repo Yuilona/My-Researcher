@@ -1,6 +1,8 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   TOPIC_SELECTION_ACTOR_TYPES,
+  TOPIC_SELECTION_ARTIFACT_KINDS,
+  TOPIC_SELECTION_ARTIFACT_STORAGE_KINDS,
   TOPIC_SELECTION_QUALITY_SIGNAL_VERDICTS,
   topicSelectionActorRefSchema,
   topicSelectionFunctionalRefSchema,
@@ -54,13 +56,41 @@ import {
   createTopicSelectionResourceSampleRequestSchema,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-resource-sampling-contracts';
 import {
+  TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_NODE_IDS,
+  TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+  topicSelectionV1aWorkflowHarnessRunRequestSchema,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1a-workflow-harness-contracts';
+import {
   TopicSelectionV1aController,
+  type AdjudicationBody,
+  type AcceptedRiskBody,
+  type ConfirmValidatedNeedBody,
+  type EvidenceStrengthBody,
+  type EvidenceMapBody,
+  type LiteratureSnapshotBody,
+  type MarkEvidenceMapStaleBody,
+  type MaterializeMemoryBody,
+  type NeedCandidateBody,
   type InterpretQualitySignalBody,
+  type OfflineCaseBody,
+  type OfflineCaseResultBody,
   type OfflineDatasetBody,
+  type OfflineRunBody,
+  type QualitySignalBody,
   type QueueSearchPlanRecheckBody,
   type ReadinessBody,
+  type ResolveSearchPlanRecheckBody,
+  type SearchPlanBody,
+  type SearchPlanRecheckBody,
+  type SearchRunBody,
+  type SupportPacketBody,
+  type TopicSeedBody,
+  type V1bInputBundleBody,
+  type WorkflowHarnessArtifactBody,
+  type WorkflowHarnessRunBody,
 } from '../controllers/topic-selection-v1a-controller.js';
 import { TopicSelectionResourceSamplingController } from '../controllers/topic-selection-resource-sampling-controller.js';
+import type { CreateTopicSelectionResourceSampleInput } from '../services/topic-selection-resource-sampling-service.js';
 
 type JsonSchema = Record<string, unknown>;
 
@@ -107,6 +137,61 @@ async function normalizeOptionalBody(request: FastifyRequest): Promise<void> {
   if (request.body === undefined) {
     (request as FastifyRequest & { body: unknown }).body = {};
   }
+}
+
+async function blockWorkflowHarnessAutomationOnDirectWrite(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void | FastifyReply> {
+  const body = request.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return;
+  }
+  const payload = body as Record<string, unknown>;
+  const blockedMarkers = [
+    payload.schema_version === TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION ? 'schema_version' : null,
+    payload.scenario_input !== undefined ? 'scenario_input' : null,
+    typeof payload.scenario_id === 'string' ? 'scenario_id' : null,
+    typeof payload.scenario_case_id === 'string' ? 'scenario_case_id' : null,
+    typeof payload.node_attempt_id === 'string' ? 'node_attempt_id' : null,
+    typeof payload.node_id === 'string' && TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_NODE_IDS.includes(
+      payload.node_id as (typeof TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_NODE_IDS)[number],
+    )
+      ? 'node_id'
+      : null,
+  ].filter((marker): marker is string => Boolean(marker));
+
+  if (blockedMarkers.length === 0) {
+    return;
+  }
+
+  return reply.status(409).send({
+    error: {
+      code: 'AUTOMATIC_HARNESS_PATH_REQUIRES_NATIVE_RUNNER',
+      message: 'Automatic v1a workflow harness invocations must use /topic-selection/v1a/workflow-harness/nodes/:nodeId/invocations.',
+      details: {
+        blocked_markers: blockedMarkers,
+      },
+    },
+  });
+}
+
+async function normalizeOptionalBodyAndBlockWorkflowHarnessAutomation(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void | FastifyReply> {
+  await normalizeOptionalBody(request);
+  return blockWorkflowHarnessAutomationOnDirectWrite(request, reply);
+}
+
+function guardedDirectWrite(schema: JsonSchema): {
+  schema: JsonSchema;
+  preValidation: typeof blockWorkflowHarnessAutomationOnDirectWrite;
+} {
+  return {
+    schema,
+    preValidation: blockWorkflowHarnessAutomationOnDirectWrite,
+  };
 }
 
 const actorType = { enum: [...TOPIC_SELECTION_ACTOR_TYPES] } as const;
@@ -671,25 +756,62 @@ const offlineCaseResultBody = bodySchema(['run_id', 'case_id', 'observed_output'
 });
 
 const runParams = paramsSchema({ runId: stringId });
+const workflowHarnessNodeParams = paramsSchema({
+  nodeId: { enum: [...TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_NODE_IDS] },
+});
+const workflowHarnessRunBody = {
+  ...workflowHarnessNodeParams,
+  body: topicSelectionV1aWorkflowHarnessRunRequestSchema,
+};
+const workflowHarnessArtifactParams = paramsSchema({ artifactRefId: stringId });
+const workflowHarnessArtifactBody = bodySchema(['artifact_kind'], {
+  workspace_id: nullableStringId,
+  title_card_id: nullableStringId,
+  artifact_kind: { enum: [...TOPIC_SELECTION_ARTIFACT_KINDS] },
+  storage_kind: { enum: [...TOPIC_SELECTION_ARTIFACT_STORAGE_KINDS] },
+  uri: nullableStringId,
+  payload: { anyOf: [recordPayload, { type: 'null' }] },
+  checksum: nullableStringId,
+  byte_size: nullableNumber,
+  mime_type: nullableStringId,
+  workflow_run_id: nullableStringId,
+  input_snapshot_id: nullableStringId,
+  created_by: actorType,
+});
 
 export async function registerTopicSelectionV1aRoutes(
   fastify: FastifyInstance,
   controller: TopicSelectionV1aController,
   resourceSamplingController: TopicSelectionResourceSamplingController,
 ): Promise<void> {
-  fastify.post(
+  fastify.post<{ Body: WorkflowHarnessRunBody; Params: { nodeId: string } }>(
+    '/topic-selection/v1a/workflow-harness/nodes/:nodeId/invocations',
+    { schema: workflowHarnessRunBody },
+    controller.invokeWorkflowHarnessNode,
+  );
+  fastify.post<{ Body: WorkflowHarnessArtifactBody }>(
+    '/topic-selection/v1a/workflow-harness/artifacts',
+    { schema: workflowHarnessArtifactBody },
+    controller.recordWorkflowHarnessArtifact,
+  );
+  fastify.get<{ Params: { artifactRefId: string } }>(
+    '/topic-selection/v1a/workflow-harness/artifacts/:artifactRefId',
+    { schema: workflowHarnessArtifactParams },
+    controller.getWorkflowHarnessArtifact,
+  );
+  fastify.post<{ Body: TopicSeedBody }>(
     '/topic-selection/v1a/topic-seeds/from-title-card',
-    { schema: topicSeedBody },
+    guardedDirectWrite(topicSeedBody),
     controller.createTopicSeedFromTitleCard,
   );
-  fastify.post(
+  fastify.post<{ Body: LiteratureSnapshotBody }>(
     '/topic-selection/v1a/literature-resource-pool-snapshots',
-    { schema: literatureSnapshotBody },
+    guardedDirectWrite(literatureSnapshotBody),
     controller.createLiteratureResourcePoolSnapshot,
   );
-  fastify.post(
+  fastify.post<{ Body: CreateTopicSelectionResourceSampleInput }>(
     '/topic-selection/v1a/resource-samples',
-    { schema: resourceSampleBody },
+    guardedDirectWrite(resourceSampleBody),
     resourceSamplingController.createResourceSampleSet,
   );
   fastify.get(
@@ -697,82 +819,106 @@ export async function registerTopicSelectionV1aRoutes(
     { schema: resourceSampleParams },
     resourceSamplingController.getResourceSampleSet,
   );
-  fastify.post('/topic-selection/v1a/search-plans', { schema: searchPlanBody }, controller.createSearchPlan);
-  fastify.post('/topic-selection/v1a/search-runs', { schema: searchRunBody }, controller.recordSearchRun);
+  fastify.post<{ Body: SearchPlanBody }>(
+    '/topic-selection/v1a/search-plans',
+    guardedDirectWrite(searchPlanBody),
+    controller.createSearchPlan,
+  );
+  fastify.post<{ Body: SearchRunBody }>(
+    '/topic-selection/v1a/search-runs',
+    guardedDirectWrite(searchRunBody),
+    controller.recordSearchRun,
+  );
   fastify.get(
     '/topic-selection/v1a/search-plans/:searchPlanId/coverage-matrix',
     { schema: searchPlanParams },
     controller.getCoverageMatrix,
   );
-  fastify.post(
+  fastify.post<{ Body: SearchPlanRecheckBody }>(
     '/topic-selection/v1a/search-plan-recheck-requests',
-    { schema: searchPlanRecheckBody },
+    guardedDirectWrite(searchPlanRecheckBody),
     controller.createSearchPlanRecheckRequest,
   );
-  fastify.post(
+  fastify.post<{ Body: ResolveSearchPlanRecheckBody; Params: { requestId: string } }>(
     '/topic-selection/v1a/search-plan-recheck-requests/:requestId/resolve',
-    { schema: resolveSearchPlanRecheckBody },
+    guardedDirectWrite(resolveSearchPlanRecheckBody),
     controller.resolveSearchPlanRecheckRequest,
   );
-  fastify.post('/topic-selection/v1a/evidence-maps', { schema: evidenceMapBody }, controller.createEvidenceMapFromSearchRun);
+  fastify.post<{ Body: EvidenceMapBody }>(
+    '/topic-selection/v1a/evidence-maps',
+    guardedDirectWrite(evidenceMapBody),
+    controller.createEvidenceMapFromSearchRun,
+  );
   fastify.get(
     '/topic-selection/v1a/evidence-maps/:evidenceMapId/need-validation-bundle',
     { schema: evidenceMapParams },
     controller.getNeedValidationEvidenceBundle,
   );
-  fastify.post(
+  fastify.post<{ Body: EvidenceStrengthBody }>(
     '/topic-selection/v1a/evidence-strength-assessments',
-    { schema: evidenceStrengthBody },
+    guardedDirectWrite(evidenceStrengthBody),
     controller.assessEvidenceStrength,
   );
-  fastify.post(
+  fastify.post<{ Body: MarkEvidenceMapStaleBody; Params: { evidenceMapId: string } }>(
     '/topic-selection/v1a/evidence-maps/:evidenceMapId/stale',
-    { schema: markEvidenceMapStaleBody },
+    guardedDirectWrite(markEvidenceMapStaleBody),
     controller.markEvidenceMapStale,
   );
-  fastify.post(
+  fastify.post<{ Body: NeedCandidateBody }>(
     '/topic-selection/v1a/need-candidates',
-    { schema: needCandidateBody },
+    guardedDirectWrite(needCandidateBody),
     controller.createNeedCandidateFromEvidenceMap,
   );
   fastify.post<{ Body: ReadinessBody; Params: { needCandidateId: string } }>(
     '/topic-selection/v1a/need-candidates/:needCandidateId/readiness-assessments',
-    { schema: readinessBody, preValidation: normalizeOptionalBody },
+    { schema: readinessBody, preValidation: normalizeOptionalBodyAndBlockWorkflowHarnessAutomation },
     controller.assessCandidateReadiness,
   );
-  fastify.post(
+  fastify.post<{ Body: SupportPacketBody }>(
     '/topic-selection/v1a/validation-support-packets',
-    { schema: supportPacketBody },
+    guardedDirectWrite(supportPacketBody),
     controller.createValidationDecisionSupportPacket,
   );
-  fastify.post(
+  fastify.post<{ Body: AdjudicationBody; Params: { needCandidateId: string } }>(
     '/topic-selection/v1a/need-candidates/:needCandidateId/adjudications',
-    { schema: adjudicationBody },
+    guardedDirectWrite(adjudicationBody),
     controller.adjudicateNeed,
   );
-  fastify.post(
+  fastify.post<{ Body: ConfirmValidatedNeedBody; Params: { adjudicationResultId: string } }>(
     '/topic-selection/v1a/adjudications/:adjudicationResultId/human-confirmations',
-    { schema: humanConfirmationBody },
+    guardedDirectWrite(humanConfirmationBody),
     controller.confirmValidatedNeed,
   );
-  fastify.post('/topic-selection/v1a/v1b-input-bundles', { schema: v1bInputBundleBody }, controller.publishV1bInputBundle);
-  fastify.post('/topic-selection/v1a/quality-signals', { schema: qualitySignalBody }, controller.emitQualitySignal);
+  fastify.post<{ Body: V1bInputBundleBody }>(
+    '/topic-selection/v1a/v1b-input-bundles',
+    guardedDirectWrite(v1bInputBundleBody),
+    controller.publishV1bInputBundle,
+  );
+  fastify.post<{ Body: QualitySignalBody }>(
+    '/topic-selection/v1a/quality-signals',
+    guardedDirectWrite(qualitySignalBody),
+    controller.emitQualitySignal,
+  );
   fastify.post<{ Body: InterpretQualitySignalBody; Params: { qualitySignalId: string } }>(
     '/topic-selection/v1a/quality-signals/:qualitySignalId/interpret',
-    { schema: interpretQualitySignalBody, preValidation: normalizeOptionalBody },
+    { schema: interpretQualitySignalBody, preValidation: normalizeOptionalBodyAndBlockWorkflowHarnessAutomation },
     controller.interpretQualitySignal,
   );
   fastify.post<{ Body: QueueSearchPlanRecheckBody; Params: { requestId: string } }>(
     '/topic-selection/v1a/search-plan-recheck-requests/:requestId/queue',
-    { schema: queueSearchPlanRecheckRequestBody, preValidation: normalizeOptionalBody },
+    { schema: queueSearchPlanRecheckRequestBody, preValidation: normalizeOptionalBodyAndBlockWorkflowHarnessAutomation },
     controller.queueSearchPlanRecheckRequest,
   );
-  fastify.post(
+  fastify.post<{ Body: MaterializeMemoryBody; Params: { memorySuggestionId: string } }>(
     '/topic-selection/v1a/candidate-memory-suggestions/:memorySuggestionId/materialize',
-    { schema: materializeMemorySuggestionParams },
+    { schema: materializeMemorySuggestionParams, preValidation: blockWorkflowHarnessAutomationOnDirectWrite },
     controller.materializeCandidateMemorySuggestion,
   );
-  fastify.post('/topic-selection/v1a/accepted-risks', { schema: acceptedRiskBody }, controller.acceptRisk);
+  fastify.post<{ Body: AcceptedRiskBody }>(
+    '/topic-selection/v1a/accepted-risks',
+    guardedDirectWrite(acceptedRiskBody),
+    controller.acceptRisk,
+  );
   fastify.get('/topic-selection/v1a/work-queue/open', controller.listOpenWorkQueueItems);
   // T-087 D1 read-only projections: list v1a authority/workflow objects per title-card.
   fastify.get(
@@ -821,32 +967,32 @@ export async function registerTopicSelectionV1aRoutes(
   );
   fastify.post<{ Body: OfflineDatasetBody }>(
     '/topic-selection/v1a/offline-evaluation/datasets',
-    { schema: offlineDatasetBody, preValidation: normalizeOptionalBody },
+    { schema: offlineDatasetBody, preValidation: normalizeOptionalBodyAndBlockWorkflowHarnessAutomation },
     controller.createOfflineEvaluationDataset,
   );
   fastify.post<{ Body: OfflineDatasetBody }>(
     '/topic-selection/v1a/offline-evaluation/datasets/synthetic-baseline',
-    { schema: offlineDatasetBody, preValidation: normalizeOptionalBody },
+    { schema: offlineDatasetBody, preValidation: normalizeOptionalBodyAndBlockWorkflowHarnessAutomation },
     controller.createSyntheticOfflineEvaluationDataset,
   );
-  fastify.post(
+  fastify.post<{ Body: OfflineCaseBody }>(
     '/topic-selection/v1a/offline-evaluation/cases',
-    { schema: offlineCaseBody },
+    guardedDirectWrite(offlineCaseBody),
     controller.addOfflineEvaluationCase,
   );
-  fastify.post(
+  fastify.post<{ Body: OfflineRunBody }>(
     '/topic-selection/v1a/offline-evaluation/runs',
-    { schema: offlineRunBody },
+    guardedDirectWrite(offlineRunBody),
     controller.startOfflineEvaluationRun,
   );
-  fastify.post(
+  fastify.post<{ Body: OfflineCaseResultBody }>(
     '/topic-selection/v1a/offline-evaluation/case-results',
-    { schema: offlineCaseResultBody },
+    guardedDirectWrite(offlineCaseResultBody),
     controller.recordOfflineEvaluationCaseResult,
   );
-  fastify.post(
+  fastify.post<{ Params: { runId: string } }>(
     '/topic-selection/v1a/offline-evaluation/runs/:runId/complete',
-    { schema: runParams },
+    { schema: runParams, preValidation: blockWorkflowHarnessAutomationOnDirectWrite },
     controller.completeOfflineEvaluationRun,
   );
   fastify.get(

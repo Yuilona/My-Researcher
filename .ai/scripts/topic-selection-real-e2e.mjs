@@ -23,7 +23,7 @@ import { TopicSelectionWorkflowHarnessService } from '../../apps/backend/src/ser
 
 const TOPIC_ID = process.env.TOPIC_SELECTION_REAL_TOPIC_ID ?? 'ai-rag-finetuning-2022-2026';
 const PROVIDER_ID = process.env.TOPIC_SELECTION_REAL_PROVIDER_ID === 'dashscope' ? 'dashscope' : 'openai';
-const MODEL_ID = process.env.TOPIC_SELECTION_REAL_MODEL_ID ?? 'gpt-5.4-mini';
+const MODEL_ID = process.env.TOPIC_SELECTION_REAL_MODEL_ID ?? 'gpt-5.5';
 const LITERATURE_LIMIT = Number.parseInt(process.env.TOPIC_SELECTION_REAL_LITERATURE_LIMIT ?? '16', 10);
 const LLM_TIMEOUT_MS = Number.parseInt(process.env.TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS ?? '180000', 10);
 const LLM_MAX_RETRIES = Number.parseInt(process.env.TOPIC_SELECTION_REAL_LLM_MAX_RETRIES ?? '3', 10);

@@ -35,6 +35,14 @@ implements TopicSelectionV1cDownstreamFeedbackRecheckRepository {
     ) ?? null;
   }
 
+  async findFeedbackByFingerprint(
+    feedbackFingerprint: string,
+  ): Promise<TopicSelectionDownstreamTopicFeedbackRecord | null> {
+    return [...this.feedbackRecords.values()].find(
+      (record) => record.feedback_fingerprint === feedbackFingerprint,
+    ) ?? null;
+  }
+
   async listFeedbackByBridgeId(
     paperProjectBridgeId: string,
   ): Promise<TopicSelectionDownstreamTopicFeedbackRecord[]> {

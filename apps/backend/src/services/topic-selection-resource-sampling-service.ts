@@ -34,6 +34,7 @@ import type { TopicSelectionResourceSamplingRepository } from '../repositories/t
 import { sha256Text, stableStringify } from './literature-content-processing-utils.js';
 import {
   BackendLlmGateway,
+  DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
   LlmGatewayError,
   type LlmCallTelemetry,
   type LlmModelRef,
@@ -47,7 +48,7 @@ const DEFAULT_POLICY_VERSION = 'topic-resource-sampling-v1';
 const DEFAULT_SAMPLE_SIZE = 16;
 const DEFAULT_MODEL: LlmModelRef = {
   providerId: 'openai',
-  modelId: 'gpt-5.4-mini',
+  modelId: 'gpt-5.5',
   profileId: WORKFLOW_PROFILE_KEY,
 };
 const TARGET_ROLES = [...TOPIC_SELECTION_RESOURCE_SAMPLE_TARGET_ROLES];
@@ -558,6 +559,7 @@ export class TopicSelectionResourceSamplingService {
       ],
       schemaName: 'topic_selection_resource_sampling_classification',
       schema: topicSelectionResourceSamplingLlmOutputSchema as unknown as Record<string, unknown>,
+      normalizedParams: DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
       policy: {
         timeoutMs: LLM_CLASSIFICATION_BATCH_TIMEOUT_MS,
         maxRetries: LLM_CLASSIFICATION_BATCH_MAX_RETRIES,

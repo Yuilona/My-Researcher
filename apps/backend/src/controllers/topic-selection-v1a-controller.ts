@@ -6,34 +6,39 @@ import { TopicSelectionNeedValidationService } from '../services/topic-selection
 import { TopicSelectionOfflineEvaluationReplayService } from '../services/topic-selection-offline-evaluation-replay-service.js';
 import { TopicSelectionRecheckRiskMemoryService } from '../services/topic-selection-recheck-risk-memory-service.js';
 import { TopicSelectionSearchResourceService } from '../services/topic-selection-search-resource-service.js';
+import { TopicSelectionWorkflowHarnessService } from '../services/topic-selection-workflow-harness-service.js';
+import type {
+  TopicSelectionV1aWorkflowHarnessRunRequest,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1a-workflow-harness-contracts';
 
 type BodyRequest<T> = FastifyRequest<{ Body: T }>;
 type ParamsRequest<T> = FastifyRequest<{ Params: T }>;
 type BodyParamsRequest<TBody, TParams> = FastifyRequest<{ Body: TBody; Params: TParams }>;
 
-type TopicSeedBody = Parameters<TopicSelectionSearchResourceService['createTopicSeedFromTitleCard']>[0];
-type LiteratureSnapshotBody = Parameters<TopicSelectionSearchResourceService['createLiteratureResourcePoolSnapshot']>[0];
-type SearchPlanBody = Parameters<TopicSelectionSearchResourceService['createSearchPlan']>[0];
-type SearchRunBody = Parameters<TopicSelectionSearchResourceService['recordSearchRun']>[0];
-type SearchPlanRecheckBody = Parameters<TopicSelectionSearchResourceService['createSearchPlanRecheckRequest']>[0];
-type ResolveSearchPlanRecheckBody =
+export type TopicSeedBody = Parameters<TopicSelectionSearchResourceService['createTopicSeedFromTitleCard']>[0];
+export type LiteratureSnapshotBody = Parameters<TopicSelectionSearchResourceService['createLiteratureResourcePoolSnapshot']>[0];
+export type SearchPlanBody = Parameters<TopicSelectionSearchResourceService['createSearchPlan']>[0];
+export type SearchRunBody = Parameters<TopicSelectionSearchResourceService['recordSearchRun']>[0];
+export type SearchPlanRecheckBody = Parameters<TopicSelectionSearchResourceService['createSearchPlanRecheckRequest']>[0];
+export type ResolveSearchPlanRecheckBody =
   Omit<Parameters<TopicSelectionSearchResourceService['resolveSearchPlanRecheckRequest']>[0], 'request_id'>;
-type EvidenceMapBody = Parameters<TopicSelectionEvidenceMapService['createEvidenceMapFromSearchRun']>[0];
-type EvidenceStrengthBody = Parameters<TopicSelectionEvidenceMapService['assessEvidenceStrength']>[0];
-type MarkEvidenceMapStaleBody = Omit<Parameters<TopicSelectionEvidenceMapService['markEvidenceMapStale']>[0], 'evidence_map_id'>;
-type NeedCandidateBody = Parameters<TopicSelectionNeedValidationService['createNeedCandidateFromEvidenceMap']>[0];
+export type EvidenceMapBody = Parameters<TopicSelectionEvidenceMapService['createEvidenceMapFromSearchRun']>[0];
+export type EvidenceStrengthBody = Parameters<TopicSelectionEvidenceMapService['assessEvidenceStrength']>[0];
+export type MarkEvidenceMapStaleBody =
+  Omit<Parameters<TopicSelectionEvidenceMapService['markEvidenceMapStale']>[0], 'evidence_map_id'>;
+export type NeedCandidateBody = Parameters<TopicSelectionNeedValidationService['createNeedCandidateFromEvidenceMap']>[0];
 export type ReadinessBody = Omit<
   Parameters<TopicSelectionNeedValidationService['assessCandidateReadiness']>[0],
   'need_candidate_id'
 >;
-type SupportPacketBody = Parameters<TopicSelectionNeedValidationService['createValidationDecisionSupportPacket']>[0];
-type AdjudicationBody = Omit<Parameters<TopicSelectionNeedValidationService['adjudicateNeed']>[0], 'need_candidate_id'>;
-type ConfirmValidatedNeedBody = Omit<
+export type SupportPacketBody = Parameters<TopicSelectionNeedValidationService['createValidationDecisionSupportPacket']>[0];
+export type AdjudicationBody = Omit<Parameters<TopicSelectionNeedValidationService['adjudicateNeed']>[0], 'need_candidate_id'>;
+export type ConfirmValidatedNeedBody = Omit<
   Parameters<TopicSelectionNeedValidationService['confirmValidatedNeed']>[0],
   'adjudication_result_id'
 >;
-type V1bInputBundleBody = Parameters<TopicSelectionNeedValidationService['publishV1bInputBundle']>[0];
-type QualitySignalBody = Parameters<TopicSelectionControlPlaneService['emitQualitySignal']>[0];
+export type V1bInputBundleBody = Parameters<TopicSelectionNeedValidationService['publishV1bInputBundle']>[0];
+export type QualitySignalBody = Parameters<TopicSelectionControlPlaneService['emitQualitySignal']>[0];
 export type InterpretQualitySignalBody = Omit<
   Parameters<TopicSelectionRecheckRiskMemoryService['interpretQualitySignal']>[0],
   'quality_signal_id'
@@ -42,15 +47,17 @@ export type QueueSearchPlanRecheckBody = Omit<
   Parameters<TopicSelectionRecheckRiskMemoryService['queueSearchPlanRecheckRequest']>[0],
   'search_plan_recheck_request_id'
 >;
-type AcceptedRiskBody = Parameters<TopicSelectionRecheckRiskMemoryService['acceptRisk']>[0];
-type MaterializeMemoryBody = Omit<
+export type AcceptedRiskBody = Parameters<TopicSelectionRecheckRiskMemoryService['acceptRisk']>[0];
+export type MaterializeMemoryBody = Omit<
   Parameters<TopicSelectionRecheckRiskMemoryService['materializeCandidateMemorySuggestion']>[0],
   'memory_suggestion_id'
 >;
 export type OfflineDatasetBody = Parameters<TopicSelectionOfflineEvaluationReplayService['createDataset']>[0];
-type OfflineCaseBody = Parameters<TopicSelectionOfflineEvaluationReplayService['addCase']>[0];
-type OfflineRunBody = Parameters<TopicSelectionOfflineEvaluationReplayService['startRun']>[0];
-type OfflineCaseResultBody = Parameters<TopicSelectionOfflineEvaluationReplayService['recordFrozenCaseResult']>[0];
+export type OfflineCaseBody = Parameters<TopicSelectionOfflineEvaluationReplayService['addCase']>[0];
+export type OfflineRunBody = Parameters<TopicSelectionOfflineEvaluationReplayService['startRun']>[0];
+export type OfflineCaseResultBody = Parameters<TopicSelectionOfflineEvaluationReplayService['recordFrozenCaseResult']>[0];
+export type WorkflowHarnessRunBody = TopicSelectionV1aWorkflowHarnessRunRequest;
+export type WorkflowHarnessArtifactBody = Parameters<TopicSelectionControlPlaneService['recordArtifactRef']>[0];
 
 function handleError(reply: FastifyReply, error: unknown) {
   if (error instanceof AppError) {
@@ -85,7 +92,50 @@ export class TopicSelectionV1aController {
     private readonly needValidation: TopicSelectionNeedValidationService,
     private readonly recheckRiskMemory: TopicSelectionRecheckRiskMemoryService,
     private readonly offlineReplay: TopicSelectionOfflineEvaluationReplayService,
+    private readonly workflowHarness: TopicSelectionWorkflowHarnessService,
   ) {}
+
+  invokeWorkflowHarnessNode = async (
+    request: BodyParamsRequest<WorkflowHarnessRunBody, { nodeId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      if (request.body.node_id !== request.params.nodeId) {
+        throw new AppError(400, 'INVALID_PAYLOAD', 'Workflow harness body node_id must match the route nodeId.');
+      }
+      const result = await this.workflowHarness.invokeNode(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  recordWorkflowHarnessArtifact = async (
+    request: BodyRequest<WorkflowHarnessArtifactBody>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.controlPlane.recordArtifactRef(request.body);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
+  getWorkflowHarnessArtifact = async (
+    request: ParamsRequest<{ artifactRefId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.controlPlane.getArtifactRef(request.params.artifactRefId);
+      if (!result) {
+        throw new AppError(404, 'NOT_FOUND', 'Workflow harness artifact not found.');
+      }
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
 
   createTopicSeedFromTitleCard = async (request: BodyRequest<TopicSeedBody>, reply: FastifyReply) => {
     try {

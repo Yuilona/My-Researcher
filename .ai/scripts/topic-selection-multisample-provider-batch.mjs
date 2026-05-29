@@ -22,7 +22,7 @@ const PROVIDER_ID = providerId(
 );
 const MODEL_ID = process.env.TOPIC_SELECTION_MULTI_SAMPLE_MODEL_ID
   ?? process.env.TOPIC_SELECTION_REAL_MODEL_ID
-  ?? 'gpt-5.4-mini';
+  ?? 'gpt-5.5';
 const LLM_TIMEOUT_MS = String(positiveInt(
   process.env.TOPIC_SELECTION_MULTI_SAMPLE_LLM_TIMEOUT_MS
     ?? process.env.TOPIC_SELECTION_REAL_LLM_TIMEOUT_MS,

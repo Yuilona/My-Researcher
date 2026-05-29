@@ -240,6 +240,35 @@ test('ready T-061 handoff creates support, dossier, mini-check, gate, and T-063 
   );
 });
 
+test('N2 decision support persists without N3 gate artifacts until gate check consumes it', async () => {
+  const { service, repository, promotionInputService } = makeSubject();
+
+  const supportOnly = await service.createPromotionDecisionSupport({
+    promotion_input_snapshot_id: 'promotion_input_snapshot_001',
+  });
+  const supportRunKey = supportOnly.promotion_decision_support.support_run_key;
+
+  assert.equal(
+    (await repository.findSupportBundleBySupportRunKey(supportRunKey))?.promotion_decision_support
+      .promotion_decision_support_id,
+    supportOnly.promotion_decision_support.promotion_decision_support_id,
+  );
+  assert.equal(await repository.findGateCheckBundleBySupportRunKey(supportRunKey), null);
+
+  const gate = await service.createPromotionGateCheckFromSupport({
+    promotion_decision_support_id: supportOnly.promotion_decision_support.promotion_decision_support_id,
+  });
+  const replay = await service.createPromotionGateCheckFromSupport({
+    support_run_key: supportRunKey,
+  });
+
+  assert.equal(gate.promotion_decision_support.promotion_decision_support_id, supportOnly.promotion_decision_support.promotion_decision_support_id);
+  assert.equal(gate.promotion_gate_check.disposition, 'ready_for_human_decision');
+  assert.equal(gate.handoff.promote_allowed, true);
+  assert.equal(replay.promotion_gate_check.promotion_gate_check_id, gate.promotion_gate_check.promotion_gate_check_id);
+  assert.equal(promotionInputService.calls, 2);
+});
+
 test('accepted risks are warnings and do not block promote handoff', async () => {
   const acceptedRiskRef = ref('accepted_risk', 'accepted_risk_001');
   const handoff = makeHandoff({
@@ -407,7 +436,7 @@ test('LLM draft success stores draft prose while deterministic gate remains auth
   };
   const telemetry: LlmCallTelemetry = {
     provider_id: 'openai',
-    model_id: 'gpt-5.4-mini',
+    model_id: 'gpt-5.5',
     profile_id: 'topic-selection-promotion-decision-support',
     prompt_template_id: 'topic-selection-promotion-decision-support',
     prompt_template_version: '1',
@@ -442,8 +471,8 @@ test('LLM draft success stores draft prose while deterministic gate remains auth
   assert.equal(result.promotion_gate_check.disposition, 'ready_for_human_decision');
 });
 
-test('LLM draft failure falls back to deterministic support with warning', async () => {
-  const { service } = makeSubject({
+test('LLM draft failure fails closed without deterministic fallback persistence', async () => {
+  const { service, repository } = makeSubject({
     llmGateway: {
       createStructuredOutput: async () => {
         throw new Error('upstream unavailable');
@@ -451,17 +480,18 @@ test('LLM draft failure falls back to deterministic support with warning', async
     },
   });
 
-  const result = await service.createPromotionGateSupport({
-    promotion_input_snapshot_id: 'promotion_input_snapshot_001',
-    support_generation_mode: 'llm_draft',
-  });
-
-  assert.equal(result.promotion_decision_support.support_status, 'succeeded_with_fallback');
-  assert.equal(
-    result.promotion_decision_support.warnings.some((warning) => warning.code === 'llm_draft_failed_fallback'),
-    true,
+  await assert.rejects(
+    () => service.createPromotionGateSupport({
+      promotion_input_snapshot_id: 'promotion_input_snapshot_001',
+      support_generation_mode: 'llm_draft',
+    }),
+    (error) =>
+      error instanceof AppError
+      && error.statusCode === 502
+      && error.errorCode === 'INTERNAL_ERROR'
+      && error.details?.failure_code === 'LLM_INVOCATION_FAILED',
   );
-  assert.equal(result.promotion_gate_check.disposition, 'ready_for_human_decision');
+  assert.equal(await repository.findLatestBundleByPromotionInputSnapshotId('promotion_input_snapshot_001'), null);
 });
 
 test('Prisma promotion gate repository round-trips records and read lookups', async () => {

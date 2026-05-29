@@ -155,11 +155,19 @@ import {
 import { TitleCardManagementController } from './controllers/title-card-management.controller.js';
 import { TopicSelectionControlPlaneService } from './services/topic-selection-control-plane-service.js';
 import { TopicSelectionEvidenceMapService } from './services/topic-selection-evidence-map-service.js';
+import { TopicSelectionEvidenceMapMaterializationService } from './services/topic-selection-evidence-map-materialization-service.js';
+import { TopicSelectionAgentOrchestratorService } from './services/topic-selection-agent-orchestrator-service.js';
+import { TopicSelectionGenerateNeedCandidateOrchestratorAdapterService } from './services/topic-selection-generate-need-candidate-orchestrator-adapter-service.js';
 import { TopicSelectionNeedValidationService } from './services/topic-selection-need-validation-service.js';
+import { TopicSelectionNeedDiscoveryArtifactBoundaryService } from './services/topic-selection-need-discovery-artifact-boundary-service.js';
+import { TopicSelectionNeedDiscoveryContextCompilerService } from './services/topic-selection-need-discovery-context-compiler-service.js';
 import { TopicSelectionOfflineEvaluationReplayService } from './services/topic-selection-offline-evaluation-replay-service.js';
+import { TopicSelectionPersistNeedCandidateBatchService } from './services/topic-selection-persist-need-candidate-batch-service.js';
+import { TopicSelectionRankedCandidateDraftBatchValidatorService } from './services/topic-selection-ranked-candidate-draft-batch-validator-service.js';
 import { TopicSelectionRecheckRiskMemoryService } from './services/topic-selection-recheck-risk-memory-service.js';
 import { TopicSelectionResourceSamplingService } from './services/topic-selection-resource-sampling-service.js';
 import { TopicSelectionSearchResourceService } from './services/topic-selection-search-resource-service.js';
+import { TopicSelectionWorkflowHarnessService } from './services/topic-selection-workflow-harness-service.js';
 import { TopicSelectionV1bIntakeService } from './services/topic-selection-v1b-intake-service.js';
 import { TopicSelectionV1bResearchSliceService } from './services/topic-selection-v1b-research-slice-service.js';
 import { TopicSelectionV1bTopicPackageService } from './services/topic-selection-v1b-topic-package-service.js';
@@ -183,6 +191,7 @@ type RepositoryStrategy = 'memory' | 'prisma';
 
 export type BuildAppOptions = {
   topicSelectionResourceSamplingLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
+  topicSelectionV1aLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
   topicSelectionV1bLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
   topicSelectionV1cPromotionGateLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
   paperImplementationRepository?: PaperImplementationRepository;
@@ -371,6 +380,46 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const topicSelectionOfflineEvaluationReplayService = new TopicSelectionOfflineEvaluationReplayService(
     topicSelectionOfflineEvaluationReplayRepository,
   );
+  const literatureContentProcessingSettingsService = new LiteratureContentProcessingSettingsService(applicationSettingsRepository);
+  const llmGateway = new BackendLlmGateway({
+    settingsService: literatureContentProcessingSettingsService,
+  });
+  const topicSelectionV1aArtifactBoundaryService = new TopicSelectionNeedDiscoveryArtifactBoundaryService(
+    topicSelectionControlPlaneService,
+  );
+  const topicSelectionV1aContextCompilerService = new TopicSelectionNeedDiscoveryContextCompilerService(
+    topicSelectionV1aArtifactBoundaryService,
+  );
+  const topicSelectionV1aLlmGateway = options.topicSelectionV1aLlmGateway ?? llmGateway;
+  const topicSelectionV1aAgentOrchestratorService = new TopicSelectionAgentOrchestratorService({
+    controlPlane: topicSelectionControlPlaneService,
+    llmGateway: topicSelectionV1aLlmGateway,
+  });
+  const topicSelectionV1aNeedCandidateBatchPersistenceService = new TopicSelectionPersistNeedCandidateBatchService(
+    topicSelectionNeedValidationRepository,
+  );
+  const topicSelectionV1aGenerateNeedCandidateAdapterService =
+    new TopicSelectionGenerateNeedCandidateOrchestratorAdapterService({
+      contextCompiler: topicSelectionV1aContextCompilerService,
+      agentOrchestrator: topicSelectionV1aAgentOrchestratorService,
+      artifactBoundary: topicSelectionV1aArtifactBoundaryService,
+      draftBatchValidator: new TopicSelectionRankedCandidateDraftBatchValidatorService(),
+      needCandidateBatchPersistence: topicSelectionV1aNeedCandidateBatchPersistenceService,
+    });
+  const topicSelectionV1aEvidenceMapMaterializationService = new TopicSelectionEvidenceMapMaterializationService();
+  const topicSelectionWorkflowHarnessService = new TopicSelectionWorkflowHarnessService({
+    contextCompiler: topicSelectionV1aContextCompilerService,
+    generateNeedCandidateAdapter: topicSelectionV1aGenerateNeedCandidateAdapterService,
+    artifactBoundary: topicSelectionV1aArtifactBoundaryService,
+    controlPlane: topicSelectionControlPlaneService,
+    searchResources: topicSelectionSearchResourceService,
+    evidenceMaps: topicSelectionEvidenceMapService,
+    evidenceMapMaterializer: topicSelectionV1aEvidenceMapMaterializationService,
+    evidenceMapExtractionAgent: topicSelectionV1aAgentOrchestratorService,
+    needValidation: topicSelectionNeedValidationService,
+    needAdjudicationAgent: topicSelectionV1aAgentOrchestratorService,
+    humanConfirmationSemanticReviewAgent: topicSelectionV1aAgentOrchestratorService,
+  });
   const topicSelectionV1aController = new TopicSelectionV1aController(
     topicSelectionControlPlaneService,
     topicSelectionSearchResourceService,
@@ -378,11 +427,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     topicSelectionNeedValidationService,
     topicSelectionRecheckRiskMemoryService,
     topicSelectionOfflineEvaluationReplayService,
+    topicSelectionWorkflowHarnessService,
   );
-  const literatureContentProcessingSettingsService = new LiteratureContentProcessingSettingsService(applicationSettingsRepository);
-  const llmGateway = new BackendLlmGateway({
-    settingsService: literatureContentProcessingSettingsService,
-  });
   const topicSelectionResourceSamplingLlmGateway = options.topicSelectionResourceSamplingLlmGateway ?? llmGateway;
   const topicSelectionResourceSamplingService = new TopicSelectionResourceSamplingService({
     repository: topicSelectionResourceSamplingRepository,

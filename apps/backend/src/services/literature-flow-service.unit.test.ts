@@ -123,7 +123,7 @@ function createMockSettingsService(
     resolveExtractionConfig: async () => ({
       apiKey: 'sk-test',
       provider: 'openai',
-      model: 'gpt-5.4-mini',
+      model: 'gpt-5.5',
       profileId: 'default',
       runtime: {
         preferred_key_content_method: 'llm_gateway',

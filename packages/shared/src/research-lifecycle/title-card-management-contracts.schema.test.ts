@@ -34,6 +34,7 @@ import * as topicSelectionOfflineEvaluationReplayContracts from './topic-selecti
 import * as topicSelectionRecheckRiskMemoryContracts from './topic-selection-recheck-risk-memory-contracts.js';
 import * as topicSelectionResourceSamplingContracts from './topic-selection-resource-sampling-contracts.js';
 import * as topicSelectionSearchResourceContracts from './topic-selection-search-resource-contracts.js';
+import * as topicSelectionV1aWorkflowHarnessContracts from './topic-selection-v1a-workflow-harness-contracts.js';
 import * as topicSelectionV1bIntakeContracts from './topic-selection-v1b-intake-contracts.js';
 import * as topicSelectionV1bResearchSliceContracts from './topic-selection-v1b-research-slice-contracts.js';
 import * as topicSelectionV1bTopicQuestionContracts from './topic-selection-v1b-topic-question-contracts.js';
@@ -3357,6 +3358,7 @@ test('research-lifecycle barrel re-exports the runtime value surface of split mo
     ...Object.keys(topicSelectionNeedValidationContracts),
     ...Object.keys(topicSelectionRecheckRiskMemoryContracts),
     ...Object.keys(topicSelectionOfflineEvaluationReplayContracts),
+    ...Object.keys(topicSelectionV1aWorkflowHarnessContracts),
     ...Object.keys(topicSelectionV1bIntakeContracts),
     ...Object.keys(topicSelectionV1bResearchSliceContracts),
     ...Object.keys(topicSelectionV1bTopicQuestionContracts),

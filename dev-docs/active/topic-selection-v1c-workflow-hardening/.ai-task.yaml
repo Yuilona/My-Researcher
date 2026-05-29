@@ -2,8 +2,8 @@ version: 1
 task_id: T-108
 project: main
 slug: topic-selection-v1c-workflow-hardening
-status: planned
-updated: "2026-05-25"
+status: done
+updated: "2026-05-29"
 keywords:
   - topic-selection
   - v1c

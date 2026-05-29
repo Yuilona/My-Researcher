@@ -2,7 +2,6 @@ import crypto from 'node:crypto';
 
 import type {
   TopicSelectionActorType,
-  TopicSelectionArtifactRefRecord,
   TopicSelectionChainTransitionAttemptRecord,
   TopicSelectionFunctionalRef,
   TopicSelectionGateIssue,
@@ -36,14 +35,19 @@ import type {
 
 import { AppError } from '../errors/app-error.js';
 import type {
-  TopicSelectionV1cPromotionGateControlPlanePersistence,
+  TopicSelectionV1cPromotionGateCheckControlPlanePersistence,
   TopicSelectionV1cPromotionGateRecordBundle,
   TopicSelectionV1cPromotionGateRepository,
+  TopicSelectionV1cPromotionSupportControlPlanePersistence,
+  TopicSelectionV1cPromotionSupportRecordBundle,
 } from '../repositories/topic-selection-v1c-promotion-gate.repository.js';
 import type {
   BackendLlmGateway,
   LlmCallTelemetry,
   LlmModelRef,
+} from './llm-gateway.js';
+import {
+  DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
 } from './llm-gateway.js';
 import {
   sha256Text,
@@ -59,7 +63,7 @@ const DEFAULT_PROMPT_TEMPLATE_VERSION = '1';
 const DEFAULT_WORKFLOW_PROFILE_VERSION = '1';
 const DEFAULT_MODEL: LlmModelRef = {
   providerId: 'openai',
-  modelId: 'gpt-5.4-mini',
+  modelId: 'gpt-5.5',
   profileId: WORKFLOW_PROFILE_KEY,
 };
 
@@ -76,6 +80,16 @@ export type CreatePromotionGateSupportInput = {
   model?: LlmModelRef | null;
 };
 
+export type CreatePromotionDecisionSupportInput = CreatePromotionGateSupportInput;
+
+export type CreatePromotionGateCheckFromSupportInput = {
+  promotion_decision_support_id?: string | null;
+  support_run_key?: string | null;
+  workspace_id?: string | null;
+  created_by?: TopicSelectionActorType;
+  policy_version_id?: string | null;
+};
+
 export type TopicSelectionPromotionInputHandoffProvider = {
   getPromotionInputHandoff(
     promotionInputSnapshotId: string,
@@ -83,6 +97,14 @@ export type TopicSelectionPromotionInputHandoffProvider = {
 };
 
 export type TopicSelectionV1cPromotionGateCreationResult =
+  TopicSelectionV1cPromotionGateRecordBundle & {
+    handoff: TopicSelectionPromotionGateHandoff;
+  };
+
+export type TopicSelectionV1cPromotionDecisionSupportCreationResult =
+  TopicSelectionV1cPromotionSupportRecordBundle;
+
+export type TopicSelectionV1cPromotionGateCheckCreationResult =
   TopicSelectionV1cPromotionGateRecordBundle & {
     handoff: TopicSelectionPromotionGateHandoff;
   };
@@ -133,9 +155,9 @@ export class TopicSelectionV1cPromotionGateService {
     this.now = options.now ?? (() => new Date().toISOString());
   }
 
-  async createPromotionGateSupport(
-    input: CreatePromotionGateSupportInput,
-  ): Promise<TopicSelectionV1cPromotionGateCreationResult> {
+  async createPromotionDecisionSupport(
+    input: CreatePromotionDecisionSupportInput,
+  ): Promise<TopicSelectionV1cPromotionDecisionSupportCreationResult> {
     const handoff = await this.promotionInputService.getPromotionInputHandoff(
       input.promotion_input_snapshot_id,
     );
@@ -154,12 +176,9 @@ export class TopicSelectionV1cPromotionGateService {
       promptTemplateVersion,
       model,
     });
-    const existing = await this.repository.findBundleBySupportRunKey(supportRunKey);
+    const existing = await this.repository.findSupportBundleBySupportRunKey(supportRunKey);
     if (existing) {
-      return {
-        ...existing,
-        handoff: this.toHandoff(existing),
-      };
+      return existing;
     }
 
     const createdBy = input.created_by ?? 'system';
@@ -174,8 +193,6 @@ export class TopicSelectionV1cPromotionGateService {
         };
     const supportId = this.idFactory('promotion_decision_support');
     const dossierId = this.idFactory('promotion_dossier');
-    const miniCheckId = this.idFactory('argument_readiness_mini_check');
-    const gateCheckId = this.idFactory('promotion_gate_check');
     const inputSnapshotId = this.idFactory('input_snapshot');
     const workflowRunId = this.idFactory('workflow_run');
     const supportArtifactId = this.idFactory('artifact_ref');
@@ -183,7 +200,6 @@ export class TopicSelectionV1cPromotionGateService {
     const sourceRefs = this.compileSourceRefs(handoff);
     const supportArtifactRef = this.ref('artifact_ref', supportArtifactId, handoff.snapshot.title_card_id, null);
     const dossierArtifactRef = this.ref('artifact_ref', dossierArtifactId, handoff.snapshot.title_card_id, null);
-    const artifactRefs = [supportArtifactRef, dossierArtifactRef];
     const supportWarnings = this.compileSupportWarnings(handoff, llmDraft.fallbackWarning);
     const support: TopicSelectionPromotionDecisionSupportRecord = {
       promotion_decision_support_id: supportId,
@@ -231,10 +247,88 @@ export class TopicSelectionV1cPromotionGateService {
       created_by: createdBy,
       created_at: now,
     };
+    const controlPlane = this.buildSupportControlPlaneRecords({
+      handoff,
+      support,
+      dossier,
+      inputSnapshotId,
+      workflowRunId,
+      supportArtifactId,
+      dossierArtifactId,
+      policyVersionId: input.policy_version_id ?? null,
+      promptTemplateVersion,
+      workflowProfileVersion,
+      model,
+      mode,
+      llmDraft,
+      createdBy,
+      now,
+    });
+
+    return this.repository.createSupportBundle({
+      promotion_decision_support: support,
+      promotion_dossier: dossier,
+      control_plane: controlPlane,
+    });
+  }
+
+  async createPromotionGateCheckFromSupport(
+    input: CreatePromotionGateCheckFromSupportInput,
+  ): Promise<TopicSelectionV1cPromotionGateCheckCreationResult> {
+    const supportBundle = input.promotion_decision_support_id
+      ? await this.repository.findSupportBundleByDecisionSupportId(input.promotion_decision_support_id)
+      : input.support_run_key
+        ? await this.repository.findSupportBundleBySupportRunKey(input.support_run_key)
+        : null;
+    if (!supportBundle) {
+      throw new AppError(
+        404,
+        'NOT_FOUND',
+        input.promotion_decision_support_id || input.support_run_key
+          ? 'PromotionDecisionSupport for gate check was not found.'
+          : 'promotion_decision_support_id or support_run_key is required to create a promotion gate check.',
+      );
+    }
+
+    const { promotion_decision_support: support, promotion_dossier: dossier } = supportBundle;
+    const existingGate = await this.repository.findGateCheckBundleBySupportRunKey(support.support_run_key);
+    if (existingGate) {
+      const bundle = {
+        ...supportBundle,
+        ...existingGate,
+      };
+      return {
+        ...bundle,
+        handoff: this.toHandoff(bundle),
+      };
+    }
+
+    const handoff = await this.promotionInputService.getPromotionInputHandoff(
+      support.promotion_input_snapshot_id,
+    );
+    this.assertWorkspace(input.workspace_id ?? support.workspace_id ?? null, handoff);
+    if (handoff.snapshot_hashes.promotion_input_snapshot_hash !== support.promotion_input_snapshot_hash) {
+      throw new AppError(
+        409,
+        'VERSION_CONFLICT',
+        'PromotionDecisionSupport snapshot hash does not match the current PromotionInputSnapshot handoff.',
+      );
+    }
+
+    const createdBy = input.created_by ?? support.created_by;
+    const now = this.now();
+    const miniCheckId = this.idFactory('argument_readiness_mini_check');
+    const gateCheckId = this.idFactory('promotion_gate_check');
+    const inputSnapshotId = this.idFactory('input_snapshot');
+    const workflowRunId = this.idFactory('workflow_run');
+    const artifactRefs = this.uniqueRefs([
+      ...support.artifact_refs,
+      ...dossier.artifact_refs,
+    ]);
     const miniCheckEvaluation = this.buildMiniCheck({
       handoff,
       support,
-      supportRunKey,
+      supportRunKey: support.support_run_key,
       miniCheckId,
       artifactRefs,
       createdBy,
@@ -251,11 +345,11 @@ export class TopicSelectionV1cPromotionGateService {
     });
     const gateCheck: TopicSelectionPromotionGateCheckRecord = {
       promotion_gate_check_id: gateCheckId,
-      support_run_key: supportRunKey,
+      support_run_key: support.support_run_key,
       workspace_id: handoff.snapshot.workspace_id ?? null,
       title_card_id: handoff.snapshot.title_card_id,
-      promotion_decision_support_id: supportId,
-      promotion_dossier_id: dossierId,
+      promotion_decision_support_id: support.promotion_decision_support_id,
+      promotion_dossier_id: dossier.promotion_dossier_id,
       argument_readiness_mini_check_id: miniCheckId,
       promotion_input_snapshot_id: handoff.promotion_input_snapshot_id,
       promotion_input_snapshot_ref: handoff.promotion_input_snapshot_ref,
@@ -270,7 +364,7 @@ export class TopicSelectionV1cPromotionGateService {
       blocker_refs: handoff.blocker_refs,
       recheck_request_refs: handoff.recheck_request_refs,
       memory_suggestion_refs: handoff.memory_suggestion_refs,
-      source_refs: sourceRefs,
+      source_refs: support.source_refs,
       snapshot_hashes: handoff.snapshot_hashes,
       input_snapshot_id: inputSnapshotId,
       workflow_run_id: workflowRunId,
@@ -281,7 +375,7 @@ export class TopicSelectionV1cPromotionGateService {
       created_by: createdBy,
       created_at: now,
     };
-    const controlPlane = this.buildControlPlaneRecords({
+    const controlPlane = this.buildGateCheckControlPlaneRecords({
       handoff,
       support,
       dossier,
@@ -289,14 +383,7 @@ export class TopicSelectionV1cPromotionGateService {
       gateCheck,
       inputSnapshotId,
       workflowRunId,
-      supportArtifactId,
-      dossierArtifactId,
       policyVersionId: input.policy_version_id ?? null,
-      promptTemplateVersion,
-      workflowProfileVersion,
-      model,
-      mode,
-      llmDraft,
       createdBy,
       now,
     });
@@ -304,17 +391,31 @@ export class TopicSelectionV1cPromotionGateService {
     gateCheck.transition_attempt_id = controlPlane.transition_attempt.chain_transition_attempt_id;
     gateCheck.trace_snapshot_id = controlPlane.trace_snapshot.trace_snapshot_id;
 
-    const bundle = await this.repository.createBundle({
-      promotion_decision_support: support,
-      promotion_dossier: dossier,
+    const gateBundle = await this.repository.createGateCheckBundle({
       argument_readiness_mini_check: miniCheckEvaluation.record,
       promotion_gate_check: gateCheck,
       control_plane: controlPlane,
     });
+    const bundle = {
+      ...supportBundle,
+      ...gateBundle,
+    };
     return {
       ...bundle,
       handoff: this.toHandoff(bundle),
     };
+  }
+
+  async createPromotionGateSupport(
+    input: CreatePromotionGateSupportInput,
+  ): Promise<TopicSelectionV1cPromotionGateCreationResult> {
+    const supportBundle = await this.createPromotionDecisionSupport(input);
+    return this.createPromotionGateCheckFromSupport({
+      promotion_decision_support_id: supportBundle.promotion_decision_support.promotion_decision_support_id,
+      workspace_id: input.workspace_id ?? null,
+      created_by: input.created_by,
+      policy_version_id: input.policy_version_id ?? null,
+    });
   }
 
   async getPromotionDecisionSupport(
@@ -394,17 +495,11 @@ export class TopicSelectionV1cPromotionGateService {
     supportRunKey: string;
   }): Promise<LlmDraftResult> {
     if (!this.llmGateway) {
-      return {
-        draft: null,
-        raw: null,
-        telemetry: null,
-        fallbackWarning: this.issue(
-          'llm_draft_failed_fallback',
-          'LLM draft mode was requested but no gateway was configured; deterministic support was persisted.',
-          'warning',
-          [input.handoff.promotion_input_snapshot_ref],
-        ),
-      };
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        'LLM draft mode requires an explicitly configured LLM gateway; default deterministic fallback is disabled.',
+      );
     }
     try {
       const response = await this.llmGateway.createStructuredOutput<TopicSelectionPromotionDecisionSupportLlmDraft>({
@@ -439,6 +534,7 @@ export class TopicSelectionV1cPromotionGateService {
         ],
         schemaName: 'TopicSelectionPromotionDecisionSupportLlmDraft',
         schema: topicSelectionPromotionDecisionSupportLlmDraftSchema as unknown as Record<string, unknown>,
+        normalizedParams: DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
         policy: {
           timeoutMs: 60_000,
           maxRetries: 1,
@@ -451,19 +547,16 @@ export class TopicSelectionV1cPromotionGateService {
         fallbackWarning: null,
       };
     } catch (error) {
-      return {
-        draft: null,
-        raw: {
-          error: error instanceof Error ? error.message : String(error),
+      throw new AppError(
+        502,
+        'INTERNAL_ERROR',
+        'LLM draft generation failed; default deterministic fallback is disabled.',
+        {
+          cause: error instanceof Error ? error.message : String(error),
+          failure_code: 'LLM_INVOCATION_FAILED',
+          support_run_key: input.supportRunKey,
         },
-        telemetry: null,
-        fallbackWarning: this.issue(
-          'llm_draft_failed_fallback',
-          'LLM draft generation failed; deterministic support was persisted.',
-          'warning',
-          [input.handoff.promotion_input_snapshot_ref],
-        ),
-      };
+      );
     }
   }
 
@@ -711,12 +804,10 @@ export class TopicSelectionV1cPromotionGateService {
     };
   }
 
-  private buildControlPlaneRecords(input: {
+  private buildSupportControlPlaneRecords(input: {
     handoff: TopicSelectionPromotionInputSnapshotHandoff;
     support: TopicSelectionPromotionDecisionSupportRecord;
     dossier: TopicSelectionPromotionDossierRecord;
-    miniCheck: TopicSelectionArgumentReadinessMiniCheckRecord;
-    gateCheck: TopicSelectionPromotionGateCheckRecord;
     inputSnapshotId: string;
     workflowRunId: string;
     supportArtifactId: string;
@@ -729,14 +820,8 @@ export class TopicSelectionV1cPromotionGateService {
     llmDraft: LlmDraftResult;
     createdBy: TopicSelectionActorType;
     now: string;
-  }): TopicSelectionV1cPromotionGateControlPlanePersistence {
-    const gateRef = this.ref(
-      'promotion_gate_check',
-      input.gateCheck.promotion_gate_check_id,
-      input.gateCheck.title_card_id,
-      input.gateCheck.promotion_input_snapshot_hash,
-    );
-    const sourceRefs = input.gateCheck.source_refs;
+  }): TopicSelectionV1cPromotionSupportControlPlanePersistence {
+    const sourceRefs = input.support.source_refs;
     const snapshotPayload = {
       promotion_input_snapshot_handoff: input.handoff,
       support_generation_mode: input.mode,
@@ -747,8 +832,8 @@ export class TopicSelectionV1cPromotionGateService {
     };
     const inputSnapshot: TopicSelectionInputSnapshotRecord = {
       input_snapshot_id: input.inputSnapshotId,
-      workspace_id: input.gateCheck.workspace_id ?? null,
-      title_card_id: input.gateCheck.title_card_id,
+      workspace_id: input.support.workspace_id ?? null,
+      title_card_id: input.support.title_card_id,
       target_ref: input.handoff.promotion_input_snapshot_ref,
       context_policy_version_id: input.policyVersionId,
       policy_version: input.policyVersionId,
@@ -761,8 +846,8 @@ export class TopicSelectionV1cPromotionGateService {
     };
     const workflowRun: TopicSelectionLlmWorkflowRunRecord = {
       workflow_run_id: input.workflowRunId,
-      workspace_id: input.gateCheck.workspace_id ?? null,
-      title_card_id: input.gateCheck.title_card_id,
+      workspace_id: input.support.workspace_id ?? null,
+      title_card_id: input.support.title_card_id,
       workflow_key: WORKFLOW_KEY,
       workflow_profile_key: WORKFLOW_PROFILE_KEY,
       workflow_profile_version: input.workflowProfileVersion,
@@ -775,13 +860,12 @@ export class TopicSelectionV1cPromotionGateService {
       started_at: input.now,
       finished_at: input.now,
       telemetry: {
-        deterministic_gate_authoritative: true,
+        deterministic_gate_authoritative: false,
         llm_draft_telemetry: input.llmDraft.telemetry,
       },
       output_summary: {
-        disposition: input.gateCheck.disposition,
         support_status: input.support.support_status,
-        required_action_codes: input.gateCheck.required_actions.map((action) => action.action_code),
+        reviewer_question_count: input.support.reviewer_questions.length,
       },
       error_code: null,
       error_message: null,
@@ -790,55 +874,138 @@ export class TopicSelectionV1cPromotionGateService {
     const supportArtifactPayload = {
       support: input.support,
       llm_draft_raw: input.llmDraft.raw,
-      deterministic_gate_authoritative: true,
+      deterministic_gate_authoritative: false,
     };
     const dossierArtifactPayload = {
       dossier: input.dossier,
       packet: input.dossier.dossier_payload,
     };
-    const artifactRefs: TopicSelectionArtifactRefRecord[] = [
-      {
-        artifact_ref_id: input.supportArtifactId,
-        workspace_id: input.gateCheck.workspace_id ?? null,
-        title_card_id: input.gateCheck.title_card_id,
-        artifact_kind: 'structured_output',
-        storage_kind: 'inline',
-        uri: null,
-        payload: supportArtifactPayload,
-        checksum: sha256Text(stableStringify(supportArtifactPayload)),
-        byte_size: null,
-        mime_type: 'application/json',
-        workflow_run_id: input.workflowRunId,
-        input_snapshot_id: input.inputSnapshotId,
-        created_by: input.createdBy,
-        created_at: input.now,
+    return {
+      input_snapshot: inputSnapshot,
+      workflow_run: workflowRun,
+      artifact_refs: [
+        {
+          artifact_ref_id: input.supportArtifactId,
+          workspace_id: input.support.workspace_id ?? null,
+          title_card_id: input.support.title_card_id,
+          artifact_kind: 'structured_output',
+          storage_kind: 'inline',
+          uri: null,
+          payload: supportArtifactPayload,
+          checksum: sha256Text(stableStringify(supportArtifactPayload)),
+          byte_size: null,
+          mime_type: 'application/json',
+          workflow_run_id: input.workflowRunId,
+          input_snapshot_id: input.inputSnapshotId,
+          created_by: input.createdBy,
+          created_at: input.now,
+        },
+        {
+          artifact_ref_id: input.dossierArtifactId,
+          workspace_id: input.support.workspace_id ?? null,
+          title_card_id: input.support.title_card_id,
+          artifact_kind: 'other',
+          storage_kind: 'inline',
+          uri: null,
+          payload: dossierArtifactPayload,
+          checksum: sha256Text(stableStringify(dossierArtifactPayload)),
+          byte_size: null,
+          mime_type: 'application/json',
+          workflow_run_id: input.workflowRunId,
+          input_snapshot_id: input.inputSnapshotId,
+          created_by: input.createdBy,
+          created_at: input.now,
+        },
+      ],
+    };
+  }
+
+  private buildGateCheckControlPlaneRecords(input: {
+    handoff: TopicSelectionPromotionInputSnapshotHandoff;
+    support: TopicSelectionPromotionDecisionSupportRecord;
+    dossier: TopicSelectionPromotionDossierRecord;
+    miniCheck: TopicSelectionArgumentReadinessMiniCheckRecord;
+    gateCheck: TopicSelectionPromotionGateCheckRecord;
+    inputSnapshotId: string;
+    workflowRunId: string;
+    policyVersionId: string | null;
+    createdBy: TopicSelectionActorType;
+    now: string;
+  }): TopicSelectionV1cPromotionGateCheckControlPlanePersistence {
+    const gateRef = this.ref(
+      'promotion_gate_check',
+      input.gateCheck.promotion_gate_check_id,
+      input.gateCheck.title_card_id,
+      input.gateCheck.promotion_input_snapshot_hash,
+    );
+    const supportRef = this.ref(
+      'promotion_decision_support',
+      input.support.promotion_decision_support_id,
+      input.gateCheck.title_card_id,
+      null,
+    );
+    const dossierRef = this.ref(
+      'promotion_dossier',
+      input.dossier.promotion_dossier_id,
+      input.gateCheck.title_card_id,
+      null,
+    );
+    const miniCheckRef = this.ref(
+      'argument_readiness_mini_check',
+      input.miniCheck.argument_readiness_mini_check_id,
+      input.gateCheck.title_card_id,
+      null,
+    );
+    const snapshotPayload = {
+      promotion_decision_support_ref: supportRef,
+      promotion_dossier_ref: dossierRef,
+      promotion_input_snapshot_ref: input.handoff.promotion_input_snapshot_ref,
+      policy_version_id: input.policyVersionId,
+    };
+    const inputSnapshot: TopicSelectionInputSnapshotRecord = {
+      input_snapshot_id: input.inputSnapshotId,
+      workspace_id: input.gateCheck.workspace_id ?? null,
+      title_card_id: input.gateCheck.title_card_id,
+      target_ref: supportRef,
+      context_policy_version_id: input.policyVersionId,
+      policy_version: input.policyVersionId,
+      snapshot_hash: sha256Text(stableStringify(snapshotPayload)),
+      source_refs: input.gateCheck.source_refs,
+      permission_refs: [],
+      payload: snapshotPayload,
+      created_by: input.createdBy,
+      created_at: input.now,
+    };
+    const workflowRun: TopicSelectionLlmWorkflowRunRecord = {
+      workflow_run_id: input.workflowRunId,
+      workspace_id: input.gateCheck.workspace_id ?? null,
+      title_card_id: input.gateCheck.title_card_id,
+      workflow_key: GATE_KEY,
+      workflow_profile_key: WORKFLOW_PROFILE_KEY,
+      workflow_profile_version: null,
+      input_snapshot_id: input.inputSnapshotId,
+      status: 'succeeded',
+      provider_id: null,
+      model_id: null,
+      prompt_template_id: null,
+      prompt_template_version: null,
+      started_at: input.now,
+      finished_at: input.now,
+      telemetry: {
+        deterministic_gate_authoritative: true,
+        consumed_support_run_key: input.support.support_run_key,
       },
-      {
-        artifact_ref_id: input.dossierArtifactId,
-        workspace_id: input.gateCheck.workspace_id ?? null,
-        title_card_id: input.gateCheck.title_card_id,
-        artifact_kind: 'other',
-        storage_kind: 'inline',
-        uri: null,
-        payload: dossierArtifactPayload,
-        checksum: sha256Text(stableStringify(dossierArtifactPayload)),
-        byte_size: null,
-        mime_type: 'application/json',
-        workflow_run_id: input.workflowRunId,
-        input_snapshot_id: input.inputSnapshotId,
-        created_by: input.createdBy,
-        created_at: input.now,
+      output_summary: {
+        disposition: input.gateCheck.disposition,
+        required_action_codes: input.gateCheck.required_actions.map((action) => action.action_code),
       },
-    ];
+      error_code: null,
+      error_message: null,
+      created_by: input.createdBy,
+    };
     const gateResultId = this.idFactory('readiness_gate_result');
     const transitionAttemptId = this.idFactory('chain_transition_attempt');
     const traceSnapshotId = this.idFactory('trace_snapshot');
-    const artifactFunctionalRefs = artifactRefs.map((artifact) => this.ref(
-      'artifact_ref',
-      artifact.artifact_ref_id,
-      artifact.title_card_id ?? null,
-      null,
-    ));
     const readinessGateResult: TopicSelectionReadinessGateResultRecord = {
       readiness_gate_result_id: gateResultId,
       workspace_id: input.gateCheck.workspace_id ?? null,
@@ -863,7 +1030,7 @@ export class TopicSelectionV1cPromotionGateService {
       workspace_id: input.gateCheck.workspace_id ?? null,
       title_card_id: input.gateCheck.title_card_id,
       transition_key: TRANSITION_KEY,
-      source_ref: input.handoff.promotion_input_snapshot_ref,
+      source_ref: supportRef,
       target_ref: gateRef,
       gate_result_id: gateResultId,
       workflow_run_id: input.workflowRunId,
@@ -873,17 +1040,12 @@ export class TopicSelectionV1cPromotionGateService {
         actor_type: input.createdBy,
       },
       result: this.toTransitionResult(input.gateCheck.disposition),
-      reason: `Promotion gate support created with disposition ${input.gateCheck.disposition}.`,
+      reason: `Promotion gate check created with disposition ${input.gateCheck.disposition}.`,
       required_actions: input.gateCheck.required_actions.map((action) => action.action_code),
       blockers: input.gateCheck.blockers,
       accepted_risk_refs: input.gateCheck.accepted_risk_refs,
       state_write_intents: [],
-      created_authority_refs: [
-        this.ref('promotion_decision_support', input.support.promotion_decision_support_id, input.gateCheck.title_card_id, null),
-        this.ref('promotion_dossier', input.dossier.promotion_dossier_id, input.gateCheck.title_card_id, null),
-        this.ref('argument_readiness_mini_check', input.miniCheck.argument_readiness_mini_check_id, input.gateCheck.title_card_id, null),
-        gateRef,
-      ],
+      created_authority_refs: [miniCheckRef, gateRef],
       created_at: input.now,
     };
     const traceSnapshotPayload = {
@@ -902,14 +1064,14 @@ export class TopicSelectionV1cPromotionGateService {
       snapshot_hash: sha256Text(stableStringify(traceSnapshotPayload)),
       object_refs: [
         input.handoff.promotion_input_snapshot_ref,
-        this.ref('promotion_decision_support', input.support.promotion_decision_support_id, input.gateCheck.title_card_id, null),
-        this.ref('promotion_dossier', input.dossier.promotion_dossier_id, input.gateCheck.title_card_id, null),
-        this.ref('argument_readiness_mini_check', input.miniCheck.argument_readiness_mini_check_id, input.gateCheck.title_card_id, null),
+        supportRef,
+        dossierRef,
+        miniCheckRef,
         gateRef,
-        ...sourceRefs,
+        ...input.gateCheck.source_refs,
       ],
       lineage_link_refs: [],
-      artifact_refs: artifactFunctionalRefs,
+      artifact_refs: input.gateCheck.artifact_refs,
       quality_signal_refs: [],
       transition_attempt_refs: [
         this.ref('chain_transition_attempt', transitionAttemptId, input.gateCheck.title_card_id, null),
@@ -921,7 +1083,6 @@ export class TopicSelectionV1cPromotionGateService {
     return {
       input_snapshot: inputSnapshot,
       workflow_run: workflowRun,
-      artifact_refs: artifactRefs,
       readiness_gate_result: readinessGateResult,
       transition_attempt: transitionAttempt,
       trace_snapshot: traceSnapshot,
@@ -1150,12 +1311,71 @@ export class TopicSelectionV1cPromotionGateService {
   ): Record<string, unknown> {
     const packageSnapshot = this.asRecord(handoff.snapshot.package_snapshot);
     const packageDraftInputSnapshot = this.asRecord(handoff.snapshot.package_draft_input_snapshot);
+    const claimCeiling = this.resolveClaimCeiling(packageSnapshot, packageDraftInputSnapshot);
+    const contributionSummary = this.readStringAtAnyPath(packageSnapshot, [
+      ['contribution_summary'],
+      ['package_payload', 'contribution_summary'],
+      ['summary'],
+    ]);
+    const evaluationPlan = this.readStringAtAnyPath(packageSnapshot, [
+      ['evaluation_plan'],
+      ['package_payload', 'evaluation_plan'],
+      ['evaluation_plan_summary'],
+    ]) ?? this.readStringAtAnyPath(packageDraftInputSnapshot, [
+      ['evaluation_plan'],
+      ['value_assessment_input', 'evaluation_plan'],
+    ]);
     return {
       summary: support.summary,
       dossier_markdown: draft?.dossier_markdown ?? null,
       reviewer_questions: support.reviewer_questions,
       risk_notes: support.risk_notes,
       recheck_notes: support.recheck_notes,
+      n3_semantic_layer: {
+        claim_ceiling_alignment: {
+          status: claimCeiling ? 'addressed' : 'missing',
+          refs: [handoff.topic_question_contract_ref],
+          rationale: claimCeiling ?? 'Claim ceiling is missing from the frozen promotion input.',
+        },
+        contribution_summary: {
+          status: contributionSummary ? 'addressed' : 'missing',
+          refs: [handoff.topic_package_ref],
+          rationale: contributionSummary ?? 'Contribution summary is missing from the frozen promotion input.',
+        },
+        evaluation_plan_summary: {
+          status: evaluationPlan ? 'addressed' : 'missing',
+          refs: [handoff.topic_package_ref, handoff.answerability_plan_ref],
+          rationale: evaluationPlan ?? 'Evaluation plan is missing from the frozen promotion input.',
+        },
+        evidence_support_map: {
+          status: handoff.evidence_refs.length > 0 ? 'addressed' : 'missing',
+          refs: handoff.evidence_refs.map((record) => record.evidence_ref),
+          rationale: handoff.evidence_refs.length > 0
+            ? 'Selected evidence refs are present in the frozen promotion input.'
+            : 'Selected evidence refs are missing from the frozen promotion input.',
+        },
+        accepted_risk_acknowledgements: {
+          status: 'addressed',
+          refs: handoff.accepted_risk_refs,
+          rationale: handoff.accepted_risk_refs.length > 0
+            ? 'Accepted risks are carried forward for human review.'
+            : 'No accepted risks are carried forward.',
+        },
+        recheck_obligation_summary: {
+          status: handoff.recheck_request_refs.length > 0 ? 'weak' : 'addressed',
+          refs: handoff.recheck_request_refs,
+          rationale: handoff.recheck_request_refs.length > 0
+            ? 'Carried recheck requests must be resolved before promotion.'
+            : 'No carried recheck requests are present.',
+        },
+        critic_finding_resolution_map: [],
+        readiness_coverage_items: support.reviewer_questions.map((question, index) => ({
+          item_id: `readiness_coverage_${String(index + 1).padStart(3, '0')}`,
+          status: 'addressed',
+          refs: [handoff.promotion_input_snapshot_ref],
+          rationale: question,
+        })),
+      },
       source_lineage: {
         promotion_input_snapshot_ref: handoff.promotion_input_snapshot_ref,
         topic_package_ref: handoff.topic_package_ref,
@@ -1174,20 +1394,9 @@ export class TopicSelectionV1cPromotionGateService {
       source_snapshot_excerpt: {
         topic_package_id: handoff.topic_package_id,
         package_version: handoff.package_version,
-        contribution_summary: this.readStringAtAnyPath(packageSnapshot, [
-          ['contribution_summary'],
-          ['package_payload', 'contribution_summary'],
-          ['summary'],
-        ]),
-        evaluation_plan: this.readStringAtAnyPath(packageSnapshot, [
-          ['evaluation_plan'],
-          ['package_payload', 'evaluation_plan'],
-          ['evaluation_plan_summary'],
-        ]) ?? this.readStringAtAnyPath(packageDraftInputSnapshot, [
-          ['evaluation_plan'],
-          ['value_assessment_input', 'evaluation_plan'],
-        ]),
-        claim_ceiling: this.resolveClaimCeiling(packageSnapshot, packageDraftInputSnapshot),
+        contribution_summary: contributionSummary,
+        evaluation_plan: evaluationPlan,
+        claim_ceiling: claimCeiling,
         prohibited_claims: this.readStringArrayAtAnyPath(packageSnapshot, [
           ['prohibited_claims'],
           ['package_payload', 'prohibited_claims'],

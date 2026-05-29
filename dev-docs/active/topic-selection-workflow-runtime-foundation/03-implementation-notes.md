@@ -402,7 +402,7 @@
 - Locked N3-D04 for SearchPlanBlueprint semantic draft/review model policy.
 - `codex_assisted` is the default execution mode for both blueprint draft and review in this local personal-use workflow.
 - `provider_llm` is reserved for explicit operator upgrade or provider-quality scenarios; `mocked_llm` remains test/acceptance-only.
-- Draft profile: `topic-selection.search-plan-blueprint.draft.v1`, output `TopicSelectionSearchPlanBlueprint@v1`, OpenAI `gpt-5.4-mini` default, OpenAI `gpt-5.5` high-accuracy override, DashScope `qwen3.6-plus` budget override, normalized params `creativity=medium`, `reasoning_depth=high`, `output_budget=large`, `json_schema`.
+- Draft profile: `topic-selection.search-plan-blueprint.draft.v1`, output `TopicSelectionSearchPlanBlueprint@v1`, OpenAI `gpt-5.5` default, OpenAI `gpt-5.5` high-accuracy override, DashScope `qwen3.6-plus` budget override, normalized params `creativity=medium`, `reasoning_depth=high`, `output_budget=large`, `json_schema`.
 - Review profile: `topic-selection.search-plan-blueprint.review.v1`, output `TopicSelectionSearchPlanBlueprintReview@v1`, same provider options, normalized params `creativity=low`, `reasoning_depth=high`, `output_budget=medium`, `json_schema`.
 - Node 3 remains deterministic and does not call these profiles; it only consumes a validated blueprint and writes SearchPlan/CoverageRow authorities through the domain service.
 - Automatic provider fallback is disabled; manual rerun or explicit model-option override must create new provenance.
@@ -925,7 +925,7 @@
 - `TopicSelectionAgentOrchestratorService` now accepts `execution_spec` and rejects mismatches with legacy top-level `execution_mode` / `model_option_id`, preventing dual-track invocation semantics.
 - `TopicSelectionNeedDiscoveryDebateLoopService` now accepts `execution_plan` with `default`, `slots`, and repeatable-slot `instances` specs. Instance specs use keys such as `explorer.round_1_discovery#explorer_2`.
 - Legacy `slot_execution_overrides` and `slot_model_option_overrides` remain supported for compatibility, but they cannot be combined with `execution_plan`.
-- Added explicit OpenAI `gpt-5.5` model options: `openai-quality` (`reasoning_depth=medium`) and `openai-deep-reasoning` (`reasoning_depth=high`). Existing `openai-balanced` remains the default; v1a callers can now opt into stronger slots or nodes explicitly.
+- Added explicit OpenAI `gpt-5.5` model options: `openai-quality` (`reasoning_depth=high`) and `openai-deep-reasoning` (`reasoning_depth=high`). Existing `openai-balanced` remains the default; v1a callers can now opt into stronger slots or nodes explicitly.
 - `BackendLlmGateway` now maps normalized provider intent into runtime provider payloads: OpenAI receives `reasoning.effort`, DashScope receives `extra_body.enable_thinking`.
 - The v1a harness E2E runner now builds and passes a canonical `debate_execution_plan` for N6 multi-agent debate instead of relying on legacy slot override fields.
 - N5 evidence extraction, N6 single-agent generation, N7 adjudication, and N8 semantic confirmation review now accept the same `execution_spec` pattern at the WorkflowHarness boundary; deterministic/`none` paths reject model options to avoid dual-track invocation semantics.

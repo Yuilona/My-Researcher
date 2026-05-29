@@ -123,6 +123,16 @@ implements TopicSelectionV1cDownstreamFeedbackRecheckRepository {
     return row ? toFeedbackRecord(row) : null;
   }
 
+  async findFeedbackByFingerprint(
+    feedbackFingerprint: string,
+  ): Promise<TopicSelectionDownstreamTopicFeedbackRecord | null> {
+    const row = await this.prisma.topicSelectionDownstreamTopicFeedback.findFirst({
+      where: { feedbackFingerprint },
+      orderBy: { createdAt: 'desc' },
+    });
+    return row ? toFeedbackRecord(row) : null;
+  }
+
   async listFeedbackByBridgeId(
     paperProjectBridgeId: string,
   ): Promise<TopicSelectionDownstreamTopicFeedbackRecord[]> {

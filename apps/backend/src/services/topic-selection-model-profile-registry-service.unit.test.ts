@@ -15,6 +15,7 @@ import {
   TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS,
   TopicSelectionModelProfileRegistryService,
 } from './topic-selection-model-profile-registry-service.js';
 import type {
@@ -80,7 +81,7 @@ test('model profile registry validates default DMP v1 profiles and resolves prov
 
   assert.equal(resolved.profile.role_family, 'explorer');
   assert.equal(resolved.selected_model_option?.provider_id, 'openai');
-  assert.equal(resolved.selected_model_option?.model_id, 'gpt-5.4-mini');
+  assert.equal(resolved.selected_model_option?.model_id, 'gpt-5.5');
   assert.equal(resolved.selected_model_option?.use_when.includes('default_provider_run'), true);
   assert.equal(resolved.selected_model_option?.request_policy?.timeout_ms, 180000);
   assert.match(resolved.profile_hash, /^[a-f0-9]{64}$/);
@@ -93,7 +94,7 @@ test('model profile registry validates default DMP v1 profiles and resolves prov
     model_option_id: `${TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID}.openai-quality`,
   });
   assert.equal(quality.selected_model_option?.model_id, 'gpt-5.5');
-  assert.equal(quality.selected_model_option?.normalized_params.reasoning_depth, 'medium');
+  assert.equal(quality.selected_model_option?.normalized_params.reasoning_depth, 'high');
   assert.equal(quality.selected_model_option?.request_policy?.timeout_ms, 300000);
 
   const deepReasoning = service.resolveProfile({
@@ -213,6 +214,18 @@ test('model profile registry validates default DMP v1 profiles and resolves prov
   });
   assert.equal(v1bGroupingSupport.profile.output_contract, 'CandidateGroupingSupport@v1');
   assert.equal(v1bGroupingSupport.selected_model_option, null);
+
+  const v1cProviderCanary = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n4_delegated_promotion_decision,
+    execution_mode: 'provider_llm',
+    run_mode: 'acceptance',
+    model_option_id: `${TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n4_delegated_promotion_decision}.openai-balanced`,
+  });
+  assert.equal(v1cProviderCanary.profile.output_contract, 'TopicSelectionV1cDelegatedPromotionDecisionCandidate@v1');
+  assert.equal(v1cProviderCanary.profile.run_mode_eligibility.codex_assisted.length, 0);
+  assert.equal(v1cProviderCanary.selected_model_option?.provider_id, 'openai');
+  assert.equal(v1cProviderCanary.selected_model_option?.normalized_params.creativity, 'low');
+  assert.equal(v1cProviderCanary.selected_model_option?.normalized_params.reasoning_depth, 'high');
 });
 
 test('model profile registry enforces run-mode and role profile execution eligibility', () => {
@@ -230,6 +243,15 @@ test('model profile registry enforces run-mode and role profile execution eligib
   assert.throws(
     () => service.resolveProfile({
       profile_id: TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID,
+      execution_mode: 'codex_assisted',
+      run_mode: 'acceptance',
+    }),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
+
+  assert.throws(
+    () => service.resolveProfile({
+      profile_id: TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n2_bounded_micro_debate,
       execution_mode: 'codex_assisted',
       run_mode: 'acceptance',
     }),

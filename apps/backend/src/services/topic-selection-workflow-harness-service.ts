@@ -82,6 +82,24 @@ import type {
 import type {
   TopicSelectionAgentExecutionSpec,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-profile-contracts';
+import {
+  TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+  TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_RESULT_SCHEMA_VERSION,
+  findTopicSelectionV1aWorkflowHarnessRouteEdge,
+  type TopicSelectionV1aWorkflowHarnessNodeId,
+  type TopicSelectionV1aWorkflowHarnessNodeStatus,
+  type TopicSelectionV1aWorkflowHarnessRunRequest,
+  type TopicSelectionV1aWorkflowHarnessRunResult,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1a-workflow-harness-contracts';
+import type {
+  TopicSelectionV1cHarnessAutomation,
+  TopicSelectionV1cHarnessNodeId,
+  TopicSelectionV1cHarnessNodeResult,
+  TopicSelectionV1cHarnessRoutingOutcome,
+} from './topic-selection-v1c-harness-adapter.js';
+import {
+  TOPIC_SELECTION_V1C_HARNESS_ADAPTER_VERSION,
+} from './topic-selection-v1c-harness-adapter.js';
 import type {
   TopicSelectionCoverageIntentType,
   TopicSelectionCoverageAssessmentRecord,
@@ -167,6 +185,7 @@ const HARNESS_TRACE_PAYLOAD_SCHEMA = 'WorkflowHarnessGenerateNeedCandidateScenar
 const NEED_ADJUDICATION_TRACE_PAYLOAD_SCHEMA = 'WorkflowHarnessValidateNeedAdjudicationScenarioTrace@v1';
 const HUMAN_CONFIRM_NEED_TRACE_PAYLOAD_SCHEMA = 'WorkflowHarnessHumanConfirmNeedScenarioTrace@v1';
 const PUBLISH_V1B_INPUT_BUNDLE_TRACE_PAYLOAD_SCHEMA = 'WorkflowHarnessPublishV1bInputBundleScenarioTrace@v1';
+const V1C_CONSUMPTION_TRACE_PAYLOAD_SCHEMA = 'WorkflowHarnessV1cConsumptionScenarioTrace@v1';
 const NORMALIZED_LITERATURE_RESOURCE_POOL_SOURCE_SCOPE = 'title_card_evidence_basket' as const;
 const UNSUPPORTED_SOURCE_SCOPE_FOR_NORMALIZED_V1A = 'UNSUPPORTED_SOURCE_SCOPE_FOR_NORMALIZED_V1A';
 const SEARCH_RUN_LOCATOR_PROVENANCE_REF_TYPES = new Set([
@@ -1120,6 +1139,80 @@ export type TopicSelectionWorkflowHarnessGenerateNeedCandidateResult = {
   harness_trace_artifact: TopicSelectionGenerateNeedCandidateArtifactRefEntry;
 };
 
+export type TopicSelectionWorkflowHarnessV1cConsumptionExpectation = {
+  status?: 'passed' | 'failed';
+  terminal_node_id?: TopicSelectionV1cHarnessNodeId | null;
+  terminal_routing_outcome?: TopicSelectionV1cHarnessRoutingOutcome | null;
+  accepted_node_count?: number | null;
+  error_code?: string | null;
+};
+
+export type TopicSelectionWorkflowHarnessV1cConsumptionInput = {
+  scenario_id: string;
+  scenario_case_id?: string | null;
+  workflow_run_id: string;
+  node_attempt_id: string;
+  node_results: TopicSelectionV1cHarnessNodeResult[];
+  expectations?: TopicSelectionWorkflowHarnessV1cConsumptionExpectation;
+};
+
+export type TopicSelectionWorkflowHarnessV1cConsumptionTraceSnapshot = {
+  schema_version: 'topic-selection-v1c-workflow-harness-consumption-trace-v0';
+  payload_schema: typeof V1C_CONSUMPTION_TRACE_PAYLOAD_SCHEMA;
+  adapter_version: typeof TOPIC_SELECTION_V1C_HARNESS_ADAPTER_VERSION;
+  scenario_id: string;
+  scenario_case_id: string | null;
+  workflow_run_id: string;
+  node_attempt_id: string;
+  scenario_status: 'passed' | 'failed';
+  node_results: TopicSelectionV1cHarnessNodeResult[];
+  consumed_node_ids: TopicSelectionV1cHarnessNodeId[];
+  terminal_node_id: TopicSelectionV1cHarnessNodeId | null;
+  terminal_routing_outcome: TopicSelectionV1cHarnessRoutingOutcome | null;
+  terminal_automation: TopicSelectionV1cHarnessAutomation | null;
+  error_code: string | null;
+  error_message: string | null;
+  assertions: TopicSelectionWorkflowHarnessAssertion[];
+  created_at: string;
+};
+
+export type TopicSelectionWorkflowHarnessV1cConsumptionResult = {
+  schema_version: 'v1';
+  scenario_id: string;
+  scenario_case_id: string | null;
+  workflow_run_id: string;
+  node_attempt_id: string;
+  scenario_status: 'passed' | 'failed';
+  adapter_version: typeof TOPIC_SELECTION_V1C_HARNESS_ADAPTER_VERSION;
+  node_results: TopicSelectionV1cHarnessNodeResult[];
+  consumed_node_ids: TopicSelectionV1cHarnessNodeId[];
+  terminal_node_id: TopicSelectionV1cHarnessNodeId | null;
+  terminal_routing_outcome: TopicSelectionV1cHarnessRoutingOutcome | null;
+  terminal_automation: TopicSelectionV1cHarnessAutomation | null;
+  error_code: string | null;
+  error_message: string | null;
+  assertions: TopicSelectionWorkflowHarnessAssertion[];
+  harness_trace_snapshot: TopicSelectionWorkflowHarnessV1cConsumptionTraceSnapshot;
+};
+
+export type TopicSelectionWorkflowHarnessScenarioResult =
+  | TopicSelectionWorkflowHarnessCreateTopicSeedResult
+  | TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolResult
+  | TopicSelectionWorkflowHarnessCreateSearchPlanResult
+  | TopicSelectionWorkflowHarnessRecordSearchRunResult
+  | TopicSelectionWorkflowHarnessBuildEvidenceMapResult
+  | TopicSelectionWorkflowHarnessGenerateNeedCandidateResult
+  | TopicSelectionWorkflowHarnessValidateNeedAdjudicationResult
+  | TopicSelectionWorkflowHarnessHumanConfirmNeedResult
+  | TopicSelectionWorkflowHarnessPublishV1bInputBundleResult;
+
+const V1C_FORWARD_NEXT_NODE_BY_NODE_ID: Partial<Record<TopicSelectionV1cHarnessNodeId, TopicSelectionV1cHarnessNodeId>> = {
+  N1: 'N2',
+  N2: 'N3',
+  N3: 'N4',
+  N4: 'N5',
+};
+
 export class TopicSelectionWorkflowHarnessService {
   private readonly now: () => string;
 
@@ -1142,6 +1235,518 @@ export class TopicSelectionWorkflowHarnessService {
     } = {},
   ) {
     this.now = options.now ?? (() => new Date().toISOString());
+  }
+
+  async invokeNode(
+    request: TopicSelectionV1aWorkflowHarnessRunRequest,
+  ): Promise<TopicSelectionV1aWorkflowHarnessRunResult> {
+    if (request.policy_version !== TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'Unsupported v1a workflow harness route policy version.', {
+        policy_version: request.policy_version,
+        supported_policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+      });
+    }
+    const scenarioInput = this.scenarioInputFromRunEnvelope(request);
+    const scenarioResult = await this.runScenarioForNode(request.node_id, scenarioInput);
+    const routeSignal = this.routeSignalForScenarioResult(scenarioResult);
+    const routeEdge = findTopicSelectionV1aWorkflowHarnessRouteEdge(request.node_id, routeSignal);
+    if (!routeEdge) {
+      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'Workflow harness route policy has no edge for emitted route signal.', {
+        node_id: request.node_id,
+        route_signal: routeSignal,
+        policy_version: request.policy_version,
+      });
+    }
+    const routeStatus = this.routeStatusForScenarioResult(scenarioResult);
+    if (!routeEdge.allowed_statuses.includes(routeStatus)) {
+      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'Workflow harness route policy rejected emitted node status.', {
+        node_id: request.node_id,
+        route_signal: routeSignal,
+        emitted_status: routeStatus,
+        allowed_statuses: routeEdge.allowed_statuses,
+        policy_version: request.policy_version,
+      });
+    }
+    const error = this.errorSummaryForScenarioResult(scenarioResult);
+
+    return {
+      schema_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_RESULT_SCHEMA_VERSION,
+      node_id: request.node_id,
+      workflow_run_id: request.workflow_run_id,
+      node_attempt_id: request.node_attempt_id,
+      policy_version: request.policy_version,
+      scenario_result: scenarioResult as unknown as Record<string, unknown>,
+      route_decision: routeEdge.route_decision,
+      route_signal: routeEdge.route_signal,
+      route_target_node_id: routeEdge.route_target_node_id,
+      handoff_kind: routeEdge.handoff_kind,
+      route_policy_ref: {
+        policy_version: request.policy_version,
+        route_id: routeEdge.route_id,
+        from_node_id: routeEdge.from_node_id,
+        route_signal: routeEdge.route_signal,
+      },
+      harness_trace_artifact_ref: this.harnessTraceArtifactRefForScenarioResult(scenarioResult),
+      error_code: error.error_code,
+      error_message: error.error_message,
+    };
+  }
+
+  runV1cHarnessConsumptionScenario(
+    input: TopicSelectionWorkflowHarnessV1cConsumptionInput,
+  ): TopicSelectionWorkflowHarnessV1cConsumptionResult {
+    const assertions: TopicSelectionWorkflowHarnessAssertion[] = [];
+    const consumedNodeIds: TopicSelectionV1cHarnessNodeId[] = [];
+    let expectedNextNodeId: TopicSelectionV1cHarnessNodeId | null = null;
+    let terminal: TopicSelectionV1cHarnessNodeResult | null = null;
+    let errorCode: string | null = null;
+    let errorMessage: string | null = null;
+
+    const fail = (code: string, message: string, actual?: unknown, expected?: unknown): void => {
+      if (!errorCode) {
+        errorCode = code;
+        errorMessage = message;
+      }
+      assertions.push({
+        assertion_id: `v1c.${code}`,
+        passed: false,
+        message,
+        expected,
+        actual,
+      });
+    };
+
+    if (input.node_results.length === 0) {
+      fail('empty_node_results', 'v1c harness consumption requires at least one node result.');
+    }
+
+    for (const nodeResult of input.node_results) {
+      if (errorCode) break;
+
+      if (terminal) {
+        const downstreamIngressAllowed = terminal.node_id === 'N5' && nodeResult.node_id === 'N6';
+        if (!downstreamIngressAllowed) {
+          fail(
+            'node_after_terminal',
+            'v1c harness consumption forbids automatic progress after a terminal node result.',
+            { previous_terminal_node_id: terminal.node_id, next_node_id: nodeResult.node_id },
+          );
+          break;
+        }
+        terminal = null;
+        expectedNextNodeId = null;
+      }
+
+      if (expectedNextNodeId && nodeResult.node_id !== expectedNextNodeId) {
+        fail(
+          'non_forward_node',
+          'v1c harness consumption rejected a non-forward node transition.',
+          nodeResult.node_id,
+          expectedNextNodeId,
+        );
+        break;
+      }
+
+      if (nodeResult.node_id === 'N6' && nodeResult.automation === 'advance') {
+        fail(
+          'n6_auto_advance_forbidden',
+          'v1c N6 is record-only and must not auto-advance or re-enter N1-N5.',
+          nodeResult.automation,
+          'record_only',
+        );
+        break;
+      }
+
+      consumedNodeIds.push(nodeResult.node_id);
+      if (nodeResult.automation === 'advance') {
+        const nextNodeId = V1C_FORWARD_NEXT_NODE_BY_NODE_ID[nodeResult.node_id] ?? null;
+        if (!nextNodeId) {
+          fail(
+            'illegal_advance',
+            'v1c harness consumption rejected advance automation from a terminal node.',
+            nodeResult.node_id,
+          );
+          break;
+        }
+        expectedNextNodeId = nextNodeId;
+        terminal = null;
+        continue;
+      }
+
+      if (nodeResult.automation === 'stop' || nodeResult.automation === 'record_only') {
+        terminal = nodeResult;
+        expectedNextNodeId = null;
+      }
+    }
+
+    if (!errorCode) {
+      assertions.push({
+        assertion_id: 'v1c.forward_only_consumption',
+        passed: true,
+        message: 'v1c harness consumed node results with forward-only transitions and terminal stop behavior.',
+        actual: consumedNodeIds,
+      });
+    }
+
+    const terminalNodeId = terminal?.node_id ?? consumedNodeIds.at(-1) ?? null;
+    const terminalRoutingOutcome = terminal?.routing_outcome
+      ?? this.lastV1cNodeResultForNodeId(input.node_results, terminalNodeId)?.routing_outcome
+      ?? null;
+    const terminalAutomation = terminal?.automation
+      ?? this.lastV1cNodeResultForNodeId(input.node_results, terminalNodeId)?.automation
+      ?? null;
+
+    this.appendV1cConsumptionExpectationAssertions(input, {
+      assertions,
+      acceptedNodeCount: consumedNodeIds.length,
+      errorCode,
+      terminalNodeId,
+      terminalRoutingOutcome,
+    });
+
+    const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
+    const trace: TopicSelectionWorkflowHarnessV1cConsumptionTraceSnapshot = {
+      schema_version: 'topic-selection-v1c-workflow-harness-consumption-trace-v0',
+      payload_schema: V1C_CONSUMPTION_TRACE_PAYLOAD_SCHEMA,
+      adapter_version: TOPIC_SELECTION_V1C_HARNESS_ADAPTER_VERSION,
+      scenario_id: input.scenario_id,
+      scenario_case_id: input.scenario_case_id ?? null,
+      workflow_run_id: input.workflow_run_id,
+      node_attempt_id: input.node_attempt_id,
+      scenario_status: scenarioStatus,
+      node_results: input.node_results,
+      consumed_node_ids: consumedNodeIds,
+      terminal_node_id: terminalNodeId,
+      terminal_routing_outcome: terminalRoutingOutcome,
+      terminal_automation: terminalAutomation,
+      error_code: errorCode,
+      error_message: errorMessage,
+      assertions,
+      created_at: this.now(),
+    };
+
+    return {
+      schema_version: 'v1',
+      scenario_id: input.scenario_id,
+      scenario_case_id: input.scenario_case_id ?? null,
+      workflow_run_id: input.workflow_run_id,
+      node_attempt_id: input.node_attempt_id,
+      scenario_status: scenarioStatus,
+      adapter_version: TOPIC_SELECTION_V1C_HARNESS_ADAPTER_VERSION,
+      node_results: input.node_results,
+      consumed_node_ids: consumedNodeIds,
+      terminal_node_id: terminalNodeId,
+      terminal_routing_outcome: terminalRoutingOutcome,
+      terminal_automation: terminalAutomation,
+      error_code: errorCode,
+      error_message: errorMessage,
+      assertions,
+      harness_trace_snapshot: trace,
+    };
+  }
+
+  private scenarioInputFromRunEnvelope(
+    request: TopicSelectionV1aWorkflowHarnessRunRequest,
+  ): Record<string, unknown> {
+    const scenarioInput = request.scenario_input ?? {};
+    return {
+      ...scenarioInput,
+      workspace_id: scenarioInput.workspace_id ?? request.workspace_id ?? null,
+      title_card_id: scenarioInput.title_card_id ?? request.title_card_id ?? null,
+      workflow_run_id: request.workflow_run_id,
+      node_attempt_id: request.node_attempt_id,
+      policy_version: request.policy_version,
+      created_by: scenarioInput.created_by ?? request.created_by ?? 'system',
+    };
+  }
+
+  private appendV1cConsumptionExpectationAssertions(
+    input: TopicSelectionWorkflowHarnessV1cConsumptionInput,
+    observed: {
+      assertions: TopicSelectionWorkflowHarnessAssertion[];
+      acceptedNodeCount: number;
+      errorCode: string | null;
+      terminalNodeId: TopicSelectionV1cHarnessNodeId | null;
+      terminalRoutingOutcome: TopicSelectionV1cHarnessRoutingOutcome | null;
+    },
+  ): void {
+    const expectations = input.expectations;
+    if (!expectations) return;
+
+    if (expectations.status) {
+      const actualStatus = observed.errorCode ? 'failed' : 'passed';
+      observed.assertions.push({
+        assertion_id: 'v1c.expected_status',
+        passed: actualStatus === expectations.status,
+        message: 'v1c harness consumption status matched expectation.',
+        expected: expectations.status,
+        actual: actualStatus,
+      });
+    }
+    if (expectations.terminal_node_id !== undefined) {
+      observed.assertions.push({
+        assertion_id: 'v1c.expected_terminal_node',
+        passed: observed.terminalNodeId === expectations.terminal_node_id,
+        message: 'v1c harness consumption terminal node matched expectation.',
+        expected: expectations.terminal_node_id,
+        actual: observed.terminalNodeId,
+      });
+    }
+    if (expectations.terminal_routing_outcome !== undefined) {
+      observed.assertions.push({
+        assertion_id: 'v1c.expected_terminal_routing_outcome',
+        passed: observed.terminalRoutingOutcome === expectations.terminal_routing_outcome,
+        message: 'v1c harness consumption terminal routing outcome matched expectation.',
+        expected: expectations.terminal_routing_outcome,
+        actual: observed.terminalRoutingOutcome,
+      });
+    }
+    if (expectations.accepted_node_count !== undefined && expectations.accepted_node_count !== null) {
+      observed.assertions.push({
+        assertion_id: 'v1c.expected_accepted_node_count',
+        passed: observed.acceptedNodeCount === expectations.accepted_node_count,
+        message: 'v1c harness consumption accepted node count matched expectation.',
+        expected: expectations.accepted_node_count,
+        actual: observed.acceptedNodeCount,
+      });
+    }
+    if (expectations.error_code !== undefined) {
+      observed.assertions.push({
+        assertion_id: 'v1c.expected_error_code',
+        passed: observed.errorCode === expectations.error_code,
+        message: 'v1c harness consumption error code matched expectation.',
+        expected: expectations.error_code,
+        actual: observed.errorCode,
+      });
+    }
+  }
+
+  private lastV1cNodeResultForNodeId(
+    nodeResults: TopicSelectionV1cHarnessNodeResult[],
+    nodeId: TopicSelectionV1cHarnessNodeId | null,
+  ): TopicSelectionV1cHarnessNodeResult | null {
+    if (!nodeId) return null;
+    for (let index = nodeResults.length - 1; index >= 0; index -= 1) {
+      if (nodeResults[index]?.node_id === nodeId) {
+        return nodeResults[index] ?? null;
+      }
+    }
+    return null;
+  }
+
+  private async runScenarioForNode(
+    nodeId: TopicSelectionV1aWorkflowHarnessNodeId,
+    scenarioInput: Record<string, unknown>,
+  ): Promise<TopicSelectionWorkflowHarnessScenarioResult> {
+    switch (nodeId) {
+      case CREATE_TOPIC_SEED_NODE_ID:
+        return this.runCreateTopicSeedScenario(scenarioInput as TopicSelectionWorkflowHarnessCreateTopicSeedInput);
+      case SNAPSHOT_LITERATURE_RESOURCE_POOL_NODE_ID:
+        return this.runSnapshotLiteratureResourcePoolScenario(
+          scenarioInput as TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolInput,
+        );
+      case CREATE_SEARCH_PLAN_NODE_ID:
+        return this.runCreateSearchPlanScenario(scenarioInput as TopicSelectionWorkflowHarnessCreateSearchPlanInput);
+      case RECORD_SEARCH_RUN_NODE_ID:
+        return this.runRecordSearchRunScenario(scenarioInput as TopicSelectionWorkflowHarnessRecordSearchRunInput);
+      case BUILD_EVIDENCE_MAP_NODE_ID:
+        return this.runBuildEvidenceMapScenario(scenarioInput as TopicSelectionWorkflowHarnessBuildEvidenceMapInput);
+      case GENERATE_NEED_CANDIDATE_NODE_ID:
+        return this.runGenerateNeedCandidateScenario(
+          scenarioInput as TopicSelectionWorkflowHarnessGenerateNeedCandidateInput,
+        );
+      case VALIDATE_NEED_ADJUDICATION_NODE_ID:
+        return this.runValidateNeedAdjudicationScenario(
+          scenarioInput as TopicSelectionWorkflowHarnessValidateNeedAdjudicationInput,
+        );
+      case HUMAN_CONFIRM_NEED_NODE_ID:
+        return this.runHumanConfirmNeedScenario(scenarioInput as TopicSelectionWorkflowHarnessHumanConfirmNeedInput);
+      case PUBLISH_V1B_INPUT_BUNDLE_NODE_ID:
+        return this.runPublishV1bInputBundleScenario(
+          scenarioInput as TopicSelectionWorkflowHarnessPublishV1bInputBundleInput,
+        );
+      default:
+        throw new AppError(400, 'INVALID_PAYLOAD', 'Unknown v1a workflow harness node_id.', { node_id: nodeId });
+    }
+  }
+
+  private routeSignalForScenarioResult(result: TopicSelectionWorkflowHarnessScenarioResult): string {
+    switch (result.node_id) {
+      case CREATE_TOPIC_SEED_NODE_ID:
+        return result.node_result.status === 'succeeded' ? 'topic_seed_created' : 'topic_seed_blocked';
+      case SNAPSHOT_LITERATURE_RESOURCE_POOL_NODE_ID:
+        return result.node_result.status === 'succeeded'
+          ? 'literature_resource_pool_snapshot_created'
+          : 'literature_resource_pool_snapshot_blocked';
+      case CREATE_SEARCH_PLAN_NODE_ID:
+        return result.node_result.status === 'succeeded' ? 'search_plan_created' : 'search_plan_blocked';
+      case RECORD_SEARCH_RUN_NODE_ID:
+        return this.routeSignalForRecordSearchRunResult(result);
+      case BUILD_EVIDENCE_MAP_NODE_ID:
+        return this.routeSignalForBuildEvidenceMapResult(result);
+      case GENERATE_NEED_CANDIDATE_NODE_ID:
+        return this.routeSignalForGenerateNeedCandidateResult(result);
+      case VALIDATE_NEED_ADJUDICATION_NODE_ID:
+        return this.routeSignalForValidateNeedAdjudicationResult(result);
+      case HUMAN_CONFIRM_NEED_NODE_ID:
+        return this.routeSignalForHumanConfirmNeedResult(result);
+      case PUBLISH_V1B_INPUT_BUNDLE_NODE_ID:
+        return this.routeSignalForPublishV1bInputBundleResult(result);
+      default:
+        throw new AppError(400, 'INVALID_PAYLOAD', 'Unknown v1a workflow harness scenario result node_id.');
+    }
+  }
+
+  private routeStatusForScenarioResult(
+    result: TopicSelectionWorkflowHarnessScenarioResult,
+  ): TopicSelectionV1aWorkflowHarnessNodeStatus {
+    switch (result.node_id) {
+      case CREATE_TOPIC_SEED_NODE_ID:
+      case SNAPSHOT_LITERATURE_RESOURCE_POOL_NODE_ID:
+      case CREATE_SEARCH_PLAN_NODE_ID:
+      case RECORD_SEARCH_RUN_NODE_ID:
+      case BUILD_EVIDENCE_MAP_NODE_ID:
+        return result.node_result.status;
+      case GENERATE_NEED_CANDIDATE_NODE_ID:
+        return result.adapter_result.status;
+      case VALIDATE_NEED_ADJUDICATION_NODE_ID:
+      case HUMAN_CONFIRM_NEED_NODE_ID:
+      case PUBLISH_V1B_INPUT_BUNDLE_NODE_ID:
+        return result.node_result.status;
+      default:
+        throw new AppError(400, 'INVALID_PAYLOAD', 'Unknown v1a workflow harness scenario result node_id.');
+    }
+  }
+
+  private routeSignalForRecordSearchRunResult(
+    result: TopicSelectionWorkflowHarnessRecordSearchRunResult,
+  ): string {
+    const nodeResult = result.node_result;
+    if (nodeResult.status !== 'succeeded') {
+      return 'search_run_blocked';
+    }
+    if (nodeResult.downstream_handoff) {
+      return 'search_run_consumable';
+    }
+    const loopbackSignal = nodeResult.loopback_signal;
+    if (!loopbackSignal) {
+      return 'search_execution_retry_required';
+    }
+    const targets = new Set(loopbackSignal.target_actions);
+    if (loopbackSignal.reason_codes.includes('SOURCE_HEALTH_WARNING')) {
+      return 'source_health_snapshot_refresh';
+    }
+    if (targets.has('topic-selection.v1a.create-search-plan.v1')) {
+      return 'search_plan_recheck_required';
+    }
+    if (targets.has('topic-selection.v1a.snapshot-literature-resource-pool.v1')) {
+      return 'source_health_snapshot_refresh';
+    }
+    if (targets.has('upstream_search_execution_or_input_preparation')) {
+      return 'search_execution_retry_required';
+    }
+    if (targets.has('human_review_search_coverage_acceptance')) {
+      return 'search_coverage_human_review_required';
+    }
+    return 'search_execution_retry_required';
+  }
+
+  private routeSignalForBuildEvidenceMapResult(
+    result: TopicSelectionWorkflowHarnessBuildEvidenceMapResult,
+  ): string {
+    if (result.node_result.status === 'succeeded' && result.node_result.downstream_handoff) {
+      return 'evidence_map_ready';
+    }
+    if (result.node_result.status === 'review_required') {
+      return 'evidence_map_review_required';
+    }
+    return 'evidence_map_blocked';
+  }
+
+  private routeSignalForGenerateNeedCandidateResult(
+    result: TopicSelectionWorkflowHarnessGenerateNeedCandidateResult,
+  ): string {
+    const routingDecision = result.adapter_result.supplemental_round_routing_decision?.routing_decision ?? null;
+    if (routingDecision === 'finalize_with_admitted_batch') {
+      return 'need_candidate_batch_finalized';
+    }
+    if (routingDecision === 'run_supplemental_round') {
+      return 'need_candidate_supplemental_round';
+    }
+    if (routingDecision === 'require_human_review' || result.adapter_result.status === 'require_human_review') {
+      return 'need_candidate_human_review_required';
+    }
+    return 'need_candidate_blocked';
+  }
+
+  private routeSignalForValidateNeedAdjudicationResult(
+    result: TopicSelectionWorkflowHarnessValidateNeedAdjudicationResult,
+  ): string {
+    switch (result.node_result.route_outcome) {
+      case 'advance_to_human_confirmation':
+        return 'need_adjudication_validated';
+      case 'repair_need_candidate':
+        return 'need_candidate_repair_required';
+      case 'repair_search_plan':
+        return 'search_plan_recheck_required';
+      case 'stop_rejected':
+        return 'candidate_rejected';
+      case 'hold_candidate':
+        return 'candidate_parked';
+      case 'stop_merged':
+        return 'candidate_merged';
+      case 'require_human_review':
+        return 'adjudication_human_review_required';
+      case 'blocked':
+      default:
+        return 'adjudication_blocked';
+    }
+  }
+
+  private routeSignalForHumanConfirmNeedResult(
+    result: TopicSelectionWorkflowHarnessHumanConfirmNeedResult,
+  ): string {
+    switch (result.node_result.route_outcome) {
+      case 'advance_to_publish_v1b_input_bundle':
+        return 'human_confirmation_ready';
+      case 'require_human_review':
+        return 'human_confirmation_review_required';
+      case 'blocked':
+      default:
+        return 'human_confirmation_blocked';
+    }
+  }
+
+  private routeSignalForPublishV1bInputBundleResult(
+    result: TopicSelectionWorkflowHarnessPublishV1bInputBundleResult,
+  ): string {
+    return result.node_result.route_outcome === 'published_v1b_input_bundle'
+      ? 'v1b_input_bundle_published'
+      : 'v1b_input_bundle_blocked';
+  }
+
+  private harnessTraceArtifactRefForScenarioResult(
+    result: TopicSelectionWorkflowHarnessScenarioResult,
+  ): TopicSelectionFunctionalRef | null {
+    if (result.node_id === GENERATE_NEED_CANDIDATE_NODE_ID) {
+      return result.harness_trace_artifact.artifact_ref;
+    }
+    return result.harness_trace_artifact_ref;
+  }
+
+  private errorSummaryForScenarioResult(
+    result: TopicSelectionWorkflowHarnessScenarioResult,
+  ): { error_code: string | null; error_message: string | null } {
+    if (result.node_id === GENERATE_NEED_CANDIDATE_NODE_ID) {
+      return {
+        error_code: result.adapter_result.error_code ?? null,
+        error_message: null,
+      };
+    }
+    return {
+      error_code: result.node_result.error_code ?? null,
+      error_message: result.node_result.error_message ?? null,
+    };
   }
 
   async runCreateTopicSeedScenario(

@@ -11,10 +11,25 @@ import type {
   TopicSelectionV1aToV1bInputBundleRecord,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-need-validation-contracts';
 import {
+  TOPIC_SELECTION_HUMAN_CONFIRMATION_INPUT_SCHEMA_VERSION,
+  TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-need-validation-contracts';
+import {
+  TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_DRAFT_SCHEMA_VERSION,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-evidence-map-contracts';
+import {
   TOPIC_SELECTION_V1B_OFFLINE_EVALUATION_METRIC_KEYS,
   type TopicSelectionOfflineEvaluationCaseRecord,
   type TopicSelectionOfflineEvaluationObservedOutput,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-offline-evaluation-replay-contracts';
+import {
+  TOPIC_SELECTION_SEARCH_PLAN_BLUEPRINT_SCHEMA_VERSION,
+  TOPIC_SELECTION_SEARCH_RUN_RECORD_BUNDLE_SCHEMA_VERSION,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-search-resource-contracts';
+import {
+  TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+  TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1a-workflow-harness-contracts';
 import type {
   TopicSelectionResearchSliceOptionRecord,
   TopicSelectionResearchSliceOptionDraft,
@@ -61,6 +76,13 @@ import {
   sha256Text,
   stableStringify,
 } from '../services/literature-content-processing-utils.js';
+import { TopicSelectionEvidenceMapMaterializationService } from '../services/topic-selection-evidence-map-materialization-service.js';
+import {
+  TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
+} from '../services/topic-selection-model-profile-registry-service.js';
 
 type ValueAssessmentFixtureMode =
   | 'ready'
@@ -1044,7 +1066,7 @@ function manualLocator(input: {
 function telemetry(schemaName: string): LlmCallTelemetry {
   return {
     provider_id: 'openai',
-    model_id: 'gpt-5.4-mini',
+    model_id: 'gpt-5.5',
     profile_id: schemaName,
     prompt_template_id: schemaName,
     prompt_template_version: '1',
@@ -1110,6 +1132,324 @@ class FakeTopicSelectionV1bLlmGateway {
     }
     throw new Error(`Unexpected structured output schema ${schemaName}.`);
   }
+}
+
+type V1aNativeHarnessHttpResult = {
+  route_decision: string;
+  route_signal: string;
+  route_target_node_id: string | null;
+  harness_trace_artifact_ref: TopicSelectionFunctionalRef | null;
+  scenario_result: any;
+};
+
+async function invokeV1aNativeHarnessNode(
+  app: FastifyInstance,
+  nodeId: string,
+  scenarioInput: Record<string, any>,
+  expectedRoute: {
+    route_decision: string;
+    route_signal: string;
+    route_target_node_id: string | null;
+  },
+): Promise<V1aNativeHarnessHttpResult> {
+  const response = await app.inject({
+    method: 'POST',
+    url: `/topic-selection/v1a/workflow-harness/nodes/${encodeURIComponent(nodeId)}/invocations`,
+    payload: {
+      schema_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
+      node_id: nodeId,
+      workflow_run_id: scenarioInput.workflow_run_id,
+      node_attempt_id: scenarioInput.node_attempt_id,
+      policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+      title_card_id: scenarioInput.title_card_id ?? null,
+      scenario_input: scenarioInput,
+      created_by: scenarioInput.created_by ?? 'system',
+    },
+  });
+  assertStatus(response, 201);
+  const body = response.json() as V1aNativeHarnessHttpResult;
+  const routeDebug = JSON.stringify({
+    route_signal: body.route_signal,
+    error_code: body.scenario_result.adapter_result?.error_code ?? body.scenario_result.node_result?.error_code ?? null,
+    error_message: body.scenario_result.adapter_result?.error_message ?? body.scenario_result.node_result?.error_message ?? null,
+    blocker_codes: body.scenario_result.adapter_result?.blocker_codes ?? body.scenario_result.node_result?.blocker_codes ?? [],
+  });
+  assert.equal(body.route_decision, expectedRoute.route_decision, `${nodeId} route_decision ${routeDebug}`);
+  assert.equal(body.route_signal, expectedRoute.route_signal, `${nodeId} route_signal ${routeDebug}`);
+  assert.equal(body.route_target_node_id, expectedRoute.route_target_node_id, `${nodeId} route_target_node_id ${routeDebug}`);
+  assert.equal(body.scenario_result.scenario_status, 'passed', `${nodeId} scenario_status ${routeDebug}`);
+  return body;
+}
+
+class FakeTopicSelectionV1aLlmGateway {
+  readonly calls: LlmStructuredOutputRequest[] = [];
+
+  async createStructuredOutput<T>(request: LlmStructuredOutputRequest) {
+    this.calls.push(request);
+    const userPayload = JSON.parse(request.messages.find((message) => message.role === 'user')?.content ?? '{}') as {
+      node?: {
+        workflow_run_id: string;
+        node_attempt_id: string;
+        execution_mode: string;
+        profile_id: string;
+        policy_version: string;
+        output_schema_version: string;
+      };
+      candidate?: {
+        need_candidate_ref: TopicSelectionFunctionalRef;
+        gap_codes?: string[];
+      };
+      readiness?: {
+        readiness_assessment_ref: TopicSelectionFunctionalRef;
+      };
+      support_packet?: {
+        validation_support_packet_ref: TopicSelectionFunctionalRef;
+        open_gap_codes?: string[];
+        residual_risk_refs?: TopicSelectionFunctionalRef[];
+      };
+    };
+    if (request.schemaName !== TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION) {
+      throw new Error(`Unexpected v1a structured output schema ${request.schemaName}.`);
+    }
+    const sourceRefs = [
+      userPayload.candidate?.need_candidate_ref,
+      userPayload.readiness?.readiness_assessment_ref,
+      userPayload.support_packet?.validation_support_packet_ref,
+    ].filter((item): item is TopicSelectionFunctionalRef => Boolean(item));
+    const parsed = {
+      schema_version: TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION,
+      workflow_run_id: userPayload.node?.workflow_run_id,
+      node_attempt_id: userPayload.node?.node_attempt_id,
+      recommendation_packet_id: `${userPayload.node?.node_attempt_id ?? 'node_attempt'}_recommendation`,
+      need_candidate_ref: userPayload.candidate?.need_candidate_ref,
+      validation_support_packet_ref: userPayload.support_packet?.validation_support_packet_ref,
+      readiness_assessment_ref: userPayload.readiness?.readiness_assessment_ref,
+      execution_mode: userPayload.node?.execution_mode,
+      profile_id: userPayload.node?.profile_id,
+      final_decision: 'validate',
+      rationale: 'Fake v1a provider validates the native runner candidate while preserving support-packet risks.',
+      required_actions: [
+        'route result according to deterministic v1a node policy',
+        ...(userPayload.support_packet?.open_gap_codes?.includes('METHOD_FAMILY_COVERAGE_GAP')
+          ? ['carry METHOD_FAMILY_COVERAGE_GAP into v1b intake']
+          : []),
+      ],
+      gap_codes: userPayload.support_packet?.open_gap_codes ?? userPayload.candidate?.gap_codes ?? [],
+      accepted_risk_refs: [],
+      residual_risk_refs: userPayload.support_packet?.residual_risk_refs ?? [],
+      rejected_reason: null,
+      merge_target_need_candidate_ref: null,
+      searchplan_recheck_reason: null,
+      searchplan_recheck_gap_codes: [],
+      source_refs: sourceRefs,
+      recommendation_payload: { fake_provider: true },
+      policy_version: userPayload.node?.policy_version,
+      output_schema_version: userPayload.node?.output_schema_version,
+    };
+    return {
+      parsed: parsed as T,
+      raw: { schemaName: request.schemaName, parsed },
+      telemetry: telemetry(request.schemaName),
+    };
+  }
+}
+
+function roleCoverageRef(
+  handoff: { coverage_role_expectations?: Array<{ expected_evidence_role: string; coverage_row_intent_ref: TopicSelectionFunctionalRef }> },
+  role: string,
+): TopicSelectionFunctionalRef {
+  const row = handoff.coverage_role_expectations?.find((entry) => entry.expected_evidence_role === role);
+  assert.ok(row, `missing ${role} coverage row in v1a search-run handoff`);
+  return row.coverage_row_intent_ref;
+}
+
+function v1aSearchRunInputRefsHash(searchRunHandoff: any): string {
+  return new TopicSelectionEvidenceMapMaterializationService().inputRefsHashForSearchRunHandoff(searchRunHandoff);
+}
+
+function buildV1aNativeEvidenceMapDraft(input: {
+  titleCardId: string;
+  searchRunHandoff: any;
+  literatureRef: TopicSelectionFunctionalRef;
+  sourceRef: TopicSelectionFunctionalRef;
+}) {
+  const roles = ['support', 'challenge', 'baseline', 'context'];
+  return {
+    schema_version: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_DRAFT_SCHEMA_VERSION,
+    title_card_ref: ref('title_card', input.titleCardId, input.titleCardId),
+    search_run_ref: input.searchRunHandoff.search_run_ref,
+    search_plan_ref: input.searchRunHandoff.search_plan_ref,
+    literature_resource_pool_snapshot_ref: input.searchRunHandoff.literature_resource_pool_snapshot_ref,
+    literature_snapshot_hash: input.searchRunHandoff.literature_snapshot_hash,
+    producer_kind: 'fixture',
+    profile_id: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
+    input_refs_hash: v1aSearchRunInputRefsHash(input.searchRunHandoff),
+    draft_units: roles.map((role) => ({
+      client_unit_key: role,
+      coverage_row_intent_ref: roleCoverageRef(input.searchRunHandoff, role),
+      evidence_role: role,
+      literature_ref: input.literatureRef,
+      source_refs: [input.sourceRef],
+      locator: manualLocator({
+        titleCardId: input.titleCardId,
+        literatureRef: input.literatureRef,
+        sourceRef: input.sourceRef,
+        key: `native-v1a-${role}`,
+      }),
+      source_statement: `Native v1a ${role} evidence supports v1b handoff fixture creation.`,
+      source_attribution_kind: role === 'challenge' ? 'counter_evidence' : 'source_claim',
+      normalized_statement: `Normalized ${role} evidence for native v1a to v1b linkage.`,
+      interpretation_payload: { role },
+      confidence: 0.82,
+      issue_codes: [],
+    })),
+    draft_links: [],
+    draft_clusters: roles.map((role) => ({
+      cluster_type: role === 'challenge' ? 'limitation_family' : role === 'baseline' ? 'baseline_family' : 'method_family',
+      cluster_key: `${role}-cluster`,
+      unit_keys: [role],
+      label: `${role} evidence`,
+      rationale: `Native v1a fixture cluster for ${role}.`,
+      confidence: 0.82,
+    })),
+    draft_patterns: roles.map((role) => ({
+      pattern_type: role === 'challenge' ? 'limitation' : role === 'baseline' ? 'baseline' : role === 'context' ? 'context' : 'solution',
+      evidence_role: role,
+      unit_keys: [role],
+      pattern_statement: `${role} evidence is present for v1b handoff validation.`,
+      confidence: 0.82,
+    })),
+    draft_conflicts: [
+      {
+        conflict_type: 'claim_conflict',
+        severity: 'moderate',
+        support_unit_keys: ['support'],
+        challenge_unit_keys: ['challenge'],
+        baseline_unit_keys: ['baseline'],
+        context_unit_keys: ['context'],
+        issue_codes: ['risk_carry_forward_required'],
+      },
+    ],
+    warning_codes: [],
+    policy_version: TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION,
+    output_schema_version: 'v1',
+  };
+}
+
+function refsByV1aEvidenceRole(evidenceMapRecords: any, role: string, titleCardId: string): TopicSelectionFunctionalRef[] {
+  return evidenceMapRecords.evidence_units
+    .filter((unit: { evidence_role: string }) => unit.evidence_role === role)
+    .map((unit: { evidence_unit_id: string; evidence_map_version?: string | null }) =>
+      ref('evidence_unit', unit.evidence_unit_id, titleCardId, unit.evidence_map_version ?? null)
+    );
+}
+
+function buildV1aNativeRankedBatch(input: {
+  titleCardId: string;
+  nodeAttemptId: string;
+  evidenceMapRecords: any;
+  strengthRef: TopicSelectionFunctionalRef;
+}) {
+  const conflictRefs = input.evidenceMapRecords.conflict_sets.map((record: { evidence_conflict_set_id: string; evidence_map_version: string }) =>
+    ref('evidence_conflict', record.evidence_conflict_set_id, input.titleCardId, record.evidence_map_version)
+  );
+  return {
+    schema_version: 'v1',
+    draft_batch: {
+      batch_id: `draft_batch_${input.nodeAttemptId}`,
+      node_attempt_id: input.nodeAttemptId,
+      terminal_result: 'finalize',
+      ranking_rationale: 'Native v1a runner fixture has complete role evidence for v1b intake.',
+      max_persisted_candidates: 5,
+    },
+    drafts: [
+      {
+        draft_id: `draft_${input.nodeAttemptId}`,
+        rank: 1,
+        candidate_need: 'Reviewer-aligned topic selection needs traceable evidence-to-need decisions.',
+        unmet_need_statement: 'Topic decisions need auditable evidence, risk, and handoff boundaries.',
+        mechanism_type: 'workflow_gap',
+        mechanism_summary: 'Native v1a route policy must preserve evidence lineage before v1b.',
+        mechanism_payload: { native_http_harness: true },
+        scope_notes: 'Local-first CS paper engineering workflows.',
+        non_goal_notes: 'No production deployment claim.',
+        prior_art_status: 'partial_solution_known',
+        evidence_role_bundle: {
+          support_unit_refs: refsByV1aEvidenceRole(input.evidenceMapRecords, 'support', input.titleCardId),
+          challenge_unit_refs: refsByV1aEvidenceRole(input.evidenceMapRecords, 'challenge', input.titleCardId),
+          baseline_unit_refs: refsByV1aEvidenceRole(input.evidenceMapRecords, 'baseline', input.titleCardId),
+          context_unit_refs: refsByV1aEvidenceRole(input.evidenceMapRecords, 'context', input.titleCardId),
+        },
+        conflict_refs: conflictRefs,
+        strength_assessment_refs: [input.strengthRef],
+        accepted_risk_refs: [],
+        gap_codes: ['traceability_gap'],
+        speculative: false,
+        confidence: 0.82,
+      },
+    ],
+    rejected_framings: [],
+    unresolved_points: [],
+  };
+}
+
+function buildV1aNativeExplorationPayload() {
+  return {
+    topic_scope: { domain: 'topic-selection native v1a to v1b handoff' },
+    evidence_signal_digest: { support_count: 1, challenge_count: 1 },
+    resource_sample_digest: { sample_set_id: 'native-v1a-v1b-sample', role_counts: { support: 1, challenge: 1, baseline: 1, context: 1 } },
+    search_coverage_digest: { coverage: 'complete', method_family_targets: ['workflow_orchestration'] },
+    sibling_candidate_digest: { candidate_count: 0 },
+    decision_memory_digest: { required_challenges: [] },
+    exploration_prompts: ['Generate one traceable candidate need.'],
+    challenge_prompts: ['Carry counter-evidence into validation.'],
+    allowed_outputs: ['ranked_candidate_draft_batch'],
+    forbidden_outputs: ['authority_write_outside_harness'],
+  };
+}
+
+function buildV1aNativeArbiterPayload(input: {
+  evidenceMapRecords: any;
+  titleCardId: string;
+  strengthRef: TopicSelectionFunctionalRef;
+}) {
+  const evidenceRows = input.evidenceMapRecords.evidence_units.map(
+    (unit: { evidence_unit_id: string; evidence_role: string; evidence_map_version?: string | null }) => ({
+      evidence_ref: ref('evidence_unit', unit.evidence_unit_id, input.titleCardId, unit.evidence_map_version ?? null),
+      role: unit.evidence_role,
+    }),
+  );
+  const conflictRows = input.evidenceMapRecords.conflict_sets.map(
+    (record: { evidence_conflict_set_id: string; evidence_map_version: string }) => ({
+      evidence_ref: ref('evidence_conflict', record.evidence_conflict_set_id, input.titleCardId, record.evidence_map_version),
+      role: 'conflict',
+    }),
+  );
+  return {
+    node_policy_ref: ref('node_policy', 'generate_need_candidate_v1', input.titleCardId),
+    output_schema_ref: ref('schema', 'ranked_candidate_draft_batch_v1', input.titleCardId),
+    authority_boundary: {
+      authority_object: 'NeedCandidate',
+      forbidden: ['NeedCandidateSet', 'ValidatedNeed', 'TopicQuestionContract'],
+    },
+    max_persisted_candidates: 5,
+    deterministic_gate_checklist: ['schema_validation', 'admission_gates'],
+    role_level_summaries: [{ role: 'single_agent', summary: 'native-v1a-v1b-ready' }],
+    candidate_pool_digest: { candidate_count: 0 },
+    evidence_ref_table: [
+      ...evidenceRows,
+      ...conflictRows,
+      {
+        evidence_ref: input.strengthRef,
+        role: 'strength_assessment',
+      },
+    ],
+    rejected_framing_table: [],
+    unresolved_points: [],
+    batch_ranking_rules: ['rank grounded drafts first'],
+    persistence_rules: ['persist only admitted candidates'],
+    failure_rules: ['block malformed drafts'],
+  };
 }
 
 function firstFunctionalRef(value: unknown, fallback: TopicSelectionFunctionalRef): TopicSelectionFunctionalRef {
@@ -1500,242 +1840,401 @@ async function createTitleCard(app: FastifyInstance, suffix: string): Promise<st
 async function createV1bInputBundle(app: FastifyInstance, suffix: string) {
   const literatureId = await createLiterature(app, suffix);
   const titleCardId = await createTitleCard(app, suffix);
-
   const basketRes = await app.inject({
     method: 'PATCH',
     url: `/title-cards/${encodeURIComponent(titleCardId)}/evidence-basket`,
     payload: { add_literature_ids: [literatureId] },
   });
   assertStatus(basketRes, 200);
-
-  const seedRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1a/topic-seeds/from-title-card',
-    payload: {
+  const n1 = await invokeV1aNativeHarnessNode(
+    app,
+    'topic-selection.v1a.create-topic-seed.v1',
+    {
+      scenario_id: 'topic-selection.v1a.native-v1b-fixture.v1',
+      scenario_case_id: 'n1',
       title_card_id: titleCardId,
+      workflow_run_id: `workflow_run_v1a_for_v1b_n1_${suffix}`,
+      node_attempt_id: `node_attempt_v1a_for_v1b_n1_${suffix}`,
+      intent_summary: 'Native v1a runner creates the v1b harness fixture bundle.',
+      scope_notes: 'v1b HTTP harness test fixture.',
+      policy_version: 'v1',
+      output_schema_version: 'v1',
+      expectations: { status: 'succeeded' },
       created_by: 'system',
     },
-  });
-  assertStatus(seedRes, 201);
-  const seed = seedRes.json() as { topic_seed_id: string };
-
-  const snapshotRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1a/literature-resource-pool-snapshots',
-    payload: {
+    {
+      route_decision: 'invoke_next',
+      route_signal: 'topic_seed_created',
+      route_target_node_id: 'topic-selection.v1a.snapshot-literature-resource-pool.v1',
+    },
+  );
+  const n2 = await invokeV1aNativeHarnessNode(
+    app,
+    'topic-selection.v1a.snapshot-literature-resource-pool.v1',
+    {
+      scenario_id: 'topic-selection.v1a.native-v1b-fixture.v1',
+      scenario_case_id: 'n2',
       title_card_id: titleCardId,
-      topic_seed_id: seed.topic_seed_id,
+      workflow_run_id: `workflow_run_v1a_for_v1b_n2_${suffix}`,
+      node_attempt_id: `node_attempt_v1a_for_v1b_n2_${suffix}`,
+      topic_seed_ref: n1.scenario_result.node_result.topic_seed_ref,
+      source_scope: 'title_card_evidence_basket',
+      policy_version: 'v1',
+      output_schema_version: 'v1',
+      expectations: { status: 'succeeded', included_literature_count: 1 },
       created_by: 'system',
     },
-  });
-  assertStatus(snapshotRes, 201);
-  const snapshot = snapshotRes.json() as {
-    literature_resource_pool_snapshot_id: string;
-    literature_refs: TopicSelectionFunctionalRef[];
-    content_source_refs: TopicSelectionFunctionalRef[];
-  };
-  const literatureRef = snapshot.literature_refs[0] ?? ref('literature_record', literatureId, titleCardId);
-  const sourceRef = snapshot.content_source_refs[0] ?? ref('literature_source', `manual-source-${suffix}`, titleCardId);
-
+    {
+      route_decision: 'invoke_next',
+      route_signal: 'literature_resource_pool_snapshot_created',
+      route_target_node_id: 'topic-selection.v1a.create-search-plan.v1',
+    },
+  );
+  const literatureRef = n2.scenario_result.node_result.included_literature_refs[0] ?? ref('literature_record', literatureId, titleCardId);
+  const sourceRef = n2.scenario_result.node_result.content_source_refs[0] ?? ref('literature_source', `manual-source-${suffix}`, titleCardId);
   const coverageIntents = [
     ['support-traceability', 'support', 'support reviewer-facing traceability gap'],
     ['challenge-freshness', 'challenge', 'challenge evidence freshness for traceability workflows'],
     ['baseline-provenance', 'baseline', 'baseline decision chain misses provenance'],
     ['context-workflow', 'context', 'context local CS paper engineering workflow'],
-  ].map(([coverageKey, role, query]) => ({
+  ].map(([coverageKey, role, query], index) => ({
     coverage_key: coverageKey,
     intent_type: role,
     query,
     expected_evidence_role: role,
+    rationale: `Native ${role} coverage for v1b handoff.`,
+    required: true,
+    priority: index,
+    target_source_types: ['paper'],
+    refs: [literatureRef],
   }));
-  const planRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1a/search-plans',
-    payload: {
+  const n3 = await invokeV1aNativeHarnessNode(
+    app,
+    'topic-selection.v1a.create-search-plan.v1',
+    {
+      scenario_id: 'topic-selection.v1a.native-v1b-fixture.v1',
+      scenario_case_id: 'n3',
       title_card_id: titleCardId,
-      topic_seed_id: seed.topic_seed_id,
-      literature_resource_pool_snapshot_id: snapshot.literature_resource_pool_snapshot_id,
-      query_intents: coverageIntents.map((intent) => intent.query),
-      coverage_intents: coverageIntents,
+      workflow_run_id: `workflow_run_v1a_for_v1b_n3_${suffix}`,
+      node_attempt_id: `node_attempt_v1a_for_v1b_n3_${suffix}`,
+      blueprint: {
+        schema_version: TOPIC_SELECTION_SEARCH_PLAN_BLUEPRINT_SCHEMA_VERSION,
+        blueprint_origin: 'workflow_scenario_fixture',
+        blueprint_provenance_refs: [],
+        title_card_ref: ref('title_card', titleCardId, titleCardId),
+        topic_seed_ref: n1.scenario_result.node_result.topic_seed_ref,
+        literature_resource_pool_snapshot_ref: n2.scenario_result.node_result.literature_resource_pool_snapshot_ref,
+        expected_snapshot_hash: n2.scenario_result.node_result.snapshot_hash,
+        plan_version: 'v1',
+        parent_search_plan_ref: null,
+        recheck_request_ref: null,
+        query_intents: coverageIntents.map((intent) => intent.query),
+        coverage_intents: coverageIntents,
+        must_check_constraints: ['Keep v1a native runner as the automatic v1b fixture producer.'],
+        exclusion_rules: ['Do not seed this automatic fixture through v1a direct write routes.'],
+        coverage_strategy: { breadth: 'role_balanced_fixture', sequencing: ['support', 'challenge', 'baseline', 'context'] },
+        role_coverage_expectation: { support: 1, challenge: 1, baseline: 1, context: 1 },
+        method_family_targets: ['workflow_orchestration'],
+        policy_version: 'v1',
+        output_schema_version: 'v1',
+      },
+      expectations: { status: 'succeeded', coverage_row_count: 4, plan_version: 'v1' },
       created_by: 'system',
     },
-  });
-  assertStatus(planRes, 201);
-  const plan = planRes.json() as {
-    search_plan: { search_plan_id: string; plan_version: string };
-    coverage_row_intents: Array<{ coverage_row_intent_id: string; expected_evidence_role: string }>;
-  };
-
-  const runRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1a/search-runs',
-    payload: {
+    {
+      route_decision: 'invoke_next',
+      route_signal: 'search_plan_created',
+      route_target_node_id: 'topic-selection.v1a.record-search-run.v1',
+    },
+  );
+  const coverageRowRefs = n3.scenario_result.node_result.coverage_row_intent_refs as TopicSelectionFunctionalRef[];
+  const n4 = await invokeV1aNativeHarnessNode(
+    app,
+    'topic-selection.v1a.record-search-run.v1',
+    {
+      scenario_id: 'topic-selection.v1a.native-v1b-fixture.v1',
+      scenario_case_id: 'n4',
       title_card_id: titleCardId,
-      search_plan_id: plan.search_plan.search_plan_id,
-      result_accounting: {
-        total_result_count: 4,
-        unique_literature_count: 1,
-        duplicate_result_count: 0,
-        failed_source_count: 0,
-        skipped_source_count: 0,
+      workflow_run_id: `workflow_run_v1a_for_v1b_n4_${suffix}`,
+      node_attempt_id: `node_attempt_v1a_for_v1b_n4_${suffix}`,
+      bundle: {
+        schema_version: TOPIC_SELECTION_SEARCH_RUN_RECORD_BUNDLE_SCHEMA_VERSION,
+        title_card_ref: ref('title_card', titleCardId, titleCardId),
+        search_plan_ref: n3.scenario_result.node_result.search_plan_ref,
+        literature_resource_pool_snapshot_ref: n2.scenario_result.node_result.literature_resource_pool_snapshot_ref,
+        expected_literature_snapshot_hash: n2.scenario_result.node_result.snapshot_hash,
+        run_kind: 'planned_search',
+        run_status: 'succeeded',
+        query_provenance: coverageIntents.map((intent) => ({ query: intent.query, coverage_key: intent.coverage_key, source: 'native_v1a_fixture' })),
+        result_accounting: {
+          total_result_count: 4,
+          unique_literature_count: 1,
+          duplicate_result_count: 0,
+          failed_source_count: 0,
+          skipped_source_count: 0,
+        },
+        source_health_summary: { source_count: 1, failed_source_count: 0, warning_codes: [] },
+        dedup_summary: { duplicate_groups: 0, canonical_work_refs: [literatureRef] },
+        evidence_map_input_refs: [literatureRef, sourceRef],
+        coverage_observations: coverageRowRefs.map((rowRef) => ({
+          coverage_row_intent_ref: rowRef,
+          status: 'succeeded',
+          result_count: 1,
+          source_count: 1,
+          missing_reason_codes: [],
+        })),
+        evidence_bindings: coverageRowRefs.map((rowRef, index) => ({
+          coverage_row_intent_ref: rowRef,
+          literature_ref: literatureRef,
+          source_refs: [sourceRef],
+          binding_kind: 'retrieval_hit',
+          result_rank: index + 1,
+        })),
+        coverage_assessments: coverageRowRefs.map((rowRef) => ({
+          coverage_row_intent_ref: rowRef,
+          verdict: 'satisfied',
+          issue_codes: [],
+          confidence: 0.88,
+          assessed_by: 'system',
+        })),
+        coverage_risk_acceptances: [],
+        raw_log_artifact_ref: ref('raw_search_log', `raw_search_${suffix}`, titleCardId),
+        raw_log_artifact_payload: { fixture: 'native_v1a_to_v1b' },
+        policy_version: 'v1',
+        output_schema_version: 'v1',
       },
-      source_health_summary: {
-        source_count: 1,
-        warning_codes: [],
+      expectations: { status: 'succeeded', consumable_for_evidence_map: true, downstream_handoff_present: true },
+      created_by: 'system',
+    },
+    {
+      route_decision: 'invoke_next',
+      route_signal: 'search_run_consumable',
+      route_target_node_id: 'topic-selection.v1a.build-evidence-map.v1',
+    },
+  );
+  const n5 = await invokeV1aNativeHarnessNode(
+    app,
+    'topic-selection.v1a.build-evidence-map.v1',
+    {
+      scenario_id: 'topic-selection.v1a.native-v1b-fixture.v1',
+      scenario_case_id: 'n5',
+      title_card_id: titleCardId,
+      workflow_run_id: `workflow_run_v1a_for_v1b_n5_${suffix}`,
+      node_attempt_id: `node_attempt_v1a_for_v1b_n5_${suffix}`,
+      search_run_handoff: n4.scenario_result.node_result.downstream_handoff,
+      extraction_draft: buildV1aNativeEvidenceMapDraft({
+        titleCardId,
+        searchRunHandoff: n4.scenario_result.node_result.downstream_handoff,
+        literatureRef,
+        sourceRef,
+      }),
+      execution_mode: 'none',
+      policy_version: 'v1',
+      output_schema_version: 'v1',
+      expectations: { status: 'succeeded', materialization_status: 'ready', evidence_unit_count: 4, downstream_handoff_present: true },
+      created_by: 'system',
+    },
+    {
+      route_decision: 'invoke_next',
+      route_signal: 'evidence_map_ready',
+      route_target_node_id: 'topic-selection.v1a.generate-need-candidate.v1',
+    },
+  );
+  const n6AttemptId = `node_attempt_v1a_for_v1b_n6_${suffix}`;
+  const n6StrengthRef = ref('evidence_strength_assessment', `strength_${suffix}`, titleCardId);
+  const n6 = await invokeV1aNativeHarnessNode(
+    app,
+    'topic-selection.v1a.generate-need-candidate.v1',
+    {
+      scenario_id: 'topic-selection.v1a.native-v1b-fixture.v1',
+      scenario_case_id: 'n6',
+      title_card_id: titleCardId,
+      workflow_run_id: `workflow_run_v1a_for_v1b_n6_${suffix}`,
+      node_attempt_id: n6AttemptId,
+      topic_scope_ref: ref('topic_scope', `topic_${suffix}`, titleCardId),
+      evidence_map_ref: n5.scenario_result.node_result.evidence_map_ref,
+      evidence_strength_ref: n6StrengthRef,
+      resource_sample_set_ref: ref('resource_sample_set', `sample_${suffix}`, titleCardId),
+      search_snapshot_refs: [n4.scenario_result.node_result.search_run_ref],
+      resource_snapshot_refs: [n2.scenario_result.node_result.literature_resource_pool_snapshot_ref],
+      policy_version: 'v1',
+      output_schema_version: 'v1',
+      profile_id: TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
+      execution_mode: 'mocked_llm',
+      run_mode: 'acceptance',
+      exploration_payload: buildV1aNativeExplorationPayload(),
+      arbiter_payload: buildV1aNativeArbiterPayload({
+        evidenceMapRecords: n5.scenario_result.node_result.evidence_map_records,
+        titleCardId,
+        strengthRef: n6StrengthRef,
+      }),
+      mocked_output: {
+        fixture_id: `ranked_batch_${suffix}`,
+        output: buildV1aNativeRankedBatch({
+          titleCardId,
+          nodeAttemptId: n6AttemptId,
+          evidenceMapRecords: n5.scenario_result.node_result.evidence_map_records,
+          strengthRef: n6StrengthRef,
+        }),
       },
-      dedup_summary: {
-        canonical_work_refs: [literatureRef],
+      current_round_index: 1,
+      remaining_round_budget: 0,
+      persist_admitted_candidates: true,
+      persistence_context: {
+        search_run_ref: n4.scenario_result.node_result.search_run_ref,
+        search_plan_ref: n3.scenario_result.node_result.search_plan_ref,
+        literature_snapshot_ref: n2.scenario_result.node_result.literature_resource_pool_snapshot_ref,
       },
-      evidence_map_input_refs: [literatureRef, sourceRef],
-      coverage_observations: plan.coverage_row_intents.map((row) => ({
-        coverage_row_intent_id: row.coverage_row_intent_id,
+      expectations: {
         status: 'succeeded',
-        result_count: 1,
-        source_count: 1,
-      })),
-      evidence_bindings: plan.coverage_row_intents.map((row, index) => ({
-        coverage_row_intent_id: row.coverage_row_intent_id,
-        literature_ref: literatureRef,
-        source_refs: [sourceRef],
-        binding_kind: 'retrieval_hit',
-        result_rank: index + 1,
-      })),
-      coverage_assessments: plan.coverage_row_intents.map((row) => ({
-        coverage_row_intent_id: row.coverage_row_intent_id,
-        verdict: 'satisfied',
-        confidence: 0.88,
-        assessed_by: 'system',
-      })),
+        routing_decision: 'finalize_with_admitted_batch',
+        admitted_draft_count: 1,
+        persisted_candidate_count: 1,
+        persistence: 'required',
+      },
       created_by: 'system',
     },
-  });
-  assertStatus(runRes, 201);
-  const run = runRes.json() as { search_run: { search_run_id: string } };
-
-  const byRole = new Map(plan.coverage_row_intents.map((row) => [row.expected_evidence_role, row]));
-  const evidenceMapRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1a/evidence-maps',
-    payload: {
+    {
+      route_decision: 'invoke_next',
+      route_signal: 'need_candidate_batch_finalized',
+      route_target_node_id: 'topic-selection.v1a.validate-need-adjudication.v1',
+    },
+  );
+  const candidate = n6.scenario_result.adapter_result.persist_need_candidate_batch_result.persisted_candidates[0];
+  const candidateRef = ref('need_candidate', candidate.need_candidate_id, titleCardId, candidate.candidate_version);
+  const n7 = await invokeV1aNativeHarnessNode(
+    app,
+    'topic-selection.v1a.validate-need-adjudication.v1',
+    {
+      scenario_id: 'topic-selection.v1a.native-v1b-fixture.v1',
+      scenario_case_id: 'n7',
       title_card_id: titleCardId,
-      search_run_id: run.search_run.search_run_id,
-      evidence_units: [
-        {
-          client_unit_key: 'support',
-          coverage_row_intent_id: byRole.get('support')?.coverage_row_intent_id,
-          evidence_role: 'support',
-          literature_ref: literatureRef,
-          locator: manualLocator({ titleCardId, literatureRef, sourceRef, key: `support-${suffix}` }),
-          source_statement: 'Reviewers need traceability from source claims to topic-selection decisions.',
-        },
-        {
-          client_unit_key: 'challenge',
-          coverage_row_intent_id: byRole.get('challenge')?.coverage_row_intent_id,
-          evidence_role: 'challenge',
-          literature_ref: literatureRef,
-          locator: manualLocator({ titleCardId, literatureRef, sourceRef, key: `challenge-${suffix}` }),
-          source_statement: 'Evidence freshness can weaken reviewer-facing traceability conclusions.',
-        },
-        {
-          client_unit_key: 'baseline',
-          coverage_row_intent_id: byRole.get('baseline')?.coverage_row_intent_id,
-          evidence_role: 'baseline',
-          literature_ref: literatureRef,
-          locator: manualLocator({ titleCardId, literatureRef, sourceRef, key: `baseline-${suffix}` }),
-          source_statement: 'Baseline decision chains often collapse provenance into a single opaque status.',
-        },
-        {
-          client_unit_key: 'context',
-          coverage_row_intent_id: byRole.get('context')?.coverage_row_intent_id,
-          evidence_role: 'context',
-          literature_ref: literatureRef,
-          locator: manualLocator({ titleCardId, literatureRef, sourceRef, key: `context-${suffix}` }),
-          source_statement: 'The workflow is scoped to local CS paper engineering and reviewer-aligned evidence review.',
-        },
-      ],
+      workflow_run_id: `workflow_run_v1a_for_v1b_n7_${suffix}`,
+      node_attempt_id: `node_attempt_v1a_for_v1b_n7_${suffix}`,
+      need_candidate_ref: candidateRef,
+      evidence_map_ref: candidate.evidence_map_ref,
+      search_run_ref: candidate.search_run_ref,
+      search_plan_ref: candidate.search_plan_ref,
+      literature_snapshot_ref: candidate.literature_snapshot_ref,
+      execution_mode: 'provider_llm',
+      run_mode: 'acceptance',
+      executor_kind: 'single_agent',
+      profile_id: TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
+      fixture_human_decision: true,
+      policy_version: 'v1',
+      output_schema_version: 'v1',
+      expectations: {
+        status: 'ready',
+        route_outcome: 'advance_to_human_confirmation',
+        final_decision: 'validate',
+        adjudication_created: true,
+      },
       created_by: 'system',
     },
-  });
-  assertStatus(evidenceMapRes, 201);
-  const evidenceMap = evidenceMapRes.json() as { evidence_map: { evidence_map_id: string } };
-
-  const candidateRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1a/need-candidates',
-    payload: {
+    {
+      route_decision: 'invoke_next',
+      route_signal: 'need_adjudication_validated',
+      route_target_node_id: 'topic-selection.v1a.human-confirm-need.v1',
+    },
+  );
+  const n8 = await invokeV1aNativeHarnessNode(
+    app,
+    'topic-selection.v1a.human-confirm-need.v1',
+    {
+      scenario_id: 'topic-selection.v1a.native-v1b-fixture.v1',
+      scenario_case_id: 'n8',
       title_card_id: titleCardId,
-      evidence_map_id: evidenceMap.evidence_map.evidence_map_id,
-      candidate_need: 'Reviewer-aligned topic selection needs traceable evidence-to-need decisions.',
-      mechanism_type: 'workflow_gap',
-      mechanism_summary: 'The decision chain is hard to audit without explicit gates and evidence refs.',
-      scope_notes: 'Local-first CS paper engineering workflows that prepare reviewer-facing topic decisions.',
-      prior_art_status: 'no_strong_solution_found',
+      workflow_run_id: `workflow_run_v1a_for_v1b_n8_${suffix}`,
+      node_attempt_id: `node_attempt_v1a_for_v1b_n8_${suffix}`,
+      adjudication_result_ref: n7.scenario_result.node_result.adjudication_result_ref,
+      need_candidate_ref: candidateRef,
+      validation_support_packet_ref: n7.scenario_result.node_result.validation_support_packet_ref,
+      reserved_validated_need_ref: n7.scenario_result.node_result.reserved_validated_need_ref,
+      confirmation_input: {
+        schema_version: TOPIC_SELECTION_HUMAN_CONFIRMATION_INPUT_SCHEMA_VERSION,
+        actor_mode: 'human',
+        accountable_human_ref: { actor_type: 'human', actor_id: 'v1b-harness-runner' },
+        rationale: 'Native v1a runner confirms the validated need for v1b intake.',
+        accepted_risk_refs: n7.scenario_result.node_result.residual_risk_refs,
+        required_check_results: [
+          'confirm_unmet_need',
+          'review_prior_art_status',
+          'review_counter_evidence',
+          'confirm_scope_and_non_goals',
+          'confirm_v1b_handoff_readiness',
+        ].map((checkId) => ({ check_id: checkId, result: 'accepted' })),
+        delegated_executor: null,
+      },
+      execution_mode: 'deterministic_parser',
+      policy_version: 'v1',
+      output_schema_version: 'v1',
+      profile_id: TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
+      expectations: {
+        status: 'ready',
+        route_outcome: 'advance_to_publish_v1b_input_bundle',
+        validated_need_created: true,
+        v1b_bundle_created: false,
+      },
       created_by: 'system',
     },
-  });
-  assertStatus(candidateRes, 201);
-  const candidate = candidateRes.json() as { need_candidate_id: string };
-
-  const readinessRes = await app.inject({
-    method: 'POST',
-    url: `/topic-selection/v1a/need-candidates/${encodeURIComponent(candidate.need_candidate_id)}/readiness-assessments`,
-    payload: { assessed_by: 'system' },
-  });
-  assertStatus(readinessRes, 201);
-  const readiness = readinessRes.json() as { readiness_assessment_id: string };
-
-  const packetRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1a/validation-support-packets',
-    payload: {
-      need_candidate_id: candidate.need_candidate_id,
-      readiness_assessment_id: readiness.readiness_assessment_id,
+    {
+      route_decision: 'invoke_next',
+      route_signal: 'human_confirmation_ready',
+      route_target_node_id: 'topic-selection.v1a.publish-v1b-input-bundle.v1',
+    },
+  );
+  const n9 = await invokeV1aNativeHarnessNode(
+    app,
+    'topic-selection.v1a.publish-v1b-input-bundle.v1',
+    {
+      scenario_id: 'topic-selection.v1a.native-v1b-fixture.v1',
+      scenario_case_id: 'n9',
+      title_card_id: titleCardId,
+      workflow_run_id: `workflow_run_v1a_for_v1b_n9_${suffix}`,
+      node_attempt_id: `node_attempt_v1a_for_v1b_n9_${suffix}`,
+      validated_need_ref: n8.scenario_result.node_result.validated_need_ref,
+      source_need_candidate_ref: candidateRef,
+      adjudication_result_ref: n8.scenario_result.node_result.adjudication_result_ref,
+      support_packet_ref: n8.scenario_result.node_result.validation_support_packet_ref,
+      human_decision_ref: n8.scenario_result.node_result.human_decision_ref,
+      evidence_map_ref: candidate.evidence_map_ref,
+      search_run_ref: candidate.search_run_ref,
+      search_plan_ref: candidate.search_plan_ref,
+      literature_snapshot_ref: candidate.literature_snapshot_ref,
+      evidence_role_bundle: candidate.evidence_role_bundle,
+      risk_refs: [...n8.scenario_result.node_result.residual_risk_refs, ...n8.scenario_result.node_result.accepted_risk_refs],
+      memory_suggestion_refs: [],
+      recheck_request_refs: [],
+      expected_bundle_version: 'v1a-to-v1b-input-bundle-v1',
+      policy_version: 'v1',
+      output_schema_version: 'v1',
+      expectations: {
+        status: 'ready',
+        route_outcome: 'published_v1b_input_bundle',
+        idempotency_result: 'created_new_bundle',
+        bundle_published: true,
+      },
       created_by: 'system',
     },
-  });
-  assertStatus(packetRes, 201);
-  const packet = packetRes.json() as { validation_support_packet_id: string };
-
-  const adjudicationRes = await app.inject({
-    method: 'POST',
-    url: `/topic-selection/v1a/need-candidates/${encodeURIComponent(candidate.need_candidate_id)}/adjudications`,
-    payload: {
-      support_packet_id: packet.validation_support_packet_id,
-      final_decision: 'validate',
-      rationale: 'Human reviewer confirms the need and trace boundary.',
-      adjudicated_by: { actor_type: 'human', actor_id: 'route-test-reviewer' },
+    {
+      route_decision: 'stop_v1a_complete',
+      route_signal: 'v1b_input_bundle_published',
+      route_target_node_id: 'v1b.entry',
     },
+  );
+  assert.ok(n9.harness_trace_artifact_ref, 'N9 native runner must expose a trace artifact with the published v1b bundle.');
+  const n9TraceRes = await app.inject({
+    method: 'GET',
+    url: `/topic-selection/v1a/workflow-harness/artifacts/${encodeURIComponent(n9.harness_trace_artifact_ref.ref_id)}`,
   });
-  assertStatus(adjudicationRes, 201);
-  const adjudication = adjudicationRes.json() as {
-    adjudication_result: { adjudication_result_id: string; output_validated_need_id: string | null };
-  };
-  assert.ok(adjudication.adjudication_result.output_validated_need_id);
-
-  const confirmationRes = await app.inject({
-    method: 'POST',
-    url: `/topic-selection/v1a/adjudications/${encodeURIComponent(
-      adjudication.adjudication_result.adjudication_result_id,
-    )}/human-confirmations`,
-    payload: {
-      human_actor: { actor_type: 'human', actor_id: 'route-test-reviewer' },
-      human_rationale: 'Support, challenge, baseline, context, and handoff refs are sufficient for v1b input.',
-    },
-  });
-  assertStatus(confirmationRes, 201);
-  const confirmation = confirmationRes.json() as { validated_need: { validated_need_id: string } };
-
-  const v1bBundleRes = await app.inject({
-    method: 'POST',
-    url: '/topic-selection/v1a/v1b-input-bundles',
-    payload: { validated_need_id: confirmation.validated_need.validated_need_id, created_by: 'system' },
-  });
-  assertStatus(v1bBundleRes, 201);
-  const v1bBundle = v1bBundleRes.json() as TopicSelectionV1aToV1bInputBundleRecord;
-
+  assertStatus(n9TraceRes, 200);
+  const n9Trace = n9TraceRes.json() as { payload: { v1b_input_bundle?: TopicSelectionV1aToV1bInputBundleRecord | null } };
+  const v1bBundle = n9Trace.payload.v1b_input_bundle;
+  assert.ok(v1bBundle, 'N9 trace payload must carry the published v1b bundle for v1b harness intake.');
+  assert.equal(v1bBundle.v1b_input_bundle_id, n9.scenario_result.node_result.v1b_input_bundle_ref.ref_id);
   return {
     titleCardId,
-    validatedNeedId: confirmation.validated_need.validated_need_id,
+    validatedNeedId: n8.scenario_result.node_result.validated_need_ref.ref_id,
     v1bInputBundle: v1bBundle,
     v1bInputBundleId: v1bBundle.v1b_input_bundle_id,
   };
@@ -1756,7 +2255,10 @@ const removedLegacyWriteRoutes = [
 ] as const;
 
 test('topic-selection v1b legacy write routes are not registered', async () => {
-  const app = buildApp({ topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway() });
+  const app = buildApp({
+    topicSelectionV1aLlmGateway: new FakeTopicSelectionV1aLlmGateway(),
+    topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway(),
+  });
   try {
     for (const route of removedLegacyWriteRoutes) {
       const response = await app.inject({
@@ -1786,7 +2288,10 @@ test('topic-selection v1b legacy write routes are not registered', async () => {
 });
 
 test('topic-selection v1b offline replay routes reject invalid payloads', async () => {
-  const app = buildApp({ topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway() });
+  const app = buildApp({
+    topicSelectionV1aLlmGateway: new FakeTopicSelectionV1aLlmGateway(),
+    topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway(),
+  });
   try {
     const invalidReplayCaseTypeRes = await app.inject({
       method: 'POST',
@@ -1828,7 +2333,10 @@ test('topic-selection v1b offline replay routes reject invalid payloads', async 
 });
 
 test('topic-selection v1b workflow harness HTTP route invokes N1 without legacy write headers', async () => {
-  const app = buildApp({ topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway() });
+  const app = buildApp({
+    topicSelectionV1aLlmGateway: new FakeTopicSelectionV1aLlmGateway(),
+    topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway(),
+  });
   try {
     const suffix = uniqueId('v1b-harness-http');
     const bundle = await createV1bInputBundle(app, suffix);
@@ -1890,7 +2398,10 @@ test('topic-selection v1b workflow harness HTTP route invokes N1 without legacy 
 });
 
 test('topic-selection v1b workflow harness HTTP route drives N1-N11 without legacy writes', async () => {
-  const app = buildApp({ topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway() });
+  const app = buildApp({
+    topicSelectionV1aLlmGateway: new FakeTopicSelectionV1aLlmGateway(),
+    topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway(),
+  });
   try {
     const { bundle, n11 } = await runV1bHarnessHttpN1ToN11(app, uniqueId('v1b-harness-http-full'));
     assert.equal(n11.gate_status, 'admitted_with_warnings', JSON.stringify(n11));
@@ -1911,7 +2422,10 @@ test('topic-selection v1b workflow harness HTTP route drives N1-N11 without lega
 });
 
 test('topic-selection v1b offline replay HTTP routes calculate metrics and expose diffs', async () => {
-  const app = buildApp({ topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway() });
+  const app = buildApp({
+    topicSelectionV1aLlmGateway: new FakeTopicSelectionV1aLlmGateway(),
+    topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway(),
+  });
   try {
     const datasetRes = await app.inject({
       method: 'POST',
@@ -2005,7 +2519,10 @@ test('T-054 Prisma HTTP smoke requires DATABASE_URL and drives v1b harness HTTP 
   process.env.APPLICATION_SETTINGS_REPOSITORY = 'prisma';
   process.env.AUTO_PULL_SCHEDULER_ENABLED = 'false';
 
-  const app = buildApp({ topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway() });
+  const app = buildApp({
+    topicSelectionV1aLlmGateway: new FakeTopicSelectionV1aLlmGateway(),
+    topicSelectionV1bLlmGateway: new FakeTopicSelectionV1bLlmGateway(),
+  });
   try {
     const result = await runV1bHarnessHttpN1ToN11(app, uniqueId('v1b-prisma-harness'));
     assert.equal(result.n11.gate_status, 'admitted_with_warnings', JSON.stringify(result.n11));

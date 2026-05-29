@@ -1104,14 +1104,28 @@ test('topic-selection v1c HTTP routes drive ready bundle to bridge and downstrea
     assertStatus(supportAliasRes, 201);
     const supportAlias = supportAliasRes.json() as {
       promotion_decision_support: { promotion_decision_support_id: string };
-      promotion_gate_check: { promotion_gate_check_id: string };
+      promotion_gate_check?: { promotion_gate_check_id: string };
     };
     assert.equal(
       supportAlias.promotion_decision_support.promotion_decision_support_id,
       gateBundle.promotion_decision_support.promotion_decision_support_id,
     );
+    assert.equal(supportAlias.promotion_gate_check, undefined);
+
+    const gateReplayRes = await app.inject({
+      method: 'POST',
+      url: '/topic-selection/v1c/promotion-gate-checks',
+      payload: {
+        promotion_decision_support_id: supportAlias.promotion_decision_support.promotion_decision_support_id,
+        created_by: 'system',
+      },
+    });
+    assertStatus(gateReplayRes, 201);
+    const gateReplay = gateReplayRes.json() as {
+      promotion_gate_check: { promotion_gate_check_id: string };
+    };
     assert.equal(
-      supportAlias.promotion_gate_check.promotion_gate_check_id,
+      gateReplay.promotion_gate_check.promotion_gate_check_id,
       gateBundle.promotion_gate_check.promotion_gate_check_id,
     );
 

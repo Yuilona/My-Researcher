@@ -211,14 +211,14 @@ test('agent orchestrator normalizes mocked, codex, and provider execution onto o
   assert.equal(providerGateway.calls[0]!.schemaName, 'topic_selection_ranked_candidate_draft_batch');
   assert.deepEqual(providerGateway.calls[0]!.model, {
     providerId: 'openai',
-    modelId: 'gpt-5.4-mini',
+    modelId: 'gpt-5.5',
     profileId: TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
   });
   assert.equal(providerGateway.calls[0]!.policy?.timeoutMs, 180000);
   assert.equal(providerGateway.calls[0]!.policy?.maxRetries, 1);
   assert.deepEqual(providerGateway.calls[0]!.normalizedParams, {
     creativity: 'medium',
-    reasoning_depth: 'medium',
+    reasoning_depth: 'high',
     output_budget: 'medium',
     structured_output_required: true,
     output_format: 'json_schema',

@@ -120,3 +120,75 @@ templates:
       - Do not output or override a promotion gate disposition.
       - Do not authorize promotion, create human decisions, create PaperProject bridges, or modify v1b/T-061 authority objects.
       - Copy refs only from the supplied PromotionInputSnapshotHandoff.
+
+  - prompt_template_id: topic-selection-v1c-promotion-support-bounded-micro-debate
+    version: 1
+    runtime_profile_id: topic-selection.v1c.promotion-support.bounded-micro-debate.codex.v1
+    description: Run one fixed-role Codex call within the v1c N2 bounded micro-debate acceptance workflow.
+    variables_schema:
+      type: object
+      required: [role_slot, context_packet_json, prior_role_outputs_json]
+      properties:
+        role_slot:
+          type: string
+        context_packet_json:
+          type: object
+        prior_role_outputs_json:
+          type: object
+    notes:
+      - Return only JSON for the requested role slot.
+      - Do not output gate disposition, promotion decision, bridge authorization, or downstream mutation fields.
+      - Copy refs only from the provided N1-derived context packet.
+      - The synthesizer.final output must include N3-readable semantic slots and critic-finding resolution coverage.
+
+  - prompt_template_id: topic-selection-v1c-gate-diagnostic-adjunct
+    version: 1
+    runtime_profile_id: topic-selection.v1c.gate-diagnostic-adjunct.codex.v1
+    description: Produce Codex diagnostic guidance after a deterministic N3 action_required gate without changing routing authority.
+    variables_schema:
+      type: object
+      required: [gate_result_json, allowed_refs_json]
+      properties:
+        gate_result_json:
+          type: object
+        allowed_refs_json:
+          type: array
+    notes:
+      - Return only diagnostic JSON.
+      - Do not change or restate a new routing outcome.
+      - Any repair suggestions must point to existing required_actions or allowed refs.
+
+  - prompt_template_id: topic-selection-v1c-codex-delegated-promotion-decision
+    version: 1
+    runtime_profile_id: topic-selection.v1c.codex-delegated-promotion-decision.codex.v1
+    description: Produce a structured N4 delegated promotion decision candidate under an explicit authorization envelope.
+    variables_schema:
+      type: object
+      required: [delegation_envelope_json, gate_handoff_json]
+      properties:
+        delegation_envelope_json:
+          type: object
+        gate_handoff_json:
+          type: object
+    notes:
+      - Return only the delegated decision candidate JSON.
+      - The candidate is not authority until deterministic N4 admission passes.
+      - Do not create PaperProjectBridge or downstream intake fields.
+      - Copy refs and hashes exactly from the supplied gate handoff and authorization envelope.
+
+  - prompt_template_id: topic-selection-v1c-downstream-feedback-normalization
+    version: 1
+    runtime_profile_id: topic-selection.v1c.downstream-feedback-normalization.codex.v1
+    description: Normalize semi-structured downstream feedback into the v1c N6 structured feedback candidate contract.
+    variables_schema:
+      type: object
+      required: [bridge_context_json, raw_feedback_text]
+      properties:
+        bridge_context_json:
+          type: object
+        raw_feedback_text:
+          type: string
+    notes:
+      - Return only the structured feedback candidate JSON.
+      - Do not invent refs, mutate bridge or promotion records, or create recheck artifacts directly.
+      - Recheck-producing feedback must include a non-empty required_action.

@@ -460,20 +460,15 @@ test('paper project intake prefers explicit selected literature ids and blocks e
   const emptyExcerpt = emptyScope.source_snapshot_excerpt as Record<string, unknown>;
   emptyExcerpt.selected_literature_evidence_ids = [];
   emptyExcerpt.selected_evidence_refs = [];
-  const emptySubject = makeSubject(emptySource);
-  const emptyBridge = await emptySubject.service.createPaperProjectBridge({
-    promotion_decision_id: 'promotion_decision_001',
-  });
-
   await assert.rejects(
-    () => emptySubject.service.createPaperProjectIntakeFromBridge({
-      paper_project_bridge_id: emptyBridge.paper_project_bridge.paper_project_bridge_id,
-      bridge_payload_hash: emptyBridge.paper_project_bridge.bridge_payload_hash,
-      created_by: 'hybrid',
+    () => makeSubject(emptySource).service.createPaperProjectBridge({
+      promotion_decision_id: 'promotion_decision_001',
     }),
-    (error) => error instanceof AppError && error.errorCode === 'GATE_CONSTRAINT_FAILED',
+    (error) =>
+      error instanceof AppError
+      && error.errorCode === 'GATE_CONSTRAINT_FAILED'
+      && /selected_evidence_refs/.test(error.message),
   );
-  assert.equal(emptySubject.paperProjectGateway.createCalls.length, 0);
 });
 
 test('paper project intake rejects stale preconditions before creating downstream project', async () => {

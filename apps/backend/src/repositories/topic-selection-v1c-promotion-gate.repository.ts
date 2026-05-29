@@ -22,12 +22,48 @@ export type TopicSelectionV1cPromotionGateControlPlanePersistence = {
   trace_snapshot: TopicSelectionTraceSnapshotRecord;
 };
 
+export type TopicSelectionV1cPromotionSupportControlPlanePersistence = {
+  input_snapshot: TopicSelectionInputSnapshotRecord;
+  workflow_run: TopicSelectionLlmWorkflowRunRecord;
+  artifact_refs: TopicSelectionArtifactRefRecord[];
+};
+
+export type TopicSelectionV1cPromotionGateCheckControlPlanePersistence = {
+  input_snapshot: TopicSelectionInputSnapshotRecord;
+  workflow_run: TopicSelectionLlmWorkflowRunRecord;
+  readiness_gate_result: TopicSelectionReadinessGateResultRecord;
+  transition_attempt: TopicSelectionChainTransitionAttemptRecord;
+  trace_snapshot: TopicSelectionTraceSnapshotRecord;
+};
+
 export type TopicSelectionV1cPromotionGatePersistenceBundle = {
   promotion_decision_support: TopicSelectionPromotionDecisionSupportRecord;
   promotion_dossier: TopicSelectionPromotionDossierRecord;
   argument_readiness_mini_check: TopicSelectionArgumentReadinessMiniCheckRecord;
   promotion_gate_check: TopicSelectionPromotionGateCheckRecord;
   control_plane: TopicSelectionV1cPromotionGateControlPlanePersistence;
+};
+
+export type TopicSelectionV1cPromotionSupportPersistenceBundle = {
+  promotion_decision_support: TopicSelectionPromotionDecisionSupportRecord;
+  promotion_dossier: TopicSelectionPromotionDossierRecord;
+  control_plane: TopicSelectionV1cPromotionSupportControlPlanePersistence;
+};
+
+export type TopicSelectionV1cPromotionGateCheckPersistenceBundle = {
+  argument_readiness_mini_check: TopicSelectionArgumentReadinessMiniCheckRecord;
+  promotion_gate_check: TopicSelectionPromotionGateCheckRecord;
+  control_plane: TopicSelectionV1cPromotionGateCheckControlPlanePersistence;
+};
+
+export type TopicSelectionV1cPromotionSupportRecordBundle = {
+  promotion_decision_support: TopicSelectionPromotionDecisionSupportRecord;
+  promotion_dossier: TopicSelectionPromotionDossierRecord;
+};
+
+export type TopicSelectionV1cPromotionGateCheckRecordBundle = {
+  argument_readiness_mini_check: TopicSelectionArgumentReadinessMiniCheckRecord;
+  promotion_gate_check: TopicSelectionPromotionGateCheckRecord;
 };
 
 export type TopicSelectionV1cPromotionGateRecordBundle = {
@@ -42,9 +78,29 @@ export interface TopicSelectionV1cPromotionGateRepository {
     persistence: TopicSelectionV1cPromotionGatePersistenceBundle,
   ): Promise<TopicSelectionV1cPromotionGateRecordBundle>;
 
+  createSupportBundle(
+    persistence: TopicSelectionV1cPromotionSupportPersistenceBundle,
+  ): Promise<TopicSelectionV1cPromotionSupportRecordBundle>;
+
+  createGateCheckBundle(
+    persistence: TopicSelectionV1cPromotionGateCheckPersistenceBundle,
+  ): Promise<TopicSelectionV1cPromotionGateCheckRecordBundle>;
+
   findBundleBySupportRunKey(
     supportRunKey: string,
   ): Promise<TopicSelectionV1cPromotionGateRecordBundle | null>;
+
+  findSupportBundleBySupportRunKey(
+    supportRunKey: string,
+  ): Promise<TopicSelectionV1cPromotionSupportRecordBundle | null>;
+
+  findSupportBundleByDecisionSupportId(
+    promotionDecisionSupportId: string,
+  ): Promise<TopicSelectionV1cPromotionSupportRecordBundle | null>;
+
+  findGateCheckBundleBySupportRunKey(
+    supportRunKey: string,
+  ): Promise<TopicSelectionV1cPromotionGateCheckRecordBundle | null>;
 
   findLatestBundleByPromotionInputSnapshotId(
     promotionInputSnapshotId: string,

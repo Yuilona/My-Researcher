@@ -93,7 +93,7 @@ model_options:
   - option_id: topic-selection.search-plan-blueprint.draft.v1.openai-balanced
     option_purpose: default_balanced_provider_run
     provider_id: openai
-    model_id: gpt-5.4-mini
+    model_id: gpt-5.5
     request_policy: { timeout_ms: 120000 }
     normalized_params:
       creativity: medium
@@ -139,7 +139,7 @@ model_options:
   - option_id: topic-selection.search-plan-blueprint.review.v1.openai-balanced
     option_purpose: default_balanced_provider_run
     provider_id: openai
-    model_id: gpt-5.4-mini
+    model_id: gpt-5.5
     request_policy: { timeout_ms: 90000 }
     normalized_params:
       creativity: low

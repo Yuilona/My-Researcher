@@ -90,6 +90,30 @@ const promotionGateSupportBody = bodySchema(['promotion_input_snapshot_id'], {
   model: recordPayload,
 });
 
+const promotionGateCheckBody = {
+  body: {
+    type: 'object',
+    additionalProperties: true,
+    anyOf: [
+      { required: ['promotion_decision_support_id'] },
+      { required: ['support_run_key'] },
+      { required: ['promotion_input_snapshot_id'] },
+    ],
+    properties: {
+      promotion_decision_support_id: stringId,
+      support_run_key: stringId,
+      promotion_input_snapshot_id: stringId,
+      workspace_id: nullableStringId,
+      created_by: actorType,
+      policy_version_id: nullableStringId,
+      support_generation_mode: { enum: [...TOPIC_SELECTION_PROMOTION_SUPPORT_GENERATION_MODES] },
+      workflow_profile_version: nullableStringId,
+      prompt_template_version: nullableStringId,
+      model: recordPayload,
+    },
+  },
+} as const;
+
 const humanPromotionDecisionBody = bodySchema([
   'promotion_gate_check_id',
   'decision',
@@ -249,12 +273,12 @@ export async function registerTopicSelectionV1cRoutes(
   fastify.post(
     '/topic-selection/v1c/promotion-decision-support',
     { schema: promotionGateSupportBody },
-    controller.createPromotionGateSupport,
+    controller.createPromotionDecisionSupport,
   );
   fastify.post(
     '/topic-selection/v1c/promotion-gate-checks',
-    { schema: promotionGateSupportBody },
-    controller.createPromotionGateSupport,
+    { schema: promotionGateCheckBody },
+    controller.createPromotionGateCheck,
   );
   fastify.get(
     '/topic-selection/v1c/promotion-decision-support/:supportId',

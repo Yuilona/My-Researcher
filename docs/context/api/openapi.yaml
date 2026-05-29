@@ -4017,7 +4017,7 @@ paths:
   /topic-selection/v1c/promotion-decision-support:
     post:
       operationId: createTopicSelectionV1cPromotionDecisionSupport
-      summary: Create promotion decision support, dossier, mini-check, and gate check.
+      summary: Create N2 promotion decision support and dossier.
       tags: [topic-selection-v1c]
       requestBody:
         required: true
@@ -4027,11 +4027,11 @@ paths:
               $ref: '#/components/schemas/TopicSelectionV1cPromotionGateSupportRequest'
       responses:
         '201':
-          description: Promotion gate support bundle created.
+          description: Promotion decision support and dossier created.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TopicSelectionV1cPromotionGateSupportResponse'
+                $ref: '#/components/schemas/TopicSelectionV1cPromotionDecisionSupportResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -4042,14 +4042,14 @@ paths:
   /topic-selection/v1c/promotion-gate-checks:
     post:
       operationId: createTopicSelectionV1cPromotionGateCheck
-      summary: Create promotion gate support and return the gate check bundle.
+      summary: Create N3 promotion gate check from existing support.
       tags: [topic-selection-v1c]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TopicSelectionV1cPromotionGateSupportRequest'
+              $ref: '#/components/schemas/TopicSelectionV1cPromotionGateCheckRequest'
       responses:
         '201':
           description: Promotion gate support bundle created.
@@ -5310,6 +5310,16 @@ components:
         handoff:
           $ref: '#/components/schemas/TopicSelectionV1cRecord'
 
+    TopicSelectionV1cPromotionDecisionSupportResponse:
+      type: object
+      required: [promotion_decision_support, promotion_dossier]
+      additionalProperties: true
+      properties:
+        promotion_decision_support:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+        promotion_dossier:
+          $ref: '#/components/schemas/TopicSelectionV1cRecord'
+
     TopicSelectionV1cHumanPromotionDecisionResponse:
       type: object
       required: [human_promotion_decision, promotion_decision]
@@ -5423,6 +5433,26 @@ components:
       required: [promotion_input_snapshot_id]
       additionalProperties: true
       properties:
+        promotion_input_snapshot_id: { type: string, minLength: 1 }
+        workspace_id: { type: string, nullable: true }
+        created_by: { type: string, enum: [human, llm, system, hybrid] }
+        policy_version_id: { type: string, nullable: true }
+        support_generation_mode: { type: string, enum: [deterministic, llm_draft] }
+        workflow_profile_version: { type: string, nullable: true }
+        prompt_template_version: { type: string, nullable: true }
+        model:
+          $ref: '#/components/schemas/JsonObject'
+
+    TopicSelectionV1cPromotionGateCheckRequest:
+      type: object
+      additionalProperties: true
+      anyOf:
+        - required: [promotion_decision_support_id]
+        - required: [support_run_key]
+        - required: [promotion_input_snapshot_id]
+      properties:
+        promotion_decision_support_id: { type: string, minLength: 1 }
+        support_run_key: { type: string, minLength: 1 }
         promotion_input_snapshot_id: { type: string, minLength: 1 }
         workspace_id: { type: string, nullable: true }
         created_by: { type: string, enum: [human, llm, system, hybrid] }
@@ -7211,7 +7241,7 @@ components:
     LiteratureExtractionProfile:
       type: object
       description: >-
-        OpenAI extraction model profile. Built-in defaults are default -> gpt-5.4-mini
+        OpenAI extraction model profile. Built-in defaults are default -> gpt-5.5
         and high_accuracy -> gpt-5.5.
       required: [profile_id, provider, model]
       properties:
@@ -7223,7 +7253,7 @@ components:
           type: string
           description: >-
             OpenAI model id used for key-content extraction. Built-in defaults:
-            gpt-5.4-mini for default, gpt-5.5 for high_accuracy.
+            gpt-5.5 for default, gpt-5.5 for high_accuracy.
       additionalProperties: false
 
     LiteratureContentProcessingExtractionSettings:

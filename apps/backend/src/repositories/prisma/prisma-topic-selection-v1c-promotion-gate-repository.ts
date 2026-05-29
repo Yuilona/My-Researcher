@@ -22,8 +22,14 @@ import type {
 import type {
   TopicSelectionV1cPromotionGateControlPlanePersistence,
   TopicSelectionV1cPromotionGatePersistenceBundle,
+  TopicSelectionV1cPromotionGateCheckControlPlanePersistence,
+  TopicSelectionV1cPromotionGateCheckPersistenceBundle,
+  TopicSelectionV1cPromotionGateCheckRecordBundle,
   TopicSelectionV1cPromotionGateRecordBundle,
   TopicSelectionV1cPromotionGateRepository,
+  TopicSelectionV1cPromotionSupportControlPlanePersistence,
+  TopicSelectionV1cPromotionSupportPersistenceBundle,
+  TopicSelectionV1cPromotionSupportRecordBundle,
 } from '../topic-selection-v1c-promotion-gate.repository.js';
 
 function toJsonValue(value: unknown): Prisma.InputJsonValue {
@@ -209,6 +215,62 @@ implements TopicSelectionV1cPromotionGateRepository {
     };
   }
 
+  async createSupportBundle(
+    persistence: TopicSelectionV1cPromotionSupportPersistenceBundle,
+  ): Promise<TopicSelectionV1cPromotionSupportRecordBundle> {
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await this.createSupportControlPlaneRecords(tx, persistence.control_plane);
+        await tx.topicSelectionPromotionDecisionSupport.create({
+          data: this.toDecisionSupportCreateInput(persistence.promotion_decision_support),
+        });
+        await tx.topicSelectionPromotionDossier.create({
+          data: this.toDossierCreateInput(persistence.promotion_dossier),
+        });
+      });
+    } catch (error) {
+      if (this.isSupportRunUniqueConflict(error)) {
+        const existing = await this.findSupportBundleBySupportRunKey(
+          persistence.promotion_decision_support.support_run_key,
+        );
+        if (existing) return existing;
+      }
+      throw error;
+    }
+    return {
+      promotion_decision_support: persistence.promotion_decision_support,
+      promotion_dossier: persistence.promotion_dossier,
+    };
+  }
+
+  async createGateCheckBundle(
+    persistence: TopicSelectionV1cPromotionGateCheckPersistenceBundle,
+  ): Promise<TopicSelectionV1cPromotionGateCheckRecordBundle> {
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await this.createGateCheckControlPlaneRecords(tx, persistence.control_plane);
+        await tx.topicSelectionArgumentReadinessMiniCheck.create({
+          data: this.toMiniCheckCreateInput(persistence.argument_readiness_mini_check),
+        });
+        await tx.topicSelectionPromotionGateCheck.create({
+          data: this.toGateCheckCreateInput(persistence.promotion_gate_check),
+        });
+      });
+    } catch (error) {
+      if (this.isSupportRunUniqueConflict(error)) {
+        const existing = await this.findGateCheckBundleBySupportRunKey(
+          persistence.promotion_gate_check.support_run_key,
+        );
+        if (existing) return existing;
+      }
+      throw error;
+    }
+    return {
+      argument_readiness_mini_check: persistence.argument_readiness_mini_check,
+      promotion_gate_check: persistence.promotion_gate_check,
+    };
+  }
+
   async findBundleBySupportRunKey(
     supportRunKey: string,
   ): Promise<TopicSelectionV1cPromotionGateRecordBundle | null> {
@@ -232,6 +294,48 @@ implements TopicSelectionV1cPromotionGateRepository {
       argument_readiness_mini_check: toMiniCheckRecord(miniCheck),
       promotion_gate_check: toGateCheckRecord(gateCheck),
     };
+  }
+
+  async findSupportBundleBySupportRunKey(
+    supportRunKey: string,
+  ): Promise<TopicSelectionV1cPromotionSupportRecordBundle | null> {
+    const support = await this.prisma.topicSelectionPromotionDecisionSupport.findUnique({
+      where: { supportRunKey },
+    });
+    if (!support) return null;
+    const dossier = await this.prisma.topicSelectionPromotionDossier.findUnique({
+      where: { supportRunKey },
+    });
+    return dossier
+      ? {
+          promotion_decision_support: toDecisionSupportRecord(support),
+          promotion_dossier: toDossierRecord(dossier),
+        }
+      : null;
+  }
+
+  async findSupportBundleByDecisionSupportId(
+    promotionDecisionSupportId: string,
+  ): Promise<TopicSelectionV1cPromotionSupportRecordBundle | null> {
+    const support = await this.prisma.topicSelectionPromotionDecisionSupport.findUnique({
+      where: { id: promotionDecisionSupportId },
+    });
+    return support ? this.findSupportBundleBySupportRunKey(support.supportRunKey) : null;
+  }
+
+  async findGateCheckBundleBySupportRunKey(
+    supportRunKey: string,
+  ): Promise<TopicSelectionV1cPromotionGateCheckRecordBundle | null> {
+    const [miniCheck, gateCheck] = await Promise.all([
+      this.prisma.topicSelectionArgumentReadinessMiniCheck.findUnique({ where: { supportRunKey } }),
+      this.prisma.topicSelectionPromotionGateCheck.findUnique({ where: { supportRunKey } }),
+    ]);
+    return miniCheck && gateCheck
+      ? {
+          argument_readiness_mini_check: toMiniCheckRecord(miniCheck),
+          promotion_gate_check: toGateCheckRecord(gateCheck),
+        }
+      : null;
   }
 
   async findLatestBundleByPromotionInputSnapshotId(
@@ -303,6 +407,16 @@ implements TopicSelectionV1cPromotionGateRepository {
     tx: Prisma.TransactionClient,
     controlPlane: TopicSelectionV1cPromotionGateControlPlanePersistence,
   ): Promise<void> {
+    await this.createSupportControlPlaneRecords(tx, controlPlane);
+    await this.createGateCheckControlPlaneRecords(tx, controlPlane, {
+      createInputSnapshotAndWorkflowRun: false,
+    });
+  }
+
+  private async createSupportControlPlaneRecords(
+    tx: Prisma.TransactionClient,
+    controlPlane: TopicSelectionV1cPromotionSupportControlPlanePersistence,
+  ): Promise<void> {
     await tx.topicSelectionInputSnapshot.create({
       data: {
         id: controlPlane.input_snapshot.input_snapshot_id,
@@ -365,6 +479,58 @@ implements TopicSelectionV1cPromotionGateRepository {
           inputSnapshotId: artifactRef.input_snapshot_id ?? null,
           createdBy: artifactRef.created_by,
           createdAt: new Date(artifactRef.created_at),
+        },
+      });
+    }
+  }
+
+  private async createGateCheckControlPlaneRecords(
+    tx: Prisma.TransactionClient,
+    controlPlane: TopicSelectionV1cPromotionGateCheckControlPlanePersistence,
+    options: { createInputSnapshotAndWorkflowRun?: boolean } = {},
+  ): Promise<void> {
+    if (options.createInputSnapshotAndWorkflowRun ?? true) {
+      await tx.topicSelectionInputSnapshot.create({
+        data: {
+          id: controlPlane.input_snapshot.input_snapshot_id,
+          workspaceId: controlPlane.input_snapshot.workspace_id ?? null,
+          titleCardId: controlPlane.input_snapshot.title_card_id ?? null,
+          targetRefType: controlPlane.input_snapshot.target_ref.ref_type,
+          targetRefId: controlPlane.input_snapshot.target_ref.ref_id,
+          targetVersionId: controlPlane.input_snapshot.target_ref.version_id ?? null,
+          contextPolicyVersionId: controlPlane.input_snapshot.context_policy_version_id ?? null,
+          policyVersion: controlPlane.input_snapshot.policy_version ?? null,
+          snapshotHash: controlPlane.input_snapshot.snapshot_hash,
+          sourceRefs: toJsonValue(controlPlane.input_snapshot.source_refs),
+          permissionRefs: toJsonValue(controlPlane.input_snapshot.permission_refs),
+          payload: toJsonValue(controlPlane.input_snapshot.payload),
+          createdBy: controlPlane.input_snapshot.created_by,
+          createdAt: new Date(controlPlane.input_snapshot.created_at),
+        },
+      });
+      await tx.topicSelectionLlmWorkflowRun.create({
+        data: {
+          id: controlPlane.workflow_run.workflow_run_id,
+          workspaceId: controlPlane.workflow_run.workspace_id ?? null,
+          titleCardId: controlPlane.workflow_run.title_card_id ?? null,
+          workflowKey: controlPlane.workflow_run.workflow_key,
+          workflowProfileKey: controlPlane.workflow_run.workflow_profile_key,
+          workflowProfileVersion: controlPlane.workflow_run.workflow_profile_version ?? null,
+          inputSnapshotId: controlPlane.workflow_run.input_snapshot_id ?? null,
+          status: controlPlane.workflow_run.status,
+          providerId: controlPlane.workflow_run.provider_id ?? null,
+          modelId: controlPlane.workflow_run.model_id ?? null,
+          promptTemplateId: controlPlane.workflow_run.prompt_template_id ?? null,
+          promptTemplateVersion: controlPlane.workflow_run.prompt_template_version ?? null,
+          startedAt: new Date(controlPlane.workflow_run.started_at),
+          finishedAt: controlPlane.workflow_run.finished_at
+            ? new Date(controlPlane.workflow_run.finished_at)
+            : null,
+          telemetry: toJsonValue(controlPlane.workflow_run.telemetry),
+          outputSummary: toJsonValue(controlPlane.workflow_run.output_summary),
+          errorCode: controlPlane.workflow_run.error_code ?? null,
+          errorMessage: controlPlane.workflow_run.error_message ?? null,
+          createdBy: controlPlane.workflow_run.created_by,
         },
       });
     }

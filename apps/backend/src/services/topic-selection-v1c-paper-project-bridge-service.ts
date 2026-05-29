@@ -97,12 +97,32 @@ export class TopicSelectionV1cPaperProjectBridgeService {
     );
     this.assertBridgeEligibleSource(sourceHandoff);
     this.assertHandoffLineageConsistency(sourceHandoff);
+    this.assertRequiredBridgeSemantics(sourceHandoff);
     this.assertWorkspace(input.workspace_id ?? null, sourceHandoff);
 
+    const workingCopyPayload = this.buildWorkingCopyPayload(sourceHandoff);
+    const workingCopyPayloadHash = sha256Text(stableStringify(workingCopyPayload));
+    const sourceRefs = this.compileSourceRefs(sourceHandoff);
+    const bridgePayloadHash = sha256Text(stableStringify({
+      source_promotion_decision_id: sourceHandoff.promotion_decision_id,
+      promotion_commitment_profile_id:
+        sourceHandoff.promotion_commitment_profile.promotion_commitment_profile_id,
+      snapshot_hashes: sourceHandoff.snapshot_hashes,
+      working_copy_payload_hash: workingCopyPayloadHash,
+      conditions: sourceHandoff.conditions,
+      accepted_risk_refs: sourceHandoff.accepted_risk_refs,
+      early_check_obligations: sourceHandoff.early_check_obligations,
+    }));
     const existing = await this.repository.findBridgeBySourcePromotionDecisionId(
       sourceHandoff.promotion_decision_id,
     );
     if (existing) {
+      this.assertExistingBridgeMatchesSource({
+        existing,
+        sourceHandoff,
+        workingCopyPayloadHash,
+        bridgePayloadHash,
+      });
       return {
         paper_project_bridge: existing,
         handoff: this.toHandoff(existing),
@@ -130,19 +150,6 @@ export class TopicSelectionV1cPaperProjectBridgeService {
       sourceHandoff.promotion_commitment_profile.title_card_id,
       null,
     );
-    const workingCopyPayload = this.buildWorkingCopyPayload(sourceHandoff);
-    const workingCopyPayloadHash = sha256Text(stableStringify(workingCopyPayload));
-    const sourceRefs = this.compileSourceRefs(sourceHandoff);
-    const bridgePayloadHash = sha256Text(stableStringify({
-      source_promotion_decision_id: sourceHandoff.promotion_decision_id,
-      promotion_commitment_profile_id:
-        sourceHandoff.promotion_commitment_profile.promotion_commitment_profile_id,
-      snapshot_hashes: sourceHandoff.snapshot_hashes,
-      working_copy_payload_hash: workingCopyPayloadHash,
-      conditions: sourceHandoff.conditions,
-      accepted_risk_refs: sourceHandoff.accepted_risk_refs,
-      early_check_obligations: sourceHandoff.early_check_obligations,
-    }));
     const bridge: TopicSelectionPaperProjectBridgeRecord = {
       paper_project_bridge_id: bridgeId,
       bridge_status: 'active',
@@ -493,6 +500,88 @@ export class TopicSelectionV1cPaperProjectBridgeService {
         409,
         'VERSION_CONFLICT',
         `PromotionBridgeHandoff ${sourceHandoff.promotion_decision_id} has inconsistent lineage: ${mismatches.join(', ')}.`,
+      );
+    }
+  }
+
+  private assertRequiredBridgeSemantics(
+    sourceHandoff: TopicSelectionPromotionBridgeHandoff,
+  ): void {
+    const commitment = sourceHandoff.promotion_commitment_profile;
+    const scope = this.asRecord(commitment.scope);
+    const excerpt = this.asRecord(scope.source_snapshot_excerpt);
+    const missing: string[] = [];
+
+    if (!this.hasText(commitment.claim_ceiling)) {
+      missing.push('claim_ceiling');
+    }
+    if (!this.firstPresentText(scope, excerpt, 'contribution_summary')) {
+      missing.push('contribution_summary');
+    }
+    if (!this.firstPresentText(scope, excerpt, 'evaluation_plan')) {
+      missing.push('evaluation_plan');
+    }
+    if (!this.hasSelectedEvidence(sourceHandoff, excerpt)) {
+      missing.push('selected_evidence_refs');
+    }
+    if (
+      sourceHandoff.decision === 'promote_with_conditions'
+      && sourceHandoff.conditions.length === 0
+    ) {
+      missing.push('conditions');
+    }
+    if (sourceHandoff.conditions.some((condition) =>
+      !this.hasText(condition.condition_code)
+      || !this.hasText(condition.required_action?.action_code)
+      || !this.hasText(condition.required_action?.reason))) {
+      missing.push('condition_required_actions');
+    }
+
+    if (missing.length > 0) {
+      throw new AppError(
+        409,
+        'GATE_CONSTRAINT_FAILED',
+        `PromotionDecision ${sourceHandoff.promotion_decision_id} is missing required bridge semantic fields: ${missing.join(', ')}.`,
+      );
+    }
+  }
+
+  private assertExistingBridgeMatchesSource(input: {
+    existing: TopicSelectionPaperProjectBridgeRecord;
+    sourceHandoff: TopicSelectionPromotionBridgeHandoff;
+    workingCopyPayloadHash: string;
+    bridgePayloadHash: string;
+  }): void {
+    const mismatches: string[] = [];
+    this.pushMismatch(
+      mismatches,
+      'promotion_input_snapshot_hash',
+      input.existing.promotion_input_snapshot_hash,
+      input.sourceHandoff.promotion_input_snapshot_hash,
+    );
+    this.pushMismatch(
+      mismatches,
+      'promotion_commitment_profile_id',
+      input.existing.promotion_commitment_profile_id,
+      input.sourceHandoff.promotion_commitment_profile.promotion_commitment_profile_id,
+    );
+    this.pushMismatch(
+      mismatches,
+      'working_copy_payload_hash',
+      input.existing.working_copy_payload_hash,
+      input.workingCopyPayloadHash,
+    );
+    this.pushMismatch(
+      mismatches,
+      'bridge_payload_hash',
+      input.existing.bridge_payload_hash,
+      input.bridgePayloadHash,
+    );
+    if (mismatches.length > 0) {
+      throw new AppError(
+        409,
+        'VERSION_CONFLICT',
+        `PaperProjectBridge ${input.existing.paper_project_bridge_id} source handoff drifted for ${input.sourceHandoff.promotion_decision_id}: ${mismatches.join(', ')}.`,
       );
     }
   }
@@ -1043,6 +1132,23 @@ export class TopicSelectionV1cPaperProjectBridgeService {
   private readString(record: Record<string, unknown>, key: string): string | null {
     const value = record[key];
     return typeof value === 'string' && value.trim().length > 0 ? value : null;
+  }
+
+  private firstPresentText(
+    primary: Record<string, unknown>,
+    secondary: Record<string, unknown>,
+    key: string,
+  ): string | null {
+    return this.readString(primary, key) ?? this.readString(secondary, key);
+  }
+
+  private hasSelectedEvidence(
+    sourceHandoff: TopicSelectionPromotionBridgeHandoff,
+    excerpt: Record<string, unknown>,
+  ): boolean {
+    const explicitIds = this.asArray(excerpt.selected_literature_evidence_ids)
+      .some((value) => this.hasText(value as string | null));
+    return explicitIds || this.extractSelectedEvidenceRefs(sourceHandoff).length > 0;
   }
 
   private hasText(value: string | null | undefined): boolean {
