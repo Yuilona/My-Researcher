@@ -28,6 +28,7 @@ const ARTIFACT_KIND_BY_KEY: Record<TopicSelectionGenerateNeedCandidateArtifactKe
   debate_role_level_summary: 'diagnostic',
   debate_issue_frame: 'structured_output',
   debate_final_synthesis: 'diagnostic',
+  context_compression_report: 'diagnostic',
   ranked_candidate_draft_batch: 'structured_output',
   minimum_schema_validation_report: 'diagnostic',
   candidate_draft_admission_report: 'diagnostic',
