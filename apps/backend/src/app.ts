@@ -64,6 +64,7 @@ import { PrismaTopicSelectionControlPlaneRepository } from './repositories/prism
 import { PrismaTopicSelectionEvidenceMapRepository } from './repositories/prisma/prisma-topic-selection-evidence-map-repository.js';
 import { PrismaTopicSelectionNeedValidationRepository } from './repositories/prisma/prisma-topic-selection-need-validation-repository.js';
 import { PrismaTopicSelectionOfflineEvaluationReplayRepository } from './repositories/prisma/prisma-topic-selection-offline-evaluation-replay-repository.js';
+import { PrismaTopicSelectionPromptPacketCacheStore } from './repositories/prisma/prisma-topic-selection-prompt-packet-cache-store.js';
 import { PrismaTopicSelectionRecheckRiskMemoryRepository } from './repositories/prisma/prisma-topic-selection-recheck-risk-memory-repository.js';
 import { PrismaTopicSelectionResourceSamplingRepository } from './repositories/prisma/prisma-topic-selection-resource-sampling-repository.js';
 import { PrismaTopicSelectionSearchResourceRepository } from './repositories/prisma/prisma-topic-selection-search-resource-repository.js';
@@ -110,6 +111,7 @@ import type { TopicSelectionControlPlaneRepository } from './repositories/topic-
 import type { TopicSelectionEvidenceMapRepository } from './repositories/topic-selection-evidence-map.repository.js';
 import type { TopicSelectionNeedValidationRepository } from './repositories/topic-selection-need-validation.repository.js';
 import type { TopicSelectionOfflineEvaluationReplayRepository } from './repositories/topic-selection-offline-evaluation-replay.repository.js';
+import type { TopicSelectionPromptPacketCacheStore } from './repositories/topic-selection-prompt-packet-cache-store.repository.js';
 import type { TopicSelectionRecheckRiskMemoryRepository } from './repositories/topic-selection-recheck-risk-memory.repository.js';
 import type { TopicSelectionResourceSamplingRepository } from './repositories/topic-selection-resource-sampling.repository.js';
 import type { TopicSelectionSearchResourceRepository } from './repositories/topic-selection-search-resource.repository.js';
@@ -163,6 +165,12 @@ import { TopicSelectionNeedDiscoveryArtifactBoundaryService } from './services/t
 import { TopicSelectionNeedDiscoveryContextCompilerService } from './services/topic-selection-need-discovery-context-compiler-service.js';
 import { TopicSelectionOfflineEvaluationReplayService } from './services/topic-selection-offline-evaluation-replay-service.js';
 import { TopicSelectionPersistNeedCandidateBatchService } from './services/topic-selection-persist-need-candidate-batch-service.js';
+import {
+  InMemoryTopicSelectionPromptPacketCacheStore,
+  TopicSelectionPromptPacketCacheService,
+} from './services/topic-selection-prompt-packet-cache-service.js';
+import { TopicSelectionContextPacketCacheService } from './services/topic-selection-context-packet-cache-service.js';
+import { TopicSelectionContextPolicyProfileRegistryService } from './services/topic-selection-context-policy-profile-registry-service.js';
 import { TopicSelectionRankedCandidateDraftBatchValidatorService } from './services/topic-selection-ranked-candidate-draft-batch-validator-service.js';
 import { TopicSelectionRecheckRiskMemoryService } from './services/topic-selection-recheck-risk-memory-service.js';
 import { TopicSelectionResourceSamplingService } from './services/topic-selection-resource-sampling-service.js';
@@ -194,6 +202,7 @@ export type BuildAppOptions = {
   topicSelectionV1aLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
   topicSelectionV1bLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
   topicSelectionV1cPromotionGateLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
+  topicSelectionPromptPacketCacheStore?: TopicSelectionPromptPacketCacheStore;
   paperImplementationRepository?: PaperImplementationRepository;
   paperImplementationMotiveRepository?: PaperImplementationMotiveRepository;
   paperImplementationTraceRepository?: PaperImplementationTraceRepository;
@@ -286,6 +295,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const topicSelectionOfflineEvaluationReplayRepository = createTopicSelectionOfflineEvaluationReplayRepository(
     storeConfig.titleCardStrategy,
   );
+  const topicSelectionPromptPacketCacheStore = options.topicSelectionPromptPacketCacheStore
+    ?? createTopicSelectionPromptPacketCacheStore(storeConfig.titleCardStrategy);
   const topicSelectionV1bIntakeRepository = createTopicSelectionV1bIntakeRepository(storeConfig.titleCardStrategy);
   const topicSelectionV1bResearchSliceRepository = createTopicSelectionV1bResearchSliceRepository(storeConfig.titleCardStrategy);
   const topicSelectionV1bTopicQuestionRepository = createTopicSelectionV1bTopicQuestionRepository(storeConfig.titleCardStrategy);
@@ -391,9 +402,16 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     topicSelectionV1aArtifactBoundaryService,
   );
   const topicSelectionV1aLlmGateway = options.topicSelectionV1aLlmGateway ?? llmGateway;
+  const topicSelectionPromptPacketCacheService = new TopicSelectionPromptPacketCacheService({
+    store: topicSelectionPromptPacketCacheStore,
+  });
+  const topicSelectionContextPacketCacheService = new TopicSelectionContextPacketCacheService();
+  const topicSelectionContextPolicyProfileRegistryService =
+    new TopicSelectionContextPolicyProfileRegistryService();
   const topicSelectionV1aAgentOrchestratorService = new TopicSelectionAgentOrchestratorService({
     controlPlane: topicSelectionControlPlaneService,
     llmGateway: topicSelectionV1aLlmGateway,
+    promptPacketCache: topicSelectionPromptPacketCacheService,
   });
   const topicSelectionV1aNeedCandidateBatchPersistenceService = new TopicSelectionPersistNeedCandidateBatchService(
     topicSelectionNeedValidationRepository,
@@ -411,6 +429,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     contextCompiler: topicSelectionV1aContextCompilerService,
     generateNeedCandidateAdapter: topicSelectionV1aGenerateNeedCandidateAdapterService,
     artifactBoundary: topicSelectionV1aArtifactBoundaryService,
+    contextPacketCache: topicSelectionContextPacketCacheService,
+    contextPolicyProfileRegistry: topicSelectionContextPolicyProfileRegistryService,
     controlPlane: topicSelectionControlPlaneService,
     searchResources: topicSelectionSearchResourceService,
     evidenceMaps: topicSelectionEvidenceMapService,
@@ -818,6 +838,19 @@ function createTopicSelectionControlPlaneRepository(
   }
 
   return new InMemoryTopicSelectionControlPlaneRepository();
+}
+
+function createTopicSelectionPromptPacketCacheStore(
+  strategy: RepositoryStrategy,
+): TopicSelectionPromptPacketCacheStore {
+  if (strategy === 'prisma') {
+    const prisma = getPrismaClient();
+    return new PrismaTopicSelectionPromptPacketCacheStore(prisma, {
+      allowMissingTableFallback: true,
+    });
+  }
+
+  return new InMemoryTopicSelectionPromptPacketCacheStore();
 }
 
 function createTopicSelectionResourceSamplingRepository(

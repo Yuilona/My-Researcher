@@ -133,6 +133,38 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 const ARTIFACT_DIR = path.join(REPO_ROOT, '.ai/.tmp/topic-selection-v1a-harness-e2e', RUN_ID);
 const ROLE_ORDER = ['support', 'challenge', 'baseline', 'context'];
+const T112_BALANCED_RESOURCE_SAMPLE_SET_ID = 'resource_sample_set_t112_prod_balanced_20260530';
+const T112_BALANCED_RESOURCE_SAMPLE_HASH = '1e421616f8f89cbc82bd061e5f9fe549871afd22026b9c937f92e19fdb0f7c2e';
+const T112_BALANCED_RESOURCE_SAMPLE_ITEMS = [
+  {
+    literatureId: 'LIT-0015',
+    role: 'support',
+    polarity: 'positive_method',
+    methodFamilies: ['fine_tuning'],
+    rationale: 'T-112 production-shaped replay fixture support evidence.',
+  },
+  {
+    literatureId: 'LIT-0017',
+    role: 'challenge',
+    polarity: 'risk_or_failure',
+    methodFamilies: ['evaluation', 'risk_analysis'],
+    rationale: 'T-112 production-shaped replay fixture challenge evidence.',
+  },
+  {
+    literatureId: 'LIT-0016',
+    role: 'baseline',
+    polarity: 'baseline_comparison',
+    methodFamilies: ['fine_tuning', 'risk_analysis'],
+    rationale: 'T-112 production-shaped replay fixture baseline evidence.',
+  },
+  {
+    literatureId: 'LIT-0018',
+    role: 'context',
+    polarity: 'foundation_context',
+    methodFamilies: ['foundation_model_context'],
+    rationale: 'T-112 production-shaped replay fixture context evidence.',
+  },
+];
 const TOPIC_METHOD_FAMILY_TARGETS = [
   'retrieval_augmented_generation',
   'fine_tuning',
@@ -651,6 +683,15 @@ function roleTargetFor(role, roleTargets) {
   return roleTargets?.[role] ?? 1;
 }
 
+function effectiveRoleTargetFor(role, roleTargets, entryCount) {
+  const requested = roleTargetFor(role, roleTargets);
+  const requestedTotal = ROLE_ORDER.reduce((sum, targetRole) => sum + roleTargetFor(targetRole, roleTargets), 0);
+  if (entryCount >= ROLE_ORDER.length && entryCount < requestedTotal) {
+    return Math.min(requested, 1);
+  }
+  return requested;
+}
+
 function assignResourceRole(entry, role) {
   entry.draft.primary_role = role;
   entry.draft.evidence_polarity = {
@@ -664,16 +705,17 @@ function assignResourceRole(entry, role) {
 }
 
 function forceRoleCoverage(entries, roleTargets) {
+  const roleTarget = (role) => effectiveRoleTargetFor(role, roleTargets, entries.length);
   const roleCounts = () => ROLE_ORDER.reduce((counts, role) => {
     counts[role] = entries.filter((entry) => entry.draft.primary_role === role).length;
     return counts;
   }, {});
   for (const role of ROLE_ORDER) {
     let counts = roleCounts();
-    while ((counts[role] ?? 0) < roleTargetFor(role, roleTargets)) {
+    while ((counts[role] ?? 0) < roleTarget(role)) {
       const donor = entries.find((entry) => {
         const donorRole = entry.draft.primary_role;
-        const donorSurplus = (counts[donorRole] ?? 0) > roleTargetFor(donorRole, roleTargets);
+        const donorSurplus = (counts[donorRole] ?? 0) > roleTarget(donorRole);
         const supportSafe = role !== 'support' || !MOCK_RESOURCE_RISK_PATTERN.test(entry.text);
         return donorRole !== role && donorSurplus && supportSafe;
       });
@@ -847,9 +889,28 @@ function makeWorkflowHarness(prisma, llmGateway) {
 }
 
 function assertStatus(response, expected, label) {
-  if (response.statusCode !== expected) {
-    throw new Error(`${label}: expected HTTP ${expected}, received ${response.statusCode}: ${response.body}`);
+  if (response.statusCode === expected) {
+    return;
   }
+
+  let payload = null;
+  try {
+    payload = response.json();
+  } catch {
+    payload = null;
+  }
+
+  const errorPayload =
+    payload && typeof payload === 'object' && !Array.isArray(payload) ? payload.error : null;
+  const error = new Error(`${label}: expected HTTP ${expected}, received ${response.statusCode}: ${response.body}`);
+  error.statusCode = response.statusCode;
+  error.responseBody = response.body;
+  error.payload = payload;
+  if (errorPayload && typeof errorPayload === 'object' && !Array.isArray(errorPayload)) {
+    error.errorCode = typeof errorPayload.code === 'string' ? errorPayload.code : undefined;
+    error.details = errorPayload.details ?? null;
+  }
+  throw error;
 }
 
 async function requestJson(app, method, url, expected, payload, label = `${method} ${url}`) {
@@ -923,6 +984,143 @@ async function invokeV1aHarnessScenario(app, nodeId, scenarioInput, label, expec
 
 async function writeJson(relativeName, payload) {
   await fs.writeFile(path.join(ARTIFACT_DIR, relativeName), `${JSON.stringify(payload, null, 2)}\n`);
+}
+
+function resourceSampleHasHarnessRoles(sampleResult) {
+  const selectedRoles = new Set(
+    (sampleResult.selected_items ?? [])
+      .filter((item) => item.selected)
+      .map((item) => item.selected_role),
+  );
+  return ROLE_ORDER.every((role) => selectedRoles.has(role));
+}
+
+async function loadResourceSampleSet(app, sampleSetId, label) {
+  return requestJson(
+    app,
+    'GET',
+    `/topic-selection/v1a/resource-samples/${encodeURIComponent(sampleSetId)}`,
+    200,
+    undefined,
+    label,
+  );
+}
+
+async function ensureBalancedReplayResourceSample(app, prisma) {
+  const existing = await prisma.topicSelectionResourceSampleSet.findUnique({
+    where: { id: T112_BALANCED_RESOURCE_SAMPLE_SET_ID },
+    select: { id: true },
+  });
+  if (!existing) {
+    const now = new Date();
+    const literatureIds = T112_BALANCED_RESOURCE_SAMPLE_ITEMS.map((item) => item.literatureId);
+    const scopedRows = await prisma.topicLiteratureScope.findMany({
+      where: {
+        topicId: TOPIC_ID,
+        literatureId: { in: literatureIds },
+      },
+      select: { literatureId: true },
+    });
+    const scopedIds = new Set(scopedRows.map((row) => row.literatureId));
+    const missingIds = literatureIds.filter((literatureId) => !scopedIds.has(literatureId));
+    if (missingIds.length > 0) {
+      throw new Error(`T-112 balanced replay fixture missing topic-scoped literature: ${missingIds.join(', ')}`);
+    }
+
+    const model = {
+      provider_id: PROVIDER_ID,
+      model_id: MODEL_ID,
+      profile_id: 'topic-selection-resource-sampling-classification',
+    };
+    const auditRef = ref(
+      'resource_sampling_audit',
+      'resource_sampling_audit_t112_prod_balanced_20260530',
+      null,
+      'topic-resource-sampling-v1',
+    );
+    await prisma.$transaction(async (tx) => {
+      await tx.topicSelectionResourceSampleSet.create({
+        data: {
+          id: T112_BALANCED_RESOURCE_SAMPLE_SET_ID,
+          workspaceId: null,
+          titleCardId: null,
+          topicId: TOPIC_ID,
+          sampleSize: T112_BALANCED_RESOURCE_SAMPLE_ITEMS.length,
+          policyVersion: 'topic-resource-sampling-v1',
+          status: 'ready',
+          roleTargets: { support: 1, challenge: 1, baseline: 1, context: 1 },
+          roleCounts: { support: 1, challenge: 1, baseline: 1, context: 1, review: 0, excluded: 0 },
+          warnings: [],
+          sampleHash: T112_BALANCED_RESOURCE_SAMPLE_HASH,
+          model,
+          inputSnapshotId: null,
+          workflowRunId: `workflow_run_${T112_BALANCED_RESOURCE_SAMPLE_SET_ID}`,
+          gateResultId: null,
+          auditRef,
+          createdBy: 'system',
+          createdAt: now,
+        },
+      });
+      await tx.topicSelectionResourceSampleItem.createMany({
+        data: T112_BALANCED_RESOURCE_SAMPLE_ITEMS.map((item, index) => ({
+          id: `resource_sample_item_t112_prod_balanced_${index + 1}`,
+          sampleSetId: T112_BALANCED_RESOURCE_SAMPLE_SET_ID,
+          workspaceId: null,
+          titleCardId: null,
+          topicId: TOPIC_ID,
+          literatureId: item.literatureId,
+          literatureRef: ref('literature_record', item.literatureId, null),
+          selectedRole: item.role,
+          selected: true,
+          rank: index + 1,
+          topicRelevance: 0.9,
+          evidencePolarity: item.polarity,
+          roleScores: roleScores(item.role),
+          confidence: 0.9,
+          classificationRationale: item.rationale,
+          exclusionReason: null,
+          reviewReason: null,
+          guardrailCodes: ['T112_PRODUCTION_SHAPED_BALANCED_FIXTURE'],
+          methodFamilies: item.methodFamilies,
+          createdAt: now,
+        })),
+      });
+      await tx.topicSelectionResourceSamplingAudit.create({
+        data: {
+          id: auditRef.ref_id,
+          sampleSetId: T112_BALANCED_RESOURCE_SAMPLE_SET_ID,
+          workspaceId: null,
+          titleCardId: null,
+          topicId: TOPIC_ID,
+          policyVersion: 'topic-resource-sampling-v1',
+          promptTemplateId: null,
+          promptTemplateVersion: null,
+          model,
+          candidateCount: T112_BALANCED_RESOURCE_SAMPLE_ITEMS.length,
+          eligibleCount: T112_BALANCED_RESOURCE_SAMPLE_ITEMS.length,
+          selectedCount: T112_BALANCED_RESOURCE_SAMPLE_ITEMS.length,
+          excludedCount: 0,
+          warningCodes: [],
+          guardrailSummary: {
+            fixture: 'T112_PRODUCTION_SHAPED_BALANCED_FIXTURE',
+            source: 'v1a_harness_replay_fallback',
+          },
+          artifactRefs: [],
+          llmStructuredOutput: {
+            fixture: true,
+            classifications: T112_BALANCED_RESOURCE_SAMPLE_ITEMS.map((item) => ({
+              literature_ref: ref('literature_record', item.literatureId, null),
+              primary_role: item.role,
+              evidence_polarity: item.polarity,
+              method_families: item.methodFamilies,
+            })),
+          },
+          createdAt: now,
+        },
+      });
+    });
+  }
+  return loadResourceSampleSet(app, T112_BALANCED_RESOURCE_SAMPLE_SET_ID, 'load T-112 balanced resource sample set');
 }
 
 function metadataBucket(resource) {
@@ -2420,23 +2618,23 @@ function compactReplayResult(label, result, original) {
 }
 
 async function expectReplayInputHashMismatch(label, run) {
+  let result;
   try {
-    const result = await run();
-    const nodeResult = result.node_result ?? null;
-    const blockerCodes = nodeResult?.blocker_codes ?? result.adapter_result?.blocker_codes ?? [];
-    assert.ok(
-      blockerCodes.includes('REPLAY_INPUT_HASH_MISMATCH'),
-      `${label} drift did not include REPLAY_INPUT_HASH_MISMATCH: ${JSON.stringify(blockerCodes)}`,
-    );
-    return {
-      mode: 'blocked_result',
-      scenario_status: result.scenario_status,
-      node_status: nodeResult?.status ?? result.adapter_result?.status ?? null,
-      blocker_codes: blockerCodes,
-      error_code: nodeResult?.error_code ?? result.adapter_result?.error_code ?? null,
-    };
+    result = await run();
   } catch (error) {
-    assert.equal(error?.errorCode, 'VERSION_CONFLICT', `${label} drift threw unexpected error.`);
+    const errorSummary = {
+      name: error?.name ?? null,
+      message: error?.message ?? null,
+      status_code: error?.statusCode ?? null,
+      error_code: error?.errorCode ?? null,
+      details: error?.details ?? null,
+      response_body: error?.responseBody ?? null,
+    };
+    assert.equal(
+      error?.errorCode,
+      'VERSION_CONFLICT',
+      `${label} drift threw unexpected error: ${JSON.stringify(errorSummary)}`,
+    );
     assert.deepEqual(error?.details?.blocker_codes, ['REPLAY_INPUT_HASH_MISMATCH']);
     return {
       mode: 'thrown',
@@ -2445,6 +2643,20 @@ async function expectReplayInputHashMismatch(label, run) {
       blocker_codes: error.details?.blocker_codes ?? [],
     };
   }
+
+  const nodeResult = result.node_result ?? null;
+  const blockerCodes = nodeResult?.blocker_codes ?? result.adapter_result?.blocker_codes ?? [];
+  assert.ok(
+    blockerCodes.includes('REPLAY_INPUT_HASH_MISMATCH'),
+    `${label} drift did not include REPLAY_INPUT_HASH_MISMATCH: ${JSON.stringify(blockerCodes)}`,
+  );
+  return {
+    mode: 'blocked_result',
+    scenario_status: result.scenario_status,
+    node_status: nodeResult?.status ?? result.adapter_result?.status ?? null,
+    blocker_codes: blockerCodes,
+    error_code: nodeResult?.error_code ?? result.adapter_result?.error_code ?? null,
+  };
 }
 
 async function runN6ToN9ReplaySmoke(input) {
@@ -2506,7 +2718,7 @@ async function runN6ToN9ReplaySmoke(input) {
         'topic-selection.v1a.generate-need-candidate.v1',
         {
           ...generateNeedCandidate.harnessInput,
-          policy_version: 'v1-replay-drift',
+          output_schema_version: 'v1-replay-drift',
         },
         'harness drift generate-need-candidate',
         null,
@@ -2519,7 +2731,7 @@ async function runN6ToN9ReplaySmoke(input) {
         'topic-selection.v1a.validate-need-adjudication.v1',
         {
           ...validateNeed.harnessInput,
-          policy_version: 'v1-replay-drift',
+          output_schema_version: 'v1-replay-drift',
         },
         'harness drift validate-need-adjudication',
         null,
@@ -2532,7 +2744,7 @@ async function runN6ToN9ReplaySmoke(input) {
         'topic-selection.v1a.human-confirm-need.v1',
         {
           ...humanConfirmNeed.harnessInput,
-          policy_version: 'v1-replay-drift',
+          output_schema_version: 'v1-replay-drift',
         },
         'harness drift human-confirm-need',
         null,
@@ -2545,7 +2757,7 @@ async function runN6ToN9ReplaySmoke(input) {
         'topic-selection.v1a.publish-v1b-input-bundle.v1',
         {
           ...publishV1bInputBundle.harnessInput,
-          policy_version: 'v1-replay-drift',
+          output_schema_version: 'v1-replay-drift',
         },
         'harness drift publish-v1b-input-bundle',
         null,
@@ -3005,15 +3217,9 @@ try {
   });
 
   currentStage = EXISTING_RESOURCE_SAMPLE_SET_ID ? 'load existing resource sample set' : 'create resource sample set';
-  const resourceSample = EXISTING_RESOURCE_SAMPLE_SET_ID
-    ? await requestJson(
-      app,
-      'GET',
-      `/topic-selection/v1a/resource-samples/${encodeURIComponent(EXISTING_RESOURCE_SAMPLE_SET_ID)}`,
-      200,
-      undefined,
-      'load existing resource sample set',
-    )
+  let resourceSampleSource = EXISTING_RESOURCE_SAMPLE_SET_ID ? 'existing_sample_set' : 'created_in_run';
+  let resourceSample = EXISTING_RESOURCE_SAMPLE_SET_ID
+    ? await loadResourceSampleSet(app, EXISTING_RESOURCE_SAMPLE_SET_ID, 'load existing resource sample set')
     : await requestJson(app, 'POST', '/topic-selection/v1a/resource-samples', 201, {
       topic_id: TOPIC_ID,
       sample_size: LITERATURE_LIMIT,
@@ -3024,6 +3230,16 @@ try {
       },
       created_by: 'system',
     }, 'create resource sample set');
+  if (
+    !EXISTING_RESOURCE_SAMPLE_SET_ID
+    && USE_MOCK_RESOURCE_SAMPLING
+    && !resourceSampleHasHarnessRoles(resourceSample)
+  ) {
+    await writeJson('00-resource-sample.default-underfilled.json', resourceSample);
+    currentStage = 'load T-112 balanced resource sample fallback';
+    resourceSample = await ensureBalancedReplayResourceSample(app, prisma);
+    resourceSampleSource = 't112_balanced_fixture_fallback';
+  }
   await writeJson('00-resource-sample.json', resourceSample);
 
   currentStage = 'load sampled resources';
@@ -3087,7 +3303,7 @@ try {
       NEED_ADJUDICATION_MODEL_OPTION_ID,
     ),
     harness_adjudication_negative_probe: NEED_ADJUDICATION_NEGATIVE_PROBE,
-    resource_sample_source: EXISTING_RESOURCE_SAMPLE_SET_ID ? 'existing_sample_set' : 'created_in_run',
+    resource_sample_source: resourceSampleSource,
     resource_sample_set_id: resourceSample.sample_set.resource_sample_set_id,
     resource_sample_status: resourceSample.sample_set.status,
     resource_sample_warnings: resourceSample.sample_set.warnings,

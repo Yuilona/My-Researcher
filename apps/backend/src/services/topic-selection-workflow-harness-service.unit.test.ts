@@ -57,6 +57,7 @@ import {
 import { TopicSelectionGenerateNeedCandidateOrchestratorAdapterService } from './topic-selection-generate-need-candidate-orchestrator-adapter-service.js';
 import { TopicSelectionNeedDiscoveryArtifactBoundaryService } from './topic-selection-need-discovery-artifact-boundary-service.js';
 import { TopicSelectionNeedDiscoveryContextCompilerService } from './topic-selection-need-discovery-context-compiler-service.js';
+import { TopicSelectionContextPacketCacheService } from './topic-selection-context-packet-cache-service.js';
 import { TopicSelectionPersistNeedCandidateBatchService } from './topic-selection-persist-need-candidate-batch-service.js';
 import { TopicSelectionRankedCandidateDraftBatchValidatorService } from './topic-selection-ranked-candidate-draft-batch-validator-service.js';
 import { TopicSelectionSearchResourceService } from './topic-selection-search-resource-service.js';
@@ -140,6 +141,7 @@ async function makeRuntime() {
   );
   const evidenceMapMaterializer = new TopicSelectionEvidenceMapMaterializationService();
   const artifactBoundary = new TopicSelectionNeedDiscoveryArtifactBoundaryService(controlPlane);
+  const contextPacketCache = new TopicSelectionContextPacketCacheService();
   const contextCompiler = new TopicSelectionNeedDiscoveryContextCompilerService(artifactBoundary, {
     now: () => '2026-05-19T00:00:00.000Z',
   });
@@ -177,6 +179,7 @@ async function makeRuntime() {
     contextCompiler,
     generateNeedCandidateAdapter,
     artifactBoundary,
+    contextPacketCache,
     controlPlane,
     searchResources,
     evidenceMaps,
@@ -283,6 +286,9 @@ function telemetry(): LlmCallTelemetry {
     embedding_input_tokens: null,
     total_tokens: null,
     cost_usd: null,
+    provider_side_cache_hit: null,
+    provider_side_cache_read_tokens: null,
+    provider_side_cache_write_tokens: null,
   };
 }
 
@@ -4190,6 +4196,166 @@ test('workflow harness runs generate-need-candidate finalize scenario through pe
   );
 });
 
+test('workflow harness blocks over-budget generate-need-candidate provider scenario before gateway or authority writes', async () => {
+  const { workflowHarness, controlPlaneRepository, needValidationRepository, llmGateway } = await makeRuntime();
+  const result = await workflowHarness.runGenerateNeedCandidateScenario(scenarioInput({
+    scenario_case_id: 'provider-over-budget-runtime-block',
+    workflow_run_id: 'workflow_run_n6_over_budget',
+    input_snapshot_id: 'input_snapshot_n6_over_budget',
+    node_attempt_id: 'node_attempt_n6_over_budget',
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    mocked_output: null,
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 200_000,
+      compression_already_applied: true,
+    },
+    persist_admitted_candidates: true,
+    expectations: {
+      status: 'blocked',
+      routing_decision: null,
+      persisted_candidate_count: 0,
+      error_code: 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION',
+      blocker_codes: ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION'],
+      persistence: 'forbidden',
+    },
+  }));
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.adapter_result.status, 'blocked');
+  assert.equal(result.adapter_result.error_code, 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION');
+  assert.equal(result.adapter_result.ranked_candidate_draft_batch_artifact, null);
+  assert.equal(result.adapter_result.minimum_schema_validation_report_artifact, null);
+  assert.equal(result.adapter_result.candidate_draft_admission_report_artifact, null);
+  assert.equal(result.adapter_result.supplemental_round_routing_decision_artifact, null);
+  assert.equal(llmGateway.calls.length, 0);
+  assert.equal((await needValidationRepository.listNeedCandidatesByTitleCardId('title_card_001')).length, 0);
+  assert.equal(
+    result.harness_trace_snapshot.artifact_refs.some((refEntry) =>
+      refEntry.ref_id === result.compiled_context.exploration_context_ref.ref_id
+        || refEntry.ref_id === result.compiled_context.arbiter_context_ref.ref_id,
+    ),
+    true,
+  );
+
+  const artifacts = await controlPlaneRepository.listArtifactRefsByWorkflowRunId('workflow_run_n6_over_budget');
+  assert.equal(
+    artifacts.some((artifact) =>
+      JSON.stringify(artifact.payload).includes('"artifact_key":"ranked_candidate_draft_batch"'),
+    ),
+    false,
+  );
+  assert.equal(
+    artifacts.some((artifact) =>
+      JSON.stringify(artifact.payload).includes('TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION'),
+    ),
+    true,
+  );
+});
+
+test('workflow harness compresses over-target generate-need-candidate context and still applies gates', async () => {
+  const { workflowHarness, controlPlaneRepository, needValidationRepository, llmGateway } = await makeRuntime();
+  const result = await workflowHarness.runGenerateNeedCandidateScenario(scenarioInput({
+    scenario_case_id: 'provider-over-target-compression-rerender',
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    mocked_output: null,
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 80_000,
+      estimated_input_tokens_after_compression_override: 12_000,
+    },
+    persist_admitted_candidates: true,
+    expectations: {
+      status: 'succeeded',
+      routing_decision: 'finalize_with_admitted_batch',
+      admitted_draft_count: 1,
+      persisted_candidate_count: 1,
+      persistence: 'required',
+    },
+  }));
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.adapter_result.status, 'succeeded');
+  assert.equal(result.adapter_result.context_compression_report_artifact?.artifact_key, 'context_compression_report');
+  assert.equal(result.adapter_result.invocation_result.token_budget_gate_result?.decision, 'within_budget');
+  assert.equal(llmGateway.calls.length, 1);
+  assert.equal((await needValidationRepository.listNeedCandidatesByTitleCardId('title_card_001')).length, 1);
+  assert.equal(
+    result.harness_trace_snapshot.artifact_refs.some((refEntry) =>
+      refEntry.ref_id === result.adapter_result.context_compression_report_artifact?.artifact_ref.ref_id,
+    ),
+    true,
+  );
+
+  const artifacts = await controlPlaneRepository.listArtifactRefsByWorkflowRunId('workflow_run_001');
+  assert.equal(
+    artifacts.some((artifact) =>
+      JSON.stringify(artifact.payload).includes('"artifact_key":"context_compression_report"')
+        && JSON.stringify(artifact.payload).includes('"payload_schema":"TopicSelectionCompressionReportEnvelope@v1"'),
+    ),
+    true,
+  );
+});
+
+test('workflow harness blocks generate-need-candidate when compressed context remains over budget', async () => {
+  const { workflowHarness, controlPlaneRepository, needValidationRepository, llmGateway } = await makeRuntime();
+  const result = await workflowHarness.runGenerateNeedCandidateScenario(scenarioInput({
+    scenario_case_id: 'provider-compressed-context-still-over-budget',
+    workflow_run_id: 'workflow_run_n6_compressed_over_budget',
+    input_snapshot_id: 'input_snapshot_n6_compressed_over_budget',
+    node_attempt_id: 'node_attempt_n6_compressed_over_budget',
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    mocked_output: null,
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 80_000,
+      estimated_input_tokens_after_compression_override: 200_000,
+    },
+    persist_admitted_candidates: true,
+    expectations: {
+      status: 'blocked',
+      routing_decision: null,
+      persisted_candidate_count: 0,
+      error_code: 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION',
+      blocker_codes: ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION'],
+      persistence: 'forbidden',
+    },
+  }));
+
+  assert.equal(result.scenario_status, 'passed');
+  assert.equal(result.adapter_result.status, 'blocked');
+  assert.equal(result.adapter_result.error_code, 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION');
+  assert.equal(result.adapter_result.context_compression_report_artifact?.artifact_key, 'context_compression_report');
+  assert.equal(result.adapter_result.ranked_candidate_draft_batch_artifact, null);
+  assert.equal(result.adapter_result.minimum_schema_validation_report_artifact, null);
+  assert.equal(result.adapter_result.candidate_draft_admission_report_artifact, null);
+  assert.equal(result.adapter_result.supplemental_round_routing_decision_artifact, null);
+  assert.equal(llmGateway.calls.length, 0);
+  assert.equal((await needValidationRepository.listNeedCandidatesByTitleCardId('title_card_001')).length, 0);
+  assert.equal(
+    result.harness_trace_snapshot.artifact_refs.some((refEntry) =>
+      refEntry.ref_id === result.adapter_result.context_compression_report_artifact?.artifact_ref.ref_id,
+    ),
+    true,
+  );
+
+  const artifacts = await controlPlaneRepository.listArtifactRefsByWorkflowRunId(
+    'workflow_run_n6_compressed_over_budget',
+  );
+  assert.equal(
+    artifacts.some((artifact) =>
+      JSON.stringify(artifact.payload).includes('"artifact_key":"context_compression_report"'),
+    ),
+    true,
+  );
+  assert.equal(
+    artifacts.some((artifact) =>
+      JSON.stringify(artifact.payload).includes('"artifact_key":"ranked_candidate_draft_batch"'),
+    ),
+    false,
+  );
+});
+
 test('workflow harness reuses persisted NeedCandidate refs when generate-need-candidate attempt is replayed', async () => {
   const { workflowHarness, needValidationRepository, llmGateway } = await makeRuntime();
   const input = scenarioInput({
@@ -4300,7 +4466,7 @@ test('workflow harness can drive mocked multi-agent debate without authority per
     },
   }));
 
-  assert.equal(result.scenario_status, 'passed');
+  assertScenarioPassed(result);
   assert.equal(result.adapter_result.debate_result?.status, 'succeeded');
   assert.equal(result.adapter_result.debate_result?.role_invocation_results.length, 4);
   assert.equal(result.adapter_result.debate_result?.role_output_artifacts.length, 3);
@@ -4510,7 +4676,7 @@ test('workflow harness keeps duplicate candidates as merge hints without persist
     },
   }));
 
-  assert.equal(result.scenario_status, 'passed');
+  assertScenarioPassed(result);
   assert.equal(result.adapter_result.candidate_draft_admission_report?.draft_results[0]?.decision, 'merge_hint_only');
   assert.equal(
     result.adapter_result.candidate_draft_admission_report?.draft_results[0]?.merge_target_ref?.ref_id,

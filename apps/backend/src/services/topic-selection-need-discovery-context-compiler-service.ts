@@ -7,9 +7,16 @@ import type {
   TopicSelectionFunctionalRef,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-control-plane-contracts';
 import type {
+  TopicSelectionExecutorKind,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-invocation-contracts';
+import type {
+  TopicSelectionContextPolicyProfile,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-llm-runtime-contracts';
+import type {
   TopicSelectionAgentExecutionMode,
   TopicSelectionArtifactFunctionalRef,
   TopicSelectionGenerateNeedCandidateArtifactKey,
+  TopicSelectionGenerateNeedCandidateArtifactSnapshot,
   TopicSelectionGenerateNeedCandidateArtifactRefEntry,
   TopicSelectionNeedDiscoveryArbiterContextPayload,
   TopicSelectionNeedDiscoveryCompiledContextPair,
@@ -19,6 +26,8 @@ import type {
   TopicSelectionNeedDiscoveryExplorationContextPayload,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-need-validation-contracts';
 import { AppError } from '../errors/app-error.js';
+import { TopicSelectionContextPacketCacheService } from './topic-selection-context-packet-cache-service.js';
+import { TopicSelectionLlmRuntimeKeyBuilderService } from './topic-selection-llm-runtime-key-builder-service.js';
 import { TopicSelectionNeedDiscoveryArtifactBoundaryService } from './topic-selection-need-discovery-artifact-boundary-service.js';
 
 const GENERATE_NEED_CANDIDATE_NODE_ID = 'topic-selection.v1a.generate-need-candidate.v1' as const;
@@ -59,6 +68,28 @@ export type CompileNeedDiscoveryContextPairInput = {
   exploration_compression?: TopicSelectionNeedDiscoveryContextCompression;
   arbiter_compression?: TopicSelectionNeedDiscoveryContextCompression;
   created_by?: TopicSelectionActorType;
+  runtime_context_cache?: NeedDiscoveryRuntimeContextCacheInput | null;
+};
+
+export type NeedDiscoveryRuntimeContextCacheBinding = {
+  context_policy_profile: TopicSelectionContextPolicyProfile;
+  context_policy_profile_hash: string;
+  executor_kind: TopicSelectionExecutorKind;
+  prompt_packet_hash: string;
+  prompt_template_id: string;
+  prompt_template_version: string;
+  model_option_id?: string | null;
+  normalized_params_hash?: string | null;
+  output_contract: string;
+  redaction_policy?: string | null;
+  context_packet_hashes?: string[] | null;
+  provenance_ref: TopicSelectionFunctionalRef;
+};
+
+export type NeedDiscoveryRuntimeContextCacheInput = {
+  cache_service: TopicSelectionContextPacketCacheService;
+  exploration_context?: NeedDiscoveryRuntimeContextCacheBinding | null;
+  arbiter_context?: NeedDiscoveryRuntimeContextCacheBinding | null;
 };
 
 export type ResolveNeedDiscoveryContextPacketExpectation = {
@@ -102,11 +133,14 @@ type CompileSingleContextPacketInput = {
   context_family: TopicSelectionNeedDiscoveryContextFamily;
   payload: TopicSelectionNeedDiscoveryContextPacket['payload'];
   compression: TopicSelectionNeedDiscoveryContextCompression;
+  runtime_cache_binding?: NeedDiscoveryRuntimeContextCacheBinding | null;
+  runtime_cache_service?: TopicSelectionContextPacketCacheService | null;
 };
 
 export class TopicSelectionNeedDiscoveryContextCompilerService {
   private readonly now: () => string;
   private readonly contextCompilerVersion: string;
+  private readonly runtimeKeyBuilder = new TopicSelectionLlmRuntimeKeyBuilderService();
 
   constructor(
     private readonly artifactBoundary: TopicSelectionNeedDiscoveryArtifactBoundaryService,
@@ -169,6 +203,8 @@ export class TopicSelectionNeedDiscoveryContextCompilerService {
         'evidence_resource_digest',
         'candidate_memory_digest',
       ]),
+      runtime_cache_binding: input.runtime_context_cache?.exploration_context ?? null,
+      runtime_cache_service: input.runtime_context_cache?.cache_service ?? null,
     });
     const arbiter = await this.compileContextPacket({
       ...common,
@@ -179,6 +215,8 @@ export class TopicSelectionNeedDiscoveryContextCompilerService {
         'role_level_summaries',
         'arbiter_context',
       ]),
+      runtime_cache_binding: input.runtime_context_cache?.arbiter_context ?? null,
+      runtime_cache_service: input.runtime_context_cache?.cache_service ?? null,
     });
 
     return {
@@ -192,6 +230,8 @@ export class TopicSelectionNeedDiscoveryContextCompilerService {
       arbiter_context_hash: arbiter.packet.payload_hash,
       exploration_cache_key: exploration.packet.cache_key,
       arbiter_cache_key: arbiter.packet.cache_key,
+      exploration_runtime_cache_key_hash: exploration.packet.runtime_cache_key_hash ?? null,
+      arbiter_runtime_cache_key_hash: arbiter.packet.runtime_cache_key_hash ?? null,
       artifact_refs: [exploration.artifact_entry, arbiter.artifact_entry],
       exploration_context_packet: exploration.packet,
       arbiter_context_packet: arbiter.packet,
@@ -319,7 +359,15 @@ export class TopicSelectionNeedDiscoveryContextCompilerService {
       payload: input.payload,
     } as TopicSelectionNeedDiscoveryContextPacket;
     packet.cache_key = this.buildCacheKey(packet);
+    packet.runtime_cache_key_hash = input.runtime_cache_binding
+      ? this.buildRuntimeContextCacheKey(input, packet).hash
+      : null;
     this.validateContextPacket(packet);
+
+    const cached = await this.resolveRuntimeCacheHit(input, packet);
+    if (cached) {
+      return cached;
+    }
 
     const artifact = await this.artifactBoundary.recordArtifact({
       workspace_id: input.workspace_id,
@@ -334,11 +382,144 @@ export class TopicSelectionNeedDiscoveryContextCompilerService {
       created_by: input.created_by ?? 'system',
     });
 
+    await this.recordRuntimeCacheArtifact(input, packet, artifact.artifact_ref, artifact.artifact_entry.artifact_hash);
     return {
       packet,
       artifact_ref: artifact.artifact_ref,
       artifact_entry: artifact.artifact_entry,
     };
+  }
+
+  private async resolveRuntimeCacheHit(
+    input: CompileSingleContextPacketInput,
+    packet: TopicSelectionNeedDiscoveryContextPacket,
+  ): Promise<{
+    packet: TopicSelectionNeedDiscoveryContextPacket;
+    artifact_ref: TopicSelectionArtifactFunctionalRef;
+    artifact_entry: TopicSelectionGenerateNeedCandidateArtifactRefEntry;
+  } | null> {
+    if (!input.runtime_cache_service || !input.runtime_cache_binding) {
+      return null;
+    }
+
+    const runtimeKey = this.buildRuntimeContextCacheKey(input, packet);
+    const cacheResult = await input.runtime_cache_service.lookup({
+      cache_key: runtimeKey.value,
+      context_policy_profile: input.runtime_cache_binding.context_policy_profile,
+      context_policy_profile_hash: input.runtime_cache_binding.context_policy_profile_hash,
+      source_refs_hash: input.input_refs_hash,
+      provenance_ref: input.runtime_cache_binding.provenance_ref,
+    });
+    if (cacheResult.cache_result === 'miss' || cacheResult.cache_result === 'not_applicable') {
+      return null;
+    }
+    if (cacheResult.cache_result !== 'hit') {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        `Context packet runtime cache returned ${cacheResult.cache_result}.`,
+      );
+    }
+    if (!cacheResult.artifact_ref || !cacheResult.artifact_hash) {
+      throw new AppError(500, 'INTERNAL_ERROR', 'Context packet cache hit did not include artifact metadata.');
+    }
+
+    const record = await this.artifactBoundary.resolveArtifactRef(cacheResult.artifact_ref, {
+      title_card_id: input.title_card_id,
+      artifact_key: this.artifactKeyForFamily(input.context_family),
+    });
+    const snapshot = this.snapshotFromArtifactRecord(record.payload);
+    const cachedPacket = this.assertRecord(snapshot.payload, 'cached context packet') as unknown as TopicSelectionNeedDiscoveryContextPacket;
+    this.validateContextPacket(cachedPacket, {
+      context_family: input.context_family,
+      policy_version: input.policy_version,
+      output_schema_version: input.output_schema_version,
+      profile_id: input.profile_id,
+      execution_mode: input.execution_mode,
+      input_refs_hash: input.input_refs_hash,
+    });
+
+    return {
+      packet: {
+        ...cachedPacket,
+        cache_hit: true,
+      },
+      artifact_ref: cacheResult.artifact_ref as TopicSelectionArtifactFunctionalRef,
+      artifact_entry: {
+        artifact_key: this.artifactKeyForFamily(input.context_family),
+        artifact_ref: cacheResult.artifact_ref as TopicSelectionArtifactFunctionalRef,
+        artifact_hash: cacheResult.artifact_hash,
+        payload_hash: cachedPacket.payload_hash,
+        payload_schema: CONTEXT_PACKET_PAYLOAD_SCHEMA,
+        redacted_paths: snapshot.redacted_paths,
+      },
+    };
+  }
+
+  private async recordRuntimeCacheArtifact(
+    input: CompileSingleContextPacketInput,
+    packet: TopicSelectionNeedDiscoveryContextPacket,
+    artifactRef: TopicSelectionArtifactFunctionalRef,
+    artifactHash: string,
+  ): Promise<void> {
+    if (!input.runtime_cache_service || !input.runtime_cache_binding) {
+      return;
+    }
+    const runtimeKey = this.buildRuntimeContextCacheKey(input, packet);
+    await input.runtime_cache_service.recordFreshArtifact({
+      cache_key: runtimeKey.value,
+      context_policy_profile: input.runtime_cache_binding.context_policy_profile,
+      context_policy_profile_hash: input.runtime_cache_binding.context_policy_profile_hash,
+      artifact_ref: artifactRef,
+      artifact_hash: artifactHash,
+      source_refs_hash: input.input_refs_hash,
+      provenance_ref: input.runtime_cache_binding.provenance_ref,
+    });
+  }
+
+  private buildRuntimeContextCacheKey(
+    input: CompileSingleContextPacketInput,
+    packet: TopicSelectionNeedDiscoveryContextPacket,
+  ) {
+    if (!input.runtime_cache_binding) {
+      throw new AppError(500, 'INTERNAL_ERROR', 'Runtime cache binding is required.');
+    }
+    const binding = input.runtime_cache_binding;
+    return this.runtimeKeyBuilder.buildContextPacketCacheKey({
+      node_id: packet.node_id,
+      invocation_slot_id: binding.context_policy_profile.invocation_slot_id,
+      execution_mode: packet.execution_mode,
+      executor_kind: binding.executor_kind,
+      context_family: binding.context_policy_profile.context_family,
+      input_refs_hash: packet.input_refs_hash,
+      context_packet_hashes: binding.context_packet_hashes ?? [packet.payload_hash],
+      prompt_packet_hash: binding.prompt_packet_hash,
+      policy_version: packet.policy_version,
+      schema_version: binding.context_policy_profile.schema_version,
+      context_compiler_version: packet.context_compiler_version,
+      prompt_template_id: binding.prompt_template_id,
+      prompt_template_version: binding.prompt_template_version,
+      profile_hash: binding.context_policy_profile_hash,
+      model_option_id: binding.model_option_id ?? null,
+      normalized_params_hash: binding.normalized_params_hash ?? null,
+      output_contract: binding.output_contract,
+      redaction_policy: binding.redaction_policy ?? binding.context_policy_profile.redaction_policy,
+      cache_scope: binding.context_policy_profile.cache_policy.cache_scope,
+    });
+  }
+
+  private snapshotFromArtifactRecord(value: unknown): TopicSelectionGenerateNeedCandidateArtifactSnapshot {
+    const snapshot = this.assertRecord(value, 'artifact payload');
+    if (
+      snapshot.node_id !== GENERATE_NEED_CANDIDATE_NODE_ID
+      || typeof snapshot.workflow_run_id !== 'string'
+      || typeof snapshot.node_attempt_id !== 'string'
+      || typeof snapshot.artifact_key !== 'string'
+      || !Array.isArray(snapshot.redacted_paths)
+    ) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'Artifact payload is not a generate-need-candidate snapshot.');
+    }
+    return snapshot as unknown as TopicSelectionGenerateNeedCandidateArtifactSnapshot;
   }
 
   private buildCacheKey(input: Pick<

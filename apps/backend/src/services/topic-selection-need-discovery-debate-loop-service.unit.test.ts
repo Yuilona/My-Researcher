@@ -96,6 +96,9 @@ function telemetryForRequest(request: LlmStructuredOutputRequest): LlmCallTeleme
     embedding_input_tokens: null,
     total_tokens: null,
     cost_usd: null,
+    provider_side_cache_hit: null,
+    provider_side_cache_read_tokens: null,
+    provider_side_cache_write_tokens: null,
   };
 }
 
@@ -560,6 +563,13 @@ test('need-discovery debate loop supports slot-level provider model option overr
   assert.equal(
     result.final_invocation_result.provenance.model_option_id,
     `${TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID}.openai-balanced`,
+  );
+  assert.deepEqual(
+    [
+      ...result.role_invocation_results.map((invocation) => invocation.token_budget_gate_result?.decision),
+      result.final_invocation_result.token_budget_gate_result?.decision,
+    ],
+    ['within_budget', 'within_budget', 'within_budget', 'within_budget', 'within_budget'],
   );
   assert.equal((llmGateway.calls[0]?.providerOverrides as { enable_thinking?: boolean }).enable_thinking, true);
   assert.deepEqual(llmGateway.calls[2]?.providerOverrides, {

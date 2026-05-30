@@ -17,12 +17,19 @@ import {
   type TopicSelectionAgentRunMode,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-profile-contracts';
 import {
+  TOPIC_SELECTION_PROMPT_QUALITY_REPORT_SCHEMA_VERSION,
+  type TopicSelectionCompressionExecutorKind,
+  type TopicSelectionContextPolicyProfile,
+  type TopicSelectionExactResponseReuseProvenance,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-llm-runtime-contracts';
+import {
   TOPIC_SELECTION_AGENT_EXECUTOR_KINDS,
   TOPIC_SELECTION_AGENT_INVOCATION_AUDIT_SCHEMA_VERSION,
   type TopicSelectionAgentInvocationAuditSnapshot,
   type TopicSelectionAgentInvocationProvenance,
   type TopicSelectionAgentInvocationStatus,
   type TopicSelectionAgentOutputSourceKind,
+  type TopicSelectionAgentTokenBudgetGateResult,
   type TopicSelectionAgentDebateExtension,
   type TopicSelectionAgentValidationSummary,
   type TopicSelectionExecutorKind,
@@ -46,6 +53,18 @@ import {
   type TopicSelectionResolvedModelProfile,
   TopicSelectionModelProfileRegistryService,
 } from './topic-selection-model-profile-registry-service.js';
+import {
+  TopicSelectionCompressionRuntimeService,
+  type TopicSelectionCompressionFactInventory,
+  type TopicSelectionCompressionReportRuntimeResult,
+} from './topic-selection-compression-runtime-service.js';
+import {
+  TOPIC_SELECTION_REDACTED_PROMPT_PACKET_ARTIFACT_SCHEMA_VERSION,
+  TopicSelectionPromptPacketRuntimeService,
+  type TopicSelectionPromptPacketRuntimeResult,
+} from './topic-selection-prompt-packet-runtime-service.js';
+import { TopicSelectionPromptPacketCacheService } from './topic-selection-prompt-packet-cache-service.js';
+import { TopicSelectionTokenBudgetGateService } from './topic-selection-token-budget-gate-service.js';
 
 export type { TopicSelectionAgentRunMode } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-profile-contracts';
 export type {
@@ -84,7 +103,38 @@ export type TopicSelectionCodexAssistedAgentOutput<T> = {
   response_hash?: string | null;
   prompt_packet_hash?: string | null;
   operator_approval_ref?: TopicSelectionFunctionalRef | null;
+  local_approval_setting_ref?: string | null;
   response_source?: 'operator_supplied' | 'cached_exact_invocation';
+  reuse_provenance?: TopicSelectionExactResponseReuseProvenance | null;
+};
+
+export type TopicSelectionAgentRuntimeTokenBudgetInput = {
+  context_policy_profile: TopicSelectionContextPolicyProfile;
+  context_policy_profile_hash: string;
+  compression_strategy_ref?: TopicSelectionFunctionalRef | null;
+  compression_already_applied?: boolean;
+  compression_attempt?: TopicSelectionAgentRuntimeCompressionAttemptInput | null;
+  compression_report_ref?: TopicSelectionFunctionalRef | null;
+  compression_report_hash?: string | null;
+  compressed_context_hash?: string | null;
+  context_payloads?: unknown[];
+  extra_payloads?: unknown[];
+  estimated_input_tokens_override?: number | null;
+  schema_overhead_tokens_override?: number | null;
+};
+
+export type TopicSelectionAgentRuntimeCompressionAttemptInput = {
+  compression_report_ref?: TopicSelectionFunctionalRef | null;
+  source_refs: TopicSelectionFunctionalRef[];
+  input_context: unknown;
+  compressed_context: unknown;
+  summary: unknown;
+  compression_executor_kind: TopicSelectionCompressionExecutorKind;
+  required_preserved_facts?: TopicSelectionCompressionFactInventory | null;
+  compressed_preserved_facts?: TopicSelectionCompressionFactInventory | null;
+  redaction_policy?: string | null;
+  estimated_input_tokens_before_override?: number | null;
+  estimated_input_tokens_after_override?: number | null;
 };
 
 export type TopicSelectionAgentInvocationRequest<T> = {
@@ -107,6 +157,8 @@ export type TopicSelectionAgentInvocationRequest<T> = {
   messages: Array<{ role: 'system' | 'user'; content: string }>;
   input_refs?: TopicSelectionFunctionalRef[];
   context_packet_refs?: TopicSelectionArtifactFunctionalRef[];
+  context_packet_hashes?: string[];
+  runtime_token_budget?: TopicSelectionAgentRuntimeTokenBudgetInput | null;
   debate_extension?: TopicSelectionAgentDebateExtension | null;
   mocked_output?: TopicSelectionMockedAgentOutput<T> | null;
   codex_response?: TopicSelectionCodexAssistedAgentOutput<T> | null;
@@ -122,6 +174,7 @@ export type TopicSelectionAgentInvocationResult<T> = {
   structured_output: T | null;
   provenance: TopicSelectionAgentInvocationProvenance;
   validation: TopicSelectionAgentValidationSummary;
+  token_budget_gate_result: TopicSelectionAgentTokenBudgetGateResult | null;
   warning_codes: string[];
   blocker_codes: string[];
   error_code?: string | null;
@@ -134,7 +187,16 @@ type SourceExecution<T> = {
   provenance: TopicSelectionAgentInvocationProvenance;
   error_code?: string | null;
   blocker_codes?: string[];
+  warning_codes?: string[];
   validation?: TopicSelectionAgentValidationSummary;
+};
+
+type PreparedPromptPacket = {
+  promptPacketHash: string;
+  promptQualityReportRef: TopicSelectionFunctionalRef | null;
+  redactedPromptArtifactRef: TopicSelectionFunctionalRef | null;
+  blockerCodes: string[];
+  warningCodes: string[];
 };
 
 export class TopicSelectionAgentOrchestratorService {
@@ -149,17 +211,31 @@ export class TopicSelectionAgentOrchestratorService {
   private readonly validators = new Map<string, ValidateFunction>();
   private readonly llmGateway: TopicSelectionAgentOrchestratorLlmGateway;
   private readonly modelProfileRegistry: TopicSelectionModelProfileRegistryService;
+  private readonly tokenBudgetGate: TopicSelectionTokenBudgetGateService;
+  private readonly compressionRuntime: TopicSelectionCompressionRuntimeService;
+  private readonly promptPacketRuntime: TopicSelectionPromptPacketRuntimeService;
+  private readonly promptPacketCache: TopicSelectionPromptPacketCacheService | null;
   private readonly now: () => string;
 
   constructor(options: {
     llmGateway?: TopicSelectionAgentOrchestratorLlmGateway;
     controlPlane?: TopicSelectionControlPlaneService;
     modelProfileRegistry?: TopicSelectionModelProfileRegistryService;
+    tokenBudgetGate?: TopicSelectionTokenBudgetGateService;
+    compressionRuntime?: TopicSelectionCompressionRuntimeService;
+    promptPacketRuntime?: TopicSelectionPromptPacketRuntimeService;
+    promptPacketCache?: TopicSelectionPromptPacketCacheService | null;
     now?: () => string;
   } = {}) {
     this.llmGateway = options.llmGateway ?? new BackendLlmGateway();
     this.controlPlane = options.controlPlane ?? null;
     this.modelProfileRegistry = options.modelProfileRegistry ?? new TopicSelectionModelProfileRegistryService();
+    this.tokenBudgetGate = options.tokenBudgetGate ?? new TopicSelectionTokenBudgetGateService();
+    this.compressionRuntime = options.compressionRuntime ?? new TopicSelectionCompressionRuntimeService();
+    this.promptPacketRuntime = options.promptPacketRuntime ?? new TopicSelectionPromptPacketRuntimeService();
+    this.promptPacketCache = options.promptPacketCache === undefined
+      ? new TopicSelectionPromptPacketCacheService()
+      : options.promptPacketCache;
     this.now = options.now ?? (() => new Date().toISOString());
   }
 
@@ -171,13 +247,77 @@ export class TopicSelectionAgentOrchestratorService {
     const effectiveInput = this.effectiveInvocationInput(input);
     this.assertInvocationInput(effectiveInput);
     const resolvedProfile = this.resolveInvocationProfile(effectiveInput);
-    const source = await this.executeSource(effectiveInput, resolvedProfile);
+    const preparedPromptPacket = await this.preparePromptPacket(effectiveInput, resolvedProfile);
+    const promptPacketHash = preparedPromptPacket.promptPacketHash;
+    const tokenBudgetPreflight = await this.preflightTokenBudget<T>(
+      effectiveInput,
+      resolvedProfile,
+      promptPacketHash,
+      preparedPromptPacket,
+    );
+    if (tokenBudgetPreflight.blockedSource) {
+      const source = tokenBudgetPreflight.blockedSource;
+      return this.buildResult(effectiveInput, {
+        status: 'blocked',
+        structuredOutput: null,
+        provenance: source.provenance,
+        validation: source.validation ?? this.validationSummary(null),
+        tokenBudgetGateResult: tokenBudgetPreflight.gateResult,
+        warningCodes: this.uniqueStrings([
+          ...preparedPromptPacket.warningCodes,
+          ...tokenBudgetPreflight.warningCodes,
+          ...(source.warning_codes ?? []),
+        ]),
+        blockerCodes: source.blocker_codes ?? ['AGENT_EXECUTION_FAILED'],
+        errorCode: source.error_code ?? 'AGENT_EXECUTION_FAILED',
+      });
+    }
+
+    if (preparedPromptPacket.blockerCodes.length > 0) {
+      const source = this.blockedSource(
+        effectiveInput,
+        resolvedProfile,
+        'PROMPT_QUALITY_GATE_BLOCKED',
+        this.sourceKindForExecutionMode(effectiveInput),
+        promptPacketHash,
+        {
+          blockerCodes: preparedPromptPacket.blockerCodes,
+          warningCodes: preparedPromptPacket.warningCodes,
+          validation: this.promptQualityValidationSummary(preparedPromptPacket.blockerCodes),
+          promptQualityReportRef: preparedPromptPacket.promptQualityReportRef,
+          redactedPromptArtifactRef: preparedPromptPacket.redactedPromptArtifactRef,
+        },
+      );
+      return this.buildResult(effectiveInput, {
+        status: 'blocked',
+        structuredOutput: null,
+        provenance: source.provenance,
+        validation: source.validation ?? this.validationSummary(null),
+        tokenBudgetGateResult: tokenBudgetPreflight.gateResult,
+        warningCodes: preparedPromptPacket.warningCodes,
+        blockerCodes: source.blocker_codes ?? ['PROMPT_QUALITY_GATE_BLOCKED'],
+        errorCode: source.error_code ?? 'PROMPT_QUALITY_GATE_BLOCKED',
+      });
+    }
+
+    const source = await this.executeSource(
+      effectiveInput,
+      resolvedProfile,
+      promptPacketHash,
+      preparedPromptPacket,
+    );
     if (source.output === null) {
       return this.buildResult(effectiveInput, {
         status: 'blocked',
         structuredOutput: null,
         provenance: source.provenance,
         validation: source.validation ?? this.validationSummary(null),
+        tokenBudgetGateResult: tokenBudgetPreflight.gateResult,
+        warningCodes: this.uniqueStrings([
+          ...preparedPromptPacket.warningCodes,
+          ...tokenBudgetPreflight.warningCodes,
+          ...(source.warning_codes ?? []),
+        ]),
         blockerCodes: source.blocker_codes ?? ['AGENT_EXECUTION_FAILED'],
         errorCode: source.error_code ?? 'AGENT_EXECUTION_FAILED',
       });
@@ -190,6 +330,11 @@ export class TopicSelectionAgentOrchestratorService {
         structuredOutput: null,
         provenance: source.provenance,
         validation: this.validationSummary(null),
+        tokenBudgetGateResult: tokenBudgetPreflight.gateResult,
+        warningCodes: this.uniqueStrings([
+          ...preparedPromptPacket.warningCodes,
+          ...tokenBudgetPreflight.warningCodes,
+        ]),
         blockerCodes: ['FORBIDDEN_AGENT_OUTPUT_FIELD'],
         errorCode: 'FORBIDDEN_AGENT_OUTPUT_FIELD',
       });
@@ -202,6 +347,11 @@ export class TopicSelectionAgentOrchestratorService {
         structuredOutput: null,
         provenance: source.provenance,
         validation,
+        tokenBudgetGateResult: tokenBudgetPreflight.gateResult,
+        warningCodes: this.uniqueStrings([
+          ...preparedPromptPacket.warningCodes,
+          ...tokenBudgetPreflight.warningCodes,
+        ]),
         blockerCodes: ['SCHEMA_VALIDATION_FAILED'],
         errorCode: 'SCHEMA_VALIDATION_FAILED',
       });
@@ -212,6 +362,11 @@ export class TopicSelectionAgentOrchestratorService {
       structuredOutput: source.output,
       provenance: source.provenance,
       validation,
+      tokenBudgetGateResult: tokenBudgetPreflight.gateResult,
+      warningCodes: this.uniqueStrings([
+        ...preparedPromptPacket.warningCodes,
+        ...tokenBudgetPreflight.warningCodes,
+      ]),
       blockerCodes: [],
       errorCode: null,
     });
@@ -249,19 +404,10 @@ export class TopicSelectionAgentOrchestratorService {
   private async executeSource<T>(
     input: TopicSelectionAgentInvocationRequest<T>,
     resolvedProfile: TopicSelectionResolvedModelProfile,
+    promptPacketHash: string,
+    preparedPromptPacket: PreparedPromptPacket,
   ): Promise<SourceExecution<T>> {
     const invocationAttemptId = this.invocationAttemptId(input);
-    const promptPacketHash = input.codex_response?.prompt_packet_hash?.trim()
-      || this.hash({
-        context_packet_refs: input.context_packet_refs ?? [],
-        input_refs: input.input_refs ?? [],
-        messages: input.messages,
-        model_option_id: resolvedProfile.selected_model_option?.option_id ?? null,
-        prompt: input.prompt,
-        profile_id: input.profile_id,
-        profile_hash: resolvedProfile.profile_hash,
-        schema_name: input.schema_name,
-      });
 
     if (input.execution_mode === 'mocked_llm') {
       if (input.run_mode === 'product') {
@@ -296,10 +442,12 @@ export class TopicSelectionAgentOrchestratorService {
           prompt_template_version: input.prompt.version,
           schema_name: input.schema_name,
           prompt_packet_hash: promptPacketHash,
+          ...this.runtimePromptPacketProvenance(preparedPromptPacket),
           response_hash: responseHash,
           structured_output_hash: responseHash,
           cache_status: 'not_applicable',
           response_reuse_ref: null,
+          ...this.runtimeCompressionProvenance(input),
           fixture_id: input.mocked_output.fixture_id,
           fixture_hash: fixtureHash,
           mock_profile: input.mocked_output.mock_profile ?? null,
@@ -315,6 +463,30 @@ export class TopicSelectionAgentOrchestratorService {
       }
       const responseHash = input.codex_response.response_hash?.trim() || this.hash(input.codex_response.output);
       const responseSource = input.codex_response.response_source ?? 'operator_supplied';
+      const localApprovalSettingRef = input.codex_response.local_approval_setting_ref?.trim() || null;
+      if (
+        responseSource === 'cached_exact_invocation'
+        && !input.codex_response.operator_approval_ref
+        && !localApprovalSettingRef
+      ) {
+        throw new AppError(
+          400,
+          'INVALID_PAYLOAD',
+          'codex_assisted cached exact invocation reuse requires operator approval or local approval setting.',
+        );
+      }
+      const responseReuseProvenance = responseSource === 'cached_exact_invocation'
+        ? this.assertCodexReuseProvenance(
+          input,
+          resolvedProfile,
+          responseHash,
+          promptPacketHash,
+          localApprovalSettingRef,
+        )
+        : null;
+      const responseReuseRef = responseReuseProvenance
+        ? await this.recordResponseReuseProvenance(input, responseReuseProvenance)
+        : null;
       return {
         output: input.codex_response.output,
         provenance: {
@@ -339,12 +511,15 @@ export class TopicSelectionAgentOrchestratorService {
           prompt_template_version: input.prompt.version,
           schema_name: input.schema_name,
           prompt_packet_hash: promptPacketHash,
+          ...this.runtimePromptPacketProvenance(preparedPromptPacket),
           response_hash: responseHash,
           structured_output_hash: responseHash,
           cache_status: responseSource === 'cached_exact_invocation' ? 'hit' : 'not_applicable',
-          response_reuse_ref: null,
+          response_reuse_ref: responseReuseRef,
+          ...this.runtimeCompressionProvenance(input),
           operator_label: input.codex_response.operator_label,
           operator_approval_ref: input.codex_response.operator_approval_ref ?? null,
+          local_approval_setting_ref: localApprovalSettingRef,
           response_source: responseSource,
           telemetry: null,
           ...this.debateExtensionProvenance(input),
@@ -415,10 +590,12 @@ export class TopicSelectionAgentOrchestratorService {
           prompt_template_version: input.prompt.version,
           schema_name: input.schema_name,
           prompt_packet_hash: promptPacketHash,
+          ...this.runtimePromptPacketProvenance(preparedPromptPacket),
           response_hash: responseHash,
           structured_output_hash: responseHash,
           cache_status: 'not_applicable',
           response_reuse_ref: null,
+          ...this.runtimeCompressionProvenance(input),
           provider_id: model.providerId,
           model_id: model.modelId,
           telemetry: response.telemetry,
@@ -451,10 +628,12 @@ export class TopicSelectionAgentOrchestratorService {
           prompt_template_version: input.prompt.version,
           schema_name: input.schema_name,
           prompt_packet_hash: promptPacketHash,
+          ...this.runtimePromptPacketProvenance(preparedPromptPacket),
           response_hash: null,
           structured_output_hash: null,
           cache_status: 'not_applicable',
           response_reuse_ref: null,
+          ...this.runtimeCompressionProvenance(input),
           provider_id: model.providerId,
           model_id: model.modelId,
           telemetry: llmError?.telemetry ?? null,
@@ -469,6 +648,76 @@ export class TopicSelectionAgentOrchestratorService {
 
   private providerCompatibleSchema(schema: Record<string, unknown>): Record<string, unknown> {
     return this.removeFalsePropertySchemas(schema) as Record<string, unknown>;
+  }
+
+  private assertCodexReuseProvenance<T>(
+    input: TopicSelectionAgentInvocationRequest<T>,
+    resolvedProfile: TopicSelectionResolvedModelProfile,
+    responseHash: string,
+    promptPacketHash: string,
+    localApprovalSettingRef: string | null,
+  ): TopicSelectionExactResponseReuseProvenance {
+    const provenance = input.codex_response?.reuse_provenance ?? null;
+    if (!provenance) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'codex_assisted cached exact invocation reuse requires reuse provenance.',
+      );
+    }
+    if (provenance.non_provider !== true || provenance.source_execution_mode === 'provider_llm') {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'codex_assisted cached exact invocation reuse provenance must be non-provider.',
+      );
+    }
+    if (provenance.response_hash !== responseHash) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'codex_assisted reuse response hash drift detected.');
+    }
+    if (provenance.prompt_packet_hash !== promptPacketHash) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'codex_assisted reuse prompt packet hash drift detected.');
+    }
+    if (provenance.profile_hash !== resolvedProfile.profile_hash) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'codex_assisted reuse profile hash drift detected.');
+    }
+    const approvalRef = input.codex_response?.operator_approval_ref ?? null;
+    if (approvalRef) {
+      if (provenance.approval_ref?.ref_id !== approvalRef.ref_id) {
+        throw new AppError(400, 'INVALID_PAYLOAD', 'codex_assisted reuse approval ref drift detected.');
+      }
+      return provenance;
+    }
+    if (!localApprovalSettingRef || provenance.local_approval_setting_ref !== localApprovalSettingRef) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'codex_assisted reuse local approval setting drift detected.');
+    }
+    return provenance;
+  }
+
+  private async recordResponseReuseProvenance<T>(
+    input: TopicSelectionAgentInvocationRequest<T>,
+    provenance: TopicSelectionExactResponseReuseProvenance,
+  ): Promise<string> {
+    if (!this.controlPlane) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'codex_assisted exact response reuse requires control-plane artifact recording.',
+      );
+    }
+    const artifact = await this.controlPlane.recordArtifactRef({
+      workspace_id: input.workspace_id ?? null,
+      title_card_id: input.title_card_id ?? null,
+      artifact_kind: 'diagnostic',
+      storage_kind: 'inline',
+      payload: {
+        payload_schema: 'TopicSelectionExactResponseReuseProvenance@v1',
+        provenance,
+      },
+      workflow_run_id: input.workflow_run_id,
+      created_by: input.created_by ?? 'system',
+    });
+    return artifact.artifact_ref_id;
   }
 
   private removeFalsePropertySchemas(value: unknown, parentKey: string | null = null): unknown {
@@ -495,10 +744,13 @@ export class TopicSelectionAgentOrchestratorService {
       structuredOutput: T | null;
       provenance: TopicSelectionAgentInvocationProvenance;
       validation: TopicSelectionAgentValidationSummary;
+      tokenBudgetGateResult?: TopicSelectionAgentTokenBudgetGateResult | null;
+      warningCodes?: string[];
       blockerCodes: string[];
       errorCode?: string | null;
     },
   ): Promise<TopicSelectionAgentInvocationResult<T>> {
+    const warningCodes = this.uniqueStrings(value.warningCodes ?? []);
     const auditSnapshot: TopicSelectionAgentInvocationAuditSnapshot = {
       schema_version: TOPIC_SELECTION_AGENT_INVOCATION_AUDIT_SCHEMA_VERSION,
       node_id: input.node_id,
@@ -506,8 +758,9 @@ export class TopicSelectionAgentOrchestratorService {
       node_attempt_id: input.node_attempt_id,
       status: value.status,
       provenance: value.provenance,
+      token_budget_gate_result: value.tokenBudgetGateResult ?? null,
       validation: value.validation,
-      warning_codes: [],
+      warning_codes: warningCodes,
       blocker_codes: value.blockerCodes,
       created_at: this.now(),
     };
@@ -522,7 +775,8 @@ export class TopicSelectionAgentOrchestratorService {
       structured_output: value.structuredOutput,
       provenance: value.provenance,
       validation: value.validation,
-      warning_codes: [],
+      token_budget_gate_result: value.tokenBudgetGateResult ?? null,
+      warning_codes: warningCodes,
       blocker_codes: value.blockerCodes,
       error_code: value.errorCode ?? null,
       audit_snapshot: auditSnapshot,
@@ -563,13 +817,271 @@ export class TopicSelectionAgentOrchestratorService {
     });
   }
 
+  private async preparePromptPacket<T>(
+    input: TopicSelectionAgentInvocationRequest<T>,
+    resolvedProfile: TopicSelectionResolvedModelProfile,
+  ): Promise<PreparedPromptPacket> {
+    const runtime = input.runtime_token_budget;
+    if (!runtime) {
+      return {
+        promptPacketHash: this.promptPacketHash(input, resolvedProfile),
+        promptQualityReportRef: null,
+        redactedPromptArtifactRef: null,
+        blockerCodes: [],
+        warningCodes: [],
+      };
+    }
+
+    const promptPacket = this.promptPacketRuntime.buildPromptPacket({
+      title_card_id: input.title_card_id ?? null,
+      workflow_run_id: input.workflow_run_id,
+      node_id: input.node_id,
+      node_attempt_id: input.node_attempt_id,
+      prompt_template_id: input.prompt.promptTemplateId,
+      prompt_template_version: input.prompt.version,
+      prompt_variant_key: runtime.context_policy_profile.invocation_slot_id,
+      invocation_slot_id: runtime.context_policy_profile.invocation_slot_id,
+      messages: input.messages,
+      source_refs: this.promptSourceRefs(input),
+      context_packet_hashes: this.promptContextPacketHashes(input),
+      compression_report_ref: runtime.compression_report_ref ?? null,
+      compression_report_hash: runtime.compression_report_hash ?? null,
+      compressed_context_hash: runtime.compressed_context_hash ?? null,
+      output_contract: input.output_contract,
+      context_policy_profile: runtime.context_policy_profile,
+      context_policy_profile_hash: runtime.context_policy_profile_hash,
+      model_option_id: resolvedProfile.selected_model_option?.option_id ?? null,
+      normalized_params_hash: resolvedProfile.normalized_params_hash,
+      runtime_modifiers_hash: this.hash({
+        compression_already_applied: runtime.compression_already_applied ?? false,
+        execution_mode: input.execution_mode,
+        executor_kind: input.executor_kind,
+        run_mode: input.run_mode,
+      }),
+      redaction_policy: runtime.context_policy_profile.redaction_policy,
+    });
+    const suppliedHash = input.codex_response?.prompt_packet_hash?.trim() || null;
+    if (suppliedHash && suppliedHash !== promptPacket.identity.prompt_packet_hash) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'codex_assisted prompt packet hash drift detected.');
+    }
+
+    const cachedPromptPacket = await this.lookupPromptPacketCache(promptPacket, runtime);
+    if (cachedPromptPacket) {
+      return cachedPromptPacket;
+    }
+
+    const artifactRefs = await this.recordPromptPacketArtifacts(input, promptPacket);
+    const recordedPromptPacket = await this.recordPromptPacketCache(
+      promptPacket,
+      runtime,
+      artifactRefs,
+    );
+    return {
+      promptPacketHash: suppliedHash ?? promptPacket.identity.prompt_packet_hash,
+      promptQualityReportRef: recordedPromptPacket.promptQualityReportRef,
+      redactedPromptArtifactRef: recordedPromptPacket.redactedPromptArtifactRef,
+      blockerCodes: recordedPromptPacket.blockerCodes,
+      warningCodes: recordedPromptPacket.warningCodes,
+    };
+  }
+
+  private async lookupPromptPacketCache(
+    promptPacket: TopicSelectionPromptPacketRuntimeResult,
+    runtime: TopicSelectionAgentRuntimeTokenBudgetInput,
+  ): Promise<PreparedPromptPacket | null> {
+    if (!this.promptPacketCache) {
+      return null;
+    }
+    const result = await this.promptPacketCache.lookup({
+      identity: promptPacket.identity,
+      context_policy_profile: runtime.context_policy_profile,
+      context_policy_profile_hash: runtime.context_policy_profile_hash,
+      provenance_ref: promptPacket.identity.provenance_ref,
+    });
+    if (result.cache_result === 'hit') {
+      if (!this.promptCacheQualityMatchesCurrentRuntime(result, promptPacket)) {
+        return {
+          promptPacketHash: promptPacket.identity.prompt_packet_hash,
+          promptQualityReportRef: null,
+          redactedPromptArtifactRef: null,
+          blockerCodes: ['PROMPT_PACKET_CACHE_BLOCKED_DRIFT'],
+          warningCodes: this.uniqueStrings([
+            ...result.warning_codes,
+            ...promptPacket.warning_codes,
+          ]),
+        };
+      }
+      return {
+        promptPacketHash: result.prompt_packet_hash,
+        promptQualityReportRef: result.prompt_quality_report_ref,
+        redactedPromptArtifactRef: result.redacted_prompt_artifact_ref,
+        blockerCodes: promptPacket.prompt_quality_report.quality_decision === 'block'
+          && promptPacket.blocker_codes.length === 0
+          ? ['PROMPT_QUALITY_GATE_BLOCKED']
+          : promptPacket.blocker_codes,
+        warningCodes: promptPacket.warning_codes,
+      };
+    }
+    if (result.cache_result === 'blocked_stale' || result.cache_result === 'blocked_drift') {
+      return {
+        promptPacketHash: promptPacket.identity.prompt_packet_hash,
+        promptQualityReportRef: null,
+        redactedPromptArtifactRef: null,
+        blockerCodes: [
+          result.cache_result === 'blocked_stale'
+            ? 'PROMPT_PACKET_CACHE_BLOCKED_STALE'
+            : 'PROMPT_PACKET_CACHE_BLOCKED_DRIFT',
+        ],
+        warningCodes: result.warning_codes,
+      };
+    }
+    return null;
+  }
+
+  private promptCacheQualityMatchesCurrentRuntime(
+    cached: {
+      quality_decision: string | null;
+      blocker_codes: string[];
+      warning_codes: string[];
+    },
+    promptPacket: TopicSelectionPromptPacketRuntimeResult,
+  ): boolean {
+    return cached.quality_decision === promptPacket.prompt_quality_report.quality_decision
+      && this.sameStringSet(cached.blocker_codes, promptPacket.blocker_codes)
+      && this.sameStringSet(cached.warning_codes, promptPacket.warning_codes);
+  }
+
+  private async recordPromptPacketCache(
+    promptPacket: TopicSelectionPromptPacketRuntimeResult,
+    runtime: TopicSelectionAgentRuntimeTokenBudgetInput,
+    artifactRefs: {
+      promptQualityReportRef: TopicSelectionFunctionalRef;
+      promptQualityReportHash: string;
+      redactedPromptArtifactRef: TopicSelectionFunctionalRef;
+      redactedPromptArtifactHash: string;
+    },
+  ): Promise<{
+    promptQualityReportRef: TopicSelectionFunctionalRef;
+    redactedPromptArtifactRef: TopicSelectionFunctionalRef;
+    blockerCodes: string[];
+    warningCodes: string[];
+  }> {
+    if (!this.promptPacketCache) {
+      return {
+        promptQualityReportRef: artifactRefs.promptQualityReportRef,
+        redactedPromptArtifactRef: artifactRefs.redactedPromptArtifactRef,
+        blockerCodes: promptPacket.blocker_codes,
+        warningCodes: promptPacket.warning_codes,
+      };
+    }
+    const recorded = await this.promptPacketCache.recordFreshArtifacts({
+      identity: promptPacket.identity,
+      context_policy_profile: runtime.context_policy_profile,
+      context_policy_profile_hash: runtime.context_policy_profile_hash,
+      redacted_prompt_artifact_ref: artifactRefs.redactedPromptArtifactRef,
+      redacted_prompt_artifact_hash: artifactRefs.redactedPromptArtifactHash,
+      prompt_quality_report_ref: artifactRefs.promptQualityReportRef,
+      prompt_quality_report_hash: artifactRefs.promptQualityReportHash,
+      quality_decision: promptPacket.prompt_quality_report.quality_decision,
+      provenance_ref: promptPacket.identity.provenance_ref,
+      blocker_codes: promptPacket.blocker_codes,
+      warning_codes: promptPacket.warning_codes,
+    });
+    return {
+      promptQualityReportRef: recorded.entry.prompt_quality_report_ref,
+      redactedPromptArtifactRef: recorded.entry.redacted_prompt_artifact_ref,
+      blockerCodes: recorded.entry.blocker_codes,
+      warningCodes: recorded.entry.warning_codes,
+    };
+  }
+
+  private async recordPromptPacketArtifacts<T>(
+    input: TopicSelectionAgentInvocationRequest<T>,
+    promptPacket: TopicSelectionPromptPacketRuntimeResult,
+  ): Promise<{
+    promptQualityReportRef: TopicSelectionFunctionalRef;
+    promptQualityReportHash: string;
+    redactedPromptArtifactRef: TopicSelectionFunctionalRef;
+    redactedPromptArtifactHash: string;
+  }> {
+    if (!this.controlPlane) {
+      return {
+        promptQualityReportRef: promptPacket.prompt_quality_report.prompt_quality_report_ref,
+        promptQualityReportHash: this.hash(promptPacket.prompt_quality_report),
+        redactedPromptArtifactRef: promptPacket.redacted_prompt_artifact.artifact_ref,
+        redactedPromptArtifactHash: this.hash(promptPacket.redacted_prompt_artifact),
+      };
+    }
+    const redactedPromptArtifact = await this.controlPlane.recordArtifactRef({
+      workspace_id: input.workspace_id ?? null,
+      title_card_id: input.title_card_id ?? null,
+      artifact_kind: 'diagnostic',
+      storage_kind: 'inline',
+      payload: {
+        payload_schema: TOPIC_SELECTION_REDACTED_PROMPT_PACKET_ARTIFACT_SCHEMA_VERSION,
+        artifact: promptPacket.redacted_prompt_artifact,
+      },
+      workflow_run_id: input.workflow_run_id,
+      created_by: input.created_by ?? 'system',
+    });
+    const redactedPromptArtifactRef = this.toArtifactFunctionalRef(redactedPromptArtifact);
+    const promptQualityReportArtifact = await this.controlPlane.recordArtifactRef({
+      workspace_id: input.workspace_id ?? null,
+      title_card_id: input.title_card_id ?? null,
+      artifact_kind: 'diagnostic',
+      storage_kind: 'inline',
+      payload: {
+        payload_schema: TOPIC_SELECTION_PROMPT_QUALITY_REPORT_SCHEMA_VERSION,
+        report: promptPacket.prompt_quality_report,
+      },
+      workflow_run_id: input.workflow_run_id,
+      created_by: input.created_by ?? 'system',
+    });
+    return {
+      promptQualityReportRef: this.toArtifactFunctionalRef(promptQualityReportArtifact),
+      promptQualityReportHash: this.requiredChecksum(promptQualityReportArtifact),
+      redactedPromptArtifactRef,
+      redactedPromptArtifactHash: this.requiredChecksum(redactedPromptArtifact),
+    };
+  }
+
+  private promptSourceRefs(input: TopicSelectionAgentInvocationRequest<unknown>): TopicSelectionFunctionalRef[] {
+    return this.uniqueRefs([
+      ...(input.input_refs ?? []),
+      ...(input.context_packet_refs ?? []),
+    ]);
+  }
+
+  private promptContextPacketHashes(input: TopicSelectionAgentInvocationRequest<unknown>): string[] {
+    const explicitHashes = this.uniqueStrings(input.context_packet_hashes ?? []);
+    if (explicitHashes.length > 0) {
+      return explicitHashes;
+    }
+    if (!input.context_packet_refs?.length) {
+      return [];
+    }
+    return [this.hash(input.context_packet_refs)];
+  }
+
   private blockedSource<T>(
     input: TopicSelectionAgentInvocationRequest<T>,
     resolvedProfile: TopicSelectionResolvedModelProfile,
     errorCode: string,
     sourceKind: TopicSelectionAgentOutputSourceKind,
     promptPacketHash: string,
+    options: {
+      blockerCodes?: string[];
+      warningCodes?: string[];
+      validation?: TopicSelectionAgentValidationSummary;
+      compressionReportRef?: TopicSelectionFunctionalRef | null;
+      compressionReportHash?: string | null;
+      compressedContextHash?: string | null;
+      promptQualityReportRef?: TopicSelectionFunctionalRef | null;
+      redactedPromptArtifactRef?: TopicSelectionFunctionalRef | null;
+    } = {},
   ): SourceExecution<T> {
+    const model = this.modelRefForResolvedProfile(resolvedProfile);
+    const mockResponseHash = input.mocked_output ? this.hash(input.mocked_output.output) : null;
     return {
       output: null,
       provenance: {
@@ -594,15 +1106,339 @@ export class TopicSelectionAgentOrchestratorService {
         prompt_template_version: input.prompt.version,
         schema_name: input.schema_name,
         prompt_packet_hash: promptPacketHash,
+        ...this.runtimePromptPacketProvenance({
+          promptPacketHash,
+          promptQualityReportRef: options.promptQualityReportRef ?? null,
+          redactedPromptArtifactRef: options.redactedPromptArtifactRef ?? null,
+          blockerCodes: [],
+          warningCodes: [],
+        }),
         response_hash: null,
         structured_output_hash: null,
         cache_status: 'not_applicable',
         response_reuse_ref: null,
+        ...this.runtimeCompressionProvenance(input, {
+          compressionReportRef: options.compressionReportRef,
+          compressionReportHash: options.compressionReportHash,
+          compressedContextHash: options.compressedContextHash,
+        }),
         telemetry: null,
+        ...(sourceKind === 'provider_response' && model ? {
+          provider_id: model.providerId,
+          model_id: model.modelId,
+        } : {}),
+        ...(sourceKind === 'mock_fixture' && input.mocked_output ? {
+          fixture_id: input.mocked_output.fixture_id,
+          fixture_hash: input.mocked_output.fixture_hash?.trim() || mockResponseHash,
+          mock_profile: input.mocked_output.mock_profile ?? null,
+        } : {}),
+        ...(sourceKind === 'codex_response' && input.codex_response ? {
+          operator_label: input.codex_response.operator_label,
+          operator_approval_ref: input.codex_response.operator_approval_ref ?? null,
+          local_approval_setting_ref: input.codex_response.local_approval_setting_ref?.trim() || null,
+          response_source: input.codex_response.response_source ?? 'operator_supplied',
+        } : {}),
         ...this.debateExtensionProvenance(input),
       },
       error_code: errorCode,
-      blocker_codes: [errorCode],
+      blocker_codes: options.blockerCodes ?? [errorCode],
+      warning_codes: options.warningCodes ?? [],
+      validation: options.validation,
+    };
+  }
+
+  private async preflightTokenBudget<T>(
+    input: TopicSelectionAgentInvocationRequest<T>,
+    resolvedProfile: TopicSelectionResolvedModelProfile,
+    promptPacketHash: string,
+    preparedPromptPacket: PreparedPromptPacket,
+  ): Promise<{
+    blockedSource: SourceExecution<T> | null;
+    warningCodes: string[];
+    gateResult: TopicSelectionAgentTokenBudgetGateResult | null;
+  }> {
+    const runtime = input.runtime_token_budget;
+    if (!runtime) {
+      return {
+        blockedSource: null,
+        warningCodes: [],
+        gateResult: null,
+      };
+    }
+
+    this.assertModeSourceInput(input);
+    this.assertNonEmpty(runtime.context_policy_profile_hash, 'runtime_token_budget.context_policy_profile_hash');
+    if (runtime.context_policy_profile_hash !== this.hash(runtime.context_policy_profile)) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'runtime_token_budget.context_policy_profile_hash drift detected.',
+      );
+    }
+    const selectedOption = resolvedProfile.selected_model_option;
+    const evaluation = this.tokenBudgetGate.evaluate({
+      context_policy_profile: runtime.context_policy_profile,
+      provider_id: selectedOption?.provider_id ?? null,
+      model_id: selectedOption?.model_id ?? null,
+      model_profile_id: resolvedProfile.profile.profile_id,
+      model_option_id: selectedOption?.option_id ?? null,
+      messages: input.messages,
+      context_payloads: runtime.context_payloads ?? [],
+      schema: input.schema,
+      extra_payloads: runtime.extra_payloads ?? [],
+      compression_strategy_ref: runtime.compression_strategy_ref
+        ?? this.compressionStrategyRef(runtime.context_policy_profile),
+      compression_already_applied: runtime.compression_already_applied ?? false,
+      estimated_input_tokens_override: runtime.estimated_input_tokens_override,
+      schema_overhead_tokens_override: runtime.schema_overhead_tokens_override,
+    });
+
+    if (
+      evaluation.result.decision === 'within_budget'
+      || evaluation.result.decision === 'budget_unknown_allow_with_warning'
+    ) {
+      return {
+        blockedSource: null,
+        warningCodes: evaluation.result.warning_codes,
+        gateResult: evaluation.result,
+      };
+    }
+
+    if (evaluation.result.decision === 'requires_compression' && runtime.compression_attempt) {
+      return this.blockForCompressionAttempt(
+        input,
+        resolvedProfile,
+        promptPacketHash,
+        runtime,
+        evaluation.result,
+        preparedPromptPacket,
+      );
+    }
+
+    const errorCode = evaluation.result.decision === 'requires_compression'
+      ? 'TOKEN_BUDGET_REQUIRES_COMPRESSION'
+      : evaluation.result.blocker_codes[0] ?? 'TOKEN_BUDGET_BLOCKED_OVER_BUDGET';
+    const blockerCodes = this.uniqueStrings([
+      errorCode,
+      ...evaluation.result.blocker_codes,
+    ]);
+    const warningCodes = this.uniqueStrings(evaluation.result.warning_codes);
+
+    return {
+      blockedSource: this.blockedSource(
+        input,
+        resolvedProfile,
+        errorCode,
+        this.sourceKindForExecutionMode(input),
+        promptPacketHash,
+        {
+          blockerCodes,
+          warningCodes,
+          validation: this.runtimeGateValidationSummary(errorCode, evaluation.result.decision),
+          promptQualityReportRef: preparedPromptPacket.promptQualityReportRef,
+          redactedPromptArtifactRef: preparedPromptPacket.redactedPromptArtifactRef,
+        },
+      ),
+      warningCodes,
+      gateResult: evaluation.result,
+    };
+  }
+
+  private async blockForCompressionAttempt<T>(
+    input: TopicSelectionAgentInvocationRequest<T>,
+    resolvedProfile: TopicSelectionResolvedModelProfile,
+    promptPacketHash: string,
+    runtime: TopicSelectionAgentRuntimeTokenBudgetInput,
+    gateResult: TopicSelectionAgentTokenBudgetGateResult,
+    preparedPromptPacket: PreparedPromptPacket,
+  ): Promise<{
+    blockedSource: SourceExecution<T>;
+    warningCodes: string[];
+    gateResult: TopicSelectionAgentTokenBudgetGateResult;
+  }> {
+    const compression = await this.createCompressionReport(input, runtime);
+    const warningCodes = this.uniqueStrings([
+      ...gateResult.warning_codes,
+      ...compression.result.warning_codes,
+      'COMPRESSION_REPORT_RECORDED',
+    ]);
+    const blockerCodes = compression.result.quality_gate_result === 'blocked'
+      ? this.uniqueStrings([
+        'COMPRESSION_QUALITY_GATE_BLOCKED',
+        ...compression.result.blocker_codes,
+      ])
+      : ['TOKEN_BUDGET_REQUIRES_COMPRESSION'];
+    const errorCode = blockerCodes[0] ?? 'TOKEN_BUDGET_REQUIRES_COMPRESSION';
+
+    return {
+      blockedSource: this.blockedSource(
+        input,
+        resolvedProfile,
+        errorCode,
+        this.sourceKindForExecutionMode(input),
+        promptPacketHash,
+        {
+          blockerCodes,
+          warningCodes,
+          compressionReportRef: compression.artifact_ref,
+          compressionReportHash: compression.artifact_hash,
+          compressedContextHash: compression.result.report.compressed_context_hash,
+          promptQualityReportRef: preparedPromptPacket.promptQualityReportRef,
+          redactedPromptArtifactRef: preparedPromptPacket.redactedPromptArtifactRef,
+          validation: this.runtimeGateValidationSummary(
+            errorCode,
+            compression.result.quality_gate_result === 'blocked'
+              ? 'compression_quality_gate_blocked'
+              : 'requires_compression',
+          ),
+        },
+      ),
+      warningCodes,
+      gateResult,
+    };
+  }
+
+  private async createCompressionReport(
+    input: TopicSelectionAgentInvocationRequest<unknown>,
+    runtime: TopicSelectionAgentRuntimeTokenBudgetInput,
+  ): Promise<{
+    artifact_ref: TopicSelectionFunctionalRef;
+    artifact_hash: string;
+    result: TopicSelectionCompressionReportRuntimeResult;
+  }> {
+    const attempt = runtime.compression_attempt;
+    if (!attempt) {
+      throw new AppError(500, 'INTERNAL_ERROR', 'compression attempt input is required.');
+    }
+    if (!this.controlPlane) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'compression report recording requires control-plane artifact recording.',
+      );
+    }
+
+    const result = this.compressionRuntime.createReport({
+      context_policy_profile: runtime.context_policy_profile,
+      context_policy_profile_hash: runtime.context_policy_profile_hash,
+      compression_report_ref: attempt.compression_report_ref ?? this.syntheticCompressionReportRef(input, attempt),
+      source_refs: attempt.source_refs,
+      input_context: attempt.input_context,
+      compressed_context: attempt.compressed_context,
+      summary: attempt.summary,
+      compression_executor_kind: attempt.compression_executor_kind,
+      required_preserved_facts: attempt.required_preserved_facts ?? null,
+      compressed_preserved_facts: attempt.compressed_preserved_facts ?? null,
+      redaction_policy: attempt.redaction_policy ?? null,
+      estimated_input_tokens_before_override: attempt.estimated_input_tokens_before_override,
+      estimated_input_tokens_after_override: attempt.estimated_input_tokens_after_override,
+    });
+    const artifact = await this.controlPlane.recordArtifactRef({
+      workspace_id: input.workspace_id ?? null,
+      title_card_id: input.title_card_id ?? null,
+      artifact_kind: 'diagnostic',
+      storage_kind: 'inline',
+      payload: {
+        payload_schema: 'TopicSelectionCompressionReportEnvelope@v1',
+        report: result.report,
+      },
+      workflow_run_id: input.workflow_run_id,
+      created_by: input.created_by ?? 'system',
+    });
+    return {
+      artifact_ref: this.toArtifactFunctionalRef(artifact),
+      artifact_hash: this.requiredChecksum(artifact),
+      result,
+    };
+  }
+
+  private syntheticCompressionReportRef(
+    input: TopicSelectionAgentInvocationRequest<unknown>,
+    attempt: TopicSelectionAgentRuntimeCompressionAttemptInput,
+  ): TopicSelectionFunctionalRef {
+    return {
+      ref_type: 'compression_report',
+      ref_id: `compression_report_${this.hash({
+        node_attempt_id: input.node_attempt_id,
+        source_refs: attempt.source_refs,
+        compressed_context: attempt.compressed_context,
+        summary: attempt.summary,
+      }).slice(0, 32)}`,
+      title_card_id: input.title_card_id ?? null,
+    };
+  }
+
+  private compressionStrategyRef(
+    profile: TopicSelectionContextPolicyProfile,
+  ): TopicSelectionFunctionalRef | null {
+    const strategyId = profile.compression_policy.compression_strategy_id?.trim();
+    const strategyVersion = profile.compression_policy.compression_strategy_version?.trim();
+    if (!strategyId || !strategyVersion) {
+      return null;
+    }
+    return {
+      ref_type: 'compression_strategy',
+      ref_id: strategyId,
+      version_id: strategyVersion,
+    };
+  }
+
+  private promptPacketHash(
+    input: TopicSelectionAgentInvocationRequest<unknown>,
+    resolvedProfile: TopicSelectionResolvedModelProfile,
+  ): string {
+    const computedHash = this.hash({
+      context_packet_refs: input.context_packet_refs ?? [],
+      input_refs: input.input_refs ?? [],
+      messages: input.messages,
+      compression_identity: this.runtimeCompressionIdentity(input),
+      model_option_id: resolvedProfile.selected_model_option?.option_id ?? null,
+      prompt: input.prompt,
+      profile_id: input.profile_id,
+      profile_hash: resolvedProfile.profile_hash,
+      schema_name: input.schema_name,
+    });
+    const suppliedHash = input.codex_response?.prompt_packet_hash?.trim() || null;
+    if (suppliedHash && suppliedHash !== computedHash) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'codex_assisted prompt packet hash drift detected.');
+    }
+    return suppliedHash ?? computedHash;
+  }
+
+  private sourceKindForExecutionMode(
+    input: TopicSelectionAgentInvocationRequest<unknown>,
+  ): TopicSelectionAgentOutputSourceKind {
+    if (input.execution_mode === 'mocked_llm') {
+      return 'mock_fixture';
+    }
+    if (input.execution_mode === 'codex_assisted') {
+      return 'codex_response';
+    }
+    return 'provider_response';
+  }
+
+  private assertModeSourceInput(input: TopicSelectionAgentInvocationRequest<unknown>): void {
+    if (input.execution_mode === 'mocked_llm') {
+      if (input.run_mode === 'product') {
+        throw new AppError(400, 'INVALID_PAYLOAD', 'mocked_llm cannot run in product mode.');
+      }
+      if (!input.mocked_output) {
+        throw new AppError(400, 'INVALID_PAYLOAD', 'mocked_output is required for mocked_llm.');
+      }
+    }
+    if (input.execution_mode === 'codex_assisted' && !input.codex_response) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'codex_response is required for codex_assisted.');
+    }
+  }
+
+  private runtimeGateValidationSummary(
+    errorCode: string,
+    decision: string,
+  ): TopicSelectionAgentValidationSummary {
+    return {
+      valid: false,
+      error_count: 1,
+      errors: [`${errorCode}: token budget gate decision ${decision}`],
     };
   }
 
@@ -614,6 +1450,64 @@ export class TopicSelectionAgentOrchestratorService {
     input: TopicSelectionAgentInvocationRequest<unknown>,
   ): Pick<TopicSelectionAgentInvocationProvenance, 'debate_extension'> | Record<string, never> {
     return input.debate_extension ? { debate_extension: input.debate_extension } : {};
+  }
+
+  private runtimeCompressionIdentity(
+    input: TopicSelectionAgentInvocationRequest<unknown>,
+    overrides: {
+      compressionReportRef?: TopicSelectionFunctionalRef | null;
+      compressionReportHash?: string | null;
+      compressedContextHash?: string | null;
+    } = {},
+  ): {
+    compression_report_ref: TopicSelectionFunctionalRef | null;
+    compression_report_hash: string | null;
+    compressed_context_hash: string | null;
+  } {
+    const runtime = input.runtime_token_budget;
+    return {
+      compression_report_ref:
+        overrides.compressionReportRef !== undefined
+          ? overrides.compressionReportRef
+          : runtime?.compression_report_ref ?? null,
+      compression_report_hash:
+        overrides.compressionReportHash !== undefined
+          ? overrides.compressionReportHash
+          : runtime?.compression_report_hash ?? null,
+      compressed_context_hash:
+        overrides.compressedContextHash !== undefined
+          ? overrides.compressedContextHash
+          : runtime?.compressed_context_hash ?? null,
+    };
+  }
+
+  private runtimeCompressionProvenance(
+    input: TopicSelectionAgentInvocationRequest<unknown>,
+    overrides: {
+      compressionReportRef?: TopicSelectionFunctionalRef | null;
+      compressionReportHash?: string | null;
+      compressedContextHash?: string | null;
+    } = {},
+  ): Pick<
+    TopicSelectionAgentInvocationProvenance,
+    'compression_report_ref' | 'compression_report_hash' | 'compressed_context_hash'
+  > | Record<string, never> {
+    const identity = this.runtimeCompressionIdentity(input, overrides);
+    if (
+      !identity.compression_report_ref
+      && !identity.compression_report_hash
+      && !identity.compressed_context_hash
+    ) {
+      return {};
+    }
+    return identity;
+  }
+
+  private requiredChecksum(record: TopicSelectionArtifactRefRecord): string {
+    if (!record.checksum) {
+      throw new AppError(500, 'INTERNAL_ERROR', 'Recorded artifact is missing checksum.');
+    }
+    return record.checksum;
   }
 
   private validateStructuredOutput(
@@ -679,6 +1573,32 @@ export class TopicSelectionAgentOrchestratorService {
       .replace(/\s+/gu, ' ')
       .trim()
       .slice(0, 500);
+  }
+
+  private promptQualityValidationSummary(blockerCodes: string[]): TopicSelectionAgentValidationSummary {
+    const blockers = this.uniqueStrings(blockerCodes);
+    return {
+      valid: false,
+      error_count: blockers.length || 1,
+      errors: blockers.length > 0
+        ? blockers.map((code) => `PROMPT_QUALITY_GATE_BLOCKED: ${code}`)
+        : ['PROMPT_QUALITY_GATE_BLOCKED'],
+    };
+  }
+
+  private runtimePromptPacketProvenance(
+    preparedPromptPacket: PreparedPromptPacket,
+  ): Pick<
+    TopicSelectionAgentInvocationProvenance,
+    'redacted_prompt_artifact_ref' | 'prompt_quality_report_ref'
+  > | Record<string, never> {
+    if (!preparedPromptPacket.redactedPromptArtifactRef && !preparedPromptPacket.promptQualityReportRef) {
+      return {};
+    }
+    return {
+      redacted_prompt_artifact_ref: preparedPromptPacket.redactedPromptArtifactRef,
+      prompt_quality_report_ref: preparedPromptPacket.promptQualityReportRef,
+    };
   }
 
   private findForbiddenOutputPath(value: unknown, path: string[] = ['structured_output']): string | null {
@@ -748,6 +1668,35 @@ export class TopicSelectionAgentOrchestratorService {
     if (!value.trim()) {
       throw new AppError(400, 'INVALID_PAYLOAD', `${fieldName} cannot be empty.`);
     }
+  }
+
+  private uniqueStrings(values: string[]): string[] {
+    return [...new Set(values.filter((value) => value.trim().length > 0))];
+  }
+
+  private sameStringSet(left: string[], right: string[]): boolean {
+    const normalizedLeft = this.uniqueStrings(left).sort();
+    const normalizedRight = this.uniqueStrings(right).sort();
+    return stableStringify(normalizedLeft) === stableStringify(normalizedRight);
+  }
+
+  private uniqueRefs(refs: TopicSelectionFunctionalRef[]): TopicSelectionFunctionalRef[] {
+    const seen = new Set<string>();
+    const unique: TopicSelectionFunctionalRef[] = [];
+    for (const ref of refs) {
+      const key = stableStringify({
+        ref_type: ref.ref_type,
+        ref_id: ref.ref_id,
+        version_id: ref.version_id ?? null,
+        title_card_id: ref.title_card_id ?? null,
+      });
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      unique.push(ref);
+    }
+    return unique;
   }
 
   private hash(value: unknown): string {

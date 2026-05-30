@@ -1,6 +1,9 @@
 import type {
   TopicSelectionFunctionalRef,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-control-plane-contracts';
+import type {
+  TopicSelectionContextPolicyProfile,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-llm-runtime-contracts';
 import {
   topicSelectionRankedCandidateDraftBatchSchema,
   type TopicSelectionCandidateDraftAdmissionReport,
@@ -14,6 +17,7 @@ import {
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-need-validation-contracts';
 import { AppError } from '../errors/app-error.js';
 import {
+  sha256Text,
   stableStringify,
 } from './literature-content-processing-utils.js';
 import {
@@ -50,6 +54,18 @@ import {
 } from './topic-selection-persist-need-candidate-batch-service.js';
 import { TopicSelectionRankedCandidateDraftBatchValidatorService } from './topic-selection-ranked-candidate-draft-batch-validator-service.js';
 import { TopicSelectionSupplementalRoundRoutingService } from './topic-selection-supplemental-round-routing-service.js';
+import {
+  TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS,
+  type TopicSelectionResolvedContextPolicyProfile,
+  TopicSelectionContextPolicyProfileRegistryService,
+} from './topic-selection-context-policy-profile-registry-service.js';
+import {
+  TopicSelectionCompressionRuntimeService,
+  type TopicSelectionCompressionFactInventory,
+  type TopicSelectionCompressionReportRuntimeResult,
+} from './topic-selection-compression-runtime-service.js';
+import { TopicSelectionTokenBudgetGateService } from './topic-selection-token-budget-gate-service.js';
 
 const GENERATE_NEED_CANDIDATE_NODE_ID = 'topic-selection.v1a.generate-need-candidate.v1' as const;
 const PROMPT_TEMPLATE_ID = 'topic-selection-generate-need-candidate';
@@ -60,11 +76,45 @@ const MINIMUM_SCHEMA_VALIDATION_PAYLOAD_SCHEMA = 'RankedCandidateDraftBatchMinim
 const CANDIDATE_DRAFT_ADMISSION_PAYLOAD_SCHEMA = 'CandidateDraftAdmissionReport@v1';
 const SUPPLEMENTAL_ROUND_ROUTING_PAYLOAD_SCHEMA = 'SupplementalRoundRoutingDecision@v1';
 const PERSIST_NEED_CANDIDATE_BATCH_PAYLOAD_SCHEMA = 'PersistNeedCandidateBatchCommand@v1';
+const CONTEXT_COMPRESSION_REPORT_PAYLOAD_SCHEMA = 'TopicSelectionCompressionReportEnvelope@v1';
 
 export type TopicSelectionGenerateNeedCandidatePersistenceContext = {
   search_run_ref: TopicSelectionFunctionalRef;
   search_plan_ref: TopicSelectionFunctionalRef;
   literature_snapshot_ref: TopicSelectionFunctionalRef;
+};
+
+export type TopicSelectionGenerateNeedCandidateRuntimeTokenBudgetOverrides = {
+  estimated_input_tokens_override?: number | null;
+  schema_overhead_tokens_override?: number | null;
+  estimated_input_tokens_after_compression_override?: number | null;
+  schema_overhead_tokens_after_compression_override?: number | null;
+  compression_already_applied?: boolean;
+};
+
+type TopicSelectionGenerateNeedCandidateCompressedContext = {
+  schema_version: 'topic-selection-v1a-n6-single-agent-compressed-context-v1';
+  compression_report_ref: TopicSelectionFunctionalRef;
+  source_context_packet_hashes: {
+    exploration_context: string;
+    arbiter_context: string;
+  };
+  exploration_context: unknown;
+  arbiter_context: unknown;
+  preserved_fact_inventory: TopicSelectionCompressionFactInventory;
+  compression_notes: {
+    strategy: string;
+    retained_refs_are_authoritative: true;
+    payload_is_not_business_authority: true;
+  };
+};
+
+type TopicSelectionGenerateNeedCandidateSingleAgentInvocationResult = {
+  invocation_result: TopicSelectionAgentInvocationResult<TopicSelectionRankedCandidateDraftBatch>;
+  context_compression_report_artifact: TopicSelectionGenerateNeedCandidateArtifactRefEntry | null;
+  compression_blocker_codes?: string[];
+  compression_warning_codes?: string[];
+  compression_error_code?: string | null;
 };
 
 export type TopicSelectionGenerateNeedCandidateOrchestratorAdapterInput = {
@@ -84,6 +134,7 @@ export type TopicSelectionGenerateNeedCandidateOrchestratorAdapterInput = {
   debate_codex_responses?: TopicSelectionNeedDiscoveryDebateCodexResponses | null;
   mocked_output?: TopicSelectionMockedAgentOutput<TopicSelectionRankedCandidateDraftBatch> | null;
   codex_response?: TopicSelectionCodexAssistedAgentOutput<TopicSelectionRankedCandidateDraftBatch> | null;
+  runtime_token_budget_overrides?: TopicSelectionGenerateNeedCandidateRuntimeTokenBudgetOverrides | null;
   current_round_index?: number | null;
   remaining_round_budget?: number | null;
   persist_admitted_candidates?: boolean;
@@ -105,6 +156,7 @@ export type TopicSelectionGenerateNeedCandidateOrchestratorAdapterResult = {
   candidate_draft_admission_report_artifact?: TopicSelectionGenerateNeedCandidateArtifactRefEntry | null;
   supplemental_round_routing_decision: TopicSelectionSupplementalRoundRoutingDecision | null;
   supplemental_round_routing_decision_artifact?: TopicSelectionGenerateNeedCandidateArtifactRefEntry | null;
+  context_compression_report_artifact?: TopicSelectionGenerateNeedCandidateArtifactRefEntry | null;
   persist_need_candidate_batch_command: TopicSelectionPersistNeedCandidateBatchCommand | null;
   persist_need_candidate_batch_command_artifact?: TopicSelectionGenerateNeedCandidateArtifactRefEntry | null;
   persist_need_candidate_batch_result?: TopicSelectionPersistNeedCandidateBatchResult | null;
@@ -130,6 +182,9 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
   private readonly supplementalRouting: TopicSelectionSupplementalRoundRoutingService;
   private readonly needCandidateBatchPersistence: TopicSelectionPersistNeedCandidateBatchService | null;
   private readonly debateLoop: TopicSelectionNeedDiscoveryDebateLoopService;
+  private readonly contextPolicyProfileRegistry: TopicSelectionContextPolicyProfileRegistryService;
+  private readonly tokenBudgetGate: TopicSelectionTokenBudgetGateService;
+  private readonly compressionRuntime: TopicSelectionCompressionRuntimeService;
 
   constructor(
     private readonly dependencies: {
@@ -141,6 +196,9 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
       supplementalRouting?: TopicSelectionSupplementalRoundRoutingService;
       needCandidateBatchPersistence?: TopicSelectionPersistNeedCandidateBatchService | null;
       debateLoop?: TopicSelectionNeedDiscoveryDebateLoopService;
+      contextPolicyProfileRegistry?: TopicSelectionContextPolicyProfileRegistryService;
+      tokenBudgetGate?: TopicSelectionTokenBudgetGateService;
+      compressionRuntime?: TopicSelectionCompressionRuntimeService;
     },
   ) {
     this.draftBatchValidator = dependencies.draftBatchValidator
@@ -155,6 +213,10 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
         agentOrchestrator: dependencies.agentOrchestrator,
         artifactBoundary: dependencies.artifactBoundary,
       });
+    this.contextPolicyProfileRegistry = dependencies.contextPolicyProfileRegistry
+      ?? new TopicSelectionContextPolicyProfileRegistryService();
+    this.tokenBudgetGate = dependencies.tokenBudgetGate ?? new TopicSelectionTokenBudgetGateService();
+    this.compressionRuntime = dependencies.compressionRuntime ?? new TopicSelectionCompressionRuntimeService();
   }
 
   async generateRankedCandidateDraftBatch(
@@ -165,8 +227,6 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
       input.node_input.exploration_context_ref,
       {
         title_card_id: input.title_card_id,
-        workflow_run_id: input.node_input.workflow_run_id,
-        node_attempt_id: input.node_input.node_attempt_id,
         context_family: 'exploration_context',
         policy_version: input.node_input.policy_version,
         output_schema_version: input.node_input.schema_version,
@@ -178,8 +238,6 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
       input.node_input.arbiter_context_ref,
       {
         title_card_id: input.title_card_id,
-        workflow_run_id: input.node_input.workflow_run_id,
-        node_attempt_id: input.node_input.node_attempt_id,
         context_family: 'arbiter_context',
         policy_version: input.node_input.policy_version,
         output_schema_version: input.node_input.schema_version,
@@ -208,36 +266,12 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
         created_by: input.created_by ?? 'system',
       })
       : null;
+    const singleAgentResult = debateResult
+      ? null
+      : await this.invokeSingleAgent(input, explorationContext, arbiterContext);
     const invocationResult = debateResult?.final_invocation_result
-      ?? await this.dependencies.agentOrchestrator.invokeStructuredOutput<TopicSelectionRankedCandidateDraftBatch>({
-        workspace_id: input.workspace_id ?? null,
-        title_card_id: input.title_card_id ?? null,
-        node_id: GENERATE_NEED_CANDIDATE_NODE_ID,
-        workflow_run_id: input.node_input.workflow_run_id,
-        node_attempt_id: input.node_input.node_attempt_id,
-        execution_mode: input.node_input.execution_mode,
-        execution_spec: input.execution_spec ?? null,
-        executor_kind: input.executor_kind ?? 'single_agent',
-        run_mode: input.run_mode,
-        profile_id: input.node_input.profile_id,
-        output_contract: RANKED_BATCH_PAYLOAD_SCHEMA,
-        model_option_id: input.model_option_id ?? null,
-        prompt: {
-          promptTemplateId: PROMPT_TEMPLATE_ID,
-          version: PROMPT_TEMPLATE_VERSION,
-        },
-        schema_name: RANKED_BATCH_SCHEMA_NAME,
-        schema: topicSelectionRankedCandidateDraftBatchSchema as unknown as Record<string, unknown>,
-        messages: this.buildMessages(input.node_input, explorationContext, arbiterContext),
-        input_refs: this.inputRefs(input.node_input),
-        context_packet_refs: [
-          input.node_input.exploration_context_ref,
-          input.node_input.arbiter_context_ref,
-        ],
-        mocked_output: input.mocked_output ?? null,
-        codex_response: input.codex_response ?? null,
-        created_by: input.created_by ?? 'system',
-      });
+      ?? singleAgentResult!.invocation_result;
+    const contextCompressionReportArtifact = singleAgentResult?.context_compression_report_artifact ?? null;
     const rankedCandidateDraftBatch = debateResult?.ranked_candidate_draft_batch
       ?? invocationResult.structured_output as TopicSelectionRankedCandidateDraftBatch | null;
 
@@ -256,6 +290,7 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
         candidate_draft_admission_report_artifact: null,
         supplemental_round_routing_decision: null,
         supplemental_round_routing_decision_artifact: null,
+        context_compression_report_artifact: contextCompressionReportArtifact,
         persist_need_candidate_batch_command: null,
         persist_need_candidate_batch_command_artifact: null,
         persist_need_candidate_batch_result: null,
@@ -263,9 +298,17 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
         arbiter_context_packet: arbiterContext,
         invocation_result: invocationResult,
         debate_result: debateResult,
-        blocker_codes: invocationResult.blocker_codes,
-        warning_codes: invocationResult.warning_codes,
-        error_code: invocationResult.error_code ?? 'AGENT_INVOCATION_BLOCKED',
+        blocker_codes: this.uniqueStrings([
+          ...(singleAgentResult?.compression_blocker_codes ?? []),
+          ...invocationResult.blocker_codes,
+        ]),
+        warning_codes: this.uniqueStrings([
+          ...(singleAgentResult?.compression_warning_codes ?? []),
+          ...invocationResult.warning_codes,
+        ]),
+        error_code: singleAgentResult?.compression_error_code
+          ?? invocationResult.error_code
+          ?? 'AGENT_INVOCATION_BLOCKED',
       };
     }
 
@@ -307,6 +350,7 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
         candidate_draft_admission_report_artifact: null,
         supplemental_round_routing_decision: null,
         supplemental_round_routing_decision_artifact: null,
+        context_compression_report_artifact: contextCompressionReportArtifact,
         persist_need_candidate_batch_command: null,
         persist_need_candidate_batch_command_artifact: null,
         persist_need_candidate_batch_result: null,
@@ -421,6 +465,7 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
       candidate_draft_admission_report_artifact: candidateDraftAdmissionArtifact.artifact_entry,
       supplemental_round_routing_decision: supplementalRoundRoutingDecision,
       supplemental_round_routing_decision_artifact: supplementalRoundRoutingArtifact.artifact_entry,
+      context_compression_report_artifact: contextCompressionReportArtifact,
       persist_need_candidate_batch_command: persistenceResult?.command ?? null,
       persist_need_candidate_batch_command_artifact: persistenceResult?.commandArtifact ?? null,
       persist_need_candidate_batch_result: persistenceResult?.result ?? null,
@@ -435,6 +480,251 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
         candidateDraftAdmissionReport,
       ),
       error_code: this.errorCodeForRoutingDecision(supplementalRoundRoutingDecision, candidateDraftAdmissionReport),
+    };
+  }
+
+  private async invokeSingleAgent(
+    input: TopicSelectionGenerateNeedCandidateOrchestratorAdapterInput,
+    explorationContext: TopicSelectionNeedDiscoveryContextPacket,
+    arbiterContext: TopicSelectionNeedDiscoveryContextPacket,
+  ): Promise<TopicSelectionGenerateNeedCandidateSingleAgentInvocationResult> {
+    const resolvedRuntimeProfile = this.resolveSingleAgentRuntimeProfile();
+    const baseMessages = this.buildMessages(input.node_input, explorationContext, arbiterContext);
+    const preflight = this.tokenBudgetGate.evaluate({
+      context_policy_profile: resolvedRuntimeProfile.profile,
+      messages: baseMessages,
+      schema: topicSelectionRankedCandidateDraftBatchSchema as unknown as Record<string, unknown>,
+      estimated_input_tokens_override:
+        input.runtime_token_budget_overrides?.estimated_input_tokens_override,
+      schema_overhead_tokens_override:
+        input.runtime_token_budget_overrides?.schema_overhead_tokens_override,
+      compression_already_applied:
+        input.runtime_token_budget_overrides?.compression_already_applied ?? false,
+    });
+
+    if (
+      preflight.result.decision !== 'requires_compression'
+      || input.runtime_token_budget_overrides?.compression_already_applied === true
+    ) {
+      return {
+        invocation_result: await this.invokeSingleAgentWithMessages({
+          input,
+          explorationContext,
+          arbiterContext,
+          messages: baseMessages,
+          runtimeProfile: resolvedRuntimeProfile,
+          runtimeOptions: {},
+        }),
+        context_compression_report_artifact: null,
+      };
+    }
+
+    const compression = await this.createSingleAgentCompressionReport({
+      input,
+      explorationContext,
+      arbiterContext,
+      runtimeProfile: resolvedRuntimeProfile,
+      estimatedInputTokensBefore: preflight.result.estimated_input_tokens,
+    });
+    if (compression.result.quality_gate_result === 'blocked') {
+      return {
+        invocation_result: await this.invokeSingleAgentWithMessages({
+          input,
+          explorationContext,
+          arbiterContext,
+          messages: baseMessages,
+          runtimeProfile: resolvedRuntimeProfile,
+          runtimeOptions: {
+            compressionReportRef: compression.artifact.artifact_ref,
+            compressionReportHash: compression.artifact.artifact_hash,
+            compressedContextHash: compression.result.report.compressed_context_hash,
+            compressionAlreadyApplied: true,
+          },
+        }),
+        context_compression_report_artifact: compression.artifact,
+        compression_blocker_codes: this.uniqueStrings([
+          'COMPRESSION_QUALITY_GATE_BLOCKED',
+          ...compression.result.blocker_codes,
+        ]),
+        compression_warning_codes: compression.result.warning_codes,
+        compression_error_code: 'COMPRESSION_QUALITY_GATE_BLOCKED',
+      };
+    }
+
+    const compressedMessages = this.buildMessages(
+      input.node_input,
+      explorationContext,
+      arbiterContext,
+      compression.compressedContext,
+    );
+    const invocationResult = await this.invokeSingleAgentWithMessages({
+      input,
+      explorationContext,
+      arbiterContext,
+      messages: compressedMessages,
+      runtimeProfile: resolvedRuntimeProfile,
+      runtimeOptions: {
+        compressionReportRef: compression.artifact.artifact_ref,
+        compressionReportHash: compression.artifact.artifact_hash,
+        compressedContextHash: compression.result.report.compressed_context_hash,
+        compressionAlreadyApplied: true,
+        estimatedInputTokensOverride:
+          input.runtime_token_budget_overrides?.estimated_input_tokens_after_compression_override,
+        schemaOverheadTokensOverride:
+          input.runtime_token_budget_overrides?.schema_overhead_tokens_after_compression_override,
+      },
+    });
+    return {
+      invocation_result: invocationResult,
+      context_compression_report_artifact: compression.artifact,
+    };
+  }
+
+  private async invokeSingleAgentWithMessages(input: {
+    input: TopicSelectionGenerateNeedCandidateOrchestratorAdapterInput;
+    explorationContext: TopicSelectionNeedDiscoveryContextPacket;
+    arbiterContext: TopicSelectionNeedDiscoveryContextPacket;
+    messages: Array<{ role: 'system' | 'user'; content: string }>;
+    runtimeProfile: TopicSelectionResolvedContextPolicyProfile;
+    runtimeOptions: {
+      compressionReportRef?: TopicSelectionFunctionalRef | null;
+      compressionReportHash?: string | null;
+      compressedContextHash?: string | null;
+      compressionAlreadyApplied?: boolean;
+      estimatedInputTokensOverride?: number | null;
+      schemaOverheadTokensOverride?: number | null;
+    };
+  }): Promise<TopicSelectionAgentInvocationResult<TopicSelectionRankedCandidateDraftBatch>> {
+    return this.dependencies.agentOrchestrator.invokeStructuredOutput<TopicSelectionRankedCandidateDraftBatch>({
+      workspace_id: input.input.workspace_id ?? null,
+      title_card_id: input.input.title_card_id ?? null,
+      node_id: GENERATE_NEED_CANDIDATE_NODE_ID,
+      workflow_run_id: input.input.node_input.workflow_run_id,
+      node_attempt_id: input.input.node_input.node_attempt_id,
+      execution_mode: input.input.node_input.execution_mode,
+      execution_spec: input.input.execution_spec ?? null,
+      executor_kind: input.input.executor_kind ?? 'single_agent',
+      run_mode: input.input.run_mode,
+      profile_id: input.input.node_input.profile_id,
+      output_contract: RANKED_BATCH_PAYLOAD_SCHEMA,
+      model_option_id: input.input.model_option_id ?? null,
+      prompt: {
+        promptTemplateId: PROMPT_TEMPLATE_ID,
+        version: PROMPT_TEMPLATE_VERSION,
+      },
+      schema_name: RANKED_BATCH_SCHEMA_NAME,
+      schema: topicSelectionRankedCandidateDraftBatchSchema as unknown as Record<string, unknown>,
+      messages: input.messages,
+      input_refs: this.inputRefs(input.input.node_input),
+      context_packet_refs: [
+        input.input.node_input.exploration_context_ref,
+        input.input.node_input.arbiter_context_ref,
+      ],
+      context_packet_hashes: [
+        input.explorationContext.payload_hash,
+        input.arbiterContext.payload_hash,
+      ],
+      runtime_token_budget: this.runtimeTokenBudgetInput(
+        input.input,
+        input.runtimeProfile,
+        input.runtimeOptions,
+      ),
+      mocked_output: input.input.mocked_output ?? null,
+      codex_response: input.input.codex_response ?? null,
+      created_by: input.input.created_by ?? 'system',
+    });
+  }
+
+  private async createSingleAgentCompressionReport(input: {
+    input: TopicSelectionGenerateNeedCandidateOrchestratorAdapterInput;
+    explorationContext: TopicSelectionNeedDiscoveryContextPacket;
+    arbiterContext: TopicSelectionNeedDiscoveryContextPacket;
+    runtimeProfile: TopicSelectionResolvedContextPolicyProfile;
+    estimatedInputTokensBefore: number | null;
+  }): Promise<{
+    artifact: TopicSelectionGenerateNeedCandidateArtifactRefEntry;
+    compressedContext: TopicSelectionGenerateNeedCandidateCompressedContext;
+    result: TopicSelectionCompressionReportRuntimeResult;
+  }> {
+    const sourceRefs = this.uniqueRefs([
+      input.input.node_input.exploration_context_ref,
+      input.input.node_input.arbiter_context_ref,
+      ...input.explorationContext.input_refs,
+      ...input.arbiterContext.input_refs,
+      ...this.inputRefs(input.input.node_input),
+    ]);
+    const factInventory = this.compressionFactInventory(
+      input.runtimeProfile.profile,
+      input.explorationContext,
+      input.arbiterContext,
+    );
+    const compressionReportRef = this.syntheticCompressionReportRef(
+      input.input,
+      input.explorationContext,
+      input.arbiterContext,
+    );
+    const compressedContext: TopicSelectionGenerateNeedCandidateCompressedContext = {
+      schema_version: 'topic-selection-v1a-n6-single-agent-compressed-context-v1',
+      compression_report_ref: compressionReportRef,
+      source_context_packet_hashes: {
+        exploration_context: input.explorationContext.payload_hash,
+        arbiter_context: input.arbiterContext.payload_hash,
+      },
+      exploration_context: this.compactPayload(input.explorationContext.payload),
+      arbiter_context: this.compactPayload(input.arbiterContext.payload),
+      preserved_fact_inventory: factInventory,
+      compression_notes: {
+        strategy: 'deterministic structural compaction; refs remain authoritative',
+        retained_refs_are_authoritative: true,
+        payload_is_not_business_authority: true,
+      },
+    };
+    const reportResult = this.compressionRuntime.createReport({
+      context_policy_profile: input.runtimeProfile.profile,
+      context_policy_profile_hash: input.runtimeProfile.profile_hash,
+      compression_report_ref: compressionReportRef,
+      source_refs: sourceRefs,
+      input_context: {
+        exploration_context: input.explorationContext.payload,
+        arbiter_context: input.arbiterContext.payload,
+      },
+      compressed_context: compressedContext,
+      summary: {
+        schema_version: 'topic-selection-v1a-n6-compression-summary-v1',
+        node_id: GENERATE_NEED_CANDIDATE_NODE_ID,
+        context_family: input.runtimeProfile.profile.context_family,
+        preserved_fact_inventory: factInventory,
+        source_context_packet_hashes: compressedContext.source_context_packet_hashes,
+        authority_note: 'Compression is advisory context only and cannot create or satisfy authority writes.',
+      },
+      compression_executor_kind: 'deterministic_structural',
+      required_preserved_facts: factInventory,
+      compressed_preserved_facts: factInventory,
+      redaction_policy: input.runtimeProfile.profile.redaction_policy,
+      estimated_input_tokens_before_override: input.estimatedInputTokensBefore,
+      estimated_input_tokens_after_override:
+        input.input.runtime_token_budget_overrides?.estimated_input_tokens_after_compression_override,
+    });
+    const artifact = await this.dependencies.artifactBoundary.recordArtifact({
+      workspace_id: input.input.workspace_id ?? null,
+      title_card_id: input.input.title_card_id ?? null,
+      workflow_run_id: input.input.node_input.workflow_run_id,
+      node_attempt_id: input.input.node_input.node_attempt_id,
+      artifact_key: 'context_compression_report',
+      payload_schema: CONTEXT_COMPRESSION_REPORT_PAYLOAD_SCHEMA,
+      payload: {
+        payload_schema: CONTEXT_COMPRESSION_REPORT_PAYLOAD_SCHEMA,
+        report: reportResult.report,
+        compressed_context: compressedContext,
+      },
+      source_refs: sourceRefs,
+      created_by: input.input.created_by ?? 'system',
+    });
+
+    return {
+      artifact: artifact.artifact_entry,
+      compressedContext,
+      result: reportResult,
     };
   }
 
@@ -557,10 +847,47 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
       ?? 'NO_ADMISSIBLE_NEED_CANDIDATE';
   }
 
+  private runtimeTokenBudgetInput(
+    input: TopicSelectionGenerateNeedCandidateOrchestratorAdapterInput,
+    resolvedProfile: TopicSelectionResolvedContextPolicyProfile = this.resolveSingleAgentRuntimeProfile(),
+    options: {
+      compressionReportRef?: TopicSelectionFunctionalRef | null;
+      compressionReportHash?: string | null;
+      compressedContextHash?: string | null;
+      compressionAlreadyApplied?: boolean;
+      estimatedInputTokensOverride?: number | null;
+      schemaOverheadTokensOverride?: number | null;
+    } = {},
+  ) {
+    const overrides = input.runtime_token_budget_overrides ?? {};
+    return {
+      context_policy_profile: resolvedProfile.profile,
+      context_policy_profile_hash: resolvedProfile.profile_hash,
+      compression_report_ref: options.compressionReportRef ?? null,
+      compression_report_hash: options.compressionReportHash ?? null,
+      compressed_context_hash: options.compressedContextHash ?? null,
+      compression_already_applied: options.compressionAlreadyApplied ?? overrides.compression_already_applied ?? false,
+      estimated_input_tokens_override: options.estimatedInputTokensOverride
+        ?? overrides.estimated_input_tokens_override,
+      schema_overhead_tokens_override: options.schemaOverheadTokensOverride
+        ?? overrides.schema_overhead_tokens_override,
+    };
+  }
+
+  private resolveSingleAgentRuntimeProfile(): TopicSelectionResolvedContextPolicyProfile {
+    return this.contextPolicyProfileRegistry.resolveProfile({
+      context_policy_profile_id:
+        TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS.need_candidate_generation,
+      invocation_slot_id:
+        TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.need_candidate_generation,
+    });
+  }
+
   private buildMessages(
     nodeInput: TopicSelectionGenerateNeedCandidateNodeInput,
     explorationContext: TopicSelectionNeedDiscoveryContextPacket,
     arbiterContext: TopicSelectionNeedDiscoveryContextPacket,
+    compressedContext?: TopicSelectionGenerateNeedCandidateCompressedContext | null,
   ): Array<{ role: 'system' | 'user'; content: string }> {
     return [
       {
@@ -583,20 +910,7 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
         role: 'user',
         content: stableStringify({
           node_input: nodeInput,
-          context_packets: {
-            exploration_context: {
-              input_refs_hash: explorationContext.input_refs_hash,
-              payload_hash: explorationContext.payload_hash,
-              cache_key: explorationContext.cache_key,
-              payload: explorationContext.payload,
-            },
-            arbiter_context: {
-              input_refs_hash: arbiterContext.input_refs_hash,
-              payload_hash: arbiterContext.payload_hash,
-              cache_key: arbiterContext.cache_key,
-              payload: arbiterContext.payload,
-            },
-          },
+          context_packets: this.messageContextPackets(explorationContext, arbiterContext, compressedContext ?? null),
           output_constraints: {
             schema_name: RANKED_BATCH_SCHEMA_NAME,
             max_persisted_candidates: arbiterContext.context_family === 'arbiter_context'
@@ -613,6 +927,169 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
         }),
       },
     ];
+  }
+
+  private messageContextPackets(
+    explorationContext: TopicSelectionNeedDiscoveryContextPacket,
+    arbiterContext: TopicSelectionNeedDiscoveryContextPacket,
+    compressedContext: TopicSelectionGenerateNeedCandidateCompressedContext | null,
+  ): Record<string, unknown> {
+    if (compressedContext) {
+      return {
+        compressed_context: compressedContext,
+        source_context_packets: {
+          exploration_context: {
+            input_refs_hash: explorationContext.input_refs_hash,
+            payload_hash: explorationContext.payload_hash,
+            cache_key: explorationContext.cache_key,
+          },
+          arbiter_context: {
+            input_refs_hash: arbiterContext.input_refs_hash,
+            payload_hash: arbiterContext.payload_hash,
+            cache_key: arbiterContext.cache_key,
+          },
+        },
+      };
+    }
+    return {
+      exploration_context: {
+        input_refs_hash: explorationContext.input_refs_hash,
+        payload_hash: explorationContext.payload_hash,
+        cache_key: explorationContext.cache_key,
+        payload: explorationContext.payload,
+      },
+      arbiter_context: {
+        input_refs_hash: arbiterContext.input_refs_hash,
+        payload_hash: arbiterContext.payload_hash,
+        cache_key: arbiterContext.cache_key,
+        payload: arbiterContext.payload,
+      },
+    };
+  }
+
+  private compressionFactInventory(
+    profile: TopicSelectionContextPolicyProfile,
+    explorationContext: TopicSelectionNeedDiscoveryContextPacket,
+    arbiterContext: TopicSelectionNeedDiscoveryContextPacket,
+  ): TopicSelectionCompressionFactInventory {
+    const inventory: TopicSelectionCompressionFactInventory = {};
+    const add = (kind: string, value: string | null | undefined) => {
+      if (!value?.trim() || !profile.compression_policy.preserved_fact_kinds.includes(kind)) {
+        return;
+      }
+      inventory[kind] = this.uniqueStrings([...(inventory[kind] ?? []), value.trim()]);
+    };
+
+    const explorationPayload = explorationContext.context_family === 'exploration_context'
+      ? explorationContext.payload
+      : null;
+    const arbiterPayload = arbiterContext.context_family === 'arbiter_context'
+      ? arbiterContext.payload
+      : null;
+
+    if (explorationPayload) {
+      const coverage = this.recordAt(explorationPayload, ['search_coverage_digest']);
+      const coverageStatus = this.stringAt(coverage, ['coverage']);
+      if (coverageStatus && coverageStatus !== 'complete') {
+        add('source_health_warning', `search_coverage:${coverageStatus}`);
+      }
+      const challengePrompts = Array.isArray(explorationPayload.challenge_prompts)
+        ? explorationPayload.challenge_prompts
+        : [];
+      for (const prompt of challengePrompts) {
+        if (typeof prompt === 'string') {
+          add('unresolved_challenge', prompt);
+        }
+      }
+      const decisionMemory = this.recordAt(explorationPayload, ['decision_memory_digest']);
+      const requiredChallenges = this.arrayOfStringsAt(decisionMemory, ['required_challenges']);
+      for (const challenge of requiredChallenges) {
+        add('residual_risk', challenge);
+        add('unresolved_challenge', challenge);
+      }
+    }
+
+    const targets = this.methodFamilyTargets(explorationContext);
+    const counts = this.methodFamilyCounts(explorationContext);
+    for (const target of targets) {
+      if ((counts[target] ?? 0) <= 0) {
+        add('method_family_gap', target);
+      }
+    }
+
+    if (arbiterPayload) {
+      for (const rule of Array.isArray(arbiterPayload.failure_rules) ? arbiterPayload.failure_rules : []) {
+        if (typeof rule === 'string') {
+          add('blocker', rule);
+        }
+      }
+      for (const point of Array.isArray(arbiterPayload.unresolved_points) ? arbiterPayload.unresolved_points : []) {
+        const label = typeof point === 'string'
+          ? point
+          : this.isRecord(point)
+            ? this.stringAt(point, ['label']) ?? this.stringAt(point, ['summary']) ?? stableStringify(point)
+            : null;
+        add('unresolved_challenge', label);
+      }
+    }
+
+    return inventory;
+  }
+
+  private compactPayload(value: unknown, depth = 0): unknown {
+    if (typeof value === 'string') {
+      return value.length > 700
+        ? {
+          truncated_text: true,
+          preview: value.slice(0, 700),
+          original_length: value.length,
+          full_hash: sha256Text(value),
+        }
+        : value;
+    }
+    if (!value || typeof value !== 'object') {
+      return value;
+    }
+    if (Array.isArray(value)) {
+      const maxItems = depth <= 2 ? 18 : 10;
+      const keptItems = value.slice(0, maxItems).map((item) => this.compactPayload(item, depth + 1));
+      if (value.length <= maxItems) {
+        return keptItems;
+      }
+      return {
+        truncated_array: true,
+        kept_items: keptItems,
+        omitted_count: value.length - maxItems,
+        full_hash: sha256Text(stableStringify(value)),
+      };
+    }
+    const output: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      output[key] = depth >= 5
+        ? {
+          truncated_object: true,
+          full_hash: sha256Text(stableStringify(child)),
+        }
+        : this.compactPayload(child, depth + 1);
+    }
+    return output;
+  }
+
+  private syntheticCompressionReportRef(
+    input: TopicSelectionGenerateNeedCandidateOrchestratorAdapterInput,
+    explorationContext: TopicSelectionNeedDiscoveryContextPacket,
+    arbiterContext: TopicSelectionNeedDiscoveryContextPacket,
+  ): TopicSelectionFunctionalRef {
+    return {
+      ref_type: 'compression_report',
+      ref_id: `compression_report_${sha256Text(stableStringify({
+        node_attempt_id: input.node_input.node_attempt_id,
+        exploration_payload_hash: explorationContext.payload_hash,
+        arbiter_payload_hash: arbiterContext.payload_hash,
+        profile_id: input.node_input.profile_id,
+      })).slice(0, 32)}`,
+      title_card_id: input.title_card_id ?? null,
+    };
   }
 
   private contextResolvableRefs(
@@ -858,6 +1335,44 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
       return null;
     }
     return value as unknown as TopicSelectionFunctionalRef;
+  }
+
+  private recordAt(value: unknown, path: string[]): Record<string, unknown> | null {
+    let current = value;
+    for (const segment of path) {
+      if (!this.isRecord(current)) {
+        return null;
+      }
+      current = current[segment];
+    }
+    return this.isRecord(current) ? current : null;
+  }
+
+  private stringAt(value: unknown, path: string[]): string | null {
+    let current = value;
+    for (const segment of path) {
+      if (!this.isRecord(current)) {
+        return null;
+      }
+      current = current[segment];
+    }
+    return typeof current === 'string' && current.trim() ? current.trim() : null;
+  }
+
+  private arrayOfStringsAt(value: unknown, path: string[]): string[] {
+    let current = value;
+    for (const segment of path) {
+      if (!this.isRecord(current)) {
+        return [];
+      }
+      current = current[segment];
+    }
+    if (!Array.isArray(current)) {
+      return [];
+    }
+    return current
+      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      .map((item) => item.trim());
   }
 
   private uniqueRefs(refs: TopicSelectionFunctionalRef[]): TopicSelectionFunctionalRef[] {

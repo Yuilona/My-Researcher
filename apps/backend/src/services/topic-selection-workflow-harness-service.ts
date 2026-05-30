@@ -53,6 +53,7 @@ import {
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-need-validation-contracts';
 import { AppError } from '../errors/app-error.js';
 import type {
+  TopicSelectionAgentRuntimeTokenBudgetInput,
   TopicSelectionAgentRunMode,
   TopicSelectionCodexAssistedAgentOutput,
   TopicSelectionExecutorKind,
@@ -61,6 +62,7 @@ import type {
 import { TopicSelectionAgentOrchestratorService } from './topic-selection-agent-orchestrator-service.js';
 import {
   type CompileNeedDiscoveryContextPairInput,
+  type NeedDiscoveryRuntimeContextCacheInput,
   type TopicSelectionNeedDiscoveryCompiledContextPairResult,
   TopicSelectionNeedDiscoveryContextCompilerService,
 } from './topic-selection-need-discovery-context-compiler-service.js';
@@ -68,6 +70,7 @@ import { TopicSelectionNeedDiscoveryArtifactBoundaryService } from './topic-sele
 import {
   type TopicSelectionGenerateNeedCandidateOrchestratorAdapterResult,
   type TopicSelectionGenerateNeedCandidatePersistenceContext,
+  type TopicSelectionGenerateNeedCandidateRuntimeTokenBudgetOverrides,
   TopicSelectionGenerateNeedCandidateOrchestratorAdapterService,
 } from './topic-selection-generate-need-candidate-orchestrator-adapter-service.js';
 import type {
@@ -157,7 +160,20 @@ import {
   TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
+  TopicSelectionModelProfileRegistryService,
 } from './topic-selection-model-profile-registry-service.js';
+import {
+  TOPIC_SELECTION_V1A_N5_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1A_N5_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1A_N7_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1A_N7_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1A_N8_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1A_N8_INVOCATION_SLOT_IDS,
+  TopicSelectionContextPolicyProfileRegistryService,
+} from './topic-selection-context-policy-profile-registry-service.js';
+import { TopicSelectionContextPacketCacheService } from './topic-selection-context-packet-cache-service.js';
 import type { TopicSelectionNeedValidationService } from './topic-selection-need-validation-service.js';
 import type { TopicSelectionSearchResourceService } from './topic-selection-search-resource-service.js';
 import {
@@ -1088,6 +1104,7 @@ export type TopicSelectionWorkflowHarnessGenerateNeedCandidateInput = {
   arbiter_payload: TopicSelectionNeedDiscoveryArbiterContextPayload;
   mocked_output?: TopicSelectionMockedAgentOutput<TopicSelectionRankedCandidateDraftBatch> | null;
   codex_response?: TopicSelectionCodexAssistedAgentOutput<TopicSelectionRankedCandidateDraftBatch> | null;
+  runtime_token_budget_overrides?: TopicSelectionGenerateNeedCandidateRuntimeTokenBudgetOverrides | null;
   model_option_id?: string | null;
   current_round_index?: number | null;
   remaining_round_budget?: number | null;
@@ -1215,12 +1232,17 @@ const V1C_FORWARD_NEXT_NODE_BY_NODE_ID: Partial<Record<TopicSelectionV1cHarnessN
 
 export class TopicSelectionWorkflowHarnessService {
   private readonly now: () => string;
+  private readonly contextPolicyProfileRegistry: TopicSelectionContextPolicyProfileRegistryService;
+  private readonly modelProfileRegistry: TopicSelectionModelProfileRegistryService;
 
   constructor(
     private readonly dependencies: {
       contextCompiler: TopicSelectionNeedDiscoveryContextCompilerService;
       generateNeedCandidateAdapter: TopicSelectionGenerateNeedCandidateOrchestratorAdapterService;
       artifactBoundary: TopicSelectionNeedDiscoveryArtifactBoundaryService;
+      contextPacketCache?: TopicSelectionContextPacketCacheService | null;
+      contextPolicyProfileRegistry?: TopicSelectionContextPolicyProfileRegistryService;
+      modelProfileRegistry?: TopicSelectionModelProfileRegistryService;
       controlPlane?: TopicSelectionControlPlaneService;
       searchResources?: TopicSelectionSearchResourceService;
       evidenceMaps?: TopicSelectionEvidenceMapService;
@@ -1235,6 +1257,10 @@ export class TopicSelectionWorkflowHarnessService {
     } = {},
   ) {
     this.now = options.now ?? (() => new Date().toISOString());
+    this.contextPolicyProfileRegistry = dependencies.contextPolicyProfileRegistry
+      ?? new TopicSelectionContextPolicyProfileRegistryService();
+    this.modelProfileRegistry = dependencies.modelProfileRegistry
+      ?? new TopicSelectionModelProfileRegistryService();
   }
 
   async invokeNode(
@@ -3035,6 +3061,7 @@ export class TopicSelectionWorkflowHarnessService {
       debate_codex_responses: input.debate_codex_responses ?? null,
       mocked_output: input.mocked_output ?? null,
       codex_response: input.codex_response ?? null,
+      runtime_token_budget_overrides: input.runtime_token_budget_overrides ?? null,
       current_round_index: input.current_round_index ?? null,
       remaining_round_budget: input.remaining_round_budget ?? null,
       persist_admitted_candidates: input.persist_admitted_candidates ?? false,
@@ -3666,6 +3693,14 @@ export class TopicSelectionWorkflowHarnessService {
           contextPacket.output_validated_need_ref,
         ],
         context_packet_refs: this.uniqueArtifactRefs([this.asArtifactRef(contextPacketRef)]),
+        context_packet_hashes: [contextPacket.context_packet_hash],
+        runtime_token_budget: this.runtimeTokenBudgetForSlot({
+          contextPolicyProfileId:
+            TOPIC_SELECTION_V1A_N8_CONTEXT_RUNTIME_PROFILE_IDS.confirmation_semantic_review,
+          invocationSlotId:
+            TOPIC_SELECTION_V1A_N8_INVOCATION_SLOT_IDS.confirmation_semantic_review,
+          contextPayloads: [contextPacket],
+        }),
         mocked_output: input.mocked_output ?? null,
         codex_response: input.codex_response ?? null,
         created_by: input.created_by ?? 'system',
@@ -4560,6 +4595,34 @@ export class TopicSelectionWorkflowHarnessService {
       messages: this.needAdjudicationMessages(input, candidate, readiness, supportPacket),
       input_refs: this.needAdjudicationInputRefs(candidate, readiness, supportPacket),
       context_packet_refs: [],
+      context_packet_hashes: [
+        this.hash({
+          candidate_ref: this.ref(
+            'need_candidate',
+            candidate.need_candidate_id,
+            candidate.title_card_id,
+            candidate.candidate_version,
+          ),
+          readiness_ref: this.ref(
+            'need_candidate_readiness',
+            readiness.readiness_assessment_id,
+            readiness.title_card_id,
+          ),
+          validation_support_packet_ref: this.ref(
+            'validation_decision_support_packet',
+            supportPacket.validation_support_packet_id,
+            supportPacket.title_card_id,
+          ),
+        }),
+      ],
+      runtime_token_budget: this.runtimeTokenBudgetForSlot({
+        contextPolicyProfileId:
+          TOPIC_SELECTION_V1A_N7_CONTEXT_RUNTIME_PROFILE_IDS.adjudication_recommendation,
+        invocationSlotId:
+          TOPIC_SELECTION_V1A_N7_INVOCATION_SLOT_IDS.adjudication_recommendation,
+        contextPayloads: [supportPacket],
+        extraPayloads: [candidate, readiness],
+      }),
       mocked_output: input.mocked_output ?? null,
       codex_response: input.codex_response ?? null,
       created_by: input.created_by ?? 'system',
@@ -5369,6 +5432,15 @@ export class TopicSelectionWorkflowHarnessService {
       context_packet_refs: this.uniqueArtifactRefs([
         this.asArtifactRef(input.extraction_context_packet_ref ?? null),
       ]),
+      context_packet_hashes: [
+        this.hash(input.extraction_context_packet),
+      ],
+      runtime_token_budget: this.runtimeTokenBudgetForSlot({
+        contextPolicyProfileId:
+          TOPIC_SELECTION_V1A_N5_CONTEXT_RUNTIME_PROFILE_IDS.evidence_extraction,
+        invocationSlotId: TOPIC_SELECTION_V1A_N5_INVOCATION_SLOT_IDS.evidence_extraction,
+        contextPayloads: [input.extraction_context_packet],
+      }),
       mocked_output: input.mocked_output ?? null,
       codex_response: input.codex_response ?? null,
       created_by: input.created_by ?? 'system',
@@ -7026,8 +7098,115 @@ export class TopicSelectionWorkflowHarnessService {
       execution_mode: input.execution_mode,
       exploration_payload: input.exploration_payload,
       arbiter_payload: input.arbiter_payload,
+      runtime_context_cache: this.n6RuntimeContextCacheInput(input),
       created_by: input.created_by ?? 'system',
     };
+  }
+
+  private n6RuntimeContextCacheInput(
+    input: TopicSelectionWorkflowHarnessGenerateNeedCandidateInput,
+  ): NeedDiscoveryRuntimeContextCacheInput | null {
+    const cacheService = this.dependencies.contextPacketCache ?? null;
+    if (!cacheService) {
+      return null;
+    }
+    const inputRefs = input.context_input_refs ?? this.defaultContextInputRefs(input);
+    const executorKind = input.executor_kind ?? 'single_agent';
+    const modelProfile = this.modelProfileRegistry.resolveProfile({
+      profile_id: input.profile_id,
+      execution_mode: input.execution_mode,
+      run_mode: input.run_mode,
+      model_option_id: input.model_option_id ?? null,
+    });
+    const modelOptionId = modelProfile.selected_model_option?.option_id ?? null;
+    const explorationProfile = this.contextPolicyProfileRegistry.resolveProfile({
+      context_policy_profile_id:
+        TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS.need_candidate_generation,
+      invocation_slot_id:
+        TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.need_candidate_generation,
+    });
+    const arbiterProfile = this.contextPolicyProfileRegistry.resolveProfile({
+      context_policy_profile_id:
+        TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS.arbiter_final_synthesis,
+      invocation_slot_id:
+        TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.arbiter_final_synthesis,
+    });
+    const explorationPayloadHash = this.hash(input.exploration_payload);
+    const arbiterPayloadHash = this.hash(input.arbiter_payload);
+
+    return {
+      cache_service: cacheService,
+      exploration_context: {
+        context_policy_profile: explorationProfile.profile,
+        context_policy_profile_hash: explorationProfile.profile_hash,
+        executor_kind: executorKind,
+        prompt_packet_hash: this.n6ContextCachePromptSeedHash({
+          input,
+          invocationSlotId:
+            TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.need_candidate_generation,
+          contextPacketHashes: [explorationPayloadHash, arbiterPayloadHash],
+          inputRefs,
+        }),
+        prompt_template_id: 'topic-selection-generate-need-candidate',
+        prompt_template_version: 'v1',
+        model_option_id: modelOptionId,
+        normalized_params_hash: modelProfile.normalized_params_hash,
+        output_contract: 'RankedCandidateDraftBatch@v1',
+        context_packet_hashes: [explorationPayloadHash],
+        provenance_ref: this.ref(
+          'runtime_context_cache_binding',
+          `${input.node_attempt_id}_n6_exploration_context_cache`,
+          input.title_card_id,
+        ),
+      },
+      arbiter_context: {
+        context_policy_profile: arbiterProfile.profile,
+        context_policy_profile_hash: arbiterProfile.profile_hash,
+        executor_kind: executorKind,
+        prompt_packet_hash: this.n6ContextCachePromptSeedHash({
+          input,
+          invocationSlotId:
+            TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.arbiter_final_synthesis,
+          contextPacketHashes: [arbiterPayloadHash],
+          inputRefs,
+        }),
+        prompt_template_id: 'topic-selection-generate-need-candidate',
+        prompt_template_version: 'v1',
+        model_option_id: modelOptionId,
+        normalized_params_hash: modelProfile.normalized_params_hash,
+        output_contract: 'RankedCandidateDraftBatch@v1',
+        context_packet_hashes: [arbiterPayloadHash],
+        provenance_ref: this.ref(
+          'runtime_context_cache_binding',
+          `${input.node_attempt_id}_n6_arbiter_context_cache`,
+          input.title_card_id,
+        ),
+      },
+    };
+  }
+
+  private n6ContextCachePromptSeedHash(input: {
+    input: TopicSelectionWorkflowHarnessGenerateNeedCandidateInput;
+    invocationSlotId: string;
+    contextPacketHashes: string[];
+    inputRefs: TopicSelectionFunctionalRef[];
+  }): string {
+    return this.hash({
+      node_id: GENERATE_NEED_CANDIDATE_NODE_ID,
+      invocation_slot_id: input.invocationSlotId,
+      prompt_template_id: 'topic-selection-generate-need-candidate',
+      prompt_template_version: 'v1',
+      output_contract: 'RankedCandidateDraftBatch@v1',
+      input_refs_hash: this.hash(input.inputRefs),
+      context_packet_hashes: input.contextPacketHashes,
+      policy_version: input.input.policy_version,
+      output_schema_version: input.input.output_schema_version,
+      profile_id: input.input.profile_id,
+      execution_mode: input.input.execution_mode,
+      executor_kind: input.input.executor_kind ?? 'single_agent',
+      model_option_id: input.input.model_option_id ?? null,
+      run_mode: input.input.run_mode,
+    });
   }
 
   private generateNeedCandidateInputHashPayload(
@@ -7067,6 +7246,7 @@ export class TopicSelectionWorkflowHarnessService {
       arbiter_payload_hash: this.hash(input.arbiter_payload),
       mocked_output_hash: input.mocked_output ? this.hash(input.mocked_output) : null,
       codex_response_hash: input.codex_response ? this.hash(input.codex_response) : null,
+      runtime_token_budget_overrides: input.runtime_token_budget_overrides ?? null,
       model_option_id: input.model_option_id ?? null,
       current_round_index: input.current_round_index ?? null,
       remaining_round_budget: input.remaining_round_budget ?? null,
@@ -7315,6 +7495,7 @@ export class TopicSelectionWorkflowHarnessService {
     adapterResult: TopicSelectionGenerateNeedCandidateOrchestratorAdapterResult,
   ): TopicSelectionArtifactFunctionalRef[] {
     return [
+      adapterResult.context_compression_report_artifact?.artifact_ref ?? null,
       adapterResult.ranked_candidate_draft_batch_artifact?.artifact_ref ?? null,
       ...(adapterResult.debate_result?.role_output_artifacts.map((artifact) => artifact.artifact_ref) ?? []),
       ...(adapterResult.debate_result?.role_level_summary_artifacts.map((artifact) => artifact.artifact_ref) ?? []),
@@ -7540,6 +7721,24 @@ export class TopicSelectionWorkflowHarnessService {
       return this.dependencies.evidenceMapExtractionAgent;
     }
     throw new AppError(500, 'INTERNAL_ERROR', 'WorkflowHarness human-confirm-need requires humanConfirmationSemanticReviewAgent dependency.');
+  }
+
+  private runtimeTokenBudgetForSlot(input: {
+    contextPolicyProfileId: string;
+    invocationSlotId: string;
+    contextPayloads?: unknown[];
+    extraPayloads?: unknown[];
+  }): TopicSelectionAgentRuntimeTokenBudgetInput {
+    const resolvedProfile = this.contextPolicyProfileRegistry.resolveProfile({
+      context_policy_profile_id: input.contextPolicyProfileId,
+      invocation_slot_id: input.invocationSlotId,
+    });
+    return {
+      context_policy_profile: resolvedProfile.profile,
+      context_policy_profile_hash: resolvedProfile.profile_hash,
+      context_payloads: input.contextPayloads ?? [],
+      extra_payloads: input.extraPayloads ?? [],
+    };
   }
 
   private assertCreateTopicSeedScenarioInput(input: TopicSelectionWorkflowHarnessCreateTopicSeedInput): void {

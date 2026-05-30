@@ -13,7 +13,14 @@ import {
   TopicSelectionAgentOrchestratorService,
   type TopicSelectionAgentOrchestratorLlmGateway,
 } from './topic-selection-agent-orchestrator-service.js';
+import { TopicSelectionPromptPacketCacheService } from './topic-selection-prompt-packet-cache-service.js';
+import {
+  TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS,
+  TopicSelectionContextPolicyProfileRegistryService,
+} from './topic-selection-context-policy-profile-registry-service.js';
 import { TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID } from './topic-selection-model-profile-registry-service.js';
+import type { LookupTopicSelectionPromptPacketCacheInput } from './topic-selection-prompt-packet-cache-service.js';
 
 type CandidateDraftBatch = {
   batch_id: string;
@@ -22,6 +29,10 @@ type CandidateDraftBatch = {
     candidate_need: string;
   }>;
 };
+
+const hashB = 'b'.repeat(64);
+const hashC = 'c'.repeat(64);
+const hashD = 'd'.repeat(64);
 
 class StubLlmGateway {
   readonly calls: LlmStructuredOutputRequest[] = [];
@@ -55,7 +66,48 @@ class FailingLlmGateway {
   }
 }
 
-function makeOrchestrator(options: { llmGateway?: TopicSelectionAgentOrchestratorLlmGateway } = {}) {
+class DriftedPromptPacketCache {
+  async lookup(rawInput: unknown) {
+    const input = rawInput as LookupTopicSelectionPromptPacketCacheInput;
+    return {
+      cache_result: 'hit' as const,
+      prompt_packet_hash: input.identity.prompt_packet_hash,
+      prompt_template_id: input.identity.prompt_template_id,
+      prompt_template_version: input.identity.prompt_template_version,
+      prompt_variant_key: input.identity.prompt_variant_key,
+      invocation_slot_id: input.identity.invocation_slot_id,
+      context_policy_profile_id: input.context_policy_profile.context_policy_profile_id,
+      context_policy_profile_version: input.context_policy_profile.context_policy_profile_version,
+      context_policy_profile_hash: input.context_policy_profile_hash,
+      output_contract: input.identity.output_contract,
+      redaction_policy: input.identity.redaction_policy,
+      redacted_prompt_artifact_ref: {
+        ref_type: 'artifact_ref' as const,
+        ref_id: 'redacted_prompt_cached_stale_quality',
+      },
+      redacted_prompt_artifact_hash: hashB,
+      prompt_quality_report_ref: {
+        ref_type: 'artifact_ref' as const,
+        ref_id: 'prompt_quality_cached_stale_quality',
+      },
+      prompt_quality_report_hash: hashC,
+      quality_decision: 'pass' as const,
+      freshness_status: 'fresh' as const,
+      provenance_ref: input.provenance_ref,
+      blocker_codes: [],
+      warning_codes: [],
+    };
+  }
+
+  async recordFreshArtifacts(): Promise<never> {
+    throw new Error('drifted prompt cache fixture should not record artifacts');
+  }
+}
+
+function makeOrchestrator(options: {
+  llmGateway?: TopicSelectionAgentOrchestratorLlmGateway;
+  promptPacketCache?: TopicSelectionPromptPacketCacheService | null;
+} = {}) {
   const repository = new InMemoryTopicSelectionControlPlaneRepository();
   let sequence = 0;
   const controlPlane = new TopicSelectionControlPlaneService(repository, {
@@ -65,6 +117,7 @@ function makeOrchestrator(options: { llmGateway?: TopicSelectionAgentOrchestrato
   const orchestrator = new TopicSelectionAgentOrchestratorService({
     controlPlane,
     llmGateway: options.llmGateway,
+    promptPacketCache: options.promptPacketCache,
     now: () => '2026-05-19T00:00:00.000Z',
   });
   return { orchestrator, repository };
@@ -87,6 +140,9 @@ function telemetry(): LlmCallTelemetry {
     embedding_input_tokens: null,
     total_tokens: null,
     cost_usd: null,
+    provider_side_cache_hit: null,
+    provider_side_cache_read_tokens: null,
+    provider_side_cache_write_tokens: null,
   };
 }
 
@@ -158,6 +214,24 @@ function baseInvocation() {
         title_card_id: 'title_card_001',
       },
     ],
+  };
+}
+
+function runtimeTokenBudgetInput(overrides: {
+  estimated_input_tokens_override?: number | null;
+  compression_already_applied?: boolean;
+} = {}) {
+  const registry = new TopicSelectionContextPolicyProfileRegistryService();
+  const resolvedProfile = registry.resolveProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS.need_candidate_generation,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.need_candidate_generation,
+  });
+  return {
+    context_policy_profile: resolvedProfile.profile,
+    context_policy_profile_hash: resolvedProfile.profile_hash,
+    ...overrides,
   };
 }
 
@@ -245,6 +319,295 @@ test('agent orchestrator blocks invalid structured output without mode-specific 
   assert.deepEqual(result.blocker_codes, ['SCHEMA_VALIDATION_FAILED']);
   assert.equal(result.provenance.execution_mode, 'codex_assisted');
   assert.equal(result.validation.valid, false);
+});
+
+test('agent orchestrator binds compression identity into prompt packet hash and provenance', async () => {
+  const { orchestrator } = makeOrchestrator();
+  const compressionReportRef = {
+    ref_type: 'artifact_ref' as const,
+    ref_id: 'compression_report_001',
+    title_card_id: 'title_card_001',
+  };
+  const baseRuntime = runtimeTokenBudgetInput({
+    estimated_input_tokens_override: 1000,
+    compression_already_applied: true,
+  });
+
+  const first = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'mocked_llm',
+    runtime_token_budget: {
+      ...baseRuntime,
+      compression_report_ref: compressionReportRef,
+      compression_report_hash: hashB,
+      compressed_context_hash: hashC,
+    },
+    mocked_output: {
+      fixture_id: 'fixture_generate_need_candidate_happy_path',
+      output: output(),
+    },
+  });
+  const driftedCompressionReportHash = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'mocked_llm',
+    runtime_token_budget: {
+      ...baseRuntime,
+      compression_report_ref: compressionReportRef,
+      compression_report_hash: hashD,
+      compressed_context_hash: hashC,
+    },
+    mocked_output: {
+      fixture_id: 'fixture_generate_need_candidate_happy_path',
+      output: output(),
+    },
+  });
+
+  assert.equal(first.status, 'succeeded');
+  assert.equal(first.provenance.compression_report_ref?.ref_id, 'compression_report_001');
+  assert.equal(first.provenance.compression_report_hash, hashB);
+  assert.equal(first.provenance.compressed_context_hash, hashC);
+  assert.notEqual(
+    first.provenance.prompt_packet_hash,
+    driftedCompressionReportHash.provenance.prompt_packet_hash,
+  );
+});
+
+test('agent orchestrator records prompt quality artifacts on runtime-enabled invocations', async () => {
+  const providerGateway = new StubLlmGateway(output());
+  const { orchestrator, repository } = makeOrchestrator({ llmGateway: providerGateway });
+
+  const result = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    runtime_token_budget: runtimeTokenBudgetInput({
+      estimated_input_tokens_override: 1000,
+    }),
+  });
+
+  assert.equal(result.status, 'succeeded');
+  assert.equal(providerGateway.calls.length, 1);
+  assert.equal(result.provenance.prompt_quality_report_ref?.ref_type, 'artifact_ref');
+  assert.equal(result.provenance.redacted_prompt_artifact_ref?.ref_type, 'artifact_ref');
+
+  const redactedPromptArtifact = await repository.findArtifactRefById(
+    result.provenance.redacted_prompt_artifact_ref!.ref_id,
+  );
+  const promptQualityArtifact = await repository.findArtifactRefById(
+    result.provenance.prompt_quality_report_ref!.ref_id,
+  );
+  assert.equal(
+    (redactedPromptArtifact?.payload as { payload_schema?: string } | null)?.payload_schema,
+    'TopicSelectionRedactedPromptPacketArtifact@v1',
+  );
+  assert.equal(
+    (promptQualityArtifact?.payload as { payload_schema?: string } | null)?.payload_schema,
+    'TopicSelectionPromptQualityReport@v1',
+  );
+  const serializedPromptArtifact = JSON.stringify(redactedPromptArtifact?.payload);
+  assert.equal(serializedPromptArtifact.includes('Return a grounded ranked candidate draft batch'), false);
+  assert.equal(serializedPromptArtifact.includes('context_packet_ref'), false);
+});
+
+test('agent orchestrator reuses prompt packet artifacts without reusing provider responses', async () => {
+  const providerGateway = new StubLlmGateway(output());
+  const { orchestrator, repository } = makeOrchestrator({ llmGateway: providerGateway });
+
+  const first = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    runtime_token_budget: runtimeTokenBudgetInput({
+      estimated_input_tokens_override: 1000,
+    }),
+  });
+  const second = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    runtime_token_budget: runtimeTokenBudgetInput({
+      estimated_input_tokens_override: 1000,
+    }),
+  });
+
+  assert.equal(first.status, 'succeeded');
+  assert.equal(second.status, 'succeeded');
+  assert.equal(providerGateway.calls.length, 2);
+  assert.equal(second.provenance.prompt_packet_hash, first.provenance.prompt_packet_hash);
+  assert.equal(
+    second.provenance.redacted_prompt_artifact_ref?.ref_id,
+    first.provenance.redacted_prompt_artifact_ref?.ref_id,
+  );
+  assert.equal(
+    second.provenance.prompt_quality_report_ref?.ref_id,
+    first.provenance.prompt_quality_report_ref?.ref_id,
+  );
+  assert.equal(second.provenance.cache_status, 'not_applicable');
+  assert.equal(second.provenance.response_hash, first.provenance.response_hash);
+
+  const artifacts = await repository.listArtifactRefsByWorkflowRunId('workflow_run_001');
+  const promptArtifacts = artifacts.filter((artifact) =>
+    (artifact.payload as { payload_schema?: string } | null)?.payload_schema
+      === 'TopicSelectionRedactedPromptPacketArtifact@v1',
+  );
+  const qualityReports = artifacts.filter((artifact) =>
+    (artifact.payload as { payload_schema?: string } | null)?.payload_schema
+      === 'TopicSelectionPromptQualityReport@v1',
+  );
+  assert.equal(promptArtifacts.length, 1);
+  assert.equal(qualityReports.length, 1);
+});
+
+test('agent orchestrator binds explicit context packet hashes instead of ref hashes', async () => {
+  const { orchestrator } = makeOrchestrator();
+
+  const first = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'mocked_llm',
+    runtime_token_budget: runtimeTokenBudgetInput({
+      estimated_input_tokens_override: 1000,
+    }),
+    context_packet_refs: [
+      {
+        ref_type: 'artifact_ref',
+        ref_id: 'stable_context_ref',
+        title_card_id: 'title_card_001',
+      },
+    ],
+    context_packet_hashes: [hashB],
+    mocked_output: {
+      fixture_id: 'fixture_generate_need_candidate_happy_path',
+      output: output(),
+    },
+  });
+  const driftedContextHash = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'mocked_llm',
+    runtime_token_budget: runtimeTokenBudgetInput({
+      estimated_input_tokens_override: 1000,
+    }),
+    context_packet_refs: [
+      {
+        ref_type: 'artifact_ref',
+        ref_id: 'stable_context_ref',
+        title_card_id: 'title_card_001',
+      },
+    ],
+    context_packet_hashes: [hashC],
+    mocked_output: {
+      fixture_id: 'fixture_generate_need_candidate_happy_path',
+      output: output(),
+    },
+  });
+
+  assert.equal(first.status, 'succeeded');
+  assert.equal(driftedContextHash.status, 'succeeded');
+  assert.notEqual(
+    first.provenance.prompt_packet_hash,
+    driftedContextHash.provenance.prompt_packet_hash,
+  );
+});
+
+test('agent orchestrator blocks prompt quality failures before provider calls', async () => {
+  const providerGateway = new StubLlmGateway(output());
+  const { orchestrator } = makeOrchestrator({ llmGateway: providerGateway });
+
+  const result = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    messages: [
+      {
+        role: 'system',
+        content: 'Return JSON only.',
+      },
+      {
+        role: 'user',
+        content: 'raw_provider_log includes api_key=local-secret and must be blocked.',
+      },
+    ],
+    runtime_token_budget: runtimeTokenBudgetInput({
+      estimated_input_tokens_override: 1000,
+    }),
+  });
+
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'PROMPT_QUALITY_GATE_BLOCKED');
+  assert.deepEqual(result.blocker_codes, ['PROMPT_FORBIDDEN_SECRET_OR_RAW_LOG']);
+  assert.equal(result.provenance.prompt_quality_report_ref?.ref_type, 'artifact_ref');
+  assert.equal(providerGateway.calls.length, 0);
+});
+
+test('agent orchestrator blocks prompt cache hits when cached quality report drifts from current runtime', async () => {
+  const providerGateway = new StubLlmGateway(output());
+  const { orchestrator } = makeOrchestrator({
+    llmGateway: providerGateway,
+    promptPacketCache: new DriftedPromptPacketCache() as unknown as TopicSelectionPromptPacketCacheService,
+  });
+
+  const result = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    messages: [
+      {
+        role: 'system',
+        content: 'Return JSON only.',
+      },
+      {
+        role: 'user',
+        content: 'raw_provider_log includes api_key=local-secret and must be blocked.',
+      },
+    ],
+    runtime_token_budget: runtimeTokenBudgetInput({
+      estimated_input_tokens_override: 1000,
+    }),
+  });
+
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'PROMPT_QUALITY_GATE_BLOCKED');
+  assert.deepEqual(result.blocker_codes, ['PROMPT_PACKET_CACHE_BLOCKED_DRIFT']);
+  assert.equal(result.provenance.prompt_quality_report_ref ?? null, null);
+  assert.equal(providerGateway.calls.length, 0);
+});
+
+test('agent orchestrator rejects supplied codex prompt hash when compression identity drifts', async () => {
+  const { orchestrator } = makeOrchestrator();
+  const source = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'codex_assisted',
+    codex_response: {
+      output: output(),
+      operator_label: 'codex-local',
+    },
+  });
+  const compressionReportRef = {
+    ref_type: 'artifact_ref' as const,
+    ref_id: 'compression_report_001',
+    title_card_id: 'title_card_001',
+  };
+
+  await assert.rejects(
+    () => orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+      ...baseInvocation(),
+      execution_mode: 'codex_assisted',
+      runtime_token_budget: {
+        ...runtimeTokenBudgetInput({
+          estimated_input_tokens_override: 1000,
+          compression_already_applied: true,
+        }),
+        compression_report_ref: compressionReportRef,
+        compression_report_hash: hashB,
+        compressed_context_hash: hashC,
+      },
+      codex_response: {
+        output: output(),
+        operator_label: 'codex-local',
+        prompt_packet_hash: source.provenance.prompt_packet_hash,
+      },
+    }),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
 });
 
 test('agent orchestrator rejects mocked product execution and forbidden raw output fields', async () => {
@@ -370,6 +733,218 @@ test('agent orchestrator accepts canonical execution_spec and rejects ambiguous 
       },
     }),
     (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
+});
+
+test('agent orchestrator blocks over-budget provider invocation before gateway call', async () => {
+  const providerGateway = new StubLlmGateway(output());
+  const { orchestrator, repository } = makeOrchestrator({ llmGateway: providerGateway });
+
+  const result = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    runtime_token_budget: runtimeTokenBudgetInput({
+      estimated_input_tokens_override: 200_000,
+      compression_already_applied: true,
+    }),
+  });
+
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.structured_output, null);
+  assert.equal(result.error_code, 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION');
+  assert.deepEqual(result.blocker_codes, ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION']);
+  assert.equal(result.token_budget_gate_result?.decision, 'blocked_over_budget');
+  assert.equal(result.token_budget_gate_result?.estimated_input_tokens, 200_000);
+  assert.equal(result.audit_snapshot.token_budget_gate_result?.decision, 'blocked_over_budget');
+  assert.equal(result.provenance.source_kind, 'provider_response');
+  assert.equal(result.provenance.provider_id, 'openai');
+  assert.equal(result.provenance.model_id, 'gpt-5.5');
+  assert.equal(providerGateway.calls.length, 0);
+  assert.match(result.validation.errors[0] ?? '', /token budget gate decision blocked_over_budget/);
+
+  const artifact = await repository.findArtifactRefById(result.audit_artifact_ref!.ref_id);
+  assert.equal(artifact?.artifact_kind, 'diagnostic');
+  assert.equal(
+    JSON.stringify(artifact?.payload).includes('TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION'),
+    true,
+  );
+});
+
+test('agent orchestrator rejects drifted runtime token-budget profile hash', async () => {
+  const providerGateway = new StubLlmGateway(output());
+  const { orchestrator } = makeOrchestrator({ llmGateway: providerGateway });
+
+  await assert.rejects(
+    () => orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+      ...baseInvocation(),
+      execution_mode: 'provider_llm',
+      run_mode: 'product',
+      runtime_token_budget: {
+        ...runtimeTokenBudgetInput(),
+        context_policy_profile_hash: 'a'.repeat(64),
+      },
+    }),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
+  assert.equal(providerGateway.calls.length, 0);
+});
+
+test('agent orchestrator records compression report when budget requires compression', async () => {
+  const providerGateway = new StubLlmGateway(output());
+  const { orchestrator, repository } = makeOrchestrator({ llmGateway: providerGateway });
+
+  const result = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    runtime_token_budget: {
+      ...runtimeTokenBudgetInput({
+        estimated_input_tokens_override: 40_000,
+      }),
+      compression_attempt: {
+        source_refs: [
+          {
+            ref_type: 'artifact_ref',
+            ref_id: 'context_packet_001',
+            title_card_id: 'title_card_001',
+          },
+        ],
+        input_context: { token_budget_fixture: 'long exploration and arbiter context' },
+        compressed_context: { preserved_refs: ['context_packet_001'] },
+        summary: { summary: 'Compressed context preserving source refs and known risks.' },
+        compression_executor_kind: 'deterministic_structural',
+        estimated_input_tokens_before_override: 40_000,
+        estimated_input_tokens_after_override: 12_000,
+      },
+    },
+  });
+
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'TOKEN_BUDGET_REQUIRES_COMPRESSION');
+  assert.equal(result.token_budget_gate_result?.decision, 'requires_compression');
+  assert.equal(result.provenance.compression_report_ref?.ref_type, 'artifact_ref');
+  assert.equal(providerGateway.calls.length, 0);
+  assert.equal(result.warning_codes.includes('COMPRESSION_REPORT_RECORDED'), true);
+
+  const compressionArtifact = await repository.findArtifactRefById(
+    result.provenance.compression_report_ref!.ref_id,
+  );
+  const payload = compressionArtifact?.payload as {
+    payload_schema?: string;
+    report?: { quality_gate_result?: string };
+  } | null;
+  assert.equal(payload?.payload_schema, 'TopicSelectionCompressionReportEnvelope@v1');
+  assert.equal(payload?.report?.quality_gate_result, 'passed');
+});
+
+test('agent orchestrator blocks compression attempts that drop required preserved facts', async () => {
+  const providerGateway = new StubLlmGateway(output());
+  const { orchestrator } = makeOrchestrator({ llmGateway: providerGateway });
+  const runtime = runtimeTokenBudgetInput({
+    estimated_input_tokens_override: 40_000,
+  });
+  const requiredFactKind = runtime.context_policy_profile.compression_policy.preserved_fact_kinds[0]!;
+
+  const result = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    runtime_token_budget: {
+      ...runtime,
+      compression_attempt: {
+        source_refs: [
+          {
+            ref_type: 'artifact_ref',
+            ref_id: 'context_packet_001',
+          },
+        ],
+        input_context: { token_budget_fixture: 'long exploration and arbiter context' },
+        compressed_context: { preserved_refs: ['context_packet_001'] },
+        summary: { summary: 'Compressed context with a dropped required fact.' },
+        compression_executor_kind: 'deterministic_structural',
+        required_preserved_facts: { [requiredFactKind]: ['required_fact_001'] },
+        compressed_preserved_facts: { [requiredFactKind]: [] },
+        estimated_input_tokens_before_override: 40_000,
+        estimated_input_tokens_after_override: 12_000,
+      },
+    },
+  });
+
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'COMPRESSION_QUALITY_GATE_BLOCKED');
+  assert.equal(result.blocker_codes.includes('COMPRESSION_QUALITY_GATE_BLOCKED'), true);
+  assert.equal(result.provenance.compression_report_ref?.ref_type, 'artifact_ref');
+  assert.equal(providerGateway.calls.length, 0);
+});
+
+test('agent orchestrator requires approval for codex exact response reuse', async () => {
+  const { orchestrator, repository } = makeOrchestrator();
+
+  await assert.rejects(
+    () => orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+      ...baseInvocation(),
+      execution_mode: 'codex_assisted',
+      codex_response: {
+        operator_label: 'codex-local',
+        output: output(),
+        response_source: 'cached_exact_invocation',
+      },
+    }),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
+
+  const source = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'codex_assisted',
+    codex_response: {
+      operator_label: 'codex-local',
+      output: output(),
+      response_source: 'operator_supplied',
+    },
+  });
+  assert.ok(source.provenance.response_hash);
+  assert.ok(source.provenance.profile_hash);
+
+  const result = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'codex_assisted',
+    codex_response: {
+      operator_label: 'codex-local',
+      output: output(),
+      response_source: 'cached_exact_invocation',
+      local_approval_setting_ref: 'local-setting:t112-codex-exact-reuse-approved',
+      reuse_provenance: {
+        source_workflow_run_id: source.workflow_run_id,
+        source_node_id: source.node_id,
+        source_node_attempt_id: source.node_attempt_id,
+        source_execution_mode: 'codex_assisted',
+        reuse_source_kind: 'codex_assisted',
+        response_hash: source.provenance.response_hash,
+        prompt_packet_hash: source.provenance.prompt_packet_hash,
+        context_packet_hashes: ['b'.repeat(64)],
+        schema_version: 'topic_selection_ranked_candidate_draft_batch',
+        profile_hash: source.provenance.profile_hash,
+        policy_version: 'v1',
+        approval_status: 'approved_by_local_setting',
+        approval_ref: null,
+        local_approval_setting_ref: 'local-setting:t112-codex-exact-reuse-approved',
+        non_provider: true,
+      },
+    },
+  });
+
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.provenance.non_provider, true);
+  assert.equal(result.provenance.cache_status, 'hit');
+  assert.match(result.provenance.response_reuse_ref ?? '', /^artifact_ref_/);
+  assert.equal(result.provenance.local_approval_setting_ref, 'local-setting:t112-codex-exact-reuse-approved');
+
+  const reuseArtifact = await repository.findArtifactRefById(result.provenance.response_reuse_ref!);
+  assert.equal(reuseArtifact?.artifact_kind, 'diagnostic');
+  assert.equal(
+    (reuseArtifact?.payload as { payload_schema?: string } | null)?.payload_schema,
+    'TopicSelectionExactResponseReuseProvenance@v1',
   );
 });
 

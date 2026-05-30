@@ -36,6 +36,7 @@ import {
 } from './literature-content-processing-utils.js';
 import {
   type TopicSelectionAgentInvocationResult,
+  type TopicSelectionAgentRuntimeTokenBudgetInput,
   type TopicSelectionAgentRunMode,
   type TopicSelectionCodexAssistedAgentOutput,
   type TopicSelectionMockedAgentOutput,
@@ -45,6 +46,11 @@ import type {
   TopicSelectionAgentExecutionSpec,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-profile-contracts';
 import { TopicSelectionNeedDiscoveryArtifactBoundaryService } from './topic-selection-need-discovery-artifact-boundary-service.js';
+import {
+  TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS,
+  TopicSelectionContextPolicyProfileRegistryService,
+} from './topic-selection-context-policy-profile-registry-service.js';
 const NEED_DISCOVERY_DEBATE_CONTRACT =
   createTopicSelectionV1aGenerateNeedCandidateDebateScenarioContract();
 
@@ -138,8 +144,14 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     private readonly dependencies: {
       agentOrchestrator: TopicSelectionAgentOrchestratorService;
       artifactBoundary: TopicSelectionNeedDiscoveryArtifactBoundaryService;
+      contextPolicyProfileRegistry?: TopicSelectionContextPolicyProfileRegistryService;
     },
-  ) {}
+  ) {
+    this.contextPolicyProfileRegistry = dependencies.contextPolicyProfileRegistry
+      ?? new TopicSelectionContextPolicyProfileRegistryService();
+  }
+
+  private readonly contextPolicyProfileRegistry: TopicSelectionContextPolicyProfileRegistryService;
 
   async runNeedDiscoveryDebate(
     input: TopicSelectionNeedDiscoveryDebateLoopInput,
@@ -472,11 +484,10 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
       executor_kind: 'multi_agent_debate' as const,
       run_mode: input.run_mode,
       model_option_id: executionSpec.model_option_id,
+      runtime_token_budget: this.runtimeTokenBudgetInput(role, stage),
       input_refs: this.inputRefs(input.node_input),
-      context_packet_refs: [
-        input.node_input.exploration_context_ref,
-        input.node_input.arbiter_context_ref,
-      ],
+      context_packet_refs: this.contextPacketRefsForSlot(input, role),
+      context_packet_hashes: this.contextPacketHashesForSlot(input, role),
       debate_extension: {
         debate_loop_id: debateLoopId,
         debate_policy_id: debatePolicyId,
@@ -489,6 +500,81 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
       },
       created_by: input.created_by ?? 'system',
     };
+  }
+
+  private runtimeTokenBudgetInput(
+    role: 'explorer' | 'deep_critic' | 'arbiter',
+    stage: string,
+  ): TopicSelectionAgentRuntimeTokenBudgetInput {
+    const resolvedProfile = this.contextPolicyProfileRegistry.resolveProfile(
+      this.contextRuntimeProfileForSlot(role, stage),
+    );
+    return {
+      context_policy_profile: resolvedProfile.profile,
+      context_policy_profile_hash: resolvedProfile.profile_hash,
+    };
+  }
+
+  private contextPacketRefsForSlot(
+    input: TopicSelectionNeedDiscoveryDebateLoopInput,
+    role: 'explorer' | 'deep_critic' | 'arbiter',
+  ): TopicSelectionArtifactFunctionalRef[] {
+    if (role === 'arbiter') {
+      return [input.node_input.arbiter_context_ref];
+    }
+    return [input.node_input.exploration_context_ref];
+  }
+
+  private contextPacketHashesForSlot(
+    input: TopicSelectionNeedDiscoveryDebateLoopInput,
+    role: 'explorer' | 'deep_critic' | 'arbiter',
+  ): string[] {
+    if (role === 'arbiter') {
+      return [input.arbiter_context_packet.payload_hash];
+    }
+    return [input.exploration_context_packet.payload_hash];
+  }
+
+  private contextRuntimeProfileForSlot(
+    role: 'explorer' | 'deep_critic' | 'arbiter',
+    stage: string,
+  ): {
+    context_policy_profile_id: string;
+    invocation_slot_id: string;
+  } {
+    if (role === 'explorer' && stage === 'round_1_discovery') {
+      return {
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS.explorer_round_1_discovery,
+        invocation_slot_id:
+          TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.explorer_round_1_discovery,
+      };
+    }
+    if (role === 'deep_critic' && stage === 'round_1_discovery') {
+      return {
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS.deep_critic_round_1_discovery,
+        invocation_slot_id:
+          TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.deep_critic_round_1_discovery,
+      };
+    }
+    if (role === 'arbiter' && stage === 'issue_framing') {
+      return {
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS.arbiter_issue_framing,
+        invocation_slot_id:
+          TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.arbiter_issue_framing,
+      };
+    }
+    if (role === 'arbiter' && stage === 'final_synthesis') {
+      return {
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS.arbiter_final_synthesis,
+        invocation_slot_id:
+          TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.arbiter_final_synthesis,
+      };
+    }
+    throw new AppError(500, 'INTERNAL_ERROR', `No context runtime profile for debate slot ${role}.${stage}.`);
   }
 
   private async recordRoleOutput<T>(

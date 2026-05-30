@@ -19,6 +19,7 @@ import type {
 } from './llm-gateway.js';
 import { TopicSelectionAgentOrchestratorService } from './topic-selection-agent-orchestrator-service.js';
 import { TopicSelectionGenerateNeedCandidateOrchestratorAdapterService } from './topic-selection-generate-need-candidate-orchestrator-adapter-service.js';
+import { TopicSelectionCompressionRuntimeService } from './topic-selection-compression-runtime-service.js';
 import { TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID } from './topic-selection-model-profile-registry-service.js';
 import { TopicSelectionNeedDiscoveryArtifactBoundaryService } from './topic-selection-need-discovery-artifact-boundary-service.js';
 import { TopicSelectionNeedDiscoveryContextCompilerService } from './topic-selection-need-discovery-context-compiler-service.js';
@@ -42,11 +43,23 @@ class StubLlmGateway {
   }
 }
 
+class DroppingRequiredFactsCompressionRuntime extends TopicSelectionCompressionRuntimeService {
+  override createReport(
+    input: Parameters<TopicSelectionCompressionRuntimeService['createReport']>[0],
+  ): ReturnType<TopicSelectionCompressionRuntimeService['createReport']> {
+    return super.createReport({
+      ...input,
+      compressed_preserved_facts: {},
+    });
+  }
+}
+
 async function makeHarness(
   executionMode: 'mocked_llm' | 'codex_assisted' | 'provider_llm',
   overrides: {
     exploration_payload?: TopicSelectionNeedDiscoveryExplorationContextPayload;
     arbiter_payload?: TopicSelectionNeedDiscoveryArbiterContextPayload;
+    compression_runtime?: TopicSelectionCompressionRuntimeService;
   } = {},
 ) {
   const repository = new InMemoryTopicSelectionControlPlaneRepository();
@@ -79,6 +92,7 @@ async function makeHarness(
     artifactBoundary,
     draftBatchValidator,
     needCandidateBatchPersistence,
+    compressionRuntime: overrides.compression_runtime,
   });
   const compiledContext = await contextCompiler.compileContextPair({
     title_card_id: 'title_card_001',
@@ -133,6 +147,9 @@ function telemetry(): LlmCallTelemetry {
     embedding_input_tokens: null,
     total_tokens: null,
     cost_usd: null,
+    provider_side_cache_hit: null,
+    provider_side_cache_read_tokens: null,
+    provider_side_cache_write_tokens: null,
   };
 }
 
@@ -354,6 +371,216 @@ test('generate-need-candidate adapter produces ranked draft batch through mocked
       );
     }
   }
+});
+
+test('generate-need-candidate adapter blocks over-budget provider invocation before ranked artifact write', async () => {
+  const { adapter, compiledContext, llmGateway, repository } = await makeHarness('provider_llm');
+
+  const result = await adapter.generateRankedCandidateDraftBatch({
+    title_card_id: 'title_card_001',
+    node_input: nodeInput(compiledContext),
+    run_mode: 'product',
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 200_000,
+      compression_already_applied: true,
+    },
+  });
+
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.ranked_candidate_draft_batch, null);
+  assert.equal(result.ranked_candidate_draft_batch_artifact, null);
+  assert.equal(result.minimum_schema_validation_report, null);
+  assert.equal(result.error_code, 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION');
+  assert.deepEqual(result.blocker_codes, ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION']);
+  assert.equal(llmGateway.calls.length, 0);
+  assert.equal(result.invocation_result.provenance.provider_id, 'openai');
+  assert.equal(result.invocation_result.provenance.model_id, 'gpt-5.5');
+
+  const artifacts = await repository.listArtifactRefsByWorkflowRunId('workflow_run_001');
+  assert.equal(
+    artifacts.some((artifact) =>
+      JSON.stringify(artifact.payload).includes('"artifact_key":"ranked_candidate_draft_batch"'),
+    ),
+    false,
+  );
+  assert.equal(
+    artifacts.some((artifact) =>
+      JSON.stringify(artifact.payload).includes('TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION'),
+    ),
+    true,
+  );
+});
+
+test('generate-need-candidate adapter compresses and re-renders single-agent context before provider call', async () => {
+  const { adapter, compiledContext, llmGateway, repository } = await makeHarness('provider_llm');
+
+  const result = await adapter.generateRankedCandidateDraftBatch({
+    title_card_id: 'title_card_001',
+    node_input: nodeInput(compiledContext),
+    run_mode: 'product',
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 80_000,
+      estimated_input_tokens_after_compression_override: 12_000,
+    },
+  });
+
+  assert.equal(result.status, 'succeeded');
+  assert.equal(llmGateway.calls.length, 1);
+  assert.equal(result.context_compression_report_artifact?.artifact_key, 'context_compression_report');
+  assert.equal(result.context_compression_report_artifact.payload_schema, 'TopicSelectionCompressionReportEnvelope@v1');
+  assert.equal(
+    result.invocation_result.provenance.compression_report_ref?.ref_id,
+    result.context_compression_report_artifact.artifact_ref.ref_id,
+  );
+  assert.equal(
+    result.invocation_result.provenance.compression_report_hash,
+    result.context_compression_report_artifact.artifact_hash,
+  );
+  assert.match(result.invocation_result.provenance.compressed_context_hash ?? '', /^[a-f0-9]{64}$/);
+  assert.equal(result.invocation_result.token_budget_gate_result?.decision, 'within_budget');
+  assert.equal(result.invocation_result.token_budget_gate_result?.estimated_input_tokens, 12_000);
+
+  const userPayload = JSON.parse(llmGateway.calls[0]?.messages[1]?.content ?? '{}') as {
+    context_packets?: {
+      compressed_context?: {
+        schema_version?: string;
+        preserved_fact_inventory?: Record<string, string[]>;
+      };
+    };
+  };
+  assert.equal(
+    userPayload.context_packets?.compressed_context?.schema_version,
+    'topic-selection-v1a-n6-single-agent-compressed-context-v1',
+  );
+  assert.deepEqual(
+    userPayload.context_packets?.compressed_context?.preserved_fact_inventory?.method_family_gap,
+    ['hybrid_adaptation'],
+  );
+  assert.equal(
+    Boolean(userPayload.context_packets?.compressed_context?.preserved_fact_inventory?.source_health_warning?.length),
+    true,
+  );
+
+  const artifacts = await repository.listArtifactRefsByWorkflowRunId('workflow_run_001');
+  const compressionArtifact = artifacts.find((artifact) =>
+    JSON.stringify(artifact.payload).includes('"artifact_key":"context_compression_report"'),
+  );
+  assert.ok(compressionArtifact);
+  assert.match(JSON.stringify(compressionArtifact.payload), /"quality_gate_result":"warned"|"quality_gate_result":"passed"/);
+  assert.match(JSON.stringify(compressionArtifact.payload), /"source_refs"/);
+  assert.match(JSON.stringify(compressionArtifact.payload), /"compressed_context_hash"/);
+});
+
+test('generate-need-candidate adapter blocks when compressed context remains over budget', async () => {
+  const { adapter, compiledContext, llmGateway, repository, needValidationRepository } =
+    await makeHarness('provider_llm');
+
+  const result = await adapter.generateRankedCandidateDraftBatch({
+    title_card_id: 'title_card_001',
+    workspace_id: 'workspace_001',
+    node_input: nodeInput(compiledContext),
+    run_mode: 'product',
+    persist_admitted_candidates: true,
+    persistence_context: persistenceContext(),
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 80_000,
+      estimated_input_tokens_after_compression_override: 200_000,
+    },
+  });
+
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION');
+  assert.deepEqual(result.blocker_codes, ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION']);
+  assert.equal(result.context_compression_report_artifact?.artifact_key, 'context_compression_report');
+  assert.equal(result.ranked_candidate_draft_batch_artifact, null);
+  assert.equal(result.minimum_schema_validation_report_artifact, null);
+  assert.equal(result.candidate_draft_admission_report_artifact, null);
+  assert.equal(result.supplemental_round_routing_decision_artifact, null);
+  assert.equal(result.persist_need_candidate_batch_result, null);
+  assert.equal(llmGateway.calls.length, 0);
+  assert.equal((await needValidationRepository.listNeedCandidatesByTitleCardId('title_card_001')).length, 0);
+  assert.equal(result.invocation_result.token_budget_gate_result?.estimated_input_tokens, 200_000);
+  assert.equal(result.invocation_result.token_budget_gate_result?.decision, 'blocked_over_budget');
+  assert.equal(
+    result.invocation_result.provenance.compression_report_ref?.ref_id,
+    result.context_compression_report_artifact.artifact_ref.ref_id,
+  );
+  assert.equal(
+    result.invocation_result.provenance.compression_report_hash,
+    result.context_compression_report_artifact.artifact_hash,
+  );
+
+  const artifacts = await repository.listArtifactRefsByWorkflowRunId('workflow_run_001');
+  assert.equal(
+    artifacts.some((artifact) =>
+      JSON.stringify(artifact.payload).includes('"artifact_key":"context_compression_report"'),
+    ),
+    true,
+  );
+  assert.equal(
+    artifacts.some((artifact) =>
+      JSON.stringify(artifact.payload).includes('"artifact_key":"ranked_candidate_draft_batch"'),
+    ),
+    false,
+  );
+});
+
+test('generate-need-candidate adapter blocks when compression quality gate drops required facts', async () => {
+  const { adapter, compiledContext, llmGateway, repository, needValidationRepository } =
+    await makeHarness('provider_llm', {
+      compression_runtime: new DroppingRequiredFactsCompressionRuntime(),
+    });
+
+  const result = await adapter.generateRankedCandidateDraftBatch({
+    title_card_id: 'title_card_001',
+    workspace_id: 'workspace_001',
+    node_input: nodeInput(compiledContext),
+    run_mode: 'product',
+    persist_admitted_candidates: true,
+    persistence_context: persistenceContext(),
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 80_000,
+      estimated_input_tokens_after_compression_override: 12_000,
+    },
+  });
+
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'COMPRESSION_QUALITY_GATE_BLOCKED');
+  assert.equal(result.blocker_codes.includes('COMPRESSION_QUALITY_GATE_BLOCKED'), true);
+  assert.equal(
+    result.blocker_codes.some((code) => code.startsWith('COMPRESSION_REQUIRED_') && code.endsWith('_DROPPED')),
+    true,
+  );
+  assert.equal(result.context_compression_report_artifact?.artifact_key, 'context_compression_report');
+  assert.equal(result.ranked_candidate_draft_batch_artifact, null);
+  assert.equal(result.minimum_schema_validation_report_artifact, null);
+  assert.equal(result.candidate_draft_admission_report_artifact, null);
+  assert.equal(result.supplemental_round_routing_decision_artifact, null);
+  assert.equal(result.persist_need_candidate_batch_result, null);
+  assert.equal(llmGateway.calls.length, 0);
+  assert.equal((await needValidationRepository.listNeedCandidatesByTitleCardId('title_card_001')).length, 0);
+  assert.equal(
+    result.invocation_result.provenance.compression_report_ref?.ref_id,
+    result.context_compression_report_artifact.artifact_ref.ref_id,
+  );
+  assert.equal(
+    result.invocation_result.provenance.compression_report_hash,
+    result.context_compression_report_artifact.artifact_hash,
+  );
+
+  const artifacts = await repository.listArtifactRefsByWorkflowRunId('workflow_run_001');
+  const compressionArtifact = artifacts.find((artifact) =>
+    JSON.stringify(artifact.payload).includes('"artifact_key":"context_compression_report"'),
+  );
+  assert.ok(compressionArtifact);
+  assert.match(JSON.stringify(compressionArtifact.payload), /"quality_gate_result":"blocked"/);
+  assert.match(JSON.stringify(compressionArtifact.payload), /COMPRESSION_REQUIRED_/);
+  assert.equal(
+    artifacts.some((artifact) =>
+      JSON.stringify(artifact.payload).includes('"artifact_key":"ranked_candidate_draft_batch"'),
+    ),
+    false,
+  );
 });
 
 test('generate-need-candidate adapter optionally persists admitted drafts idempotently', async () => {
