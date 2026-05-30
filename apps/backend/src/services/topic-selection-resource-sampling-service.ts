@@ -595,12 +595,22 @@ export class TopicSelectionResourceSamplingService {
       embedding_input_tokens: this.sumTelemetryValues(telemetry, 'embedding_input_tokens'),
       total_tokens: this.sumTelemetryValues(telemetry, 'total_tokens'),
       cost_usd: this.sumTelemetryValues(telemetry, 'cost_usd'),
+      provider_side_cache_hit: this.anyProviderSideCacheHit(telemetry),
+      provider_side_cache_read_tokens: this.sumTelemetryValues(telemetry, 'provider_side_cache_read_tokens'),
+      provider_side_cache_write_tokens: this.sumTelemetryValues(telemetry, 'provider_side_cache_write_tokens'),
     };
   }
 
   private sumTelemetryValues(
     telemetry: LlmCallTelemetry[],
-    key: 'input_tokens' | 'output_tokens' | 'embedding_input_tokens' | 'total_tokens' | 'cost_usd',
+    key:
+      | 'input_tokens'
+      | 'output_tokens'
+      | 'embedding_input_tokens'
+      | 'total_tokens'
+      | 'cost_usd'
+      | 'provider_side_cache_read_tokens'
+      | 'provider_side_cache_write_tokens',
   ): number | null {
     let total = 0;
     let seen = false;
@@ -612,6 +622,19 @@ export class TopicSelectionResourceSamplingService {
       }
     }
     return seen ? total : null;
+  }
+
+  private anyProviderSideCacheHit(telemetry: LlmCallTelemetry[]): boolean | null {
+    let seen = false;
+    for (const item of telemetry) {
+      if (item.provider_side_cache_hit === true) {
+        return true;
+      }
+      if (item.provider_side_cache_hit === false) {
+        seen = true;
+      }
+    }
+    return seen ? false : null;
   }
 
   private errorTelemetry(error: unknown): LlmCallTelemetry | null {

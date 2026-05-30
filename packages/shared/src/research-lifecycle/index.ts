@@ -39,6 +39,7 @@ export * from './experiment-foundation-contracts.js';
 export * from './topic-selection-control-plane-contracts.js';
 export * from './topic-selection-agent-profile-contracts.js';
 export * from './topic-selection-agent-invocation-contracts.js';
+export * from './topic-selection-llm-runtime-contracts.js';
 export * from './topic-selection-debate-scenario-contracts.js';
 export * from './topic-selection-search-resource-contracts.js';
 export * from './topic-selection-resource-sampling-contracts.js';

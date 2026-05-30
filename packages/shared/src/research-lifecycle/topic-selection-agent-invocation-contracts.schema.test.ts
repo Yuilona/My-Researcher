@@ -82,8 +82,12 @@ function providerAuditSnapshot(): TopicSelectionAgentInvocationAuditSnapshot {
         embedding_input_tokens: null,
         total_tokens: null,
         cost_usd: null,
+        provider_side_cache_hit: null,
+        provider_side_cache_read_tokens: null,
+        provider_side_cache_write_tokens: null,
       },
     },
+    token_budget_gate_result: null,
     validation: {
       valid: true,
       error_count: 0,
@@ -103,6 +107,13 @@ test('topic-selection agent invocation audit schema rejects provider provenance 
   const snapshot = providerAuditSnapshot();
   snapshot.provenance.model_option_id = null;
   snapshot.provenance.normalized_params_hash = null;
+
+  assert.equal(await validatesBody(topicSelectionAgentInvocationAuditSnapshotSchema, snapshot), false);
+});
+
+test('topic-selection agent invocation audit schema rejects missing token-budget gate field', async () => {
+  const snapshot = providerAuditSnapshot() as unknown as Record<string, unknown>;
+  delete snapshot.token_budget_gate_result;
 
   assert.equal(await validatesBody(topicSelectionAgentInvocationAuditSnapshotSchema, snapshot), false);
 });
@@ -133,6 +144,7 @@ test('topic-selection agent invocation audit schema accepts codex and mock prove
   codex.provenance.telemetry = null;
   codex.provenance.operator_label = 'codex-local';
   codex.provenance.response_source = 'operator_supplied';
+  codex.provenance.local_approval_setting_ref = null;
 
   const mock = providerAuditSnapshot();
   mock.provenance.execution_mode = 'mocked_llm';

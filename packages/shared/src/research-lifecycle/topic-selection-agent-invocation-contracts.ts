@@ -47,6 +47,15 @@ export const TOPIC_SELECTION_AGENT_INVOCATION_CACHE_STATUSES = [
 export type TopicSelectionAgentInvocationCacheStatus =
   (typeof TOPIC_SELECTION_AGENT_INVOCATION_CACHE_STATUSES)[number];
 
+export const TOPIC_SELECTION_AGENT_TOKEN_BUDGET_GATE_DECISIONS = [
+  'within_budget',
+  'requires_compression',
+  'blocked_over_budget',
+  'budget_unknown_allow_with_warning',
+] as const;
+export type TopicSelectionAgentTokenBudgetGateDecision =
+  (typeof TOPIC_SELECTION_AGENT_TOKEN_BUDGET_GATE_DECISIONS)[number];
+
 export interface TopicSelectionAgentInvocationTelemetrySummary {
   provider_id: string;
   model_id: string;
@@ -63,6 +72,9 @@ export interface TopicSelectionAgentInvocationTelemetrySummary {
   embedding_input_tokens: number | null;
   total_tokens: number | null;
   cost_usd: number | null;
+  provider_side_cache_hit: boolean | null;
+  provider_side_cache_read_tokens: number | null;
+  provider_side_cache_write_tokens: number | null;
 }
 
 export interface TopicSelectionAgentDebateExtension {
@@ -106,20 +118,41 @@ export interface TopicSelectionAgentInvocationProvenance {
   prompt_template_version: string;
   schema_name: string;
   prompt_packet_hash: string;
+  redacted_prompt_artifact_ref?: TopicSelectionFunctionalRef | null;
+  prompt_quality_report_ref?: TopicSelectionFunctionalRef | null;
   response_hash: string | null;
   structured_output_hash: string | null;
   cache_status: TopicSelectionAgentInvocationCacheStatus;
   response_reuse_ref: string | null;
+  compression_report_ref?: TopicSelectionFunctionalRef | null;
+  compression_report_hash?: string | null;
+  compressed_context_hash?: string | null;
   fixture_id?: string | null;
   fixture_hash?: string | null;
   mock_profile?: string | null;
   operator_label?: string | null;
   operator_approval_ref?: TopicSelectionFunctionalRef | null;
+  local_approval_setting_ref?: string | null;
   response_source?: 'operator_supplied' | 'cached_exact_invocation' | null;
   provider_id?: string | null;
   model_id?: string | null;
   telemetry: TopicSelectionAgentInvocationTelemetrySummary | null;
   debate_extension?: TopicSelectionAgentDebateExtension | null;
+}
+
+export interface TopicSelectionAgentTokenBudgetGateResult {
+  provider_id: string | null;
+  model_id: string | null;
+  profile_id: string;
+  model_option_id: string | null;
+  estimated_input_tokens: number | null;
+  estimated_output_tokens: number;
+  context_window_tokens: number | null;
+  schema_overhead_tokens: number | null;
+  decision: TopicSelectionAgentTokenBudgetGateDecision;
+  compression_strategy_ref: TopicSelectionFunctionalRef | null;
+  blocker_codes: string[];
+  warning_codes: string[];
 }
 
 export interface TopicSelectionAgentInvocationAuditSnapshot {
@@ -129,6 +162,7 @@ export interface TopicSelectionAgentInvocationAuditSnapshot {
   node_attempt_id: string;
   status: TopicSelectionAgentInvocationStatus;
   provenance: TopicSelectionAgentInvocationProvenance;
+  token_budget_gate_result: TopicSelectionAgentTokenBudgetGateResult | null;
   validation: TopicSelectionAgentValidationSummary;
   warning_codes: string[];
   blocker_codes: string[];
@@ -164,6 +198,9 @@ export const topicSelectionAgentInvocationTelemetrySummarySchema = {
     'embedding_input_tokens',
     'total_tokens',
     'cost_usd',
+    'provider_side_cache_hit',
+    'provider_side_cache_read_tokens',
+    'provider_side_cache_write_tokens',
   ],
   properties: {
     provider_id: stringId,
@@ -181,6 +218,9 @@ export const topicSelectionAgentInvocationTelemetrySummarySchema = {
     embedding_input_tokens: nullableNumber,
     total_tokens: nullableNumber,
     cost_usd: nullableNumber,
+    provider_side_cache_hit: { anyOf: [{ type: 'boolean' }, { type: 'null' }] },
+    provider_side_cache_read_tokens: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }] },
+    provider_side_cache_write_tokens: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }] },
   },
 } as const;
 
@@ -274,15 +314,21 @@ export const topicSelectionAgentInvocationProvenanceSchema = {
     prompt_template_version: stringId,
     schema_name: stringId,
     prompt_packet_hash: hashString,
+    redacted_prompt_artifact_ref: nullableFunctionalRef,
+    prompt_quality_report_ref: nullableFunctionalRef,
     response_hash: nullableHashString,
     structured_output_hash: nullableHashString,
     cache_status: { enum: [...TOPIC_SELECTION_AGENT_INVOCATION_CACHE_STATUSES] },
     response_reuse_ref: nullableStringId,
+    compression_report_ref: nullableFunctionalRef,
+    compression_report_hash: nullableHashString,
+    compressed_context_hash: nullableHashString,
     fixture_id: nullableStringId,
     fixture_hash: nullableHashString,
     mock_profile: nullableStringId,
     operator_label: nullableStringId,
     operator_approval_ref: nullableFunctionalRef,
+    local_approval_setting_ref: nullableStringId,
     response_source: {
       anyOf: [
         { enum: ['operator_supplied', 'cached_exact_invocation'] },
@@ -348,6 +394,39 @@ export const topicSelectionAgentInvocationProvenanceSchema = {
   ],
 } as const;
 
+export const topicSelectionAgentTokenBudgetGateResultSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'provider_id',
+    'model_id',
+    'profile_id',
+    'model_option_id',
+    'estimated_input_tokens',
+    'estimated_output_tokens',
+    'context_window_tokens',
+    'schema_overhead_tokens',
+    'decision',
+    'compression_strategy_ref',
+    'blocker_codes',
+    'warning_codes',
+  ],
+  properties: {
+    provider_id: nullableStringId,
+    model_id: nullableStringId,
+    profile_id: stringId,
+    model_option_id: nullableStringId,
+    estimated_input_tokens: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }] },
+    estimated_output_tokens: { type: 'integer', minimum: 0 },
+    context_window_tokens: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }] },
+    schema_overhead_tokens: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }] },
+    decision: { enum: [...TOPIC_SELECTION_AGENT_TOKEN_BUDGET_GATE_DECISIONS] },
+    compression_strategy_ref: nullableFunctionalRef,
+    blocker_codes: { type: 'array', items: { type: 'string' } },
+    warning_codes: { type: 'array', items: { type: 'string' } },
+  },
+} as const;
+
 export const topicSelectionAgentInvocationAuditSnapshotSchema = {
   type: 'object',
   additionalProperties: false,
@@ -358,6 +437,7 @@ export const topicSelectionAgentInvocationAuditSnapshotSchema = {
     'node_attempt_id',
     'status',
     'provenance',
+    'token_budget_gate_result',
     'validation',
     'warning_codes',
     'blocker_codes',
@@ -370,6 +450,9 @@ export const topicSelectionAgentInvocationAuditSnapshotSchema = {
     node_attempt_id: stringId,
     status: { enum: [...TOPIC_SELECTION_AGENT_INVOCATION_STATUSES] },
     provenance: topicSelectionAgentInvocationProvenanceSchema,
+    token_budget_gate_result: {
+      anyOf: [topicSelectionAgentTokenBudgetGateResultSchema, { type: 'null' }],
+    },
     validation: topicSelectionAgentValidationSummarySchema,
     warning_codes: { type: 'array', items: { type: 'string' } },
     blocker_codes: { type: 'array', items: { type: 'string' } },

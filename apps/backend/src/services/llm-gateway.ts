@@ -56,6 +56,9 @@ export type LlmCallTelemetry = {
   embedding_input_tokens: number | null;
   total_tokens: number | null;
   cost_usd: number | null;
+  provider_side_cache_hit: boolean | null;
+  provider_side_cache_read_tokens: number | null;
+  provider_side_cache_write_tokens: number | null;
 };
 
 export class LlmGatewayError extends Error {
@@ -835,6 +838,11 @@ export class BackendLlmGateway {
       embedding_input_tokens: prompt === null ? usage.inputTokens ?? usage.totalTokens : null,
       total_tokens: usage.totalTokens,
       cost_usd: null,
+      provider_side_cache_hit: usage.providerSideCacheReadTokens === null
+        ? null
+        : usage.providerSideCacheReadTokens > 0,
+      provider_side_cache_read_tokens: usage.providerSideCacheReadTokens,
+      provider_side_cache_write_tokens: usage.providerSideCacheWriteTokens,
     };
   }
 
@@ -842,15 +850,31 @@ export class BackendLlmGateway {
     inputTokens: number | null;
     outputTokens: number | null;
     totalTokens: number | null;
+    providerSideCacheReadTokens: number | null;
+    providerSideCacheWriteTokens: number | null;
   } {
     const usage = this.tryReadObject(raw?.usage);
     if (!usage) {
-      return { inputTokens: null, outputTokens: null, totalTokens: null };
+      return {
+        inputTokens: null,
+        outputTokens: null,
+        totalTokens: null,
+        providerSideCacheReadTokens: null,
+        providerSideCacheWriteTokens: null,
+      };
     }
+    const promptDetails = this.tryReadObject(usage.prompt_tokens_details)
+      ?? this.tryReadObject(usage.input_tokens_details);
     return {
       inputTokens: this.readNonNegativeNumber(usage.input_tokens) ?? this.readNonNegativeNumber(usage.prompt_tokens),
       outputTokens: this.readNonNegativeNumber(usage.output_tokens) ?? this.readNonNegativeNumber(usage.completion_tokens),
       totalTokens: this.readNonNegativeNumber(usage.total_tokens),
+      providerSideCacheReadTokens: this.readNonNegativeNumber(usage.provider_side_cache_read_tokens)
+        ?? this.readNonNegativeNumber(usage.cache_read_input_tokens)
+        ?? this.readNonNegativeNumber(promptDetails?.cached_tokens),
+      providerSideCacheWriteTokens: this.readNonNegativeNumber(usage.provider_side_cache_write_tokens)
+        ?? this.readNonNegativeNumber(usage.cache_creation_input_tokens)
+        ?? this.readNonNegativeNumber(promptDetails?.cache_creation_tokens),
     };
   }
 

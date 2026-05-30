@@ -339,6 +339,7 @@ export const TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_ARTIFACT_KEYS = [
   'debate_role_level_summary',
   'debate_issue_frame',
   'debate_final_synthesis',
+  'context_compression_report',
   'ranked_candidate_draft_batch',
   'minimum_schema_validation_report',
   'candidate_draft_admission_report',
@@ -616,6 +617,7 @@ export interface TopicSelectionNeedDiscoveryContextEnvelope {
   execution_mode: TopicSelectionAgentExecutionMode;
   cache_key: string;
   cache_hit: boolean;
+  runtime_cache_key_hash?: string | null;
   redaction_policy: TopicSelectionNeedDiscoveryContextRedactionPolicy;
   created_at: string;
   memory_digest_hash: string;
@@ -759,6 +761,8 @@ export interface TopicSelectionNeedDiscoveryCompiledContextPair {
   arbiter_context_hash: string;
   exploration_cache_key: string;
   arbiter_cache_key: string;
+  exploration_runtime_cache_key_hash?: string | null;
+  arbiter_runtime_cache_key_hash?: string | null;
   artifact_refs: TopicSelectionGenerateNeedCandidateArtifactRefEntry[];
 }
 
@@ -2159,6 +2163,7 @@ const topicSelectionNeedDiscoveryContextEnvelopeProperties = {
   execution_mode: { enum: [...TOPIC_SELECTION_AGENT_EXECUTION_MODES] },
   cache_key: stringId,
   cache_hit: booleanValue,
+  runtime_cache_key_hash: nullableString,
   redaction_policy: { enum: [...TOPIC_SELECTION_NEED_DISCOVERY_CONTEXT_REDACTION_POLICIES] },
   created_at: stringId,
   memory_digest_hash: stringId,
@@ -2518,6 +2523,8 @@ export const topicSelectionNeedDiscoveryCompiledContextPairSchema = {
     arbiter_context_hash: stringId,
     exploration_cache_key: stringId,
     arbiter_cache_key: stringId,
+    exploration_runtime_cache_key_hash: nullableString,
+    arbiter_runtime_cache_key_hash: nullableString,
     artifact_refs: {
       type: 'array',
       items: topicSelectionGenerateNeedCandidateArtifactRefEntrySchema,

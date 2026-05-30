@@ -27,6 +27,7 @@ import * as titleCardManagementContracts from './title-card-management-contracts
 import * as topicSelectionControlPlaneContracts from './topic-selection-control-plane-contracts.js';
 import * as topicSelectionAgentProfileContracts from './topic-selection-agent-profile-contracts.js';
 import * as topicSelectionAgentInvocationContracts from './topic-selection-agent-invocation-contracts.js';
+import * as topicSelectionLlmRuntimeContracts from './topic-selection-llm-runtime-contracts.js';
 import * as topicSelectionDebateScenarioContracts from './topic-selection-debate-scenario-contracts.js';
 import * as topicSelectionEvidenceMapContracts from './topic-selection-evidence-map-contracts.js';
 import * as topicSelectionNeedValidationContracts from './topic-selection-need-validation-contracts.js';
@@ -231,6 +232,7 @@ test('topic-selection need-validation schemas load through direct and aggregate 
     'debate_role_level_summary',
     'debate_issue_frame',
     'debate_final_synthesis',
+    'context_compression_report',
     'ranked_candidate_draft_batch',
     'minimum_schema_validation_report',
     'candidate_draft_admission_report',
@@ -3351,6 +3353,7 @@ test('research-lifecycle barrel re-exports the runtime value surface of split mo
     ...Object.keys(topicSelectionControlPlaneContracts),
     ...Object.keys(topicSelectionAgentProfileContracts),
     ...Object.keys(topicSelectionAgentInvocationContracts),
+    ...Object.keys(topicSelectionLlmRuntimeContracts),
     ...Object.keys(topicSelectionDebateScenarioContracts),
     ...Object.keys(topicSelectionSearchResourceContracts),
     ...Object.keys(topicSelectionResourceSamplingContracts),

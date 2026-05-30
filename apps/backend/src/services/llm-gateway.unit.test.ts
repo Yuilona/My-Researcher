@@ -55,8 +55,60 @@ test('LLM gateway maps structured Responses output and telemetry', async () => {
   assert.equal(response.telemetry.input_tokens, 11);
   assert.equal(response.telemetry.output_tokens, 7);
   assert.equal(response.telemetry.total_tokens, 18);
+  assert.equal(response.telemetry.provider_side_cache_hit, null);
+  assert.equal(response.telemetry.provider_side_cache_read_tokens, null);
+  assert.equal(response.telemetry.provider_side_cache_write_tokens, null);
   assert.equal(calls[0]?.model, 'gpt-test');
   assert.deepEqual(calls[0]?.reasoning, { effort: 'high' });
+});
+
+test('LLM gateway records provider-side cache telemetry without treating it as response reuse', async () => {
+  const gateway = new BackendLlmGateway({
+    settingsService: createSettingsService(),
+    fetchImpl: (async () => new Response(JSON.stringify({
+      output_text: JSON.stringify({ ok: true }),
+      usage: {
+        input_tokens: 100,
+        output_tokens: 12,
+        total_tokens: 112,
+        input_tokens_details: {
+          cached_tokens: 64,
+          cache_creation_tokens: 8,
+        },
+      },
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })) as typeof fetch,
+  });
+
+  const response = await gateway.createStructuredOutput<{ ok: boolean }>({
+    executionContext: { feature: 'test', operation: 'structured-cache-telemetry' },
+    model: { providerId: 'openai', modelId: 'gpt-test', profileId: 'test-profile' },
+    prompt: { promptTemplateId: 'test-prompt', version: 'v1' },
+    messages: [{ role: 'user', content: 'return ok' }],
+    schemaName: 'ok_schema',
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['ok'],
+      properties: { ok: { type: 'boolean' } },
+    },
+    normalizedParams: {
+      creativity: 'medium',
+      reasoning_depth: 'high',
+      output_budget: 'medium',
+      structured_output_required: true,
+      output_format: 'json_schema',
+    },
+  });
+
+  assert.equal(response.parsed.ok, true);
+  assert.equal(response.telemetry.provider_side_cache_hit, true);
+  assert.equal(response.telemetry.provider_side_cache_read_tokens, 64);
+  assert.equal(response.telemetry.provider_side_cache_write_tokens, 8);
+  assert.equal(response.telemetry.input_tokens, 100);
+  assert.equal(response.telemetry.output_tokens, 12);
 });
 
 test('LLM gateway maps OpenAI normalized reasoning depth to Responses effort and allows provider override', async () => {

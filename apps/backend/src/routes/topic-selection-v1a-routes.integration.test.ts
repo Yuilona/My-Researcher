@@ -332,6 +332,9 @@ function v1aTelemetry(schemaName: string): LlmCallTelemetry {
     embedding_input_tokens: null,
     total_tokens: 200,
     cost_usd: null,
+    provider_side_cache_hit: null,
+    provider_side_cache_read_tokens: null,
+    provider_side_cache_write_tokens: null,
   };
 }
 
