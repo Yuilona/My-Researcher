@@ -1,6 +1,242 @@
 # 06 Node Scope Matrix
 
-This matrix identifies the initial T-112 coverage surface. Detailed node policy remains in the owning task packages; this file records cache/compression/token-budget obligations only.
+This matrix is the implementation gate for T-112. It identifies every topic-selection LLM-capable node/slot and records cache, compression, token-budget, response-reuse, and provenance obligations. Shared runtime behavior MUST NOT be implemented for a node surface until its row is defined here.
+
+## Matrix Column Contract
+Row granularity is the LLM invocation slot, not the workflow node. A workflow node with multiple LLM roles, debate stages, semantic support artifacts, or provider canary surfaces MUST have one row per independently invokable slot.
+
+Each implementation-ready row MUST define:
+- node or slot id;
+- `ContextPolicyProfile` id;
+- functional template;
+- execution modifiers;
+- current invocation path: `AgentOrchestrator`, direct `BackendLlmGateway`, Codex artifact, fixture, or deterministic parser;
+- LLM role;
+- authority relation: support only, draft for deterministic gate, human-review advisory, or never authority;
+- context family;
+- node policy adapter or context compiler owner;
+- source refs and required input hash;
+- prompt/profile/model-option key fields;
+- prompt variant key for role/stage/scenario-specific prompts;
+- dynamic prompt material schema/refs when a prior LLM role can focus a later prompt;
+- allowed execution modes;
+- token-budget policy;
+- compression policy, including required preserved facts and quality blockers;
+- context packet cache policy, exact key fields, and stale miss/block behavior;
+- prompt packet cache policy and prompt quality gate requirements;
+- exact response reuse policy, approval requirements, and provider-required live-call behavior;
+- deterministic gates that must still run after cache or reuse;
+- required provenance/audit artifacts;
+- required audit projections and intended consumers;
+- required tests and provider canaries.
+
+## Context Policy Profile Contract
+Every slot row MUST bind one explicit `ContextPolicyProfile`. The profile is the decision unit for whether the slot has suitable context, including memory, compression, cache, token budget, reuse, and post-reuse gates.
+
+Required profile fields:
+- `invocation_slot_id`;
+- `functional_template`;
+- `execution_modifiers`;
+- `context_family`;
+- `allowed_source_refs`;
+- `memory_policy`;
+- `compression_policy`;
+- `cache_policy`;
+- `token_budget_policy`;
+- `reuse_policy`;
+- `post_reuse_gates`;
+- `provenance_policy`.
+
+Functional template values:
+- `candidate_for_deterministic_gate`;
+- `support_only_semantic`;
+- `delegated_payload_candidate`;
+- `human_review_advisory`.
+
+Execution modifier values:
+- `provider_required_live`;
+- `codex_exact_reuse_allowed`;
+- `mock_replay_allowed`;
+- `external_artifact_admission`;
+- `compression_allowed_with_quality_gate`;
+- `compression_disallowed`.
+
+`invocation_slot_id` MUST participate in every context cache key, prompt packet key, invocation cache key, and exact response reuse key.
+
+## Context Policy Field Semantics
+Profile-declared context suitability is mandatory. The runtime MUST NOT infer or trim semantic context outside the slot profile.
+
+Source taxonomy:
+- `authority_record`: primary facts.
+- `ref_backed_artifact`: conditional facts with source refs and hashes.
+- `durable_memory`: warning/risk/constraint/recheck input only; not standalone evidence.
+- `prior_llm_output`: support, critique, or replay input only when profile-approved.
+- `cache_projection`: acceleration only.
+- `provider_telemetry`: audit/cost/debug only.
+
+Memory policy MUST define allowed memory families, use labels, stale/source-drift behavior, and whether missing blocker/risk/gap/recheck memory blocks the slot.
+
+Compression policy MUST define compression mode, strategy id/version, preserved facts, forbidden payload classes, token estimate fields, and quality-gate blockers.
+
+Cache policy MUST define exact key fields, stale miss/block behavior, provider-required live-call behavior, and the post-cache gates that still run.
+
+Cache target rules:
+- context packet and compression artifacts are reusable across providers and execution modes only on exact key hit;
+- prompt packet metadata/hash is reusable for replay identity, audit, and cost analysis;
+- provider responses, provider telemetry, provider-side cache hit fields, and provider-specific repair results are not cross-provider business cache targets;
+- context packet cache hit returns an artifact ref and never promotes cached content to authority;
+- context packet cache index rows store key/hash/ref/status/provenance metadata only, not business payloads;
+- every cache-capable slot must use the shared cache result enum: `hit`, `miss`, `blocked_stale`, `blocked_drift`, `bypassed`, or `not_applicable`;
+- v1a, v1b, v1c, and resource sampling adapters may construct context differently, but they must not create local read-through cache semantics outside the shared runtime.
+
+Response reuse policy MUST distinguish execution provenance without creating separate runtimes:
+- `provider_llm` response reuse is blocked or treated as miss; provider-required live slots must execute a live provider call;
+- `codex_assisted` exact reuse requires operator approval or explicit local approved-reuse setting and must record `non_provider=true`;
+- `mocked_llm` exact reuse is limited to test/acceptance fixture replay and must record fixture/replay provenance;
+- response reuse payloads live in ref-backed artifacts, while the reuse index stores exact key, response hash, artifact ref, approval/provenance metadata, and freshness/status only;
+- every response reuse hit still runs schema validation, output contract validation, post-reuse gates, deterministic gates, authority-boundary checks, and provenance/audit recording.
+
+Token-budget policy MUST define the preflight decision handling before provider execution and after any compression.
+
+Token-budget estimator rules:
+- first slice uses `ConservativeTokenEstimator`;
+- provider-aware tokenizer plugins are not part of the first slice;
+- profile rows must declare output budget, safety margin, and unknown-estimate behavior;
+- provider actual token telemetry is calibration data only.
+
+Profile versioning MUST include profile id/version/hash, compiler version, compression strategy version, memory policy version, cache policy version, and redaction policy.
+
+Prompt packet rules:
+- prompt packet identity covers the complete invocation prompt packet, not only the system prompt;
+- `prompt_variant_key` must distinguish role, stage, and scenario variants such as explorer, critic, arbiter framing, arbiter final synthesis, repair, and feedback normalization;
+- prompt packet keys must include context refs/hashes, dynamic material refs/hashes, output contract, profile/model params, runtime modifiers, and redaction policy;
+- prompt cache/index rows store metadata and artifact refs only;
+- persisted prompt payloads must be redacted, ref-backed artifacts;
+- hidden reasoning, raw provider logs, credentials, secrets, and unredacted private content are forbidden in persisted prompt artifacts.
+
+Dynamic prompt material rules:
+- LLM roles may generate focus material such as issue frames, challenge lists, risk checklists, and repair agendas;
+- LLM roles must not generate or override executable prompt templates, role boundaries, output contracts, authority boundaries, token/cache/reuse policy, or provider-required-live semantics;
+- dynamic material must be schema-validated, ref-backed, hash-included, provenance-recorded, and rendered by a fixed prompt compiler.
+
+Prompt quality rules:
+- implementation-ready rows must define prompt-template lint expectations and runtime `PromptQualityReport` blockers when the slot uses dynamic material or debate/finalization prompts;
+- prompt quality gates may block unsafe prompt packets before provider/Codex/mock execution;
+- prompt effectiveness telemetry is a review signal only and must not change business authority.
+
+Audit consumption rules:
+- each invocation row must emit or reference a `runtime_audit_envelope` for machine verification;
+- implementation-ready rows must declare whether `operator_audit_summary`, `human_trust_summary`, or both are expected consumers;
+- `operator_audit_summary` may expose execution mode, cache status, compression status, token/prompt quality status, schema/gate status, blocker/warning codes, and artifact refs;
+- `human_trust_summary` may expose source refs, residual risks, evidence gaps, recheck hints, live-provider versus non-provider/replay labeling, deterministic gate status, and human confirmation status;
+- projections must reference source envelope ref/hash, must not rewrite decisions, and must not become business authority;
+- human-facing projections must omit raw cache keys, prompt payload details, raw provider telemetry, hidden reasoning, raw provider logs, credentials, secrets, and unredacted private content.
+
+Compression executor rules:
+- `deterministic_structural` may trim, chunk, preserve refs, and produce deterministic digests without semantic rewriting;
+- `codex_assisted` may produce semantic compressed context only when the slot profile allows it;
+- Codex compression output is non-authority and must be recorded as a ref-backed, hash-checked, quality-gated artifact;
+- compression executor choice must appear in provenance and cache/reuse keys when relevant;
+- provider-required live-call slots default to compression-disallowed unless the canary explicitly tests compressed context.
+
+## Registry Binding
+Each slot row MUST reference a registered `ContextPolicyProfile` id and version before runtime implementation for that slot.
+
+Registry rules:
+- shared contracts define the profile and registry schema;
+- backend resolves profiles through an independent `TopicSelectionContextPolicyProfileRegistryService` or equivalent resolver;
+- matrix markdown is governance evidence, not runtime configuration;
+- the first implementation SHOULD use hardcoded TypeScript profile constants;
+- unknown profile id, version mismatch, slot/profile mismatch, schema invalidity, unsupported functional template/modifier, or profile hash drift MUST block before context compilation or provider invocation.
+
+## Runtime Adapter Binding
+Every slot row must be reachable through one stage adapter or facade:
+- `v1a` adapter for v1a AgentOrchestrator/debate/context-compiler paths;
+- `v1b` adapter for frozen input, semantic artifact admission, N4/N6/N8 drafts, and N7 topic-question-contract context handoffs;
+- `v1c` adapter for promotion support, bounded debate, provider canaries, and downstream feedback normalization;
+- resource-sampling adapter for literature classification batches and direct provider calls.
+
+Stage adapters may stay workflow-specific, but they MUST NOT implement independent cache, compression, response reuse, token-budget, or provenance kernels.
+
+v1b N7 is a core context hub. Its support slots remain non-authority, but N7 must admit high-quality input context from N6 candidate artifacts, failed-trial feedback, grouping support, and debate-admission support, then produce ref-backed context/handoff suitable for N8 value assessment and loopback decisions.
+
+## First-Slice Implementation-Ready Matrix: v1a N6
+Only the rows in this section are implementation-ready for the first T-112 code slice. The broader slot inventory below remains coverage evidence and must not be wired to the shared runtime until promoted into an implementation-ready section.
+
+First-slice profile defaults:
+- profile version: `v1`;
+- profile hash: computed by the `TopicSelectionContextPolicyProfileRegistryService` from hardcoded TypeScript profile constants;
+- estimator: `ConservativeTokenEstimator`;
+- token estimate safety margin: `1.25`;
+- unknown token estimate behavior: `blocked_over_budget` for provider execution, `budget_unknown_allow_with_warning` only for mocked acceptance fixtures;
+- response reuse: `provider_llm` blocked/miss, `codex_assisted` requires operator approval or explicit local approved-reuse setting with `non_provider=true`, `mocked_llm` fixture replay only.
+
+| Slot row id | Profile id/version | Prompt variant key | Context/dynamic material | Token budget policy | Compression policy | Cache/reuse/audit/tests |
+|---|---|---|---|---|---|---|
+| `need_candidate_generation` | `topic-selection.v1a.n6.need-candidate-generation.context-runtime@v1` | `need_candidate_generation` | `exploration_context` + `arbiter_context`; no dynamic prompt material | estimated input target `28000`; output budget `4096`; decision set `within_budget`, `requires_compression`, `blocked_over_budget`, `budget_unknown_allow_with_warning` | `required_when_over_budget`; executors `deterministic_structural`, `codex_assisted`; must preserve source refs, blockers, residual risks, accepted risks, method-family gaps, source-health warnings, unresolved challenges, and recheck hints | cache key includes slot, context families, input refs hash, context hashes, profile hash, compiler/template/schema/policy versions, model option, normalized params, redaction policy; post-cache gates: schema, candidate admission, supplemental routing, persistence boundary; projections: `operator_audit_summary`, `human_trust_summary`; tests: exact hit, stale miss/block, provider response reuse rejected |
+| `explorer.round_1_discovery` | `topic-selection.v1a.n6.explorer-round-1.context-runtime@v1` | `explorer.round_1_discovery` | `exploration_context`; parent refs none for round 1 | estimated input target `24000`; output budget `1600`; unknown provider estimate blocks | `required_when_over_budget`; executors `deterministic_structural`, `codex_assisted`; preserve topic scope, evidence signal digest, resource sample digest, search coverage digest, sibling candidate digest, decision memory digest | cache key includes slot and `exploration_context` only; cannot satisfy critic or arbiter slots; reuse only Codex-approved/mock; projections: `operator_audit_summary`; tests: cross-role cache miss, compression preserves memory/evidence refs |
+| `deep_critic.round_1_discovery` | `topic-selection.v1a.n6.deep-critic-round-1.context-runtime@v1` | `deep_critic.round_1_discovery` | `exploration_context`; may reference explorer output hash only when configured by debate plan | estimated input target `24000`; output budget `1600`; unknown provider estimate blocks | `required_when_over_budget`; executors `deterministic_structural`, `codex_assisted`; preserve evidence gaps, challenge prompts, source-health warnings, residual risks, method-family gaps | cache key includes slot, `exploration_context`, debate plan hash, and parent role-output hash when present; cannot satisfy explorer or arbiter slots; projections: `operator_audit_summary`; tests: parent hash drift miss/block, quality gate blocks missing gap/risk facts |
+| `arbiter.issue_framing` | `topic-selection.v1a.n6.arbiter-issue-framing.context-runtime@v1` | `arbiter.issue_framing` | `arbiter_context` + role summary refs/hashes; produces `DebateIssueFrame@v1` dynamic prompt material | estimated input target `26000`; output budget `1200`; unknown provider estimate blocks | `required_when_over_budget`; executors `deterministic_structural`, `codex_assisted`; preserve role-level summaries, unresolved points, rejected framing table, blocker/risk/gap/recheck facts | cache key includes slot, `arbiter_context`, role summary refs/hashes, debate policy id/version; produced issue frame must be schema/ref/hash/provenance valid; projections: `operator_audit_summary`; tests: role-summary drift miss/block, invalid issue frame blocks final synthesis |
+| `arbiter.final_synthesis` | `topic-selection.v1a.n6.arbiter-final-synthesis.context-runtime@v1` | `arbiter.final_synthesis` | `arbiter_context` + role summary refs/hashes + `DebateIssueFrame@v1` ref/hash | estimated input target `28000`; output budget `4096`; unknown provider estimate blocks | `required_when_over_budget`; executors `deterministic_structural`, `codex_assisted`; strict quality gate preserving blockers, residual risks, accepted risks, method-family gaps, unresolved challenges, recheck hints, deterministic gate checklist, persistence rules | cache key includes slot, `arbiter_context`, role summary refs/hashes, issue-frame hash, profile hash, compiler/template/schema/policy versions, model option, normalized params, redaction policy; post-cache/reuse gates: schema validation, candidate admission, supplemental routing, persistence boundary; projections: `operator_audit_summary`, `human_trust_summary`; tests: issue-frame hash changes prompt hash, cache hit does not duplicate authority write |
+
+First-slice runtime blockers:
+- any v1a N6 slot missing a registered profile id/version/hash blocks before context compilation;
+- any prompt packet for v1a N6 missing `prompt_variant_key` blocks before provider/Codex/mock execution;
+- any Codex exact reuse without approval ref or explicit local approved-reuse setting blocks before schema/deterministic gate admission;
+- any provider mode historical response hit is treated as miss/block and cannot satisfy provider output;
+- any context packet cache entry with source/profile/schema/compiler/redaction/context-family drift misses or blocks.
+
+## v1a Runtime Closure Rows
+These rows were promoted after the v1a implementation-quality review. They close the discovered gap where N5/N7/N8 already used `AgentOrchestrator` but did not yet pass T-112 runtime token/context identity.
+
+| Slot row id | Profile id/version | Prompt variant key | Context/dynamic material | Token budget policy | Compression policy | Cache/reuse/audit/tests |
+|---|---|---|---|---|---|---|
+| `evidence_extraction` | `topic-selection.v1a.n5.evidence-extraction.context-runtime@v1` | `evidence_extraction` | `evidence_extraction_context`; source is the N5 extraction context packet | estimated input target `32000`; output budget `4096`; provider unknown estimate blocks, mocked acceptance may warn | `required_when_over_budget`; preserve source refs, extraction blockers, residual risks, source-health warnings, method-family gaps, unresolved challenges, and recheck hints | prompt/context identity includes extraction packet hash and runtime profile hash; provider response reuse blocked; post-runtime gates: schema validation, evidence-map deterministic gate, authority write boundary; tests cover profile registry and WorkflowHarness runtime binding |
+| `adjudication_recommendation` | `topic-selection.v1a.n7.need-adjudication-support.context-runtime@v1` | `adjudication_recommendation` | `need_adjudication_support_packet_context` plus candidate and readiness refs/hashes | estimated input target `18000`; output budget `2048`; provider unknown estimate blocks, mocked acceptance may warn | `required_when_over_budget`; preserve recommendation blockers, residual risks, accepted risks, method-family gaps, source-health warnings, unresolved challenges, and recheck hints | prompt/context identity includes candidate/readiness/support packet hashes; provider response reuse blocked; post-runtime gates: schema validation, residual risk/gap gate, deterministic adjudication boundary; tests cover profile registry and WorkflowHarness runtime binding |
+| `confirmation_semantic_review` | `topic-selection.v1a.n8.human-confirmation-semantic-review.context-runtime@v1` | `confirmation_semantic_review` | `human_confirmation_semantic_review_context`; advisory context only | estimated input target `10000`; output budget `1200`; provider unknown estimate blocks, mocked acceptance may warn | `required_when_over_budget`; preserve human-facing residual risks, evidence gaps, source-health warnings, unresolved challenges, accepted risks, and recheck hints | prompt/context identity includes semantic-review context packet hash; provider response reuse blocked; output is human-review advisory and never final authority; post-runtime gates: schema validation, semantic review gate, human authority boundary; tests cover profile registry and WorkflowHarness runtime binding |
+
+v1a runtime closure blockers:
+- N5/N7/N8 invocations without `runtime_token_budget` are considered runtime binding drift.
+- N7 cache/reuse must never skip the residual risk/gap gate.
+- N8 semantic review must remain advisory and cannot replace human confirmation authority.
+- Cross-run context cache hits are allowed only for exact semantic cache identity; consumers must not require current workflow ownership, but must validate refs/hashes/profile/context-family before use.
+
+## Slot Inventory For Alignment
+This table locks the initial row inventory before implementation-ready cache/compression/reuse policy is filled for each slot.
+
+First deep integration target: v1a N6. Its single-agent and debate rows are the first runtime integration slice because they exercise slot isolation, context-family separation, context cache, Codex compression, response reuse, and deterministic candidate admission together.
+
+| Area | Node | Slot row id | Current invocation path | Authority relation | Target context family / owner | Profile / output contract |
+|---|---|---|---|---|---|---|
+| Resource sampling | `topic-selection.resource-sampling.create-sample-set.v1` | `resource_classification.batch` | Direct `BackendLlmGateway` in `TopicSelectionResourceSamplingService` | semantic classification draft before deterministic guardrails | `resource_sampling_classification_context`; owner TBD resource-sampling compiler | `TopicSelectionResourceSamplingLlmOutput` |
+| v1a N5 | `topic-selection.v1a.build-evidence-map.v1` | `evidence_extraction` | `WorkflowHarness -> AgentOrchestrator` | model draft before deterministic evidence-map materialization | `evidence_extraction_context`; owner TBD v1a evidence compiler | `topic-selection.evidence-map-extraction.single-agent.v1`; `TopicSelectionEvidenceMapExtractionDraft@v1` |
+| v1a N6 | `topic-selection.v1a.generate-need-candidate.v1` | `need_candidate_generation` | `GenerateNeedCandidateAdapter -> AgentOrchestrator` | model draft before deterministic candidate admission | `exploration_context` + `arbiter_context`; `TopicSelectionNeedDiscoveryContextCompilerService` | `topic-selection.generate-need-candidate.single-agent.v1`; `RankedCandidateDraftBatch@v1` |
+| v1a N6 | `topic-selection.v1a.generate-need-candidate.v1` | `explorer.round_1_discovery` | `NeedDiscoveryDebateLoop -> AgentOrchestrator` | debate worker support only before arbiter synthesis | `exploration_context`; `TopicSelectionNeedDiscoveryContextCompilerService` | `topic-selection.need-discovery.explorer.v1`; `NeedDiscoveryExplorerNotes@v1` |
+| v1a N6 | `topic-selection.v1a.generate-need-candidate.v1` | `deep_critic.round_1_discovery` | `NeedDiscoveryDebateLoop -> AgentOrchestrator` | debate worker support only before arbiter synthesis | `exploration_context`; `TopicSelectionNeedDiscoveryContextCompilerService` | `topic-selection.need-discovery.deep-critic.v1`; `NeedDiscoveryDeepCriticNotes@v1` |
+| v1a N6 | `topic-selection.v1a.generate-need-candidate.v1` | `arbiter.issue_framing` | `NeedDiscoveryDebateLoop -> AgentOrchestrator` | debate arbiter support artifact before final synthesis | `arbiter_context` + role summary refs; `TopicSelectionNeedDiscoveryContextCompilerService` | `topic-selection.need-discovery.arbiter-framing.v1`; `DebateIssueFrame@v1` |
+| v1a N6 | `topic-selection.v1a.generate-need-candidate.v1` | `arbiter.final_synthesis` | `NeedDiscoveryDebateLoop -> AgentOrchestrator` | model draft before deterministic candidate admission | `arbiter_context` + issue-frame/role-summary refs; `TopicSelectionNeedDiscoveryContextCompilerService` | `topic-selection.need-discovery.arbiter-final.v1`; `RankedCandidateDraftBatch@v1` |
+| v1a N7 | `topic-selection.v1a.validate-need-adjudication.v1` | `adjudication_recommendation` | `WorkflowHarness -> AgentOrchestrator` | recommendation before deterministic adjudication gate | `need_adjudication_support_packet_context`; owner TBD need-validation compiler | `topic-selection.need-adjudication.single-agent.v1`; `TopicSelectionNeedAdjudicationRecommendationPacket@v1` |
+| v1a N8 | `topic-selection.v1a.human-confirm-need.v1` | `confirmation_semantic_review` | `WorkflowHarness -> AgentOrchestrator` or deterministic parser | human-review advisory; never final authority | `human_confirmation_semantic_review_context`; owner TBD confirmation compiler | `topic-selection.confirmation-semantic-review.single-agent.v1`; `HumanConfirmationSemanticReview@v1` |
+| v1b N2 | `topic-selection.v1b.record-research-constraint-profile.v1` | `n2_constraint_profile_semantic_support` | frozen semantic artifact via `WorkflowHarness` | delegated payload candidate before deterministic gate | `v1b_constraint_profile_context`; owner TBD v1b semantic-support adapter | `ResearchConstraintProfileDraftSupport@v1` |
+| v1b N3 | `topic-selection.v1b.assess-intake-readiness.v1` | `n3_readiness_classification` | frozen semantic artifact via `WorkflowHarness` | support only before deterministic readiness gate | `v1b_intake_readiness_context`; owner TBD v1b semantic-support adapter | `IntakeReadinessClassificationSupport@v1` |
+| v1b N4 | `topic-selection.v1b.generate-research-slice-options.v1` | `n4_research_slice_option_draft` | frozen semantic artifact via `WorkflowHarness`; provider/codex generation currently external harness/script | model draft before deterministic slice option gate | `v1b_research_slice_option_context`; owner TBD v1b semantic-support adapter | `topic-selection.v1b.research-slice-options.single-agent.v1`; `ResearchSliceOptionSetDraft@v1` |
+| v1b N5 | `topic-selection.v1b.select-research-slice.v1` | `n5_slice_selection_review` | frozen semantic artifact via `WorkflowHarness` | delegated payload candidate before deterministic selection gate | `v1b_slice_selection_context`; owner TBD v1b semantic-support adapter | `ResearchSliceSelectionReviewSupport@v1` |
+| v1b N6 | `topic-selection.v1b.generate-topic-question-candidates.v1` | `n6_question_candidate_draft` | frozen semantic artifact via `WorkflowHarness`; provider/codex generation currently external harness/script | model draft before deterministic candidate gate | `v1b_topic_question_candidate_context`; owner TBD v1b semantic-support adapter | `topic-selection.v1b.topic-question-candidates.single-agent.v1`; `TopicQuestionCandidateSetDraft@v1` |
+| v1b N6 | `topic-selection.v1b.generate-topic-question-candidates.v1` | `n6_loopback_triage` | frozen semantic artifact via `WorkflowHarness` | support only before retry/loopback decision | `v1b_n6_loopback_triage_context`; owner TBD v1b semantic-support adapter | `N6LoopbackTriageSupport@v1` |
+| v1b N7 | `topic-selection.v1b.materialize-topic-question-contract.v1` | `n7_candidate_grouping` | frozen semantic artifact via `WorkflowHarness` | support only before deterministic contract gate; contributes to N7 context hub | `v1b_candidate_grouping_context`; owner TBD v1b N7 context adapter | `CandidateGroupingSupport@v1` |
+| v1b N7 | `topic-selection.v1b.materialize-topic-question-contract.v1` | `n7_failed_trial_synthesis` | frozen semantic artifact via `WorkflowHarness` | support only before next-candidate or loopback routing; contributes to N7 context hub | `v1b_failed_trial_synthesis_context`; owner TBD v1b N7 context adapter | `N8FailedTrialSynthesisSupport@v1` |
+| v1b N7/N8 | `topic-selection.v1b.materialize-topic-question-contract.v1` | `n7_n8_debate_admission_review` | frozen semantic artifact via `WorkflowHarness` | support only before deterministic N8 invocation admission; contributes to N7->N8 context handoff | `v1b_n8_debate_admission_context`; owner TBD v1b N7 context adapter | `N8DebateAdmissionReviewSupport@v1` |
+| v1b N8 | `topic-selection.v1b.assess-topic-value.v1` | `n8_value_assessment_draft` | frozen semantic artifact via `WorkflowHarness`; provider/codex generation currently external harness/script | model draft before deterministic value gate | `v1b_value_assessment_context`; owner TBD v1b semantic-support adapter | `topic-selection.v1b.topic-value-assessment.single-agent.v1`; `TopicValueAssessmentDraft@v1` |
+| v1c N2 | `topic-selection.v1c.generate-promotion-support.v1` | `promotion_support_generation.llm_draft` | direct `BackendLlmGateway` in `TopicSelectionV1cPromotionGateService` when `llm_draft` | advisory support only before deterministic promotion gate | `v1c_promotion_support_context`; owner TBD v1c promotion-support adapter | `TopicSelectionPromotionDecisionSupportLlmDraft` |
+| v1c N2 | `topic-selection.v1c.generate-promotion-support.v1` | `n2_bounded_micro_debate.promotion_supporter_draft` | external Codex acceptance script; provider canary script -> `AgentOrchestrator` -> `BackendLlmGateway` | support-only draft before critic/repair/final synthesis | `v1c_promotion_support_context`; owner TBD v1c bounded-debate adapter | `topic-selection.v1c.promotion-support.bounded-micro-debate.codex.v1` / provider-canary profile; `TopicSelectionV1cBoundedMicroDebateRoleOrFinal@v1` |
+| v1c N2 | `topic-selection.v1c.generate-promotion-support.v1` | `n2_bounded_micro_debate.reviewer_critic_review` | external Codex acceptance script; provider canary script -> `AgentOrchestrator` -> `BackendLlmGateway` | support-only critique before repair/final synthesis | `v1c_promotion_support_context` + supporter draft hash; owner TBD v1c bounded-debate adapter | `topic-selection.v1c.promotion-support.bounded-micro-debate.codex.v1` / provider-canary profile; `TopicSelectionV1cBoundedMicroDebateRoleOrFinal@v1` |
+| v1c N2 | `topic-selection.v1c.generate-promotion-support.v1` | `n2_bounded_micro_debate.promotion_supporter_repair` | external Codex acceptance script; provider canary script -> `AgentOrchestrator` -> `BackendLlmGateway` | support-only repair before final synthesis | `v1c_promotion_support_context` + critic finding hash; owner TBD v1c bounded-debate adapter | `topic-selection.v1c.promotion-support.bounded-micro-debate.codex.v1` / provider-canary profile; `TopicSelectionV1cBoundedMicroDebateRoleOrFinal@v1` |
+| v1c N2 | `topic-selection.v1c.generate-promotion-support.v1` | `n2_bounded_micro_debate.synthesizer_final` | external Codex acceptance script; provider canary script -> `AgentOrchestrator` -> `BackendLlmGateway` | final advisory semantic layer before deterministic N3 promotion gate | `v1c_promotion_support_context` + role-output hashes; owner TBD v1c bounded-debate adapter | `topic-selection.v1c.promotion-support.bounded-micro-debate.codex.v1` / provider-canary profile; `TopicSelectionV1cBoundedMicroDebateRoleOrFinal@v1` |
+| v1c N3 canary | `topic-selection.v1c.evaluate-promotion-gate.v1` | `provider_canary.gate_diagnostic_adjunct` | provider canary script -> `AgentOrchestrator` -> `BackendLlmGateway` | diagnostic adjunct only; no authority change | `v1c_gate_diagnostic_context`; owner shared provider-canary adapter | `topic-selection.v1c.gate-diagnostic-adjunct.provider-canary.v1`; `TopicSelectionV1cGateDiagnosticAdjunct@v1` |
+| v1c N4 canary | `topic-selection.v1c.record-human-promotion-decision.v1` | `provider_canary.delegated_promotion_decision` | provider canary script -> `AgentOrchestrator` -> `BackendLlmGateway`, then deterministic N4 admission | delegated decision candidate before deterministic human-promotion-decision service | `v1c_delegated_promotion_decision_context`; owner shared provider-canary adapter | `topic-selection.v1c.delegated-promotion-decision.provider-canary.v1`; `TopicSelectionV1cDelegatedPromotionDecisionCandidate@v1` |
+| v1c N6 | `topic-selection.v1c.downstream-feedback-recheck.v1` | `downstream_feedback_normalization` | Codex acceptance script; provider canary script -> `AgentOrchestrator` -> `BackendLlmGateway`; deterministic service admission | normalized candidate before deterministic recheck creation | `v1c_downstream_feedback_context`; owner TBD v1c feedback-normalization adapter | `topic-selection.v1c.downstream-feedback-normalization.codex.v1` / provider-canary profile; `TopicSelectionV1cDownstreamFeedbackCandidate@v1` |
+
+## Initial Coverage Surface
 
 | Area | Node / Surface | LLM Role | Context Policy | Cache Policy | Token Budget Policy | Acceptance Focus |
 |---|---|---|---|---|---|---|
@@ -22,3 +258,20 @@ This matrix identifies the initial T-112 coverage surface. Detailed node policy 
 - Every cache-capable row must define exact key fields and stale behavior.
 - Every compression-capable row must define quality checks and forbidden omissions.
 
+## Alignment Backlog
+These rows need explicit expansion before Phase 1 runtime implementation:
+- Resource sampling literature classification batches.
+- v1a N5 evidence extraction.
+- v1a N6 single-agent generate need candidate.
+- v1a N6 debate slots: explorer, deep critic, arbiter issue framing, arbiter final synthesis.
+- v1a N7 need adjudication recommendation.
+- v1a N8 human confirmation semantic review.
+- v1b N4 research-slice option draft.
+- v1b N6 topic-question candidate draft.
+- v1b N8 topic value assessment draft or debate final.
+- v1b support-only semantic slots: N6 loopback triage, N7 candidate grouping, N7 failed-trial synthesis, N7/N8 debate admission support.
+- v1c N2 promotion support `llm_draft`.
+- v1c N2 bounded micro-debate slots: supporter draft, reviewer critic, supporter repair, synthesizer final.
+- v1c provider canary slots: N3 gate diagnostic adjunct, N4 delegated promotion decision, N6 downstream feedback normalization.
+- v1c N6 downstream feedback normalization.
+- OpenAI and DashScope evidence for every provider-capable canary slot.

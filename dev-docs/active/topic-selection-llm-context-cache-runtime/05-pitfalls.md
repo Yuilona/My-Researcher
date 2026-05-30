@@ -8,7 +8,12 @@
 - Do not drop blocker facts, residual risks, source-health warnings, unresolved challenges, method-family gaps, or recheck hints during compression.
 - Do not persist hidden reasoning, raw provider logs, credentials, secrets, or unredacted private content.
 - Do not use semantic-near cache for authority-bearing workflow decisions.
+- Do not treat the slot inventory table as implementation-ready runtime configuration.
+- Do not wire resource sampling, v1b, or v1c direct provider paths into T-112 semantics before their rows are promoted and registered.
+- Do not add another local cache-key formula to the v1a N6 context compiler; route key building through shared runtime primitives.
+- Do not accept Codex exact reuse without an approval ref or explicit local approved-reuse setting.
+- Do not build provider-mode context cache keys with placeholder model metadata. Resolve the selected model profile first so `model_option_id` and `normalized_params_hash` are concrete key fields.
+- Do not require a read-through context cache artifact ref to belong to the current workflow run. Cross-run exact cache hits are valid when source refs, hashes, context family, policy/schema/profile, execution mode, and payload hash are all validated.
 
 ## Pending
-- No resolved implementation pitfalls yet.
-
+- Resource sampling, v1b, and v1c still need their own implementation-ready matrix promotion before runtime wiring.

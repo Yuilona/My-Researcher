@@ -2,8 +2,8 @@ version: 1
 task_id: T-112
 project: main
 slug: topic-selection-llm-context-cache-runtime
-status: planned
-updated: "2026-05-28"
+status: in-progress
+updated: "2026-05-30"
 keywords:
   - topic-selection
   - llm-runtime

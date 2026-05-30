@@ -1,7 +1,7 @@
 # T-112 Topic Selection LLM Context Cache Runtime
 
 ## Status
-- State: planned
+- State: in-progress
 - Task ID: `T-112`
 - Mapping: `M-001 > F-001 > R-009 > T-112`
 - Depends on:
@@ -33,13 +33,28 @@
 
 ## Acceptance Criteria
 - [ ] A node-scope matrix identifies every topic-selection LLM-capable node and its context/cache/compression/token-budget policy.
-- [ ] Shared contracts reject stale cache keys, policy drift, schema drift, profile/model-option drift, context-family drift, and missing token-budget decisions.
-- [ ] Provider-backed invocations perform token-budget preflight before calling OpenAI/DashScope/DeepSeek-compatible gateways.
-- [ ] `provider_llm` execution never silently serves cached responses as live provider calls.
-- [ ] Exact response reuse is allowed only for explicit replay/test/acceptance or operator-approved Codex-assisted reuse with `non_provider=true`.
+- [x] Shared contracts reject missing policy/schema/profile fields, context-family drift, malformed compression/prompt/reuse/audit envelopes, and missing token-budget decisions.
+- [x] Backend token-budget primitive emits typed preflight decisions from first-slice `ContextPolicyProfile` policy.
+- [x] Backend context packet cache primitive returns exact-hit, stale, drift, miss, and disabled-cache envelopes without storing payloads.
+- [x] Backend compression runtime primitive creates ref-backed/hash-checked reports and blocks forbidden payloads or dropped required facts.
+- [x] v1a N6 production-shaped local context cache tests verify artifact-ref reuse and stale/drift blocking without live providers.
+- [x] v1a N6 single-agent provider path performs token-budget preflight in `AgentOrchestrator` and blocks over-budget fixtures before gateway calls.
+- [x] v1a N6 WorkflowHarness provider over-budget fixture proves call-count `0`, no ranked/admission/routing artifacts, and no NeedCandidate authority write.
+- [x] Agent invocation audit snapshots carry token-budget gate results when a runtime profile is supplied.
+- [x] v1a N6 debate slots pass through the same runtime token-budget preflight as single-agent N6.
+- [x] Provider-side cache telemetry is recorded as telemetry only and remains separate from business response reuse.
+- [x] `codex_assisted` exact cached reuse requires approval plus non-provider reuse provenance before schema/deterministic gate admission.
+- [x] Over-budget paths with supplied compression attempts record quality-gated compression report artifacts before blocking provider execution.
+- [x] v1a N6 single-agent over-target provider path performs deterministic structural compression, records a `context_compression_report` artifact, re-renders the prompt with compressed context, and then still runs token/schema/admission/persistence gates.
+- [x] Minimal OpenAI/DashScope provider-canary harness proves local provider-required prompt-cache hits still execute gateway calls, while over-budget fixtures execute zero provider calls.
+- [x] Prompt packet cache has a Prisma-backed persistent exact index that stores artifact refs and hashes only, with no prompt payload or provider response payload.
+- [x] Production-shaped local/dev Prisma smokes verify persistent prompt-index read-through semantics, provider-required non-response-reuse behavior, over-budget provider call count `0`, v1a N1-N9 main WorkflowHarness execution, N6-N9 exact replay/input-hash drift behavior, and default mock-sample fallback to the balanced T-112 fixture.
+- [x] Live OpenAI/DashScope provider canaries verify provider-backed v1a N6 invocations perform token-budget preflight before gateway calls and do not treat prompt-cache hits as provider response reuse.
+- [ ] Provider-backed invocations outside the promoted v1a N6 first slice perform token-budget preflight before calling OpenAI/DashScope/DeepSeek-compatible gateways.
+- [x] `provider_llm` execution in the promoted v1a N6 first slice never silently serves cached responses as live provider calls.
+- [x] Exact response reuse is allowed only for explicit replay/test/acceptance or operator-approved Codex-assisted reuse with `non_provider=true` in the `AgentOrchestrator` Codex path.
 - [ ] Context packet read-through cache reuses compiled packets only when exact key fields match.
-- [ ] Compression reports preserve source refs, input hashes, summary hashes, redaction policy, compiler version, token estimates, and quality-gate result.
+- [ ] Compression reports are wired into over-budget context execution and preserve source refs, input hashes, summary hashes, redaction policy, compiler version, token estimates, and quality-gate result.
 - [ ] Cache hits do not create duplicate authority writes and do not skip deterministic gates.
 - [ ] v1a, v1b, and v1c harness smokes verify happy path, stale cache, token-over-budget, and response-reuse boundaries.
-- [ ] Provider canaries record telemetry and prove provider-required scenarios still perform live provider calls.
-
+- [x] Live OpenAI/DashScope v1a N6 provider canaries record telemetry and prove provider-required scenarios still perform live provider calls.
