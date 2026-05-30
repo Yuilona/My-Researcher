@@ -1219,6 +1219,44 @@ model TopicSelectionArtifactRef {
   @@index([checksum])
 }
 
+model TopicSelectionPromptPacketCacheIndex {
+  promptPacketHash            String   @id
+  promptTemplateId            String
+  promptTemplateVersion       String
+  promptVariantKey            String
+  invocationSlotId            String
+  contextPolicyProfileId      String
+  contextPolicyProfileVersion String
+  contextPolicyProfileHash    String
+  outputContract              String
+  redactionPolicy             String
+  contextPacketHashesHash     String
+  compressionReportHash       String?
+  compressedContextHash       String?
+  dynamicMaterialRefsHash     String?
+  modelOptionId               String?
+  normalizedParamsHash        String?
+  runtimeModifiersHash        String
+  redactedPromptArtifactRef   Json     @default("{}")
+  redactedPromptArtifactHash  String
+  promptQualityReportRef      Json     @default("{}")
+  promptQualityReportHash     String
+  qualityDecision             String
+  freshnessStatus             String
+  provenanceRef               Json     @default("{}")
+  blockerCodes                Json     @default("[]")
+  warningCodes                Json     @default("[]")
+  createdAt                   DateTime @db.Timestamptz(6)
+  updatedAt                   DateTime @db.Timestamptz(6)
+
+  @@index([promptTemplateId, promptTemplateVersion, promptVariantKey])
+  @@index([invocationSlotId, freshnessStatus])
+  @@index([contextPolicyProfileId, contextPolicyProfileVersion])
+  @@index([modelOptionId])
+  @@index([qualityDecision])
+  @@index([updatedAt])
+}
+
 model TopicSelectionLlmWorkflowRun {
   id                     String    @id
   workspaceId            String?

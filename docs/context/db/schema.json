@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-05-21T10:41:41.734Z",
+  "updatedAt": "2026-05-30T11:49:50.074Z",
   "ssot": {
     "mode": "repo-prisma",
     "source": {
@@ -39068,6 +39068,376 @@
           "type": "index",
           "fields": [
             "workflowRunId"
+          ],
+          "name": null,
+          "map": null
+        }
+      ]
+    },
+    {
+      "name": "TopicSelectionPromptPacketCacheIndex",
+      "dbName": null,
+      "schema": null,
+      "columns": [
+        {
+          "name": "blockerCodes",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": "\"[]\"",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "compressedContextHash",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "compressionReportHash",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "contextPacketHashesHash",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "contextPolicyProfileHash",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "contextPolicyProfileId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "contextPolicyProfileVersion",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": "Timestamptz",
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "dynamicMaterialRefsHash",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "freshnessStatus",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "invocationSlotId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "modelOptionId",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "normalizedParamsHash",
+          "type": "String",
+          "nullable": true,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "outputContract",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "promptPacketHash",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "promptQualityReportHash",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "promptQualityReportRef",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": "\"{}\"",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "promptTemplateId",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "promptTemplateVersion",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "promptVariantKey",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "provenanceRef",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": "\"{}\"",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "qualityDecision",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "redactedPromptArtifactHash",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "redactedPromptArtifactRef",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": "\"{}\"",
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "redactionPolicy",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "runtimeModifiersHash",
+          "type": "String",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": "Timestamptz",
+          "default": null,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "warningCodes",
+          "type": "Json",
+          "nullable": false,
+          "list": false,
+          "dbName": null,
+          "dbType": null,
+          "default": "\"[]\"",
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "relations": [],
+      "indexes": [
+        {
+          "type": "index",
+          "fields": [
+            "contextPolicyProfileId",
+            "contextPolicyProfileVersion"
+          ],
+          "name": null,
+          "map": null
+        },
+        {
+          "type": "index",
+          "fields": [
+            "invocationSlotId",
+            "freshnessStatus"
+          ],
+          "name": null,
+          "map": null
+        },
+        {
+          "type": "index",
+          "fields": [
+            "modelOptionId"
+          ],
+          "name": null,
+          "map": null
+        },
+        {
+          "type": "index",
+          "fields": [
+            "promptTemplateId",
+            "promptTemplateVersion",
+            "promptVariantKey"
+          ],
+          "name": null,
+          "map": null
+        },
+        {
+          "type": "index",
+          "fields": [
+            "qualityDecision"
+          ],
+          "name": null,
+          "map": null
+        },
+        {
+          "type": "index",
+          "fields": [
+            "updatedAt"
           ],
           "name": null,
           "map": null
