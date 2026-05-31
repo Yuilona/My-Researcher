@@ -15,6 +15,9 @@
 - Do not build provider-mode context cache keys with placeholder model metadata. Resolve the selected model profile first so `model_option_id` and `normalized_params_hash` are concrete key fields.
 - Do not require a read-through context cache artifact ref to belong to the current workflow run. Cross-run exact cache hits are valid when source refs, hashes, context family, policy/schema/profile, execution mode, and payload hash are all validated.
 - Do not require real provider N5 EvidenceMap extraction to materialize only as `ready`. `ready_with_warning` is production-valid when authority refs, EvidenceUnit refs, downstream handoff, runtime success, and warning codes are all present.
+- Do not let v1a N7 validate recommendations drop `METHOD_FAMILY_COVERAGE_GAP` reported by the support packet; the recommendation must carry the gap code or an explicit method-family/coverage-gap required action.
+- Do not classify v1a N1/N2/N3/N4/N9 as LLM compression/cache nodes. They are deterministic context producers and publish boundaries, so their stress coverage must focus on ref/hash lineage, source-health handoff, replay, and authority-write blocking.
+- Do not interpret the v1a runtime stress runner as a live-provider canary. It is Prisma-backed and production-shaped, but defaults to deterministic mocked LLM execution so repeated local runs do not spend provider budget.
 
 ## Pending
 - Resource sampling, v1b, and v1c still need their own implementation-ready matrix promotion before runtime wiring.

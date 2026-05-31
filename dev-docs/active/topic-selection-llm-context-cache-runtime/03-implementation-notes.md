@@ -267,3 +267,29 @@
 - Updated `.ai/scripts/topic-selection-v1a-harness-e2e.mjs` so provider-backed EvidenceMap extraction accepts `ready` or `ready_with_warning`; `ready_with_warning` must still carry warning codes in the downstream handoff.
 - The deterministic/non-provider harness expectation remains strict `ready`.
 - This is a harness expectation fix, not a relaxation of authority boundaries: EvidenceMap authority refs, EvidenceUnit refs, handoff creation, runtime agent success, and downstream deterministic gates are still required.
+
+## 2026-05-31 - v1a Runtime Policy Stress Harness
+- Added WorkflowHarness-level runtime stress coverage before promoting the same pattern to v1b/v1c.
+- Added a deterministic context-producer stress path for v1a N1/N2/N3/N4 and N9. This path verifies topic-seed refs, literature snapshot hashes, source-health warning handoff, SearchPlan/SearchRun drift blocking before authority writes, N9 exact replay, and N9 lineage drift blocking without invoking the LLM gateway.
+- The N6-first stress path now exercises exact context-cache read-through, provider-required live-call behavior on prompt/context cache hits, model-option drift miss behavior, stale context-cache blocking, deterministic schema/admission/routing artifacts after cache hit, and zero NeedCandidate authority writes when persistence is forbidden.
+- The v1a chain stress path runs the LLM-bearing N5/N6/N7/N8 sequence with fake gateway outputs but production-shaped `AgentOrchestrator` calls:
+  - N5 provider EvidenceMap extraction records token-budget audit and materializes a warning-backed EvidenceMap handoff.
+  - N6 provider generation triggers over-target compression, records a compression report, re-renders the prompt, and still passes schema/admission/persistence gates.
+  - N7 provider adjudication records token-budget audit and must carry `METHOD_FAMILY_COVERAGE_GAP` when the support packet reports it.
+  - N8 provider semantic review records token-budget audit before human-confirmed ValidatedNeed authority creation.
+- This is a policy stress suite, not throughput/load testing. It validates runtime decisions, provenance, call counts, context lineage, and authority boundaries under producer hash-drift, compressed, cache-hit, drift, and stale conditions without real provider credentials.
+
+## 2026-05-31 - Prisma-Backed v1a Runtime Stress Runner
+- Added `.ai/scripts/topic-selection-v1a-runtime-stress.mjs` and `pnpm topic-selection:v1a-runtime-stress`.
+- The runner reuses the existing Prisma-backed v1a harness instead of introducing another workflow path. Each child run executes N1-N9 with `TOPIC_SELECTION_V1A_HARNESS_REPLAY_SMOKE=1`, reads the child summary artifact, and then queries the Prisma prompt packet index for rows created during the stress window.
+- Stress mode is parameterized by `TOPIC_SELECTION_V1A_RUNTIME_STRESS_ITERATIONS` and `TOPIC_SELECTION_V1A_RUNTIME_STRESS_MODES`. Supported N6 modes are `single_agent` and `multi_agent_debate`.
+- The runner fails closed if a deterministic stress child invokes the harness LLM gateway, if N6 does not persist candidates, if replay smoke fails, if input-hash drift invokes the LLM gateway, or if prompt packet index rows/slot distribution are missing.
+- This remains a local/dev production-shaped stress runner. It writes local Prisma workflow records and prompt index rows, but does not call live providers by default and does not require provider secrets.
+
+## 2026-05-31 - Phase 1 Closure Planning
+- Added `Next Phase 1 - v1a Runtime Closure Pack` to `01-plan.md`.
+- Added `09-v1a-runtime-stress-runbook.md` with usage, prerequisites, parameters, expected results, artifact locations, and troubleshooting for the Prisma-backed v1a runtime stress runner.
+- Tightened the runtime stress runner after review:
+  - child failures now report child stderr/stdout before attempting to read the summary artifact;
+  - prompt packet index assertions now check expected slot minimums for single-agent and multi-agent-debate modes;
+  - prompt quality validation now checks for `block` decisions rather than a non-existent `fail` decision.

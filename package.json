@@ -29,6 +29,7 @@
     "topic-selection:multisample-provider-batch": "node --env-file=.env.local .ai/scripts/topic-selection-multisample-provider-batch.mjs",
     "topic-selection:v1a-harness-e2e": "node --env-file=.env.local --loader ./apps/backend/node_modules/ts-node/esm.mjs .ai/scripts/topic-selection-v1a-harness-e2e.mjs",
     "topic-selection:v1a-harness-replay-smoke": "TOPIC_SELECTION_V1A_HARNESS_REPLAY_SMOKE=1 node --env-file=.env.local --loader ./apps/backend/node_modules/ts-node/esm.mjs .ai/scripts/topic-selection-v1a-harness-e2e.mjs",
+    "topic-selection:v1a-runtime-stress": "node --env-file=.env.local .ai/scripts/topic-selection-v1a-runtime-stress.mjs",
     "topic-selection:v1b-harness-e2e": "node --env-file=.env.local --loader ./apps/backend/node_modules/ts-node/esm.mjs .ai/scripts/topic-selection-v1b-harness-e2e.mjs",
     "topic-selection:v1c-harness-acceptance": "TS_NODE_PROJECT=apps/backend/tsconfig.json node --env-file=.env.local --loader ./apps/backend/node_modules/ts-node/esm.mjs .ai/scripts/topic-selection-v1c-harness-acceptance.mjs",
     "topic-selection:v1c-real-codex-acceptance": "TS_NODE_PROJECT=apps/backend/tsconfig.json node --env-file=.env.local --loader ./apps/backend/node_modules/ts-node/esm.mjs .ai/scripts/topic-selection-v1c-real-codex-acceptance.mjs",

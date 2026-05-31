@@ -236,3 +236,90 @@
 - Add contract, unit, HTTP, harness, and provider canary tests.
 - Delete or retire any node-local cache markers that become redundant.
 - Run governance sync/lint and record results in `04-verification.md`.
+
+## Next Phase 1 - v1a Runtime Closure Pack
+
+### Objective
+- Freeze the current v1a T-112 implementation as the reference baseline before promoting v1b/v1c rows.
+- Close the v1a scope at the level of tests, docs, verification evidence, usage guidance, and commit grouping.
+- Make the next handoff explicit: v1b N7 can start only after the v1a runtime closure pack has passed its exit criteria.
+
+### Scope
+- Include the v1a runtime policy stress tests:
+  - N1/N2/N3/N4 deterministic context producer and N9 publish-boundary stress;
+  - N5/N6/N7/N8 LLM runtime gate stress;
+  - N6 context-cache hit/drift/stale stress.
+- Include the Prisma-backed v1a runtime stress runner:
+  - `pnpm topic-selection:v1a-runtime-stress`;
+  - single-agent and multi-agent-debate modes;
+  - prompt packet index growth/slot distribution checks;
+  - exact replay and input-hash drift LLM call-count checks.
+- Include documentation updates for usage, verification evidence, pitfalls, and acceptance status.
+- Include commit grouping for the completed v1a closure work.
+
+### Non-Scope
+- Do not add new DB schema or migrations.
+- Do not add live provider calls to the runtime stress runner.
+- Do not promote v1b/v1c runtime wiring in this phase.
+- Do not implement a persistent DB context packet cache index in this phase.
+- Do not change provider routing, model registry, prompt templates, or provider credentials.
+
+### Work Packages
+- P1.1 Diff and implementation review:
+  - review current v1a stress tests and runtime stress runner for duplicate runtime semantics, local cache-key formulas, response-reuse ambiguity, provider SDK bypass, hidden provider calls, and authority-boundary drift;
+  - confirm the runner only uses existing `AgentOrchestrator -> BackendLlmGateway` harness paths and existing Prisma-backed app wiring.
+- P1.2 Usage documentation:
+  - document `pnpm topic-selection:v1a-runtime-stress`;
+  - document required env assumptions: local/dev `.env.local`, migrated local/dev Prisma DB, balanced T-112 sample fixture, no provider credentials required by default;
+  - document optional parameters:
+    - `TOPIC_SELECTION_V1A_RUNTIME_STRESS_RUN_ID`;
+    - `TOPIC_SELECTION_V1A_RUNTIME_STRESS_ITERATIONS`;
+    - `TOPIC_SELECTION_V1A_RUNTIME_STRESS_MODES=single_agent,multi_agent_debate`;
+    - `TOPIC_SELECTION_V1A_RUNTIME_STRESS_CHILD_TIMEOUT_MS`.
+- P1.3 Verification ladder:
+  - run syntax/package checks;
+  - run targeted v1a runtime policy stress tests;
+  - run the full WorkflowHarness test file;
+  - run backend typecheck;
+  - run single-agent Prisma-backed runtime stress;
+  - run multi-agent-debate Prisma-backed runtime stress;
+  - run project governance sync/lint.
+- P1.4 Evidence consolidation:
+  - keep command/results in `04-verification.md`;
+  - ensure `00-overview.md` acceptance items reflect the v1a stress coverage;
+  - keep pitfalls focused on historical do-not-repeat lessons, not current TODOs.
+- P1.5 Commit grouping:
+  - Commit A: v1a WorkflowHarness runtime policy stress coverage and T-112 docs;
+  - Commit B: Prisma-backed v1a runtime stress runner, package script, usage/verification docs;
+  - optionally squash into one commit only if review prefers a single v1a closure changeset.
+
+### Exit Criteria
+- Targeted stress command passes with all active v1a stress tests.
+- Full `topic-selection-workflow-harness-service.unit.test.ts` passes.
+- `pnpm --filter @paper-engineering-assistant/backend typecheck` passes.
+- `pnpm topic-selection:v1a-runtime-stress` passes for at least:
+  - `TOPIC_SELECTION_V1A_RUNTIME_STRESS_ITERATIONS=2`;
+  - `TOPIC_SELECTION_V1A_RUNTIME_STRESS_MODES=single_agent`;
+  - one multi-agent-debate run.
+- Runtime stress evidence proves:
+  - exact replay LLM call delta is `0`;
+  - input-hash drift LLM call delta is `0`;
+  - prompt packet index records expected N6/N7 slot rows;
+  - no live provider call is required by default.
+- `git diff --check` passes for touched files.
+- Project governance sync/lint passes.
+- The final diff is ready to commit without unresolved implementation findings.
+
+### Risks And Mitigations
+- Risk: local/dev DB stress leaves diagnostic records.
+  - Mitigation: treat records as local verification artifacts; do not run against shared production DB; use explicit run ids and artifact dirs.
+- Risk: stress runner is mistaken for provider canary.
+  - Mitigation: docs and pitfall state it defaults to deterministic mocked LLM execution and does not spend provider budget.
+- Risk: prompt packet index rows grow across repeated local stress runs.
+  - Mitigation: Phase 1 records this as acceptable local/dev evidence; retention/cleanup policy is deferred to a later persistence-governance decision.
+- Risk: v1a closure work delays v1b promotion.
+  - Mitigation: keep Phase 1 limited to review, docs, verification, and commit grouping; no new runtime feature scope.
+
+### Handoff Gate To v1b
+- v1b N7 implementation preparation may start after Phase 1 exit criteria pass and the v1a closure commits are staged or explicitly accepted as a single pending changeset.
+- The first v1b step should promote v1b N7 rows in `06-node-scope-matrix.md` from inventory to implementation-ready, then define the v1b N7 `ContextPolicyProfile`.
