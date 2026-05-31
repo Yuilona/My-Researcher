@@ -97,6 +97,9 @@
 | Runtime integration | direct gateway caller uses provider without runtime preflight | test blocks or detects provider call count violation |
 | Runtime integration | resource sampling/v1b/v1c direct provider path claims T-112 runtime semantics before promotion | test fails |
 | Runtime integration | external artifact admission bypasses runtime provenance/reuse validation | admission rejected |
+| v1a runtime/harness boundary | `WorkflowHarness` calls promoted v1a node adapters/shared runtime collaborators and asserts outcomes | accepted; harness remains flow controller and verification surface |
+| v1a runtime/harness boundary | `WorkflowHarness` owns a production prompt/cache/compression/admission formula for a promoted v1a node | rejected or flagged by boundary review/test |
+| v1a runtime/harness boundary | N6 runtime context-cache identity is constructed in a node adapter/context compiler facade | accepted; harness supplies scenario facts and replay/test overrides only |
 | v1b N7 context hub | missing required N6/N8 feedback/grouping context refs | context admission blocks or records explicit blocker |
 | v1b N7 context hub | valid support artifacts and frozen refs | produces ref-backed N7 handoff for N8/loopback without treating support as authority |
 | v1b N7 profile registry | D19-approved N7 profiles resolve by slot/profile id/version | profile hash is stable and registry blocks unknown, mismatch, or drifted profiles |

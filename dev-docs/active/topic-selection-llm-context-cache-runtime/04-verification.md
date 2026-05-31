@@ -486,6 +486,13 @@
 | `pnpm topic-selection:v1b-n6-runtime-smoke` | passed | Prisma-backed `n6_runtime_smoke` passed with run id `v1b-harness-e2e-1780239385851-996f73`. The smoke now asserts exact N6 prompt hashes, prompt-index delta, and Prisma model-level metadata-only behavior. |
 | `T112_V1B_N6_PROVIDER_CANARY_LIVE=1 BACKEND_TEST_PRESERVE_REAL_ENV=1 pnpm --filter @paper-engineering-assistant/backend exec node --env-file=../../.env.local --test --loader ts-node/esm src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | 12 provider canary tests executed: 10 passed and 2 skipped. The live v1b N6 OpenAI and DashScope canaries both passed using the real N6 output schema; DashScope completed within the 300-second timeout. |
 
+## 2026-06-01 - v1a D18.1 Boundary Cleanup Verification
+| Command | Result | Notes |
+|---|---|---|
+| `rg -n "n6RuntimeLoopKind\|n6ContextCachePromptSeedHash\|NeedDiscoveryRuntimeContextCacheInput\|TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS\|TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS" apps/backend/src/services/topic-selection-workflow-harness-service.ts` | passed | No matches. N6 runtime context-cache profile/slot/prompt-seed construction is no longer owned by `TopicSelectionWorkflowHarnessService`. |
+| `node --test --loader ts-node/esm src/services/topic-selection-v1a-n6-runtime-context-cache-binding-service.unit.test.ts src/services/topic-selection-need-discovery-context-compiler-service.unit.test.ts src/services/topic-selection-workflow-harness-service.unit.test.ts` | passed | 100/100 focused backend tests passed. Coverage includes the new N6 runtime binding facade, context compiler cache read-through, and full v1a WorkflowHarness regression. |
+| `pnpm --filter @paper-engineering-assistant/backend typecheck` | passed | Backend TypeScript compile passed after extracting `TopicSelectionV1aN6RuntimeContextCacheBindingService` and wiring `WorkflowHarness` through it. |
+
 ## Required Before Implementation
 - Contract design reviewed against T-088/T-089 D-18. Done.
 - First slice selected and approved: shared contracts/runtime primitives followed by v1a N6 single-agent and debate slots. Done.

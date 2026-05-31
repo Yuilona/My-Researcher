@@ -133,6 +133,25 @@
 - Added a WorkflowHarness provider fixture proving an over-budget N6 attempt blocks before gateway execution, does not write ranked/admission/routing artifacts, and does not create NeedCandidate authority records.
 - This is still local provider-shaped verification using the existing fake gateway; OpenAI/DashScope live canaries remain a later explicit step.
 
+## Phase 1J - v1a Runtime/Harness Boundary Lock
+- Status: implemented for N6 runtime context-cache binding extraction; N5/N7/N8 review remains a follow-up guardrail, not a production blocker for the current v1a closure boundary.
+- v1a node runtime adapters/context compiler facades are the SSOT for node-level execution semantics:
+  - context construction and context-family binding;
+  - prompt/profile/variant/runtime identity binding;
+  - cache key material, stale behavior, and compression preserved facts;
+  - schema validation, candidate/support admission, routing, and authority-write command shape.
+- `WorkflowHarness` is the whole-flow controller:
+  - N1-N9 ordering;
+  - route-policy transitions and handoff routing;
+  - replay/idempotency assertions;
+  - scenario fixtures, test overrides, traces, and smoke/e2e verification.
+- `WorkflowHarness` MAY pass explicit test overrides such as runtime token-budget estimates or mocked provider outputs, but those overrides must enter a node adapter/shared runtime path and must not become a second production semantics path.
+- v1a cleanup backlog:
+  - done: move N6 runtime context-cache input construction out of `WorkflowHarness` and into a thin N6 runtime binding facade;
+  - review N5/N7/N8 `runtime_token_budget` construction and move any production profile/prompt/context identity semantics into node-specific facades if they grow beyond simple orchestration input assembly;
+  - keep harness assertions about cache/reuse/token-budget behavior, but avoid harness-owned prompt/cache/compression/admission formulas;
+  - add a boundary regression check that promoted v1a nodes are invoked through node adapters/shared runtime collaborators rather than a harness-local runtime path.
+
 ## Phase 2 - Context Packet Cache Runtime
 - Add read-through cache lookup for compiled context packets before recording a new artifact. Done for the v1a N6 context compiler local path; broader node/harness rollout pending.
 - Ensure cache hits return existing artifact refs and mark `cache_hit=true`. Done for the v1a N6 context compiler local path.

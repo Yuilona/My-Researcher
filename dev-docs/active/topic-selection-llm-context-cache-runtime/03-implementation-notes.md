@@ -749,3 +749,17 @@
   - N6 prompt index checks now bind to the exact generated prompt packet hashes for the initial and drift branches.
   - The smoke asserts the N6 prompt-index delta equals the generated N6 prompt hash count.
   - The smoke also checks Prisma runtime model metadata to ensure `TopicSelectionPromptPacketCacheIndex` does not persist prompt payloads, provider responses, provider telemetry payloads, raw provider logs, authority payloads, or secrets.
+
+## 2026-06-01 - v1a Runtime/Harness Boundary Lock
+- Locked D18.1: v1a node runtime and `WorkflowHarness` have separate responsibilities.
+- Node runtime adapters/context compiler facades own node-level LLM-like execution semantics. For v1a this includes N6 single-agent/debate generation mode, runtime context packet identity, prompt/profile/variant binding, compression and re-rendering, schema/admission/routing gates, and persistence command shape.
+- `WorkflowHarness` owns whole-flow control: N1-N9 ordering, replay/idempotency, route-policy handoff, scenario fixtures, assertions, traces, and smoke/e2e verification.
+- Harness-level test overrides are allowed only as inputs to node adapters/shared runtime collaborators. They must not define a second prompt/cache/compression/admission/authority semantics path.
+- Implemented the first D18.1 cleanup:
+  - added `TopicSelectionV1aN6RuntimeContextCacheBindingService` as the thin N6 runtime binding facade;
+  - moved N6 context-cache profile/model/runtime-invocation/prompt-seed/cache-binding construction out of `TopicSelectionWorkflowHarnessService`;
+  - `WorkflowHarness` now supplies scenario facts, input refs, and explicit test overrides to the facade, then passes the returned runtime cache binding into the context compiler.
+- Secondary cleanup:
+  - review N5/N7/N8 runtime token-budget binding in the harness and keep it as simple orchestration input assembly only;
+  - if those nodes gain node-specific prompt/cache/compression/admission policy, introduce node facades instead of extending `WorkflowHarness`;
+  - add regression coverage that promoted v1a nodes pass through node adapters/shared runtime collaborators, and that harness assertions do not become production policy.

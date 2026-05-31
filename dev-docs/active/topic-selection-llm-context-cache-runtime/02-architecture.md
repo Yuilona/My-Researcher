@@ -27,6 +27,7 @@
 - D16: prompt quality is monitored through static prompt-template lint, runtime `PromptQualityReport`, and outcome telemetry. Prompt quality gates may warn or block unsafe prompt packets, while effectiveness metrics are review signals only and cannot rewrite business authority.
 - D17: every LLM-like invocation emits an append-only runtime audit envelope for machine verification, but human-facing audit is served through projections. `operator_audit_summary` and `human_trust_summary` may simplify fields for developer/operator or product-human consumption, but each projection MUST reference the source envelope hash/ref, MUST NOT rewrite conclusions, and MUST NOT become business authority.
 - D18: implementation begins only with a narrow v1a N6 first slice. The full slot inventory remains coverage evidence, but only rows promoted into the first-slice implementation-ready matrix may be wired to the shared runtime. The first implementation sequence is shared contracts/schema tests, profile registry skeleton, runtime key/token/cache/audit primitives, then v1a N6 single-agent and debate slot wiring. Direct provider paths in resource sampling, v1b, and v1c remain explicitly deferred until their rows are promoted.
+- D18.1: v1a separates node runtime from `WorkflowHarness` orchestration. Node runtime adapters/context compiler facades own each node's concrete LLM-like execution semantics: context construction, prompt/profile/variant binding, cache identity, compression and re-rendering, schema/admission/routing gates, and authority-write command shape. `WorkflowHarness` owns whole-flow N1-N9 ordering, replay/idempotency, handoff routing, test fixtures, assertions, traces, and smoke/e2e control. It may call node adapters and inject test overrides, but it MUST NOT become the SSOT for prompt/cache/compression/admission/authority semantics.
 
 ## Runtime Boundaries
 - `AgentOrchestrator`: remains the preferred structured agent invocation boundary. T-112 adds prompt/context cache policy and token-budget preflight here or in a shared runtime collaborator called from here.
@@ -39,6 +40,8 @@
 - Prompt compilers: render fixed prompt templates plus approved dynamic material into prompt packets, compute prompt packet hashes, and emit prompt quality reports before provider/Codex/mock execution.
 - WorkflowHarness: invokes nodes and asserts cache/reuse/token-budget behavior without owning cache semantics.
 - Domain services: remain authority writers and deterministic gate owners.
+
+For v1a specifically, `WorkflowHarness` should remain a flow controller and verification harness. If a runtime decision depends on a v1a node's semantic state, such as N6 generation mode, debate role, runtime context packet identity, compression preserved facts, candidate admission, or persistence command shape, that decision belongs in the v1a node adapter/context compiler layer. Harness code may pass scenario inputs, replay fixtures, and explicit test overrides, but production semantics must still be resolved by the node runtime path.
 
 ## Runtime Integration Pattern
 All LLM-like paths use the same runtime kernel through an adapter:
