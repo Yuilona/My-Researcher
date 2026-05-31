@@ -10,6 +10,8 @@ import { AppError } from '../errors/app-error.js';
 import {
   TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
@@ -38,7 +40,7 @@ function resolvedProfile() {
   });
 }
 
-function resolvedV1bN7Profile(input: {
+function resolvedContextProfile(input: {
   context_policy_profile_id: string;
   invocation_slot_id: string;
 }) {
@@ -100,6 +102,25 @@ function v1bN7RequiredFacts() {
     n8_gate_rejection_reason: ['novelty_gate_failed'],
     debate_admission_need: ['need_additional_value_risk_review'],
     value_risk_fact: ['risk_value_evidence_thin'],
+  };
+}
+
+function v1bN6RequiredFacts() {
+  return {
+    selected_slice_identity: ['research_slice_ref_001'],
+    n5_handoff: ['n5_handoff_hash_001'],
+    selected_option_identity: ['selected_option_ref_001'],
+    option_set_identity: ['option_set_ref_001'],
+    constraint_profile: ['constraint_profile_ref_001'],
+    intake_readiness: ['intake_readiness_ref_001'],
+    evidence_ref: ['evidence_ref_001'],
+    boundary_ref: ['boundary_ref_001'],
+    assumption_ref: ['assumption_ref_001'],
+    claim_ceiling: ['bounded_claim_ceiling_001'],
+    non_goal: ['non_goal_promotion_001'],
+    source_health_warning: ['source_health_partial'],
+    residual_risk: ['risk_context_thin'],
+    recheck_hint: ['recheck_after_value_trial'],
   };
 }
 
@@ -180,19 +201,19 @@ test('compression quality gate blocks when required risk gap and recheck facts a
 });
 
 test('compression quality gate blocks when v1b N7 runtime support facts are dropped', () => {
-  const failedTrialProfile = resolvedV1bN7Profile({
+  const failedTrialProfile = resolvedContextProfile({
     context_policy_profile_id:
       TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS.failed_trial_synthesis,
     invocation_slot_id:
       TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS.failed_trial_synthesis,
   });
-  const debateAdmissionProfile = resolvedV1bN7Profile({
+  const debateAdmissionProfile = resolvedContextProfile({
     context_policy_profile_id:
       TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS.n8_debate_admission_review,
     invocation_slot_id:
       TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS.n8_debate_admission_review,
   });
-  const groupingProfile = resolvedV1bN7Profile({
+  const groupingProfile = resolvedContextProfile({
     context_policy_profile_id:
       TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS.candidate_grouping,
     invocation_slot_id:
@@ -298,6 +319,103 @@ test('compression quality gate blocks when v1b N7 runtime support facts are drop
   assert.ok(groupingResult.blocker_codes.includes('COMPRESSION_REQUIRED_CANDIDATE_IDENTITY_DROPPED'));
   assert.ok(groupingResult.blocker_codes.includes('COMPRESSION_REQUIRED_CANDIDATE_ORDER_DROPPED'));
   assert.ok(groupingResult.blocker_codes.includes('COMPRESSION_REQUIRED_GROUPING_RATIONALE_DROPPED'));
+});
+
+test('compression quality gate blocks when v1b N6 long-context facts are dropped', () => {
+  const n6Profile = resolvedContextProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS.question_candidate_draft,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS.question_candidate_draft,
+  });
+  const runtime = new TopicSelectionCompressionRuntimeService();
+  const result = runtime.createReport({
+    context_policy_profile: n6Profile.profile,
+    context_policy_profile_hash: n6Profile.profile_hash,
+    compression_report_ref: ref('artifact_ref', 'compression_report_v1b_n6_long_context'),
+    source_refs: [ref('artifact_ref', 'n6_question_candidate_context_packet')],
+    input_context: {
+      frozen_n5_lineage: {
+        n5_handoff_hash: 'n5_handoff_hash_001',
+        selected_slice_ref: 'research_slice_ref_001',
+        selected_option_ref: 'selected_option_ref_001',
+        option_set_ref: 'option_set_ref_001',
+      },
+      long_context_chunks: Array.from({ length: 20 }, (_, index) => ({
+        chunk_id: `chunk_${index + 1}`,
+        evidence_ref: 'evidence_ref_001',
+        boundary_ref: 'boundary_ref_001',
+        assumption_ref: 'assumption_ref_001',
+        risk_note: 'risk_context_thin',
+        recheck_hint: 'recheck_after_value_trial',
+      })),
+    },
+    compressed_context: {
+      frozen_n5_lineage: {
+        selected_slice_ref: 'research_slice_ref_001',
+        selected_option_ref: 'selected_option_ref_001',
+      },
+      summary: 'Dropped N5 handoff, option set, evidence, boundary, assumption, claim ceiling, non-goal, and recheck facts.',
+    },
+    summary: 'Incomplete N6 long-context compression.',
+    compression_executor_kind: 'codex_assisted',
+    required_preserved_facts: v1bN6RequiredFacts(),
+    compressed_preserved_facts: {
+      selected_slice_identity: ['research_slice_ref_001'],
+      selected_option_identity: ['selected_option_ref_001'],
+      constraint_profile: ['constraint_profile_ref_001'],
+      intake_readiness: ['intake_readiness_ref_001'],
+      source_health_warning: ['source_health_partial'],
+      residual_risk: ['risk_context_thin'],
+    },
+    estimated_input_tokens_before_override: 48_000,
+    estimated_input_tokens_after_override: 12_000,
+  });
+
+  assert.equal(result.quality_gate_result, 'blocked');
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_N5_HANDOFF_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_OPTION_SET_IDENTITY_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_EVIDENCE_REF_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_BOUNDARY_REF_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_ASSUMPTION_REF_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_CLAIM_CEILING_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_NON_GOAL_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_RECHECK_HINT_DROPPED'));
+});
+
+test('compression quality gate blocks v1b N6 adversarial persisted payloads', () => {
+  const n6Profile = resolvedContextProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS.question_candidate_draft,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS.question_candidate_draft,
+  });
+  const runtime = new TopicSelectionCompressionRuntimeService();
+  const result = runtime.createReport({
+    context_policy_profile: n6Profile.profile,
+    context_policy_profile_hash: n6Profile.profile_hash,
+    compression_report_ref: ref('artifact_ref', 'compression_report_v1b_n6_adversarial_payload'),
+    source_refs: [ref('artifact_ref', 'n6_question_candidate_context_packet')],
+    input_context: {
+      n5_handoff_hash: 'n5_handoff_hash_001',
+      selected_slice_ref: 'research_slice_ref_001',
+      evidence_ref: 'evidence_ref_001',
+    },
+    compressed_context: {
+      preserved_refs: ['research_slice_ref_001', 'evidence_ref_001'],
+      raw_provider_logs: ['provider request body must never persist here'],
+    },
+    summary: 'Compressed context with an adversarial raw provider log field.',
+    compression_executor_kind: 'deterministic_structural',
+    required_preserved_facts: v1bN6RequiredFacts(),
+    compressed_preserved_facts: v1bN6RequiredFacts(),
+    estimated_input_tokens_before_override: 20_000,
+    estimated_input_tokens_after_override: 8_000,
+  });
+
+  assert.equal(result.quality_gate_result, 'blocked');
+  assert.ok(result.blocker_codes.includes('COMPRESSION_FORBIDDEN_PERSISTED_PAYLOAD'));
+  assert.match(result.warning_codes.join(' '), /compressed_payload\.raw_provider_logs/);
 });
 
 test('compression quality gate blocks forbidden hidden reasoning raw logs and secrets', () => {

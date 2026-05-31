@@ -524,9 +524,12 @@
   - remove promoted initial-path direct draft generation after replacement L1/L2 tests pass.
 - Slice 1 implementation status:
   - profile, runtime adapter, admission service, `WorkflowHarness` admission wiring, and L1/L2 tests are implemented for `initial_from_n5`;
+  - L3 Prisma-backed local/dev smoke is implemented as `pnpm topic-selection:v1b-n6-runtime-smoke`;
+  - L4 provider canary coverage is implemented for OpenAI and DashScope over `AgentOrchestrator -> BackendLlmGateway`; provider-required live calls remain non-reusable business responses, and over-budget canaries call zero providers;
+  - L5 long-context/adversarial coverage blocks dropped N6 preserved facts and forbidden persisted payloads before draft generation/admission can continue;
   - `legacy_unverified` N6 drafts now block before deterministic gates, and `fixture_replay` remains limited to non-product fixture paths;
   - N6 frozen payload/context/handoff lineage validation now runs before draft artifact resolution/admission;
-  - next work remains P2.1 L3 Prisma-backed smoke, provider canary, long-context/adversarial coverage, then P2.1b regeneration/triage promotion.
+  - next work is P2.1b regeneration/triage promotion.
 
 ### Implementation Order
 - P2.1 v1b N6 initial topic-question candidate generation:

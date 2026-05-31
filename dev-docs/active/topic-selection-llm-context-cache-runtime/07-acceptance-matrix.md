@@ -163,6 +163,9 @@
 | v1b N6 D24 compression | compression drops selected slice identity, N5 handoff hash, selected option identity, evidence refs, boundary refs, assumption refs, claim ceiling, non-goals, source-health warnings, or risk/gap/recheck hints | compression quality gate blocks before draft generation/admission continues |
 | v1b N6 D24 replay | exact replay of the promoted initial path | LLM-like call delta is `0`, and frozen input identity, runtime/admission identity, deterministic gate replay, authority refs/hashes, and `N6ToN7Handoff@v1` hash are equivalent |
 | v1b N6 D24 legacy exit | replacement L1/L2 tests pass for the promoted initial path | product/acceptance promoted paths no longer submit direct frozen semantic drafts to N6 gate; only explicit `fixture_replay` helpers remain outside product admission |
+| v1b N6 D24 L3 | `pnpm topic-selection:v1b-n6-runtime-smoke` runs over Prisma-backed local/dev DB | runtime-verified product-mode N6 draft is admitted, exact replay creates no extra artifact refs, source-hash drift blocks, and N6 prompt packet index rows are metadata-only |
+| v1b N6 D24 L4 | local and gated live provider canaries run for OpenAI/DashScope | provider-required prompt-cache hits still make live provider calls, provider response reuse remains null/not-applicable, and over-budget canaries call zero providers |
+| v1b N6 D24 L5 | long-context/adversarial compression tests run | dropped N5 handoff/option/evidence/boundary/claim/recheck facts and forbidden raw provider logs block before draft generation/admission continues |
 | Token budget | over budget, compression disallowed | blocks before provider call |
 | Token budget | over budget, compression allowed | runs compression and records report |
 | v1a N6 compression | over target before compression and within target after compression | records `context_compression_report`, re-renders compressed prompt, performs one provider call, and still runs schema/admission/persistence gates |
@@ -210,6 +213,8 @@
 | v1b N6 initial prompt cache hit | prompt cache returns existing prompt artifact and quality report refs | draft execution/admission, schema validation, N6 deterministic gate, authority write, and handoff emission still run |
 | v1b N6 initial authority-write failure | deterministic gate passed but persistence fails | no replayable N6 success trace and no `N6ToN7Handoff@v1` is emitted |
 | v1b N6 initial legacy exit | replacement L1/L2 tests pass | promoted product/acceptance path no longer directly feeds legacy frozen semantic draft artifacts to N6 gate |
+| v1b N6 initial provider canary | OpenAI/DashScope provider canaries are explicitly enabled | shared runtime records prompt/cache/audit provenance, live calls still execute, and no provider response becomes business authority |
+| v1b N6 initial long-context adversarial | long selected-slice context is compressed before draft generation | compression quality gate blocks fact drops and forbidden persisted payloads before the N6 deterministic gate sees a draft |
 | v1b N7 | high-quality topic-question-contract context is admitted and produces N7->N8/loopback handoff refs |
 | v1b N7 exact replay | no extra LLM-like call, no duplicate topic-question-contract authority writes, and deterministic N7 gates still run |
 | v1b N7 frozen input drift | support reuse is rejected before candidate selection, N8 admission, loopback, or persistence |

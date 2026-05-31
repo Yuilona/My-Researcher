@@ -464,6 +464,19 @@
 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after the T-112 documentation sync. |
 | `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registry remains structurally valid; no provider/config-key drift was introduced. |
 
+## 2026-05-31 - v1b N6 L3/L4/L5 Runtime Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-compression-runtime-service.unit.test.ts` | passed | 8/8 compression runtime tests passed. New N6 L5 cases block dropped long-context facts and adversarial persisted raw provider logs. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | 12 provider canary tests executed: 8 local tests passed and 4 live-provider tests skipped by explicit env/key gates. New N6 local canaries cover OpenAI/DashScope prompt-cache-live-required behavior and zero-call over-budget blocking. |
+| `pnpm --filter @paper-engineering-assistant/backend typecheck` | passed | Backend TypeScript compile passed after adding N6 L3/L4/L5 script, service, and test coverage. |
+| `pnpm topic-selection:v1b-n6-runtime-smoke` | passed | Prisma-backed `n6_runtime_smoke` passed with run id `v1b-harness-e2e-1780236801621-b3329d`. The smoke verified runtime-verified product-mode Codex draft admission, exact replay without extra artifact refs, source-hash drift blocking with `N6_DRAFT_ARTIFACT_SOURCE_HASH_DRIFT`, non-provider runtime audit, no response reuse, and two N6 prompt packet index rows. |
+| `T112_V1B_N6_PROVIDER_CANARY_LIVE=1 BACKEND_TEST_PRESERVE_REAL_ENV=1 pnpm --filter @paper-engineering-assistant/backend exec node --env-file=../../.env.local --test --loader ts-node/esm src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | 12 provider canary tests executed: 10 passed and 2 skipped. The new live v1b N6 OpenAI and DashScope canaries both passed through `AgentOrchestrator -> BackendLlmGateway`; v1a live canaries remained skipped because `T112_PROVIDER_CANARY_LIVE` was not set. |
+| `node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package.json ok')"` | passed | Package JSON remains valid after adding `topic-selection:v1b-n6-runtime-smoke`. |
+| `git diff --check` | passed | No whitespace errors after the N6 L3/L4/L5 code, script, package, and documentation updates. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after the T-112 documentation sync. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registry remains structurally valid; no provider/config-key drift was introduced by the N6 canary changes. |
+
 ## Required Before Implementation
 - Contract design reviewed against T-088/T-089 D-18. Done.
 - First slice selected and approved: shared contracts/runtime primitives followed by v1a N6 single-agent and debate slots. Done.

@@ -68,5 +68,6 @@
 ## Current Focus
 - v1b N7 runtime first slice is closed for L1-L3 plus minimum adversarial quality coverage.
 - D24 v1b N6 chain alignment is closed for first-slice planning.
-- Current implementation-readiness focus is v1b N6 `n6_question_candidate_draft` with generation mode `initial_from_n5`.
+- v1b N6 `n6_question_candidate_draft.initial_from_n5` is implemented through L3 Prisma-backed smoke, L4 provider canary, and L5 long-context/adversarial compression coverage.
+- Current implementation-readiness focus is the next v1b N6 slice: N7->N6 regeneration and N6 loopback/triage promotion.
 - Later post-N7 v1b runtime expansion remains ordered as N6, then N8, then N4.

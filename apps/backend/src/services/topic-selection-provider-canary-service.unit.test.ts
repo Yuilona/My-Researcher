@@ -10,6 +10,7 @@ import { InMemoryTopicSelectionControlPlaneRepository } from '../repositories/in
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
 import {
   TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID,
 } from './topic-selection-model-profile-registry-service.js';
 import {
   TopicSelectionProviderCanaryService,
@@ -87,6 +88,13 @@ function expectedModelOptionId(providerId: TopicSelectionProviderCanaryProviderI
   return `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.${suffix}`;
 }
 
+function expectedV1bN6ModelOptionId(providerId: TopicSelectionProviderCanaryProviderId): string {
+  const suffix = providerId === 'openai'
+    ? 'openai-balanced'
+    : 'dashscope-thinking-budget';
+  return `${TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID}.${suffix}`;
+}
+
 async function assertPromptCacheLiveRequiredCanary(providerId: TopicSelectionProviderCanaryProviderId) {
   const gateway = new StubProviderCanaryGateway();
   const service = makeCanaryService({ llmGateway: gateway });
@@ -112,6 +120,36 @@ async function assertPromptCacheLiveRequiredCanary(providerId: TopicSelectionPro
   assert.equal(result.telemetry.length, 2);
   assert.equal(result.telemetry[1]!.provider_side_cache_hit, true);
   assert.equal(result.telemetry[1]!.provider_side_cache_read_tokens, 32);
+}
+
+async function assertV1bN6PromptCacheLiveRequiredCanary(providerId: TopicSelectionProviderCanaryProviderId) {
+  const gateway = new StubProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runV1bN6PromptCacheLiveRequiredCanary({
+    provider_id: providerId,
+  });
+
+  assert.equal(result.provider_id, providerId);
+  assert.equal(result.model_option_id, expectedV1bN6ModelOptionId(providerId));
+  assert.equal(result.provider_required_live, true);
+  assert.equal(result.first_status, 'succeeded');
+  assert.equal(result.second_status, 'succeeded');
+  assert.equal(result.provider_call_count, 2);
+  assert.equal(gateway.calls.length, 2);
+  assert.equal(gateway.calls[0]!.model.providerId, providerId);
+  assert.equal(gateway.calls[0]!.model.profileId, TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID);
+  assert.equal(gateway.calls[0]!.prompt.promptTemplateId, 'topic-selection-v1b-n6-provider-canary-live-required');
+  assert.equal(gateway.calls[0]!.schemaName, 'topic_selection_v1b_n6_provider_canary_draft');
+  assert.ok(gateway.calls[0]!.schemaName.length <= 64);
+  assert.equal(gateway.calls[1]!.model.providerId, providerId);
+  assert.equal(result.first_prompt_packet_hash, result.second_prompt_packet_hash);
+  assert.equal(result.prompt_artifact_ref_reused, true);
+  assert.equal(result.prompt_quality_report_ref_reused, true);
+  assert.deepEqual(result.provider_response_cache_statuses, ['not_applicable', 'not_applicable']);
+  assert.deepEqual(result.response_reuse_refs, [null, null]);
+  assert.equal(result.telemetry.length, 2);
+  assert.equal(result.telemetry[1]!.provider_side_cache_hit, true);
 }
 
 test('provider canary proves OpenAI prompt cache hits still require live provider calls', async () => {
@@ -158,9 +196,65 @@ test('provider canary blocks over-budget DashScope fixtures before gateway calls
   assert.deepEqual(result.blocker_codes, ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION']);
 });
 
+test('provider canary proves v1b N6 OpenAI prompt cache hits still require live provider calls', async () => {
+  await assertV1bN6PromptCacheLiveRequiredCanary('openai');
+});
+
+test('provider canary proves v1b N6 DashScope prompt cache hits still require live provider calls', async () => {
+  await assertV1bN6PromptCacheLiveRequiredCanary('dashscope');
+});
+
+test('provider canary blocks over-budget v1b N6 OpenAI fixtures before gateway calls', async () => {
+  const gateway = new StubProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runV1bN6OverBudgetZeroCallCanary({
+    provider_id: 'openai',
+  });
+
+  assert.equal(result.provider_id, 'openai');
+  assert.equal(result.model_option_id, expectedV1bN6ModelOptionId('openai'));
+  assert.equal(result.provider_call_count, 0);
+  assert.equal(gateway.calls.length, 0);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION');
+  assert.equal(result.token_budget_gate_decision, 'blocked_over_budget');
+  assert.deepEqual(result.blocker_codes, ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION']);
+});
+
+test('provider canary blocks over-budget v1b N6 DashScope fixtures before gateway calls', async () => {
+  const gateway = new StubProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runV1bN6OverBudgetZeroCallCanary({
+    provider_id: 'dashscope',
+  });
+
+  assert.equal(result.provider_id, 'dashscope');
+  assert.equal(result.model_option_id, expectedV1bN6ModelOptionId('dashscope'));
+  assert.equal(result.provider_call_count, 0);
+  assert.equal(gateway.calls.length, 0);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION');
+  assert.equal(result.token_budget_gate_decision, 'blocked_over_budget');
+  assert.deepEqual(result.blocker_codes, ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION']);
+});
+
 function shouldRunLiveCanary(providerId: TopicSelectionProviderCanaryProviderId): boolean {
   if (
     process.env.T112_PROVIDER_CANARY_LIVE !== '1'
+    || process.env.BACKEND_TEST_PRESERVE_REAL_ENV !== '1'
+  ) {
+    return false;
+  }
+  return providerId === 'openai'
+    ? Boolean(process.env.OPENAI_API_KEY?.trim())
+    : Boolean(process.env.DASHSCOPE_API_KEY?.trim());
+}
+
+function shouldRunLiveV1bN6Canary(providerId: TopicSelectionProviderCanaryProviderId): boolean {
+  if (
+    process.env.T112_V1B_N6_PROVIDER_CANARY_LIVE !== '1'
     || process.env.BACKEND_TEST_PRESERVE_REAL_ENV !== '1'
   ) {
     return false;
@@ -220,6 +314,62 @@ test(
     assert.equal(result.first_status, 'succeeded');
     assert.equal(result.second_status, 'succeeded');
     assert.equal(result.provider_call_count, 2);
+    assert.equal(result.telemetry[0]?.provider_id, 'dashscope');
+  },
+);
+
+test(
+  'provider canary live v1b N6 OpenAI invocation uses the configured provider gateway',
+  {
+    skip: shouldRunLiveV1bN6Canary('openai')
+      ? false
+      : 'set T112_V1B_N6_PROVIDER_CANARY_LIVE=1, BACKEND_TEST_PRESERVE_REAL_ENV=1, and OPENAI_API_KEY to run',
+    timeout: 300_000,
+  },
+  async () => {
+    const service = makeCanaryService({
+      llmGateway: new BackendLlmGateway({
+        defaultTimeoutMs: 300_000,
+        defaultMaxRetries: 0,
+      }),
+    });
+
+    const result = await service.runV1bN6PromptCacheLiveRequiredCanary({
+      provider_id: 'openai',
+    });
+
+    assert.equal(result.first_status, 'succeeded');
+    assert.equal(result.second_status, 'succeeded');
+    assert.equal(result.provider_call_count, 2);
+    assert.equal(result.model_option_id, expectedV1bN6ModelOptionId('openai'));
+    assert.equal(result.telemetry[0]?.provider_id, 'openai');
+  },
+);
+
+test(
+  'provider canary live v1b N6 DashScope invocation uses the configured provider gateway',
+  {
+    skip: shouldRunLiveV1bN6Canary('dashscope')
+      ? false
+      : 'set T112_V1B_N6_PROVIDER_CANARY_LIVE=1, BACKEND_TEST_PRESERVE_REAL_ENV=1, and DASHSCOPE_API_KEY to run',
+    timeout: 300_000,
+  },
+  async () => {
+    const service = makeCanaryService({
+      llmGateway: new BackendLlmGateway({
+        defaultTimeoutMs: 300_000,
+        defaultMaxRetries: 0,
+      }),
+    });
+
+    const result = await service.runV1bN6PromptCacheLiveRequiredCanary({
+      provider_id: 'dashscope',
+    });
+
+    assert.equal(result.first_status, 'succeeded');
+    assert.equal(result.second_status, 'succeeded');
+    assert.equal(result.provider_call_count, 2);
+    assert.equal(result.model_option_id, expectedV1bN6ModelOptionId('dashscope'));
     assert.equal(result.telemetry[0]?.provider_id, 'dashscope');
   },
 );

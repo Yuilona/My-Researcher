@@ -714,5 +714,22 @@
   - deterministic gate bypass attempt blocking after runtime admission.
 - Slice status:
   - `n6_question_candidate_draft.initial_from_n5` L1/L2 is implemented and passing;
-  - N7->N6 regeneration, N6 gate-failure regeneration, `n6_loopback_triage` runtime generation, provider canary, Prisma-backed v1b N6 smoke, and long-context/adversarial stress remain later D24 slices;
+  - N7->N6 regeneration, N6 gate-failure regeneration, and `n6_loopback_triage` runtime generation remain later D24 slices;
   - context packet cache remains process-local/runtime-only per D20.
+
+## 2026-05-31 - v1b N6 L3/L4/L5 Verification Slice Implemented
+- Added Prisma-backed L3 smoke scenario `n6_runtime_smoke` to `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` and package script `pnpm topic-selection:v1b-n6-runtime-smoke`.
+  - The smoke drives N1-N5 setup, generates a product-mode `runtime_verified` Codex-assisted N6 draft through `TopicSelectionV1bN6DraftRuntimeService`, admits N6 through the existing deterministic gate, and verifies `N6ToN7Handoff@v1` emission.
+  - Exact replay reuses the same authority/handoff refs and does not create additional artifact refs for the N6 workflow run.
+  - Source-hash drift blocks with `N6_DRAFT_ARTIFACT_SOURCE_HASH_DRIFT` before authority or handoff emission.
+  - Prompt packet index checks confirm metadata-only N6 rows for `n6_question_candidate_draft.initial_from_n5`; rows contain refs/hashes and do not expose messages or provider responses.
+- Added v1b N6 provider canary methods to `TopicSelectionProviderCanaryService`.
+  - Local fake-gateway coverage proves prompt packet cache hits still require two provider-facing calls and exact response reuse remains null/not-applicable.
+  - OpenAI/DashScope over-budget canaries block before provider calls.
+  - Live v1b N6 provider canaries are gated by `T112_V1B_N6_PROVIDER_CANARY_LIVE=1` and `BACKEND_TEST_PRESERVE_REAL_ENV=1`; the OpenAI schema name is kept under the provider `text.format.name` 64-character limit.
+- Added N6 L5 compression/adversarial tests to `topic-selection-compression-runtime-service.unit.test.ts`.
+  - Dropping N6 long-context facts blocks for missing N5 handoff, option-set identity, evidence refs, boundary refs, assumption refs, claim ceiling, non-goals, and recheck hints.
+  - Persisting adversarial raw provider logs in compressed context blocks with `COMPRESSION_FORBIDDEN_PERSISTED_PAYLOAD`.
+- Updated first-slice status:
+  - `n6_question_candidate_draft.initial_from_n5` now has L1/L2 implementation, L3 Prisma-backed smoke, L4 local/live provider canary evidence, and L5 long-context/adversarial compression coverage.
+  - Next v1b N6 work should promote P2.1b regeneration/triage paths instead of widening the initial N5->N6 path further.
