@@ -3042,7 +3042,7 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
     output_schema_version: 'v1',
     expectations: {
       status: 'succeeded',
-      materialization_status: 'ready',
+      materialization_status: EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE === 'provider_llm' ? null : 'ready',
       evidence_unit_count: selectedResources.length,
       downstream_handoff_present: true,
     },
@@ -3053,6 +3053,18 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
     route_target_node_id: 'topic-selection.v1a.generate-need-candidate.v1',
   });
   assertScenarioPassed(evidenceMap, 'build-evidence-map');
+  if (EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE === 'provider_llm') {
+    const materializationStatus = evidenceMap.node_result.materialization_report.status;
+    if (!['ready', 'ready_with_warning'].includes(materializationStatus)) {
+      throw new Error(`Provider EvidenceMap materialization must be ready or ready_with_warning, got ${materializationStatus}.`);
+    }
+    if (
+      materializationStatus === 'ready_with_warning'
+      && (evidenceMap.node_result.downstream_handoff?.warning_summary?.warning_codes ?? []).length === 0
+    ) {
+      throw new Error('Provider EvidenceMap ready_with_warning result must carry warning codes in the downstream handoff.');
+    }
+  }
   if (EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE !== 'none') {
     if (evidenceMap.node_result.agent_invocation_status !== 'succeeded') {
       throw new Error(`EvidenceMap extraction agent did not succeed: ${evidenceMap.node_result.error_code}`);

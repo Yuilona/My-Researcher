@@ -261,3 +261,9 @@
 - Relaxed adapter artifact-ref expectations for context cache hits from "same workflow run" to "same semantic context contract." A context cache hit may legitimately return an artifact ref from the source workflow run; consumers still validate title card, context family, policy/schema/profile, execution mode, and payload hash.
 - Kept compression quality rules in the shared compression runtime and runtime profile contracts. No node-local compression quality fork was introduced in this repair.
 - This repair does not promote resource sampling, v1b, or v1c rows to implementation-ready status, and it does not add provider SDK paths, provider secrets, semantic response cache, or desktop UI.
+
+## 2026-05-31 - Production-Shaped v1a Provider Verification Fix
+- A real OpenAI v1a provider harness run exposed that provider-generated N5 EvidenceMap extraction can materialize as `ready_with_warning` while still creating authority refs and a valid Node 6 handoff.
+- Updated `.ai/scripts/topic-selection-v1a-harness-e2e.mjs` so provider-backed EvidenceMap extraction accepts `ready` or `ready_with_warning`; `ready_with_warning` must still carry warning codes in the downstream handoff.
+- The deterministic/non-provider harness expectation remains strict `ready`.
+- This is a harness expectation fix, not a relaxation of authority boundaries: EvidenceMap authority refs, EvidenceUnit refs, handoff creation, runtime agent success, and downstream deterministic gates are still required.

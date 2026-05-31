@@ -14,6 +14,7 @@
 - Do not accept Codex exact reuse without an approval ref or explicit local approved-reuse setting.
 - Do not build provider-mode context cache keys with placeholder model metadata. Resolve the selected model profile first so `model_option_id` and `normalized_params_hash` are concrete key fields.
 - Do not require a read-through context cache artifact ref to belong to the current workflow run. Cross-run exact cache hits are valid when source refs, hashes, context family, policy/schema/profile, execution mode, and payload hash are all validated.
+- Do not require real provider N5 EvidenceMap extraction to materialize only as `ready`. `ready_with_warning` is production-valid when authority refs, EvidenceUnit refs, downstream handoff, runtime success, and warning codes are all present.
 
 ## Pending
 - Resource sampling, v1b, and v1c still need their own implementation-ready matrix promotion before runtime wiring.
