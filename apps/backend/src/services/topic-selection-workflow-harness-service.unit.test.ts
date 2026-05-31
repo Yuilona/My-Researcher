@@ -78,6 +78,10 @@ import {
 import { TopicSelectionEvidenceMapMaterializationService } from './topic-selection-evidence-map-materialization-service.js';
 import { TopicSelectionNeedValidationService } from './topic-selection-need-validation-service.js';
 import {
+  sha256Text,
+  stableStringify,
+} from './literature-content-processing-utils.js';
+import {
   TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
@@ -87,11 +91,17 @@ import {
 
 class StubLlmGateway {
   readonly calls: LlmStructuredOutputRequest[] = [];
-  private readonly outputsBySchemaName = new Map<string, unknown>();
+  private readonly outputsBySchemaName = new Map<
+    string,
+    unknown | ((request: LlmStructuredOutputRequest) => unknown)
+  >();
 
   constructor(private readonly output: TopicSelectionRankedCandidateDraftBatch) {}
 
-  setOutputForSchema(schemaName: string, output: unknown): void {
+  setOutputForSchema(
+    schemaName: string,
+    output: unknown | ((request: LlmStructuredOutputRequest) => unknown),
+  ): void {
     this.outputsBySchemaName.set(schemaName, output);
   }
 
@@ -99,7 +109,10 @@ class StubLlmGateway {
     request: LlmStructuredOutputRequest,
   ): Promise<LlmStructuredOutputResponse<T>> {
     this.calls.push(request);
-    const output = this.outputsBySchemaName.get(request.schemaName) ?? this.output;
+    const configuredOutput = this.outputsBySchemaName.get(request.schemaName);
+    const output = typeof configuredOutput === 'function'
+      ? configuredOutput(request)
+      : configuredOutput ?? this.output;
     return {
       parsed: output as T,
       raw: { output },
@@ -108,7 +121,29 @@ class StubLlmGateway {
   }
 }
 
-async function makeRuntime() {
+class ForcedStaleContextPacketCacheService extends TopicSelectionContextPacketCacheService {
+  override async lookup(
+    input: Parameters<TopicSelectionContextPacketCacheService['lookup']>[0],
+  ): ReturnType<TopicSelectionContextPacketCacheService['lookup']> {
+    return {
+      cache_result: 'blocked_stale',
+      artifact_ref: null,
+      artifact_hash: null,
+      cache_key_hash: sha256Text(stableStringify(input.cache_key)),
+      context_family: input.cache_key.context_family,
+      context_policy_profile_id: input.context_policy_profile.context_policy_profile_id,
+      context_policy_profile_version: input.context_policy_profile.context_policy_profile_version,
+      context_policy_profile_hash: input.context_policy_profile_hash,
+      source_refs_hash: input.source_refs_hash ?? input.cache_key.input_refs_hash,
+      freshness_status: 'stale',
+      provenance_ref: input.provenance_ref,
+    };
+  }
+}
+
+async function makeRuntime(options: {
+  contextPacketCache?: TopicSelectionContextPacketCacheService;
+} = {}) {
   const controlPlaneRepository = new InMemoryTopicSelectionControlPlaneRepository();
   let sequence = 0;
   const controlPlane = new TopicSelectionControlPlaneService(controlPlaneRepository, {
@@ -141,7 +176,7 @@ async function makeRuntime() {
   );
   const evidenceMapMaterializer = new TopicSelectionEvidenceMapMaterializationService();
   const artifactBoundary = new TopicSelectionNeedDiscoveryArtifactBoundaryService(controlPlane);
-  const contextPacketCache = new TopicSelectionContextPacketCacheService();
+  const contextPacketCache = options.contextPacketCache ?? new TopicSelectionContextPacketCacheService();
   const contextCompiler = new TopicSelectionNeedDiscoveryContextCompilerService(artifactBoundary, {
     now: () => '2026-05-19T00:00:00.000Z',
   });
@@ -204,6 +239,7 @@ async function makeRuntime() {
     searchResources,
     titleCards,
     llmGateway,
+    contextPacketCache,
   };
 }
 
@@ -267,6 +303,48 @@ function assertScenarioPassed(result: {
     'passed',
     JSON.stringify(result.assertions.filter((assertion) => !assertion.passed), null, 2),
   );
+}
+
+function artifactSnapshotKey(record: { payload?: unknown }): string | null {
+  const payload = record.payload;
+  return payload && typeof payload === 'object' && 'artifact_key' in payload
+    ? String((payload as { artifact_key?: unknown }).artifact_key ?? '')
+    : null;
+}
+
+async function findAgentAuditSnapshot(input: {
+  repository: InMemoryTopicSelectionControlPlaneRepository;
+  refs: Array<TopicSelectionFunctionalRef | null | undefined>;
+  nodeId: string;
+}): Promise<{
+  node_id: string;
+  token_budget_gate_result?: { decision?: string | null } | null;
+}> {
+  for (const refEntry of input.refs) {
+    if (!refEntry || refEntry.ref_type !== 'artifact_ref') {
+      continue;
+    }
+    const artifact = await input.repository.findArtifactRefById(refEntry.ref_id);
+    const payload = artifact?.payload;
+    if (!payload || typeof payload !== 'object') {
+      continue;
+    }
+    const snapshot = payload as {
+      schema_version?: string;
+      node_id?: string;
+      token_budget_gate_result?: { decision?: string | null } | null;
+    };
+    if (
+      snapshot.schema_version === 'topic-selection-agent-invocation-audit-v1'
+      && snapshot.node_id === input.nodeId
+    ) {
+      return {
+        node_id: snapshot.node_id,
+        token_budget_gate_result: snapshot.token_budget_gate_result ?? null,
+      };
+    }
+  }
+  throw new Error(`Agent audit snapshot for ${input.nodeId} not found.`);
 }
 
 function telemetry(): LlmCallTelemetry {
@@ -2339,6 +2417,271 @@ test('workflow harness blocks SearchRun snapshot hash drift before authority cre
   assert.equal((await ctx.searchResourceRepository.listCoverageEvidenceBindingsBySearchPlanId(ctx.searchPlan.search_plan_id)).length, 0);
 });
 
+test('workflow harness stress-tests v1a context producers and publish boundary', async () => {
+  const producerCtx = await makeRuntime();
+  const titleCard = await producerCtx.titleCards.createTitleCard({
+    working_title: 'Risk-aware RAG adaptation',
+    brief: 'Stress context lineage before v1a LLM runtime consumption.',
+  });
+  const topicSeed = await producerCtx.workflowHarness.runCreateTopicSeedScenario({
+    scenario_id: 'topic-selection.v1a.context-lineage-stress.v1',
+    scenario_case_id: 'context-stress-n1-topic-seed',
+    title_card_id: titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_context_stress_n1',
+    node_attempt_id: 'node_attempt_context_stress_n1',
+    intent_summary: 'Seed v1a with bounded RAG/fine-tuning context lineage.',
+    scope_notes: 'Exercise deterministic context producers before LLM runtime nodes.',
+    intent_preparation_refs: [{
+      ref_type: 'topic_seed_intent_draft',
+      ref_id: 'context_stress_intent_draft',
+      title_card_id: titleCard.title_card_id,
+    }],
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    expectations: {
+      status: 'succeeded',
+      seed_version: 'v1',
+      intent_summary: 'Seed v1a with bounded RAG/fine-tuning context lineage.',
+    },
+  });
+  assertScenarioPassed(topicSeed);
+  assert.ok(topicSeed.node_result.topic_seed_ref);
+
+  await producerCtx.literature.createLiterature(makeLiterature('context_stress_lit'));
+  await producerCtx.literature.upsertLiteratureSource({
+    id: 'context_stress_source',
+    literatureId: 'context_stress_lit',
+    provider: 'manual',
+    sourceItemId: 'manual-context-stress-lit',
+    sourceUrl: 'file://context_stress_lit.pdf',
+    rawPayload: {},
+    fetchedAt: '2026-05-19T00:00:00.000Z',
+  });
+  await producerCtx.literature.upsertPipelineState({
+    id: 'context_stress_pipeline',
+    literatureId: 'context_stress_lit',
+    citationComplete: true,
+    abstractReady: true,
+    keyContentReady: true,
+    dedupStatus: 'unique',
+    updatedAt: '2026-05-19T00:00:00.000Z',
+  });
+  await producerCtx.titleCards.updateEvidenceBasket(titleCard.title_card_id, {
+    add_literature_ids: ['context_stress_lit'],
+  });
+  const snapshot = await producerCtx.workflowHarness.runSnapshotLiteratureResourcePoolScenario(snapshotScenarioInput({
+    title_card_id: titleCard.title_card_id,
+    topic_seed_ref: topicSeed.node_result.topic_seed_ref!,
+  }, {
+    scenario_id: 'topic-selection.v1a.context-lineage-stress.v1',
+    scenario_case_id: 'context-stress-n2-snapshot',
+    workflow_run_id: 'workflow_run_context_stress_n2',
+    node_attempt_id: 'node_attempt_context_stress_n2',
+    resource_sample_set_provenance_ref: refForTitleCard(
+      'resource_sample_set',
+      'resource_sample_set_context_stress',
+      titleCard.title_card_id,
+    ),
+    expectations: {
+      status: 'succeeded',
+      included_literature_count: 1,
+      content_source_count: 1,
+    },
+  }));
+  assertScenarioPassed(snapshot);
+  assert.ok(snapshot.node_result.literature_resource_pool_snapshot_ref);
+  assert.ok(snapshot.node_result.snapshot_hash);
+
+  const blueprint = searchPlanBlueprint({
+    title_card_id: titleCard.title_card_id,
+    topic_seed_ref: topicSeed.node_result.topic_seed_ref!,
+    literature_resource_pool_snapshot_ref: snapshot.node_result.literature_resource_pool_snapshot_ref!,
+    expected_snapshot_hash: snapshot.node_result.snapshot_hash,
+  });
+  const searchPlan = await producerCtx.workflowHarness.runCreateSearchPlanScenario(searchPlanScenarioInput(blueprint, {
+    scenario_id: 'topic-selection.v1a.context-lineage-stress.v1',
+    scenario_case_id: 'context-stress-n3-search-plan',
+    title_card_id: titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_context_stress_n3',
+    node_attempt_id: 'node_attempt_context_stress_n3',
+    expectations: {
+      status: 'succeeded',
+      coverage_row_count: 2,
+      plan_version: 'v1',
+    },
+  }));
+  assertScenarioPassed(searchPlan);
+  assert.ok(searchPlan.node_result.search_plan_ref);
+  assert.equal(searchPlan.harness_trace_snapshot.expected_snapshot_hash, snapshot.node_result.snapshot_hash);
+  assert.equal(searchPlan.harness_trace_snapshot.resolved_snapshot_hash, snapshot.node_result.snapshot_hash);
+
+  const searchBundle = searchRunBundle({
+    title_card_id: titleCard.title_card_id,
+    search_plan_ref: searchPlan.node_result.search_plan_ref!,
+    literature_resource_pool_snapshot_ref: snapshot.node_result.literature_resource_pool_snapshot_ref!,
+    expected_literature_snapshot_hash: snapshot.node_result.snapshot_hash,
+    coverage_row_intent_ref: searchPlan.node_result.coverage_row_intent_refs[0]!,
+    literature_ref: snapshot.node_result.included_literature_refs[0]!,
+    source_ref: snapshot.node_result.content_source_refs[0]!,
+  }, {
+    source_health_summary: {
+      source_count: 1,
+      failed_source_count: 0,
+      warning_codes: ['SOURCE_RATE_LIMIT_RETRY'],
+    },
+  });
+  const searchRun = await producerCtx.workflowHarness.runRecordSearchRunScenario({
+    scenario_id: 'topic-selection.v1a.context-lineage-stress.v1',
+    scenario_case_id: 'context-stress-n4-search-run',
+    title_card_id: titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_context_stress_n4',
+    node_attempt_id: 'node_attempt_context_stress_n4',
+    bundle: searchBundle,
+    expectations: {
+      status: 'succeeded',
+      consumable_for_evidence_map: true,
+      downstream_handoff_present: true,
+      loopback_signal_present: false,
+    },
+  });
+  assertScenarioPassed(searchRun);
+  assert.equal(searchRun.node_result.downstream_handoff?.literature_snapshot_hash, snapshot.node_result.snapshot_hash);
+  assert.deepEqual(searchRun.node_result.downstream_handoff?.method_family_targets, [
+    'fine_tuning',
+    'retrieval_augmented_generation',
+  ]);
+  assert.ok(searchRun.node_result.warning_codes.includes('SOURCE_RATE_LIMIT_RETRY'));
+  assert.deepEqual(
+    searchRun.node_result.downstream_handoff?.source_health_summary.warning_codes,
+    ['SOURCE_RATE_LIMIT_RETRY'],
+  );
+  assert.equal(producerCtx.llmGateway.calls.length, 0);
+
+  await assert.rejects(
+    () => producerCtx.workflowHarness.runSnapshotLiteratureResourcePoolScenario(snapshotScenarioInput({
+      title_card_id: titleCard.title_card_id,
+      topic_seed_ref: {
+        ...topicSeed.node_result.topic_seed_ref!,
+        version_id: null,
+      },
+    })),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
+
+  const searchPlanCountBeforeDrift = (await producerCtx.searchResources.listSearchPlansByTitleCardId(
+    titleCard.title_card_id,
+  )).length;
+  const driftedPlan = await producerCtx.workflowHarness.runCreateSearchPlanScenario(searchPlanScenarioInput(
+    searchPlanBlueprint({
+      title_card_id: titleCard.title_card_id,
+      topic_seed_ref: topicSeed.node_result.topic_seed_ref!,
+      literature_resource_pool_snapshot_ref: snapshot.node_result.literature_resource_pool_snapshot_ref!,
+      expected_snapshot_hash: 'drifted-context-snapshot-hash',
+    }),
+    {
+      scenario_id: 'topic-selection.v1a.context-lineage-stress.v1',
+      scenario_case_id: 'context-stress-n3-snapshot-drift',
+      title_card_id: titleCard.title_card_id,
+      workflow_run_id: 'workflow_run_context_stress_n3_drift',
+      node_attempt_id: 'node_attempt_context_stress_n3_drift',
+      expectations: {
+        status: 'blocked',
+        error_code: 'VERSION_CONFLICT',
+        blocker_codes: ['SNAPSHOT_HASH_MISMATCH'],
+        coverage_row_count: 0,
+      },
+    },
+  ));
+  assertScenarioPassed(driftedPlan);
+  assert.equal(
+    (await producerCtx.searchResources.listSearchPlansByTitleCardId(titleCard.title_card_id)).length,
+    searchPlanCountBeforeDrift,
+  );
+
+  const searchRunHashDrift = await producerCtx.workflowHarness.runRecordSearchRunScenario({
+    scenario_id: 'topic-selection.v1a.context-lineage-stress.v1',
+    scenario_case_id: 'context-stress-n4-snapshot-hash-drift',
+    title_card_id: titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_context_stress_n4_drift',
+    node_attempt_id: 'node_attempt_context_stress_n4_drift',
+    bundle: {
+      ...searchBundle,
+      expected_literature_snapshot_hash: 'drifted-search-run-snapshot-hash',
+    },
+    expectations: {
+      status: 'blocked',
+      error_code: 'VERSION_CONFLICT',
+      consumable_for_evidence_map: false,
+      downstream_handoff_present: false,
+      loopback_signal_present: false,
+    },
+  });
+  assertScenarioPassed(searchRunHashDrift);
+  assert.equal(searchRunHashDrift.node_result.authority_refs.length, 0);
+  assert.equal(
+    (await producerCtx.searchResourceRepository.listCoverageEvidenceBindingsBySearchPlanId(
+      searchPlan.node_result.search_plan_ref!.ref_id,
+    )).length,
+    1,
+  );
+
+  const publishCtx = await seedValidateNeedAdjudicationRuntime();
+  const humanConfirmResult = await runHumanConfirmNeedForPublish(publishCtx);
+  const publishInput = await publishV1bInputBundleScenarioInput(publishCtx, humanConfirmResult, {
+    scenario_id: 'topic-selection.v1a.context-lineage-stress.v1',
+    scenario_case_id: 'context-stress-n9-publish',
+    workflow_run_id: 'workflow_run_context_stress_n9_publish',
+    node_attempt_id: 'node_attempt_context_stress_n9_publish',
+  });
+  const publish = await publishCtx.workflowHarness.runPublishV1bInputBundleScenario(publishInput);
+  const replay = await publishCtx.workflowHarness.runPublishV1bInputBundleScenario(publishInput);
+  assertScenarioPassed(publish);
+  assertScenarioPassed(replay);
+  assert.equal(publish.node_result.idempotency_result, 'created_new_bundle');
+  assert.equal(replay.node_result.replay_provenance?.replayed, true);
+  assert.equal(replay.node_result.v1b_input_bundle_ref?.ref_id, publish.node_result.v1b_input_bundle_ref?.ref_id);
+  assert.equal(
+    (await publishCtx.needValidationRepository.listV1aToV1bInputBundlesByValidatedNeedId(
+      humanConfirmResult.node_result.validated_need_ref!.ref_id,
+    )).length,
+    1,
+  );
+  assert.equal(publishCtx.llmGateway.calls.length, 0);
+
+  const driftCtx = await seedValidateNeedAdjudicationRuntime();
+  const driftHumanConfirmResult = await runHumanConfirmNeedForPublish(driftCtx);
+  const publishDrift = await driftCtx.workflowHarness.runPublishV1bInputBundleScenario(
+    await publishV1bInputBundleScenarioInput(driftCtx, driftHumanConfirmResult, {
+      scenario_id: 'topic-selection.v1a.context-lineage-stress.v1',
+      scenario_case_id: 'context-stress-n9-lineage-drift',
+      workflow_run_id: 'workflow_run_context_stress_n9_drift',
+      node_attempt_id: 'node_attempt_context_stress_n9_drift',
+      source_need_candidate_ref: refForTitleCard(
+        'need_candidate',
+        driftCtx.candidate.need_candidate_id,
+        driftCtx.titleCard.title_card_id,
+        'stale-candidate-version',
+      ),
+      expectations: {
+        status: 'blocked',
+        route_outcome: 'blocked',
+        error_code: 'VERSION_CONFLICT',
+        blocker_codes: ['VERSION_CONFLICT'],
+        idempotency_result: 'not_applicable',
+        bundle_published: false,
+      },
+    }),
+  );
+  assertScenarioPassed(publishDrift);
+  assert.equal(publishDrift.node_result.v1b_input_bundle_ref, null);
+  assert.equal(
+    (await driftCtx.needValidationRepository.listV1aToV1bInputBundlesByValidatedNeedId(
+      driftHumanConfirmResult.node_result.validated_need_ref!.ref_id,
+    )).length,
+    0,
+  );
+});
+
 test('workflow harness blocks unsupported SearchRun authority refs before service persistence', async () => {
   const ctx = await seedRecordSearchRunRuntime();
   const unsupportedRef: TopicSelectionFunctionalRef = {
@@ -4354,6 +4697,413 @@ test('workflow harness blocks generate-need-candidate when compressed context re
     ),
     false,
   );
+});
+
+test('workflow harness stress-tests v1a N6 runtime cache boundaries', async () => {
+  const { workflowHarness, controlPlaneRepository, needValidationRepository, llmGateway } = await makeRuntime();
+  const rankedSchemaName = 'topic_selection_ranked_candidate_draft_batch';
+  const baseProviderInput = (caseId: string, nodeAttemptId: string, workflowRunId: string) =>
+    scenarioInput({
+      scenario_case_id: caseId,
+      workflow_run_id: workflowRunId,
+      node_attempt_id: nodeAttemptId,
+      execution_mode: 'provider_llm',
+      run_mode: 'product',
+      mocked_output: null,
+      persist_admitted_candidates: false,
+      persistence_context: null,
+      expectations: {
+        status: 'succeeded',
+        routing_decision: 'finalize_with_admitted_batch',
+        admitted_draft_count: 1,
+        persisted_candidate_count: 0,
+        persistence: 'forbidden',
+      },
+    });
+
+  const warmInput = baseProviderInput(
+    'runtime-stress-n6-cache-warm',
+    'node_attempt_runtime_stress_cache_warm',
+    'workflow_run_runtime_stress_cache_warm',
+  );
+  llmGateway.setOutputForSchema(rankedSchemaName, rankedBatch(warmInput.node_attempt_id));
+  const warm = await workflowHarness.runGenerateNeedCandidateScenario(warmInput);
+
+  const exactHitInput = baseProviderInput(
+    'runtime-stress-n6-cache-exact-hit',
+    'node_attempt_runtime_stress_cache_hit',
+    'workflow_run_runtime_stress_cache_hit',
+  );
+  llmGateway.setOutputForSchema(rankedSchemaName, rankedBatch(exactHitInput.node_attempt_id));
+  const exactHit = await workflowHarness.runGenerateNeedCandidateScenario(exactHitInput);
+
+  const driftMissInput = {
+    ...baseProviderInput(
+      'runtime-stress-n6-cache-profile-drift-miss',
+      'node_attempt_runtime_stress_cache_drift',
+      'workflow_run_runtime_stress_cache_drift',
+    ),
+    model_option_id: `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.dashscope-thinking-budget`,
+  };
+  llmGateway.setOutputForSchema(rankedSchemaName, rankedBatch(driftMissInput.node_attempt_id));
+  const driftMiss = await workflowHarness.runGenerateNeedCandidateScenario(driftMissInput);
+
+  assertScenarioPassed(warm);
+  assertScenarioPassed(exactHit);
+  assertScenarioPassed(driftMiss);
+  assert.equal(warm.compiled_context.exploration_context_packet.cache_hit, false);
+  assert.equal(warm.compiled_context.arbiter_context_packet.cache_hit, false);
+  assert.equal(exactHit.compiled_context.exploration_context_packet.cache_hit, true);
+  assert.equal(exactHit.compiled_context.arbiter_context_packet.cache_hit, true);
+  assert.equal(
+    exactHit.compiled_context.exploration_context_ref.ref_id,
+    warm.compiled_context.exploration_context_ref.ref_id,
+  );
+  assert.equal(
+    exactHit.compiled_context.arbiter_context_ref.ref_id,
+    warm.compiled_context.arbiter_context_ref.ref_id,
+  );
+  assert.equal(driftMiss.compiled_context.exploration_context_packet.cache_hit, false);
+  assert.equal(driftMiss.compiled_context.arbiter_context_packet.cache_hit, false);
+  assert.notEqual(
+    driftMiss.compiled_context.exploration_context_ref.ref_id,
+    warm.compiled_context.exploration_context_ref.ref_id,
+  );
+  assert.notEqual(
+    driftMiss.compiled_context.arbiter_context_ref.ref_id,
+    warm.compiled_context.arbiter_context_ref.ref_id,
+  );
+  assert.equal(llmGateway.calls.length, 3);
+  assert.equal((await needValidationRepository.listNeedCandidatesByTitleCardId('title_card_001')).length, 0);
+
+  const exactHitArtifactKeys = (await controlPlaneRepository.listArtifactRefsByWorkflowRunId(
+    exactHitInput.workflow_run_id,
+  )).map(artifactSnapshotKey);
+  assert.equal(exactHitArtifactKeys.includes('exploration_context_packet'), false);
+  assert.equal(exactHitArtifactKeys.includes('arbiter_context_packet'), false);
+  assert.equal(exactHitArtifactKeys.includes('ranked_candidate_draft_batch'), true);
+  assert.equal(exactHitArtifactKeys.includes('minimum_schema_validation_report'), true);
+  assert.equal(exactHitArtifactKeys.includes('candidate_draft_admission_report'), true);
+  assert.equal(exactHitArtifactKeys.includes('supplemental_round_routing_decision'), true);
+
+  const staleRuntime = await makeRuntime({
+    contextPacketCache: new ForcedStaleContextPacketCacheService(),
+  });
+  await assert.rejects(
+    () => staleRuntime.workflowHarness.runGenerateNeedCandidateScenario(baseProviderInput(
+      'runtime-stress-n6-cache-stale-block',
+      'node_attempt_runtime_stress_cache_stale',
+      'workflow_run_runtime_stress_cache_stale',
+    )),
+    (error: unknown) => error instanceof AppError && error.errorCode === 'INVALID_PAYLOAD',
+  );
+  assert.equal(staleRuntime.llmGateway.calls.length, 0);
+  assert.equal(
+    (await staleRuntime.needValidationRepository.listNeedCandidatesByTitleCardId('title_card_001')).length,
+    0,
+  );
+});
+
+test('workflow harness stress-tests v1a LLM runtime gates from N5 through N8', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const titleCardId = ctx.titleCard.title_card_id;
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(ctx.searchRunHandoff);
+  const literatureRef = ctx.literatureSnapshot.literature_refs[0]!;
+  const sourceRef = ctx.literatureSnapshot.content_source_refs[0]!;
+  const supportLocator = validationManualLocator({
+    title_card_id: titleCardId,
+    literature_ref: literatureRef,
+    source_ref: sourceRef,
+    manual_ref: refForTitleCard('manual_locator', 'runtime_stress_support_locator', titleCardId),
+    manual_label: 'runtime stress support locator',
+  });
+  const contextLocator = validationManualLocator({
+    title_card_id: titleCardId,
+    literature_ref: literatureRef,
+    source_ref: sourceRef,
+    manual_ref: refForTitleCard('manual_locator', 'runtime_stress_context_locator', titleCardId),
+    manual_label: 'runtime stress context locator',
+  });
+  const baseDraft = evidenceMapExtractionDraft({
+    title_card_id: titleCardId,
+    handoff: ctx.searchRunHandoff,
+    literature_ref: literatureRef,
+    source_ref: sourceRef,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    input_refs_hash: inputRefsHash,
+  });
+  const supportDraftUnit = {
+    ...baseDraft.draft_units[0]!,
+    locator: supportLocator,
+    source_statement: 'The paper reports section-backed evidence for traceable RAG adaptation validation.',
+    normalized_statement: 'Traceable RAG adaptation validation needs section-backed evidence.',
+  };
+  const providerDraft: TopicSelectionEvidenceMapExtractionDraft = {
+    ...baseDraft,
+    producer_kind: 'provider_llm',
+    draft_units: [
+      supportDraftUnit,
+      {
+        ...supportDraftUnit,
+        client_unit_key: 'unit_context_001',
+        coverage_row_intent_ref: null,
+        evidence_role: 'context',
+        locator: contextLocator,
+        source_statement: 'The workflow context is local-first paper engineering with reviewer evidence.',
+        normalized_statement: 'The candidate is scoped to local-first reviewer-facing evidence workflows.',
+        interpretation_payload: { role_hint: 'context' },
+        confidence: 0.8,
+        issue_codes: [],
+      },
+    ],
+    warning_codes: ['COVERAGE_ROW_INTENT_REF_MISSING'],
+  };
+  ctx.llmGateway.setOutputForSchema('TopicSelectionEvidenceMapExtractionDraft@v1', providerDraft);
+  const n5 = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: titleCardId,
+    handoff: ctx.searchRunHandoff,
+    draft: providerDraft,
+  }, {
+    scenario_case_id: 'runtime-stress-n5-provider-context',
+    workflow_run_id: 'workflow_run_runtime_stress_n5',
+    node_attempt_id: 'node_attempt_runtime_stress_n5',
+    extraction_draft: null,
+    extraction_context_packet: evidenceMapExtractionContextPacket({
+      workflow_run_id: 'workflow_run_runtime_stress_n5',
+      node_attempt_id: 'node_attempt_runtime_stress_n5',
+      handoff: ctx.searchRunHandoff,
+      input_refs_hash: inputRefsHash,
+      execution_mode: 'provider_llm',
+    }),
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    mocked_output: null,
+    expectations: {
+      status: 'succeeded',
+      materialization_status: 'ready_with_warning',
+      evidence_unit_count: 2,
+      downstream_handoff_present: true,
+      warning_codes: ['COVERAGE_ROW_INTENT_REF_MISSING'],
+    },
+  }));
+  assertScenarioPassed(n5);
+  assert.equal(n5.node_result.agent_invocation_status, 'succeeded');
+  const n5Audit = await findAgentAuditSnapshot({
+    repository: ctx.controlPlaneRepository,
+    refs: [n5.node_result.agent_invocation_audit_ref],
+    nodeId: 'topic-selection.v1a.build-evidence-map.v1',
+  });
+  assert.equal(n5Audit.token_budget_gate_result?.decision, 'within_budget');
+
+  const evidenceUnits = n5.node_result.evidence_map_records?.evidence_units ?? [];
+  const supportUnit = evidenceUnits.find((unit) => unit.evidence_role === 'support');
+  const contextUnit = evidenceUnits.find((unit) => unit.evidence_role === 'context');
+  assert.ok(supportUnit);
+  assert.ok(contextUnit);
+  const supportRef = refForTitleCard('evidence_unit', supportUnit.evidence_unit_id, titleCardId);
+  const contextRef = refForTitleCard('evidence_unit', contextUnit.evidence_unit_id, titleCardId);
+  const strengthRef = refForTitleCard('evidence_strength_assessment', 'runtime_stress_strength', titleCardId);
+  const n6NodeAttemptId = 'node_attempt_runtime_stress_n6';
+  const n6Batch = rankedBatch(n6NodeAttemptId);
+  n6Batch.drafts[0] = {
+    ...n6Batch.drafts[0]!,
+    evidence_role_bundle: {
+      support_unit_refs: [supportRef],
+      challenge_unit_refs: [],
+      baseline_unit_refs: [],
+      context_unit_refs: [contextRef],
+    },
+    conflict_refs: [],
+    strength_assessment_refs: [strengthRef],
+  };
+  const handoff = n5.node_result.downstream_handoff;
+  assert.ok(handoff);
+  ctx.llmGateway.setOutputForSchema('topic_selection_ranked_candidate_draft_batch', n6Batch);
+  const n6 = await ctx.workflowHarness.runGenerateNeedCandidateScenario(scenarioInput({
+    scenario_case_id: 'runtime-stress-n6-provider-compression',
+    title_card_id: titleCardId,
+    workflow_run_id: 'workflow_run_runtime_stress_n6',
+    input_snapshot_id: null,
+    node_attempt_id: n6NodeAttemptId,
+    topic_scope_ref: ctx.topicSeedRef,
+    evidence_map_ref: handoff.evidence_map_ref,
+    evidence_strength_ref: strengthRef,
+    resource_sample_set_ref: null,
+    candidate_pool_projection_ref: null,
+    evidence_map_handoff: handoff,
+    search_snapshot_refs: [handoff.search_run_ref],
+    resource_snapshot_refs: [handoff.literature_resource_pool_snapshot_ref],
+    exploration_payload: {
+      ...explorationPayload(),
+      topic_scope: {
+        title_card_id: titleCardId,
+        domain: 'RAG fine-tuning safety',
+      },
+      evidence_signal_digest: {
+        support_count: 1,
+        challenge_count: 0,
+      },
+      resource_sample_digest: {
+        sample_set_id: handoff.literature_resource_pool_snapshot_ref.ref_id,
+        role_counts: { support: 1, context: 1 },
+        topic_method_family_targets: ['retrieval_augmented_generation', 'fine_tuning'],
+      },
+    },
+    arbiter_payload: {
+      ...arbiterPayload(),
+      node_policy_ref: refForTitleCard('node_policy', 'generate_need_candidate_v1', titleCardId),
+      output_schema_ref: refForTitleCard('schema', 'ranked_candidate_draft_batch_v1', titleCardId),
+      evidence_ref_table: [
+        { evidence_ref: supportRef, role: 'support' },
+        { evidence_ref: contextRef, role: 'context' },
+        { evidence_ref: strengthRef, role: 'strength' },
+      ],
+    },
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    mocked_output: null,
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 80_000,
+      estimated_input_tokens_after_compression_override: 12_000,
+    },
+    persist_admitted_candidates: true,
+    persistence_context: {
+      search_run_ref: handoff.search_run_ref,
+      search_plan_ref: handoff.search_plan_ref,
+      literature_snapshot_ref: handoff.literature_resource_pool_snapshot_ref,
+    },
+    expectations: {
+      status: 'succeeded',
+      routing_decision: 'finalize_with_admitted_batch',
+      admitted_draft_count: 1,
+      persisted_candidate_count: 1,
+      persistence: 'required',
+    },
+  }));
+  assertScenarioPassed(n6);
+  assert.equal(n6.adapter_result.context_compression_report_artifact?.artifact_key, 'context_compression_report');
+  assert.equal(n6.adapter_result.invocation_result.token_budget_gate_result?.decision, 'within_budget');
+  assert.equal(n6.adapter_result.invocation_result.token_budget_gate_result?.estimated_input_tokens, 12_000);
+
+  const candidateRef = n6.adapter_result.persist_need_candidate_batch_result?.persisted_candidate_refs[0];
+  assert.ok(candidateRef);
+  const candidate = await ctx.needValidationRepository.findNeedCandidateById(candidateRef.ref_id);
+  assert.ok(candidate);
+  const readiness = await ctx.needService.assessCandidateReadiness({
+    need_candidate_id: candidate.need_candidate_id,
+    assessed_by: 'system',
+  });
+  assert.equal(readiness.recommendation, 'ready_for_validation');
+  const supportPacket = await ctx.needService.createValidationDecisionSupportPacket({
+    need_candidate_id: candidate.need_candidate_id,
+    readiness_assessment_id: readiness.readiness_assessment_id,
+    created_by: 'system',
+  });
+  const adjudicationCtx = {
+    ...ctx,
+    evidenceMap: n5.node_result.evidence_map_records!.evidence_map,
+    evidenceUnits,
+    candidate,
+    readiness,
+    supportPacket,
+  } as unknown as ValidateNeedAdjudicationSeed;
+  const n7Packet = needAdjudicationRecommendationPacket(adjudicationCtx, {
+    workflow_run_id: 'workflow_run_runtime_stress_n7',
+    node_attempt_id: 'node_attempt_runtime_stress_n7',
+  }, {
+    execution_mode: 'provider_llm',
+    gap_codes: ['METHOD_FAMILY_COVERAGE_GAP'],
+    required_actions: ['carry method-family coverage gap into human confirmation and v1b handoff'],
+  });
+  ctx.llmGateway.setOutputForSchema(
+    TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION,
+    n7Packet,
+  );
+  const n7 = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(adjudicationCtx, n7Packet, {
+      scenario_case_id: 'runtime-stress-n7-provider-adjudication',
+      workflow_run_id: 'workflow_run_runtime_stress_n7',
+      node_attempt_id: 'node_attempt_runtime_stress_n7',
+      execution_mode: 'provider_llm',
+      run_mode: 'product',
+      mocked_output: null,
+      expectations: {
+        status: 'ready',
+        route_outcome: 'advance_to_human_confirmation',
+        final_decision: 'validate',
+        adjudication_created: true,
+      },
+    }),
+  );
+  assertScenarioPassed(n7);
+  const n7Audit = await findAgentAuditSnapshot({
+    repository: ctx.controlPlaneRepository,
+    refs: n7.harness_trace_snapshot.artifact_refs,
+    nodeId: 'topic-selection.v1a.validate-need-adjudication.v1',
+  });
+  assert.equal(n7Audit.token_budget_gate_result?.decision, 'within_budget');
+
+  const n8Input = humanConfirmNeedScenarioInput(adjudicationCtx, n7, {
+    scenario_case_id: 'runtime-stress-n8-provider-semantic-review',
+    workflow_run_id: 'workflow_run_runtime_stress_n8',
+    node_attempt_id: 'node_attempt_runtime_stress_n8',
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    mocked_output: null,
+  });
+  ctx.llmGateway.setOutputForSchema(
+    TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION,
+    (request: LlmStructuredOutputRequest) => {
+      const payload = JSON.parse(request.messages[1]?.content ?? '{}') as {
+        context_packet_ref: TopicSelectionFunctionalRef;
+      };
+      return {
+        schema_version: TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION,
+        workflow_run_id: n8Input.workflow_run_id,
+        node_attempt_id: n8Input.node_attempt_id,
+        review_id: `${n8Input.node_attempt_id}_semantic_review`,
+        context_packet_ref: payload.context_packet_ref,
+        execution_mode: 'provider_llm',
+        profile_id: TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
+        status: 'pass',
+        alignment_codes: ['validate_alignment_clear'],
+        risk_coverage: 'complete',
+        required_check_coverage: 'complete',
+        scope_violations: [],
+        rationale_summary: n8Input.confirmation_input.rationale,
+        provenance_ref: payload.context_packet_ref,
+        warning_codes: [],
+        blocker_codes: [],
+        review_reason_codes: [],
+        policy_version: n8Input.policy_version,
+        output_schema_version: n8Input.output_schema_version,
+      } satisfies HumanConfirmationSemanticReview;
+    },
+  );
+  const n8 = await ctx.workflowHarness.runHumanConfirmNeedScenario(n8Input);
+  assertScenarioPassed(n8);
+  const n8Audit = await findAgentAuditSnapshot({
+    repository: ctx.controlPlaneRepository,
+    refs: n8.harness_trace_snapshot.artifact_refs,
+    nodeId: 'topic-selection.v1a.human-confirm-need.v1',
+  });
+  assert.equal(n8Audit.token_budget_gate_result?.decision, 'within_budget');
+
+  const publish = await ctx.workflowHarness.runPublishV1bInputBundleScenario(
+    await publishV1bInputBundleScenarioInput(adjudicationCtx, n8, {
+      scenario_case_id: 'runtime-stress-publish-v1b-bundle',
+      workflow_run_id: 'workflow_run_runtime_stress_publish',
+      node_attempt_id: 'node_attempt_runtime_stress_publish',
+    }),
+  );
+  assertScenarioPassed(publish);
+  assert.equal(publish.node_result.route_outcome, 'published_v1b_input_bundle');
+  assert.deepEqual(ctx.llmGateway.calls.map((call) => call.schemaName), [
+    'TopicSelectionEvidenceMapExtractionDraft@v1',
+    'topic_selection_ranked_candidate_draft_batch',
+    TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION,
+    TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION,
+  ]);
 });
 
 test('workflow harness reuses persisted NeedCandidate refs when generate-need-candidate attempt is replayed', async () => {
