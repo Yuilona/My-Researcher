@@ -167,6 +167,10 @@ import {
   TopicSelectionModelProfileRegistryService,
 } from './topic-selection-model-profile-registry-service.js';
 import {
+  TopicSelectionV1bN6DraftAdmissionService,
+} from './topic-selection-v1b-n6-draft-admission-service.js';
+import { TopicSelectionV1bN6DraftRuntimeService } from './topic-selection-v1b-n6-draft-runtime-service.js';
+import {
   TopicSelectionV1bN7SupportAdmissionService,
   type TopicSelectionV1bN7SupportSlotId,
 } from './topic-selection-v1b-n7-support-admission-service.js';
@@ -466,6 +470,8 @@ export class TopicSelectionV1bWorkflowHarnessService {
   private readonly idFactory: IdFactory;
   private readonly now: () => string;
   private readonly modelProfileRegistry: TopicSelectionModelProfileRegistryService;
+  private readonly n6DraftAdmission = new TopicSelectionV1bN6DraftAdmissionService();
+  private readonly n6DraftRuntime: TopicSelectionV1bN6DraftRuntimeService;
   private readonly n7SupportAdmission = new TopicSelectionV1bN7SupportAdmissionService();
   private readonly n7SupportRuntime: TopicSelectionV1bN7SupportRuntimeService;
   private readonly runnerDependencies: HarnessRunnerDependencies;
@@ -482,6 +488,9 @@ export class TopicSelectionV1bWorkflowHarnessService {
     this.idFactory = options.idFactory ?? ((prefix) => `${prefix}_${crypto.randomUUID()}`);
     this.now = options.now ?? (() => new Date().toISOString());
     this.modelProfileRegistry = options.modelProfileRegistry ?? new TopicSelectionModelProfileRegistryService();
+    this.n6DraftRuntime = new TopicSelectionV1bN6DraftRuntimeService(controlPlane, {
+      modelProfileRegistry: this.modelProfileRegistry,
+    });
     this.n7SupportRuntime = new TopicSelectionV1bN7SupportRuntimeService(controlPlane, {
       modelProfileRegistry: this.modelProfileRegistry,
     });
@@ -2886,13 +2895,6 @@ export class TopicSelectionV1bWorkflowHarnessService {
         message: payload.message,
       });
     }
-    const draftResolution = await this.resolveN6DraftPayload(input);
-    if (!draftResolution.ok) {
-      return this.persistBlockedResult(input, hashContext, {
-        blockerCode: draftResolution.code,
-        message: draftResolution.message,
-      });
-    }
     const loaded = await this.loadN6Context(payload.value);
     if (!loaded.ok) {
       return this.persistBlockedResult(input, hashContext, {
@@ -2905,6 +2907,13 @@ export class TopicSelectionV1bWorkflowHarnessService {
       return this.persistBlockedResult(input, hashContext, {
         blockerCode: lineageBlocker.code,
         message: lineageBlocker.message,
+      });
+    }
+    const draftResolution = await this.resolveN6DraftPayload(input, payload.value);
+    if (!draftResolution.ok) {
+      return this.persistBlockedResult(input, hashContext, {
+        blockerCode: draftResolution.code,
+        message: draftResolution.message,
       });
     }
 
@@ -8868,8 +8877,69 @@ export class TopicSelectionV1bWorkflowHarnessService {
       && this.refsEqual(payload.selected_slice_option_ref, handoffPayload.selected_slice_option_ref);
   }
 
+  private async verifyN6RuntimeVerifiedDraftAuditArtifact(
+    input: TopicSelectionV1bWorkflowHarnessRunRequest,
+    artifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef,
+  ): Promise<{ ok: true } | { ok: false; code: string; message: string }> {
+    if (
+      !artifact.runtime_audit_ref
+      || artifact.runtime_audit_ref.ref_type !== 'artifact_ref'
+      || !this.refsEqual(artifact.provenance_ref, artifact.runtime_audit_ref)
+    ) {
+      return this.n6RuntimeAuditDrift('N6 runtime draft provenance must point to its audit artifact_ref.');
+    }
+    const auditArtifact = await this.controlPlane.getArtifactRef(artifact.runtime_audit_ref.ref_id);
+    if (
+      !auditArtifact
+      || auditArtifact.artifact_kind !== 'diagnostic'
+      || auditArtifact.checksum !== artifact.runtime_audit_hash
+      || auditArtifact.workflow_run_id !== input.workflow_run_id
+    ) {
+      return this.n6RuntimeAuditDrift('N6 runtime draft audit artifact is missing or checksum-drifted.');
+    }
+    const auditPayload = auditArtifact.payload;
+    if (!this.isRecord(auditPayload) || !this.isRecord(auditPayload.provenance)) {
+      return this.n6RuntimeAuditDrift('N6 runtime draft audit payload is not a valid invocation audit snapshot.');
+    }
+    const provenance = auditPayload.provenance;
+    const expectedSourceKind = artifact.execution_mode === 'mocked_llm' ? 'mock_fixture' : 'codex_response';
+    if (
+      auditPayload.node_id !== input.node_id
+      || auditPayload.workflow_run_id !== input.workflow_run_id
+      || auditPayload.node_attempt_id !== input.node_attempt_id
+      || auditPayload.status !== 'succeeded'
+      || provenance.workflow_run_id !== input.workflow_run_id
+      || provenance.node_id !== input.node_id
+      || provenance.node_attempt_id !== input.node_attempt_id
+      || provenance.execution_mode !== artifact.execution_mode
+      || provenance.source_kind !== expectedSourceKind
+      || provenance.non_provider !== true
+      || provenance.run_mode !== artifact.run_mode
+      || provenance.profile_id !== artifact.profile_id
+      || provenance.model_option_id !== artifact.model_option_id
+      || provenance.output_contract !== artifact.output_contract
+      || provenance.prompt_packet_hash !== artifact.prompt_packet_hash
+      || provenance.structured_output_hash !== artifact.structured_output_hash
+      || provenance.cache_status !== 'not_applicable'
+      || provenance.response_reuse_ref !== null
+      || provenance.telemetry !== null
+    ) {
+      return this.n6RuntimeAuditDrift('N6 runtime draft audit provenance does not match the draft artifact identity.');
+    }
+    return { ok: true };
+  }
+
+  private n6RuntimeAuditDrift(message: string): { ok: false; code: string; message: string } {
+    return {
+      ok: false,
+      code: 'N6_DRAFT_ARTIFACT_RUNTIME_CONTEXT_DRIFT',
+      message,
+    };
+  }
+
   private async resolveN6DraftPayload(
     input: TopicSelectionV1bWorkflowHarnessRunRequest,
+    payload: TopicSelectionV1bN6HarnessFrozenInputPayload,
   ): Promise<{ ok: true } & N6DraftResolution | { ok: false; code: string; message: string }> {
     const semanticArtifact = (input.semantic_artifacts ?? []).find((artifact) =>
       artifact.slot_id === 'n6_question_candidate_draft'
@@ -8921,6 +8991,47 @@ export class TopicSelectionV1bWorkflowHarnessService {
         ok: false,
         code: 'N6_FROZEN_DRAFT_ARTIFACT_HASH_MISMATCH',
         message: 'N6 TopicQuestionCandidateSetDraft payload hash does not match semantic artifact provenance.',
+      };
+    }
+    if (
+      semanticArtifact.runtime_provenance_class === 'runtime_verified'
+      && semanticArtifact.execution_mode !== 'codex_assisted'
+      && semanticArtifact.execution_mode !== 'mocked_llm'
+    ) {
+      return {
+        ok: false,
+        code: 'N6_DRAFT_ARTIFACT_PROVENANCE_CLASS_INVALID',
+        message: 'runtime_verified v1b N6 draft artifacts must be generated by the N6 draft runtime.',
+      };
+    }
+    if (semanticArtifact.runtime_provenance_class === 'runtime_verified') {
+      const auditVerification = await this.verifyN6RuntimeVerifiedDraftAuditArtifact(input, semanticArtifact);
+      if (!auditVerification.ok) {
+        return auditVerification;
+      }
+    }
+    const admissionExecutionMode = semanticArtifact.execution_mode === 'mocked_llm'
+      ? 'mocked_llm'
+      : 'codex_assisted';
+    const admission = this.n6DraftAdmission.admit({
+      artifact: semanticArtifact,
+      expected: this.n6DraftRuntime.buildAdmissionExpectedIdentity({
+        request: input,
+        frozenPayload: payload,
+        generationMode: 'initial_from_n5',
+        normalizedPayloadHash: draftHash,
+        executionMode: admissionExecutionMode,
+        runMode: semanticArtifact.run_mode,
+        profileId: semanticArtifact.profile_id,
+        modelOptionId: semanticArtifact.model_option_id,
+      }),
+      allow_fixture_replay: input.run_mode !== 'product',
+    });
+    if (!admission.admitted) {
+      return {
+        ok: false,
+        code: admission.blocker.code,
+        message: admission.blocker.message,
       };
     }
     return {

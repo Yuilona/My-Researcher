@@ -78,6 +78,15 @@ export const TOPIC_SELECTION_V1A_N8_INVOCATION_SLOT_IDS = {
   confirmation_semantic_review: 'confirmation_semantic_review',
 } as const;
 
+export const TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS = {
+  question_candidate_draft:
+    'topic-selection.v1b.n6.question-candidate-draft.context-runtime@v1',
+} as const;
+
+export const TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS = {
+  question_candidate_draft: 'n6_question_candidate_draft',
+} as const;
+
 export const TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS = {
   candidate_grouping:
     'topic-selection.v1b.n7.candidate-grouping.context-runtime@v1',
@@ -360,6 +369,42 @@ const DEFAULT_TOPIC_SELECTION_CONTEXT_POLICY_PROFILE_REGISTRY:
           'schema_validation',
           'semantic_review_gate',
           'human_authority_boundary',
+        ],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS.question_candidate_draft,
+        invocation_slot_id: TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS.question_candidate_draft,
+        functional_template: 'candidate_for_deterministic_gate',
+        context_family: 'v1b_n6_topic_question_generation',
+        estimated_input_token_target: 24000,
+        estimated_output_token_budget: 4096,
+        preserved_fact_kinds: [
+          ...COMMON_PRESERVED_FACT_KINDS,
+          'selected_slice_identity',
+          'n5_handoff',
+          'selected_option_identity',
+          'option_set_identity',
+          'constraint_profile',
+          'intake_readiness',
+          'evidence_ref',
+          'boundary_ref',
+          'assumption_ref',
+          'claim_ceiling',
+          'non_goal',
+          'source_health_warning',
+        ],
+        post_reuse_gates: [
+          'schema_validation',
+          'draft_admission',
+          'deterministic_gate',
+          'authority_boundary',
+        ],
+        post_cache_gates: [
+          'schema_validation',
+          'draft_admission',
+          'deterministic_gate',
+          'authority_boundary',
         ],
       }),
       contextPolicyProfile({

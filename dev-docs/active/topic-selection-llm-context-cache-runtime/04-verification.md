@@ -454,6 +454,16 @@
 | `git diff --check` | passed | No whitespace errors after code, tests, script, package, and documentation updates. |
 | `pnpm lint` | passed | Current repository lint script is a placeholder (`echo "Add lint script"`). |
 
+## 2026-05-31 - v1b N6 Initial Runtime Draft Slice Verification
+| Command | Result | Notes |
+|---|---|---|
+| `node --test --loader ts-node/esm src/services/topic-selection-context-policy-profile-registry-service.unit.test.ts src/services/topic-selection-v1b-n6-draft-admission-service.unit.test.ts src/services/topic-selection-v1b-workflow-harness-service.unit.test.ts` | passed | 87/87 targeted tests passed. Coverage includes the v1b N6 profile, draft admission drift blockers, product-mode runtime-verified Codex draft admission, exact replay, source/audit drift, legacy blocking, and deterministic gate preservation. |
+| `pnpm --filter @paper-engineering-assistant/backend typecheck` | passed | Backend TypeScript compile passed after adding the N6 runtime adapter, admission service, harness wiring, and optional `prompt_variant_key` support in `AgentOrchestrator`. |
+| `pnpm --filter @paper-engineering-assistant/backend test` | passed | Backend full suite passed: 989 tests total, 985 passed, 4 skipped. |
+| `git diff --check` | passed | No whitespace errors after code and documentation updates. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after the T-112 documentation sync. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registry remains structurally valid; no provider/config-key drift was introduced. |
+
 ## Required Before Implementation
 - Contract design reviewed against T-088/T-089 D-18. Done.
 - First slice selected and approved: shared contracts/runtime primitives followed by v1a N6 single-agent and debate slots. Done.

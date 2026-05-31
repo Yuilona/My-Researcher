@@ -156,6 +156,7 @@ export type TopicSelectionAgentInvocationRequest<T> = {
   output_contract: string;
   model_option_id?: string | null;
   prompt: LlmPromptRef;
+  prompt_variant_key?: string | null;
   schema_name: string;
   schema: Record<string, unknown>;
   messages: Array<{ role: 'system' | 'user'; content: string }>;
@@ -837,6 +838,8 @@ export class TopicSelectionAgentOrchestratorService {
     }
 
     const runtimeInvocationContextHash = this.runtimeInvocationContextHash(input, runtime);
+    const promptVariantKey = input.prompt_variant_key?.trim()
+      || runtime.context_policy_profile.invocation_slot_id;
     const promptPacket = this.promptPacketRuntime.buildPromptPacket({
       title_card_id: input.title_card_id ?? null,
       workflow_run_id: input.workflow_run_id,
@@ -844,7 +847,7 @@ export class TopicSelectionAgentOrchestratorService {
       node_attempt_id: input.node_attempt_id,
       prompt_template_id: input.prompt.promptTemplateId,
       prompt_template_version: input.prompt.version,
-      prompt_variant_key: runtime.context_policy_profile.invocation_slot_id,
+      prompt_variant_key: promptVariantKey,
       invocation_slot_id: runtime.context_policy_profile.invocation_slot_id,
       runtime_invocation_context_hash: runtimeInvocationContextHash,
       messages: input.messages,
@@ -1722,6 +1725,9 @@ export class TopicSelectionAgentOrchestratorService {
     this.assertNonEmpty(input.output_contract, 'output_contract');
     this.assertNonEmpty(input.prompt.promptTemplateId, 'prompt.promptTemplateId');
     this.assertNonEmpty(input.prompt.version, 'prompt.version');
+    if (input.prompt_variant_key !== undefined && input.prompt_variant_key !== null) {
+      this.assertNonEmpty(input.prompt_variant_key, 'prompt_variant_key');
+    }
     this.assertNonEmpty(input.schema_name, 'schema_name');
     if (!['mocked_llm', 'codex_assisted', 'provider_llm'].includes(input.execution_mode)) {
       throw new AppError(400, 'INVALID_PAYLOAD', 'execution_mode is not supported.');

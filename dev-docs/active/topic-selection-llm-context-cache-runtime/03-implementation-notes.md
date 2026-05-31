@@ -640,7 +640,7 @@
   - `N5ToN6Handoff@v1` remains the only authority input for initial N5->N6 generation;
   - `n6_question_candidate_draft` generates or admits `TopicQuestionCandidateSetDraft@v1` only as a model draft before `N6TopicQuestionCandidateGate`;
   - N6 deterministic gates remain responsible for schema validation, source/ref/hash validation, answerability/falsification/claim-ceiling checks, candidate admission, authority writes, and `N6ToN7Handoff@v1`;
-  - initial generation uses `v1b_topic_question_candidate_context` and generation mode `initial_from_n5`;
+  - initial generation uses `v1b_n6_topic_question_generation` and generation mode `initial_from_n5`;
   - prompt/cache identity must include frozen input hash, `n5_handoff_hash`, selected research slice ref/hash, option-set ref/hash, selected-option ref/hash, selection-decision ref/hash, constraint/readiness refs/hashes, prompt variant, output contract, profile id/version/hash, model/runtime params hash, and redaction policy;
   - N6 draft artifacts should carry `runtime_verified`, `fixture_replay`, or `legacy_unverified` provenance classes so downstream LLM agents can reason about workflow-quality evidence without treating diagnostics as authority;
   - first implementation should use `codex_assisted` and `mocked_llm`; provider canary should follow after runtime identity, admission, replay, and deterministic-gate boundaries are stable.
@@ -691,3 +691,28 @@
   - ready scope is `n6_question_candidate_draft.initial_from_n5` through Codex/mocked shared runtime;
   - not ready in Slice 1: N7->N6 regeneration, N6 gate-failure retry, `n6_loopback_triage` runtime generation, provider canary, and DB-backed context packet cache;
   - first code steps should add the v1b N6 first-slice context runtime profile, N6 draft runtime/admission contracts and tests, node-level N6 draft runtime adapter, WorkflowHarness adapter calls for the promoted initial path, and promoted initial-path legacy exit after replacement L1/L2 tests pass.
+
+## 2026-05-31 - v1b N6 Initial Runtime Draft Slice Implemented
+- Added the v1b N6 first-slice `ContextPolicyProfile` for `n6_question_candidate_draft` with context family `v1b_n6_topic_question_generation`, candidate-for-deterministic-gate semantics, `draft_admission` post-cache/reuse gates, and preserved facts for N5 handoff, selected slice/option identity, evidence/boundary/assumption refs, claim ceiling, non-goals, source-health warnings, and risk/gap/recheck facts.
+- Added `TopicSelectionV1bN6DraftRuntimeService` as the node-level runtime adapter for generation mode `initial_from_n5`.
+  - The adapter compiles a ref-backed runtime context packet from the frozen N5->N6 input, records it as a diagnostic artifact, invokes `AgentOrchestrator`, and records a `runtime_verified` `TopicQuestionCandidateSetDraft@v1` semantic artifact.
+  - Prompt identity uses `prompt_variant_key=n6_question_candidate_draft.initial_from_n5` while keeping `invocation_slot_id=n6_question_candidate_draft`; the runtime invocation context hash binds the `initial_from_n5` semantic scenario.
+  - The shared `AgentOrchestrator` now accepts an optional `prompt_variant_key`, preserving the existing invocation-slot default for current N7/v1a callers while allowing N6 generation-mode-specific prompt packet identity.
+- Added `TopicSelectionV1bN6DraftAdmissionService` with fail-closed admission for promoted N6 drafts.
+  - `runtime_verified` drafts must match output hash, prompt packet hash, context profile id/version/hash, prompt variant, runtime invocation context hash, redaction policy, source hash bundle, runtime audit ref/hash, and coherent compression identity.
+  - `legacy_unverified` is blocked instead of downgraded to warning.
+  - `fixture_replay` remains test/acceptance-only and is blocked in product mode.
+- Reordered `WorkflowHarness` N6 execution so frozen N6 payload parsing, context loading, and N5 handoff lineage validation happen before draft artifact resolution/admission.
+- Wired N6 draft admission into the existing deterministic N6 candidate gate and authority-write path. Runtime success remains non-authority; N6 business success still requires deterministic gate pass, candidate-set authority persistence, and `N6ToN7Handoff@v1`.
+- Added focused L1/L2 coverage:
+  - profile resolution and preserved-fact policy checks;
+  - N6 admission exact identity, legacy/fixture behavior, payload/profile/prompt/runtime/source/compression drift;
+  - product-mode runtime-verified Codex draft admission;
+  - runtime draft exact replay without authority rewrites;
+  - source drift and runtime-audit drift blocking before authority writes;
+  - legacy draft blocking;
+  - deterministic gate bypass attempt blocking after runtime admission.
+- Slice status:
+  - `n6_question_candidate_draft.initial_from_n5` L1/L2 is implemented and passing;
+  - N7->N6 regeneration, N6 gate-failure regeneration, `n6_loopback_triage` runtime generation, provider canary, Prisma-backed v1b N6 smoke, and long-context/adversarial stress remain later D24 slices;
+  - context packet cache remains process-local/runtime-only per D20.

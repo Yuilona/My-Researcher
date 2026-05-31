@@ -12,6 +12,8 @@ import {
   TOPIC_SELECTION_V1A_N7_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1A_N8_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1A_N8_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
@@ -88,6 +90,32 @@ test('context policy profile registry validates and resolves v1a runtime profile
   });
   assert.equal(grouping.profile.context_family, 'v1b_n7_topic_question_hardening');
   assert.equal(grouping.profile.functional_template, 'support_only_semantic');
+
+  const n6Draft = service.resolveProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS.question_candidate_draft,
+    invocation_slot_id: TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS.question_candidate_draft,
+  });
+  assert.equal(n6Draft.profile.context_family, 'v1b_n6_topic_question_generation');
+  assert.equal(n6Draft.profile.functional_template, 'candidate_for_deterministic_gate');
+  assert.equal(n6Draft.profile.token_budget_policy.estimated_output_token_budget, 4096);
+  assert.equal(n6Draft.profile.cache_policy.post_cache_gates.includes('draft_admission'), true);
+  assert.equal(n6Draft.profile.post_reuse_gates.includes('authority_boundary'), true);
+  assert.equal(
+    n6Draft.profile.compression_policy.preserved_fact_kinds.includes('selected_slice_identity'),
+    true,
+  );
+  assert.equal(
+    n6Draft.profile.compression_policy.preserved_fact_kinds.includes('n5_handoff'),
+    true,
+  );
+  assert.equal(
+    n6Draft.profile.compression_policy.allowed_executor_kinds.includes(
+      'provider_llm' as never,
+    ),
+    false,
+  );
+
   assert.deepEqual(
     grouping.profile.compression_policy.allowed_executor_kinds,
     ['deterministic_structural', 'codex_assisted'],

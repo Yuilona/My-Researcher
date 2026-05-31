@@ -78,6 +78,7 @@ import { InMemoryTopicSelectionV1bTopicPackageRepository } from '../repositories
 import { AppError } from '../errors/app-error.js';
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
 import { TopicSelectionV1bWorkflowHarnessService } from './topic-selection-v1b-workflow-harness-service.js';
+import { TopicSelectionV1bN6DraftRuntimeService } from './topic-selection-v1b-n6-draft-runtime-service.js';
 import {
   TopicSelectionV1bN7SupportRuntimeService,
   type TopicSelectionV1bN7RuntimeSupportPayload,
@@ -951,6 +952,30 @@ async function recordN6DraftArtifact(
     structured_output_hash: draftHash,
     provenance_ref: ref('artifact_ref', provenance.artifact_ref_id, TITLE_CARD_ID),
   });
+}
+
+async function generateN6RuntimeDraftArtifact(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  draft: TopicSelectionV1bTopicQuestionCandidateSetDraftPayload,
+): Promise<TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef> {
+  const runtime = new TopicSelectionV1bN6DraftRuntimeService(ctx.controlPlane);
+  const generated = await runtime.generateDraftArtifact({
+    request: input,
+    generation_mode: 'initial_from_n5',
+    execution_mode: 'codex_assisted',
+    run_mode: input.run_mode ?? 'acceptance',
+    codex_response: {
+      output: draft,
+      operator_label: 'unit-test-runtime',
+    },
+    created_by: 'system',
+  });
+  assert.equal(generated.status, 'succeeded');
+  if (generated.status !== 'succeeded') {
+    throw new Error('Expected N6 runtime draft generation to succeed.');
+  }
+  return generated.semantic_artifact;
 }
 
 async function runReadyN6(
@@ -3285,6 +3310,182 @@ test('v1b workflow harness N6 carries warnings and detects replay drift', async 
   });
   assert.equal(drift.gate_status, 'blocked');
   assert.equal(drift.error_code, 'REPLAY_SEMANTIC_ARTIFACT_HASH_MISMATCH');
+});
+
+test('v1b workflow harness N6 admits runtime-verified Codex draft in product mode', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n5 } = await runReadyN5(ctx);
+  const input = await n6Request(ctx, n5, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_verified_draft',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_verified_draft',
+  });
+  const draft = await n6Draft(ctx, input);
+  const runtime = new TopicSelectionV1bN6DraftRuntimeService(ctx.controlPlane);
+  const generated = await runtime.generateDraftArtifact({
+    request: input,
+    generation_mode: 'initial_from_n5',
+    execution_mode: 'codex_assisted',
+    run_mode: 'product',
+    codex_response: {
+      output: draft,
+      operator_label: 'test-runtime',
+    },
+    created_by: 'system',
+  });
+
+  assert.equal(generated.status, 'succeeded');
+  if (generated.status !== 'succeeded') {
+    throw new Error('Expected runtime N6 draft generation to succeed.');
+  }
+  assert.equal(generated.semantic_artifact.runtime_provenance_class, 'runtime_verified');
+  assert.equal(generated.semantic_artifact.prompt_variant_key, 'n6_question_candidate_draft.initial_from_n5');
+  assert.equal(
+    generated.semantic_artifact.context_policy_profile_id,
+    'topic-selection.v1b.n6.question-candidate-draft.context-runtime@v1',
+  );
+  assert.notEqual(generated.semantic_artifact.prompt_packet_hash, 'c'.repeat(64));
+  assert.ok(generated.semantic_artifact.runtime_audit_ref);
+  assert.ok(generated.semantic_artifact.runtime_audit_hash);
+  assert.equal(generated.semantic_artifact.source_hashes.n5_handoff_hash, input.frozen_input.payload.n5_handoff_hash);
+
+  const result = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [generated.semantic_artifact],
+  });
+  assert.equal(result.gate_status, 'admitted');
+  assert.equal(result.route_decision, 'invoke_next');
+  assert.equal(result.authority_ref?.ref_type, 'topic_question_candidate_set');
+});
+
+test('v1b workflow harness N6 runtime draft exact replay does not rewrite authority artifacts', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n5 } = await runReadyN5(ctx);
+  const input = await n6Request(ctx, n5, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_draft_replay',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_draft_replay',
+  });
+  const draft = await n6Draft(ctx, input);
+  const semanticArtifact = await generateN6RuntimeDraftArtifact(ctx, input, draft);
+  const first = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [semanticArtifact],
+  });
+  const artifactRefsBeforeReplay = await ctx.controlPlane.listArtifactRefsByWorkflowRunId(input.workflow_run_id);
+  const replay = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [semanticArtifact],
+  });
+  const artifactRefsAfterReplay = await ctx.controlPlane.listArtifactRefsByWorkflowRunId(input.workflow_run_id);
+
+  assert.equal(replay.replay_provenance?.replayed, true);
+  assert.equal(replay.authority_ref?.ref_id, first.authority_ref?.ref_id);
+  assert.equal(replay.handoff_ref?.ref_id, first.handoff_ref?.ref_id);
+  assert.equal(artifactRefsAfterReplay.length, artifactRefsBeforeReplay.length);
+});
+
+test('v1b workflow harness N6 runtime draft drift blocks before authority write', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n5 } = await runReadyN5(ctx);
+  const input = await n6Request(ctx, n5, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_draft_source_drift',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_draft_source_drift',
+  });
+  const draft = await n6Draft(ctx, input);
+  const semanticArtifact = await generateN6RuntimeDraftArtifact(ctx, input, draft);
+  const blocked = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [{
+      ...semanticArtifact,
+      source_hashes: {
+        ...semanticArtifact.source_hashes,
+        n5_handoff_hash: '9'.repeat(64),
+      },
+    }],
+  });
+
+  assert.equal(blocked.gate_status, 'blocked');
+  assert.equal(blocked.error_code, 'N6_DRAFT_ARTIFACT_SOURCE_HASH_DRIFT');
+  assert.equal(blocked.authority_ref, null);
+  assert.equal(blocked.handoff_ref, null);
+});
+
+test('v1b workflow harness N6 runtime draft audit drift and legacy artifacts block before authority write', async () => {
+  const auditCtx = await seedHarnessV1aBundle();
+  const { n5: auditN5 } = await runReadyN5(auditCtx);
+  const auditInput = await n6Request(auditCtx, auditN5, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_draft_audit_drift',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_draft_audit_drift',
+  });
+  const auditDraft = await n6Draft(auditCtx, auditInput);
+  const runtimeArtifact = await generateN6RuntimeDraftArtifact(auditCtx, auditInput, auditDraft);
+  const auditBlocked = await auditCtx.service.invokeNode({
+    ...auditInput,
+    semantic_artifacts: [{
+      ...runtimeArtifact,
+      runtime_audit_hash: '6'.repeat(64),
+    }],
+  });
+
+  assert.equal(auditBlocked.gate_status, 'blocked');
+  assert.equal(auditBlocked.error_code, 'N6_DRAFT_ARTIFACT_RUNTIME_CONTEXT_DRIFT');
+  assert.equal(auditBlocked.authority_ref, null);
+  assert.equal(auditBlocked.handoff_ref, null);
+
+  const legacyCtx = await seedHarnessV1aBundle();
+  const { n5: legacyN5 } = await runReadyN5(legacyCtx);
+  const legacyInput = await n6Request(legacyCtx, legacyN5, {
+    workflow_run_id: 'workflow_run_v1b_n6_legacy_draft',
+    node_attempt_id: 'node_attempt_v1b_n6_legacy_draft',
+  });
+  const legacyDraft = await n6Draft(legacyCtx, legacyInput);
+  const legacyArtifact = await recordN6DraftArtifact(legacyCtx, legacyInput, legacyDraft);
+  const legacyBlocked = await legacyCtx.service.invokeNode({
+    ...legacyInput,
+    semantic_artifacts: [{
+      ...legacyArtifact,
+      runtime_provenance_class: 'legacy_unverified',
+    }],
+  });
+
+  assert.equal(legacyBlocked.gate_status, 'blocked');
+  assert.equal(legacyBlocked.error_code, 'N6_DRAFT_ARTIFACT_LEGACY_UNVERIFIED');
+  assert.equal(legacyBlocked.authority_ref, null);
+  assert.equal(legacyBlocked.handoff_ref, null);
+});
+
+test('v1b workflow harness N6 runtime draft cannot bypass deterministic candidate gates', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n5 } = await runReadyN5(ctx);
+  const input = await n6Request(ctx, n5, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_draft_no_authority_bypass',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_draft_no_authority_bypass',
+  });
+  const draft = await n6Draft(ctx, input);
+  const invalidDraft: TopicSelectionV1bTopicQuestionCandidateSetDraftPayload = {
+    ...draft,
+    candidates: [{
+      ...draft.candidates[0]!,
+      traceability_check: {
+        ...draft.candidates[0]!.traceability_check,
+        support_evidence_refs: [ref('research_slice_evidence_ref', 'unknown_runtime_evidence', TITLE_CARD_ID)],
+      },
+    }],
+  };
+  const semanticArtifact = await generateN6RuntimeDraftArtifact(ctx, input, invalidDraft);
+  const blocked = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [semanticArtifact],
+  });
+
+  assert.equal(blocked.gate_status, 'blocked');
+  assert.equal(blocked.error_code, 'N6_UNKNOWN_EVIDENCE_REF');
+  assert.equal(blocked.authority_ref, null);
+  assert.equal(blocked.handoff_ref, null);
 });
 
 test('v1b workflow harness N6 partial semantic failure admits only passing candidates without upstream rollback', async () => {

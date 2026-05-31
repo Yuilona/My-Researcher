@@ -464,7 +464,7 @@
 - Initial N5->N6 generation keeps `N5ToN6Handoff@v1` as the only authority input.
 - `n6_question_candidate_draft` may generate or admit `TopicQuestionCandidateSetDraft@v1` through the shared runtime, but it does not create candidate authority.
 - N6 deterministic gates still own schema validation, source/ref/hash validation, answerability checks, candidate admission, authority writes, and `N6ToN7Handoff@v1` emission.
-- Initial generation uses `v1b_topic_question_candidate_context` and generation mode `initial_from_n5`.
+- Initial generation uses `v1b_n6_topic_question_generation` and generation mode `initial_from_n5`.
 - Prompt/cache identity for the initial path includes the frozen input hash, `n5_handoff_hash`, selected research slice ref/hash, option-set ref/hash, selected-option ref/hash, selection-decision ref/hash, constraint/readiness refs/hashes, prompt variant, output contract, profile id/version/hash, model/runtime params hash, and redaction policy.
 - N6 draft artifacts should use the same machine-readable provenance classes as N7 support artifacts: `runtime_verified`, `fixture_replay`, and `legacy_unverified`.
 - First implementation should prefer `codex_assisted` and `mocked_llm`; provider canary can follow after runtime identity, admission, replay, and gate boundaries are stable.
@@ -522,6 +522,11 @@
   - add node-level N6 draft runtime adapter;
   - wire `WorkflowHarness` to call the node adapter for promoted initial-path draft generation/admission;
   - remove promoted initial-path direct draft generation after replacement L1/L2 tests pass.
+- Slice 1 implementation status:
+  - profile, runtime adapter, admission service, `WorkflowHarness` admission wiring, and L1/L2 tests are implemented for `initial_from_n5`;
+  - `legacy_unverified` N6 drafts now block before deterministic gates, and `fixture_replay` remains limited to non-product fixture paths;
+  - N6 frozen payload/context/handoff lineage validation now runs before draft artifact resolution/admission;
+  - next work remains P2.1 L3 Prisma-backed smoke, provider canary, long-context/adversarial coverage, then P2.1b regeneration/triage promotion.
 
 ### Implementation Order
 - P2.1 v1b N6 initial topic-question candidate generation:
