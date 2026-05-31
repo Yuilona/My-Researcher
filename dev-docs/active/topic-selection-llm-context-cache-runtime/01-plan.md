@@ -396,7 +396,7 @@
 ### Decision Gates
 - D19 MUST lock the v1b N7 first-slice scope, context families, input refs, identity fields, and handoff shape before code changes.
 - D23 SHOULD lock the v1b semantic support generation/admission path before production/provider artifact rows are accepted.
-- D20 SHOULD keep DB-backed context packet cache out of this slice unless D19 exposes a concrete cross-process reuse requirement.
+- D20 is locked for v1a and SHOULD remain the default for the v1b N7 slice: keep DB-backed context packet cache out unless D19 exposes a concrete cross-process reuse requirement with freshness and cleanup policy.
 - D21 MUST lock v1b N7 compression executors and preserved facts before token-budget overage paths are enabled.
 - D22 MUST define the v1b N7 verification ladder before expanding to v1b N4/N6/N8.
 

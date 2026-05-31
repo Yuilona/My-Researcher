@@ -90,6 +90,12 @@ Each child v1a harness also writes its normal artifacts under:
 - Prompt packet cache index rows are created as artifact-ref-only metadata for the expected invocation slots.
 - N6 single-agent and N6 multi-agent debate modes are both covered when selected.
 
+## Production Boundary
+- v1a production may use the current process-local context packet cache as an acceleration layer only.
+- A process restart or deploy can safely lose context packet cache hits; v1a must recompile ref-backed context packets and continue through the same token-budget, prompt-quality, schema, deterministic, replay, and authority gates.
+- Persistent DB prompt packet cache is in scope for v1a because it stores only redacted prompt artifact refs, quality report refs, hashes, freshness, and provenance.
+- Persistent DB context packet cache is out of scope for the v1a closure pack. Add it only in a later slice with explicit migration, freshness, cleanup, and cross-process reuse requirements.
+
 ## What It Does Not Prove
 - It does not prove live provider availability.
 - It does not prove OpenAI/DashScope provider-required live-call behavior.

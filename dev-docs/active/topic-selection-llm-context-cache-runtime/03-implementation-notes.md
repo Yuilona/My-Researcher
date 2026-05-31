@@ -11,10 +11,12 @@
 
 ## Pending Decisions
 - D19: lock v1b N7 as the first post-v1a runtime rollout slice, including exact slot scope, context families, input refs, prompt/cache identity fields, and N7->N8/loopback handoff shape.
-- D20: decide whether context packet cache remains runtime/in-memory plus artifact-ref based for this rollout, or whether a DB-backed context packet cache index is required later.
 - D21: lock v1b/v1c compression executor policy, including which slots allow `deterministic_structural` and `codex_assisted` compression and which facts must be preserved.
 - D22: lock production stress layering for v1b/v1c, including local/unit, Prisma-backed, provider canary, concurrency/load, and long-context/adversarial fixtures.
 - D23: lock v1b semantic support generation/admission path so support artifacts carry real prompt/profile/provenance hashes and production/provider paths cannot use placeholder prompt identities.
+
+## Locked Production Boundaries
+- D20: v1a production deployment keeps context packet cache as an artifact-ref read-through runtime index with the current process-local store. A restart/deploy may miss and recompile context packets; this is safe because context packets are acceleration/audit artifacts, not authority. Do not add a DB-backed context packet cache index until a later slice proves a concrete cross-process context-reuse requirement and defines migration, freshness, and cleanup policy.
 
 ## Implementation Backlog
 - Add shared contract schemas and schema tests. Done for the contract-first slice.
@@ -326,3 +328,11 @@
 - Wired the new hash through backend runtime key building, prompt packet runtime, N6 context packet read-through cache bindings, N6 single-agent adapter calls, N6 debate role/final calls, and v1a N5/N7/N8 token-budget runtime bindings.
 - N6 debate dynamic material is now explicit: arbiter issue framing/final synthesis pass role summaries and issue-frame refs as bounded dynamic prompt material records. These records can influence prompt rendering but cannot override prompt templates.
 - Extended v1a stress coverage so a nonsemantic scenario exact hit still reuses context artifacts, while supplemental round identity and explicit semantic scenario identity force cache misses.
+
+## 2026-05-31 - v1a Production Readiness Follow-Up
+- Committed the v1a runtime invocation-context implementation as `8b750fe feat(topic-selection): bind v1a runtime invocation context`.
+- Re-ran live OpenAI/DashScope provider canaries after the runtime identity changes. Provider-required prompt-cache hits still performed live gateway calls, and over-budget fixtures still called zero providers.
+- Re-ran Prisma-backed v1a N1-N9 main and replay-smoke harnesses with the balanced T-112 fixture. Main execution passed with deterministic mocked LLMs and replay drift blocked N6-N9 with `REPLAY_INPUT_HASH_MISMATCH` without extra LLM calls.
+- Re-ran a production-shaped OpenAI v1a provider slice with real provider calls for N5, N6, and N7. The full N1-N9 flow passed and published the v1b input bundle.
+- A DashScope N6 provider slice exposed provider prompt fragility: generated candidates were schema-valid but not validation-ready because they omitted non-empty `scope_notes`. Hardened the fixed N6 prompt compiler with explicit readiness constraints for `scope_notes` and `speculative=false`, then reran the DashScope N6 provider slice successfully.
+- Locked D20 for v1a: persistent DB context packet cache is not part of this production boundary. The deployed v1a path may lose context packet cache hits across process restarts and safely recompiles ref-backed context packets. Persistent prompt packet cache remains Prisma-backed; provider response reuse remains blocked for `provider_llm`.

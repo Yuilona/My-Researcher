@@ -168,6 +168,8 @@ Cross-provider cache semantics:
 ## Context Packet Cache Read-Through Contract
 The context packet cache is a lightweight lookup index over ref-backed artifacts. It MUST NOT become a second authority store or stage-specific payload store.
 
+For the v1a production boundary, the context packet cache index is process-local. Loss of that index after restart/deploy is a safe miss that recompiles the ref-backed context packet; correctness must not depend on a persistent context packet cache row.
+
 Runtime read-through order:
 1. Resolve `ContextPolicyProfile` and validate slot/profile/hash compatibility.
 2. Ask the stage adapter/context compiler for source refs, source hashes, memory refs, context family, and compiler metadata.

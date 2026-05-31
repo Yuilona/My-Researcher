@@ -60,6 +60,7 @@
 | Context cache | exact cross-provider context packet hit | returns existing artifact ref without provider response reuse |
 | Context cache | provider response presented as cross-provider cache hit | rejected or treated as miss |
 | Context cache | miss compiles and persists new context artifact | cache index row is inserted idempotently with artifact ref and provenance only |
+| Context cache | v1a process restart loses the process-local context cache entry | treated as a safe miss; context packet recompiles and deterministic/authority gates still run |
 | Context cache | stage adapter tries local read-through cache outside runtime | rejected or detected by runtime integration test |
 | Context cache | context-family mismatch with identical source refs | returns miss/block, never a hit |
 | Prompt cache | same system prompt with different debate role/stage prompt | produces distinct prompt packet hashes and no cross-role hit |
