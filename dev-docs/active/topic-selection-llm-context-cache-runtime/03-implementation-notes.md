@@ -10,7 +10,11 @@
 - Initial architecture aligns with T-088/T-089 D-18: cache is acceleration/replay only; durable memory is structured business memory; context families stay distinct; response reuse must be provenance-labeled and non-provider unless a live provider call actually occurs.
 
 ## Pending Decisions
-- None after D18 readiness alignment. Next decisions should focus on implementation execution order inside the approved first slice.
+- D19: lock v1b N7 as the first post-v1a runtime rollout slice, including exact slot scope, context families, input refs, prompt/cache identity fields, and N7->N8/loopback handoff shape.
+- D20: decide whether context packet cache remains runtime/in-memory plus artifact-ref based for this rollout, or whether a DB-backed context packet cache index is required later.
+- D21: lock v1b/v1c compression executor policy, including which slots allow `deterministic_structural` and `codex_assisted` compression and which facts must be preserved.
+- D22: lock production stress layering for v1b/v1c, including local/unit, Prisma-backed, provider canary, concurrency/load, and long-context/adversarial fixtures.
+- D23: lock v1b semantic support generation/admission path so support artifacts carry real prompt/profile/provenance hashes and production/provider paths cannot use placeholder prompt identities.
 
 ## Implementation Backlog
 - Add shared contract schemas and schema tests. Done for the contract-first slice.
@@ -293,3 +297,32 @@
   - child failures now report child stderr/stdout before attempting to read the summary artifact;
   - prompt packet index assertions now check expected slot minimums for single-agent and multi-agent-debate modes;
   - prompt quality validation now checks for `block` decisions rather than a non-existent `fail` decision.
+
+## 2026-05-31 - v1b N7 Runtime First Slice Planning Sync
+- Added `Next Phase 2 - v1b N7 Runtime First Slice` to `01-plan.md` as the post-v1a execution checklist.
+- Confirmed the planning stance for D19 discussion: v1b N7 should be treated as a context hub plus support-artifact admission surface before it is treated as a provider-generation node.
+- Identified the first N7 slot set for D19 alignment:
+  - `n7_candidate_grouping`;
+  - `n7_failed_trial_synthesis`;
+  - `n7_n8_debate_admission_review`.
+- Added D23 as a required support-path decision because current v1b harness/script paths can produce semantic artifacts with placeholder prompt identity metadata. Production/provider support artifacts must not be admitted under T-112 without real prompt packet, profile, input, and provenance hashes.
+- Documented the implementation boundary for the first N7 slice:
+  - keep N7 deterministic candidate selection, trial ledger, N8 admission, loopback, and persistence gates as authority;
+  - add runtime profile resolution, context admission, prompt identity validation, token-budget preflight, compression report validation, replay/idempotency checks, and audit provenance around support artifacts and context handoffs;
+  - do not promote v1b N4/N6/N8 or DB-backed context packet cache in the same slice unless D19-D22 explicitly change scope.
+
+## 2026-05-31 - D19 Output Context Clarification
+- Confirmed D19.1: v1b N7 may proceed as the first post-v1a runtime slice, without promoting v1b N4/N6/N8 in the same slice.
+- Clarified that v1b already has a workflow-level `N7ToN8Handoff@v1` contract. T-112 does not need to invent the business handoff; it needs runtime context families/profiles for cache, compression, prompt identity, token budget, replay, and audit semantics.
+- Corrected the proposed N7 output context model from one generic handoff family to two route-specific runtime context projections:
+  - `v1b_n7_to_n8_topic_question_contract_context` wraps the existing N7-to-N8 forward handoff and is consumed by N8 value assessment;
+  - `v1b_n7_to_n6_failed_trial_loopback_context` carries failed-trial synthesis, N8 feedback, failed candidate lineage, and regeneration hints back to N6.
+- The N7-to-N6 projection is initially a T-112 runtime context artifact, not automatically a new workflow handoff kind. D19 should still decide whether it remains runtime-only or becomes a formal `N7ToN6Handoff@v1` in a later contract slice.
+
+## 2026-05-31 - v1a Runtime Invocation Context Contract
+- Added `TopicSelectionRuntimeInvocationContext@v1` as the shared identity envelope for runtime-only semantic modifiers. The envelope captures semantic scenario identity, loop/repair identity, debate round/role/stage identity, parent invocation hashes, and dynamic prompt material hashes.
+- Added required `runtime_invocation_context_hash` fields to context packet cache keys, prompt packet identity, and runtime audit envelope contracts. This makes loop, supplemental, repair, debate, and semantic-scenario changes part of cache/prompt identity instead of node-local conventions.
+- Kept the runtime invocation context hash semantic-only. It intentionally excludes `workflow_run_id` and `node_attempt_id`, so exact context cache reuse can still work across equivalent workflow runs.
+- Wired the new hash through backend runtime key building, prompt packet runtime, N6 context packet read-through cache bindings, N6 single-agent adapter calls, N6 debate role/final calls, and v1a N5/N7/N8 token-budget runtime bindings.
+- N6 debate dynamic material is now explicit: arbiter issue framing/final synthesis pass role summaries and issue-frame refs as bounded dynamic prompt material records. These records can influence prompt rendering but cannot override prompt templates.
+- Extended v1a stress coverage so a nonsemantic scenario exact hit still reuses context artifacts, while supplemental round identity and explicit semantic scenario identity force cache misses.

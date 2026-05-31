@@ -39,6 +39,7 @@ export type BuildTopicSelectionPromptPacketRuntimeInput = {
   prompt_template_version: string;
   prompt_variant_key: string;
   invocation_slot_id: string;
+  runtime_invocation_context_hash: string;
   messages: TopicSelectionPromptPacketRuntimeMessage[];
   source_refs: TopicSelectionFunctionalRef[];
   context_packet_hashes?: string[];
@@ -134,6 +135,7 @@ export class TopicSelectionPromptPacketRuntimeService {
       {
         node_attempt_id: input.node_attempt_id,
         rendered_prompt_hash: renderedPromptHash,
+        runtime_invocation_context_hash: input.runtime_invocation_context_hash,
         runtime_modifiers_hash: input.runtime_modifiers_hash,
       },
       input.title_card_id ?? null,
@@ -147,6 +149,7 @@ export class TopicSelectionPromptPacketRuntimeService {
       prompt_template_version: input.prompt_template_version,
       prompt_variant_key: input.prompt_variant_key,
       invocation_slot_id: input.invocation_slot_id,
+      runtime_invocation_context_hash: input.runtime_invocation_context_hash,
       context_packet_hashes: contextPacketHashes,
       compression_report_ref: input.compression_report_ref ?? null,
       compression_report_hash: input.compression_report_hash ?? null,
@@ -264,6 +267,7 @@ export class TopicSelectionPromptPacketRuntimeService {
     this.assertNonEmpty(input.prompt_template_version, 'prompt_template_version');
     this.assertNonEmpty(input.prompt_variant_key, 'prompt_variant_key');
     this.assertNonEmpty(input.invocation_slot_id, 'invocation_slot_id');
+    this.assertNonEmpty(input.runtime_invocation_context_hash, 'runtime_invocation_context_hash');
     this.assertNonEmpty(input.output_contract, 'output_contract');
     this.assertNonEmpty(input.context_policy_profile_hash, 'context_policy_profile_hash');
     if (input.context_policy_profile_hash !== this.hash(input.context_policy_profile)) {

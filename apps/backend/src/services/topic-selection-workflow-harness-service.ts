@@ -173,6 +173,10 @@ import {
   TOPIC_SELECTION_V1A_N8_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
 } from './topic-selection-context-policy-profile-registry-service.js';
+import {
+  TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
+  type TopicSelectionRuntimeLoopKind,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-llm-runtime-contracts';
 import { TopicSelectionContextPacketCacheService } from './topic-selection-context-packet-cache-service.js';
 import type { TopicSelectionNeedValidationService } from './topic-selection-need-validation-service.js';
 import type { TopicSelectionSearchResourceService } from './topic-selection-search-resource-service.js';
@@ -3699,6 +3703,8 @@ export class TopicSelectionWorkflowHarnessService {
             TOPIC_SELECTION_V1A_N8_CONTEXT_RUNTIME_PROFILE_IDS.confirmation_semantic_review,
           invocationSlotId:
             TOPIC_SELECTION_V1A_N8_INVOCATION_SLOT_IDS.confirmation_semantic_review,
+          scenarioId: input.scenario_id,
+          scenarioCaseId: input.scenario_case_id ?? null,
           contextPayloads: [contextPacket],
         }),
         mocked_output: input.mocked_output ?? null,
@@ -4620,6 +4626,8 @@ export class TopicSelectionWorkflowHarnessService {
           TOPIC_SELECTION_V1A_N7_CONTEXT_RUNTIME_PROFILE_IDS.adjudication_recommendation,
         invocationSlotId:
           TOPIC_SELECTION_V1A_N7_INVOCATION_SLOT_IDS.adjudication_recommendation,
+        scenarioId: input.scenario_id,
+        scenarioCaseId: input.scenario_case_id ?? null,
         contextPayloads: [supportPacket],
         extraPayloads: [candidate, readiness],
       }),
@@ -5439,6 +5447,8 @@ export class TopicSelectionWorkflowHarnessService {
         contextPolicyProfileId:
           TOPIC_SELECTION_V1A_N5_CONTEXT_RUNTIME_PROFILE_IDS.evidence_extraction,
         invocationSlotId: TOPIC_SELECTION_V1A_N5_INVOCATION_SLOT_IDS.evidence_extraction,
+        scenarioId: input.scenario_id,
+        scenarioCaseId: input.scenario_case_id ?? null,
         contextPayloads: [input.extraction_context_packet],
       }),
       mocked_output: input.mocked_output ?? null,
@@ -7133,6 +7143,26 @@ export class TopicSelectionWorkflowHarnessService {
     });
     const explorationPayloadHash = this.hash(input.exploration_payload);
     const arbiterPayloadHash = this.hash(input.arbiter_payload);
+    const explorationRuntimeInvocationContextHash = this.runtimeInvocationContextHash({
+      invocationSlotId:
+        TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.need_candidate_generation,
+      scenarioId: input.scenario_id,
+      scenarioCaseId: input.scenario_case_id ?? null,
+      loopKind: this.n6RuntimeLoopKind(input),
+      loopStage: 'need_candidate_generation',
+      currentRoundIndex: input.current_round_index ?? 1,
+      remainingRoundBudget: input.remaining_round_budget ?? null,
+    });
+    const arbiterRuntimeInvocationContextHash = this.runtimeInvocationContextHash({
+      invocationSlotId:
+        TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.arbiter_final_synthesis,
+      scenarioId: input.scenario_id,
+      scenarioCaseId: input.scenario_case_id ?? null,
+      loopKind: this.n6RuntimeLoopKind(input),
+      loopStage: 'arbiter_final_synthesis',
+      currentRoundIndex: input.current_round_index ?? 1,
+      remainingRoundBudget: input.remaining_round_budget ?? null,
+    });
 
     return {
       cache_service: cacheService,
@@ -7140,10 +7170,12 @@ export class TopicSelectionWorkflowHarnessService {
         context_policy_profile: explorationProfile.profile,
         context_policy_profile_hash: explorationProfile.profile_hash,
         executor_kind: executorKind,
+        runtime_invocation_context_hash: explorationRuntimeInvocationContextHash,
         prompt_packet_hash: this.n6ContextCachePromptSeedHash({
           input,
           invocationSlotId:
             TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.need_candidate_generation,
+          runtimeInvocationContextHash: explorationRuntimeInvocationContextHash,
           contextPacketHashes: [explorationPayloadHash, arbiterPayloadHash],
           inputRefs,
         }),
@@ -7163,10 +7195,12 @@ export class TopicSelectionWorkflowHarnessService {
         context_policy_profile: arbiterProfile.profile,
         context_policy_profile_hash: arbiterProfile.profile_hash,
         executor_kind: executorKind,
+        runtime_invocation_context_hash: arbiterRuntimeInvocationContextHash,
         prompt_packet_hash: this.n6ContextCachePromptSeedHash({
           input,
           invocationSlotId:
             TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.arbiter_final_synthesis,
+          runtimeInvocationContextHash: arbiterRuntimeInvocationContextHash,
           contextPacketHashes: [arbiterPayloadHash],
           inputRefs,
         }),
@@ -7188,12 +7222,14 @@ export class TopicSelectionWorkflowHarnessService {
   private n6ContextCachePromptSeedHash(input: {
     input: TopicSelectionWorkflowHarnessGenerateNeedCandidateInput;
     invocationSlotId: string;
+    runtimeInvocationContextHash: string;
     contextPacketHashes: string[];
     inputRefs: TopicSelectionFunctionalRef[];
   }): string {
     return this.hash({
       node_id: GENERATE_NEED_CANDIDATE_NODE_ID,
       invocation_slot_id: input.invocationSlotId,
+      runtime_invocation_context_hash: input.runtimeInvocationContextHash,
       prompt_template_id: 'topic-selection-generate-need-candidate',
       prompt_template_version: 'v1',
       output_contract: 'RankedCandidateDraftBatch@v1',
@@ -7723,9 +7759,88 @@ export class TopicSelectionWorkflowHarnessService {
     throw new AppError(500, 'INTERNAL_ERROR', 'WorkflowHarness human-confirm-need requires humanConfirmationSemanticReviewAgent dependency.');
   }
 
+  private runtimeInvocationContextHash(input: {
+    invocationSlotId: string;
+    scenarioId?: string | null;
+    scenarioCaseId?: string | null;
+    loopKind?: TopicSelectionRuntimeLoopKind;
+    loopStage?: string | null;
+    currentRoundIndex?: number | null;
+    remainingRoundBudget?: number | null;
+    loopbackSourceNodeId?: string | null;
+    repairOriginRef?: TopicSelectionFunctionalRef | null;
+    repairOriginHash?: string | null;
+  }): string {
+    const semanticScenarioKey = this.semanticScenarioKey(input.scenarioId ?? null, input.scenarioCaseId ?? null);
+    return this.hash({
+      schema_version: TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
+      invocation_slot_id: input.invocationSlotId,
+      scenario_context: semanticScenarioKey
+        ? {
+          identity_policy: 'semantic_identity',
+          scenario_id: input.scenarioId ?? null,
+          scenario_case_id: input.scenarioCaseId ?? null,
+          semantic_scenario_key: semanticScenarioKey,
+        }
+        : {
+          identity_policy: 'not_semantic',
+          scenario_id: null,
+          scenario_case_id: null,
+          semantic_scenario_key: null,
+        },
+      loop_context: {
+        loop_kind: input.loopKind ?? 'not_applicable',
+        loop_stage: input.loopStage ?? null,
+        current_round_index: input.currentRoundIndex ?? null,
+        remaining_round_budget: input.remainingRoundBudget ?? null,
+        loopback_source_node_id: input.loopbackSourceNodeId ?? null,
+        repair_origin_ref: input.repairOriginRef ?? null,
+        repair_origin_hash: input.repairOriginHash ?? null,
+      },
+      debate_context: {
+        debate_loop_id: null,
+        debate_policy_id: null,
+        round_index: null,
+        role: null,
+        stage: null,
+        agent_instance_id: null,
+        parent_invocation_attempt_ids_hash: null,
+        dynamic_material_refs_hash: null,
+      },
+    });
+  }
+
+  private n6RuntimeLoopKind(
+    input: TopicSelectionWorkflowHarnessGenerateNeedCandidateInput,
+  ): TopicSelectionRuntimeLoopKind {
+    return (input.current_round_index ?? 1) > 1
+      ? 'supplemental_round'
+      : 'initial';
+  }
+
+  private semanticScenarioKey(
+    scenarioId: string | null,
+    scenarioCaseId: string | null,
+  ): string | null {
+    const normalizedScenarioId = scenarioId?.trim() || null;
+    const normalizedScenarioCaseId = scenarioCaseId?.trim() || null;
+    const semanticMarker = [normalizedScenarioId, normalizedScenarioCaseId]
+      .some((value) => value?.includes('semantic-runtime-identity') || value?.startsWith('semantic:'));
+    if (!semanticMarker) {
+      return null;
+    }
+    return this.hash({
+      scenario_id: normalizedScenarioId,
+      scenario_case_id: normalizedScenarioCaseId,
+    });
+  }
+
   private runtimeTokenBudgetForSlot(input: {
     contextPolicyProfileId: string;
     invocationSlotId: string;
+    scenarioId?: string | null;
+    scenarioCaseId?: string | null;
+    runtimeInvocationContextHash?: string | null;
     contextPayloads?: unknown[];
     extraPayloads?: unknown[];
   }): TopicSelectionAgentRuntimeTokenBudgetInput {
@@ -7736,6 +7851,13 @@ export class TopicSelectionWorkflowHarnessService {
     return {
       context_policy_profile: resolvedProfile.profile,
       context_policy_profile_hash: resolvedProfile.profile_hash,
+      runtime_invocation_context_hash: input.runtimeInvocationContextHash
+        ?? this.runtimeInvocationContextHash({
+          invocationSlotId: input.invocationSlotId,
+          scenarioId: input.scenarioId ?? null,
+          scenarioCaseId: input.scenarioCaseId ?? null,
+          loopKind: 'not_applicable',
+        }),
       context_payloads: input.contextPayloads ?? [],
       extra_payloads: input.extraPayloads ?? [],
     };

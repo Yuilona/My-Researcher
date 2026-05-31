@@ -156,6 +156,7 @@ const REQUIRED_CACHE_KEY_FIELDS = [
   'execution_mode',
   'executor_kind',
   'context_family',
+  'runtime_invocation_context_hash',
   'input_refs_hash',
   'context_packet_hashes',
   'prompt_packet_hash',

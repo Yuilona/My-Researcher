@@ -31,6 +31,7 @@ import {
 
 const hashA = 'a'.repeat(64);
 const hashB = 'b'.repeat(64);
+const hashC = 'c'.repeat(64);
 
 function makeServices() {
   const repository = new InMemoryTopicSelectionControlPlaneRepository();
@@ -168,6 +169,7 @@ function runtimeCacheBinding(
     context_policy_profile: resolved.profile,
     context_policy_profile_hash: resolved.profile_hash,
     executor_kind: 'single_agent',
+    runtime_invocation_context_hash: hashC,
     prompt_packet_hash: hashA,
     prompt_template_id: 'topic-selection-generate-need-candidate',
     prompt_template_version: 'v1',
@@ -196,6 +198,7 @@ function runtimeCacheKeyHashForExploration(binding: NeedDiscoveryRuntimeContextC
     execution_mode: input.execution_mode,
     executor_kind: binding.executor_kind,
     context_family: binding.context_policy_profile.context_family,
+    runtime_invocation_context_hash: binding.runtime_invocation_context_hash,
     input_refs_hash: inputRefsHash,
     context_packet_hashes: [payloadHash],
     prompt_packet_hash: binding.prompt_packet_hash,

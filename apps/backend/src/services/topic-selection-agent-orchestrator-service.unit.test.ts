@@ -220,6 +220,7 @@ function baseInvocation() {
 function runtimeTokenBudgetInput(overrides: {
   estimated_input_tokens_override?: number | null;
   compression_already_applied?: boolean;
+  runtime_invocation_context_hash?: string | null;
 } = {}) {
   const registry = new TopicSelectionContextPolicyProfileRegistryService();
   const resolvedProfile = registry.resolveProfile({
@@ -506,6 +507,41 @@ test('agent orchestrator binds explicit context packet hashes instead of ref has
     first.provenance.prompt_packet_hash,
     driftedContextHash.provenance.prompt_packet_hash,
   );
+});
+
+test('agent orchestrator binds runtime invocation context hash into prompt packet identity', async () => {
+  const { orchestrator } = makeOrchestrator();
+
+  const initial = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'mocked_llm',
+    runtime_token_budget: runtimeTokenBudgetInput({
+      estimated_input_tokens_override: 1000,
+      runtime_invocation_context_hash: hashB,
+    }),
+    context_packet_hashes: [hashB],
+    mocked_output: {
+      fixture_id: 'fixture_generate_need_candidate_happy_path',
+      output: output(),
+    },
+  });
+  const supplemental = await orchestrator.invokeStructuredOutput<CandidateDraftBatch>({
+    ...baseInvocation(),
+    execution_mode: 'mocked_llm',
+    runtime_token_budget: runtimeTokenBudgetInput({
+      estimated_input_tokens_override: 1000,
+      runtime_invocation_context_hash: hashC,
+    }),
+    context_packet_hashes: [hashB],
+    mocked_output: {
+      fixture_id: 'fixture_generate_need_candidate_happy_path',
+      output: output(),
+    },
+  });
+
+  assert.equal(initial.status, 'succeeded');
+  assert.equal(supplemental.status, 'succeeded');
+  assert.notEqual(initial.provenance.prompt_packet_hash, supplemental.provenance.prompt_packet_hash);
 });
 
 test('agent orchestrator blocks prompt quality failures before provider calls', async () => {

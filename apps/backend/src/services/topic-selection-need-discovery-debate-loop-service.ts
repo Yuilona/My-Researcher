@@ -19,6 +19,10 @@ import {
   type TopicSelectionRankedCandidateDraftBatch,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-need-validation-contracts';
 import {
+  TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
+  type TopicSelectionDynamicPromptMaterialRecord,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-llm-runtime-contracts';
+import {
   createTopicSelectionV1aGenerateNeedCandidateDebateScenarioContract,
   TOPIC_SELECTION_NEED_DISCOVERY_DEBATE_POLICY_ID,
   TOPIC_SELECTION_V1A_GENERATE_NEED_CANDIDATE_NODE_ID,
@@ -378,6 +382,9 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
         'arbiter_issue_frame',
         executionSpec,
         input.parentInvocationAttemptIds,
+        {
+          role_level_summary_refs: input.roleLevelSummaryRefs,
+        },
       ),
       profile_id: ISSUE_FRAME_SLOT.profile_id,
       output_contract: ISSUE_FRAME_SLOT.output_contract,
@@ -430,6 +437,7 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
         input.parentInvocationAttemptIds,
         {
           arbiter_issue_frame_ref: input.issueFrameRef,
+          role_level_summary_refs: input.roleLevelSummaryRefs,
         },
       ),
       profile_id: FINAL_SYNTHESIS_SLOT.profile_id,
@@ -464,11 +472,25 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
     parentInvocationAttemptIds: string[] = [],
     refs: {
       role_level_summary_ref?: TopicSelectionFunctionalRef | null;
+      role_level_summary_refs?: TopicSelectionFunctionalRef[] | null;
       arbiter_issue_frame_ref?: TopicSelectionFunctionalRef | null;
       arbiter_final_artifact_ref?: TopicSelectionFunctionalRef | null;
     } = {},
   ) {
     const invocationAttemptId = `${input.node_input.node_attempt_id}.${debateLoopId}.${role}.${stage}.${agentInstanceId}`;
+    const debateExtension = {
+      debate_loop_id: debateLoopId,
+      debate_policy_id: debatePolicyId,
+      round_index: roundIndex,
+      role,
+      stage,
+      agent_instance_id: agentInstanceId,
+      parent_invocation_attempt_ids: parentInvocationAttemptIds,
+      role_level_summary_ref: refs.role_level_summary_ref ?? null,
+      arbiter_issue_frame_ref: refs.arbiter_issue_frame_ref ?? null,
+      arbiter_final_artifact_ref: refs.arbiter_final_artifact_ref ?? null,
+    };
+    const dynamicMaterialRefs = this.dynamicPromptMaterialRefsForDebateSlot(input, role, stage, refs);
     return {
       workspace_id: input.workspace_id ?? null,
       title_card_id: input.title_card_id ?? null,
@@ -484,20 +506,11 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
       executor_kind: 'multi_agent_debate' as const,
       run_mode: input.run_mode,
       model_option_id: executionSpec.model_option_id,
-      runtime_token_budget: this.runtimeTokenBudgetInput(role, stage),
+      runtime_token_budget: this.runtimeTokenBudgetInput(role, stage, debateExtension, dynamicMaterialRefs),
       input_refs: this.inputRefs(input.node_input),
       context_packet_refs: this.contextPacketRefsForSlot(input, role),
       context_packet_hashes: this.contextPacketHashesForSlot(input, role),
-      debate_extension: {
-        debate_loop_id: debateLoopId,
-        debate_policy_id: debatePolicyId,
-        round_index: roundIndex,
-        role,
-        stage,
-        agent_instance_id: agentInstanceId,
-        parent_invocation_attempt_ids: parentInvocationAttemptIds,
-        ...refs,
-      },
+      debate_extension: debateExtension,
       created_by: input.created_by ?? 'system',
     };
   }
@@ -505,14 +518,93 @@ export class TopicSelectionNeedDiscoveryDebateLoopService {
   private runtimeTokenBudgetInput(
     role: 'explorer' | 'deep_critic' | 'arbiter',
     stage: string,
+    debateExtension: {
+      debate_loop_id: string;
+      debate_policy_id: string;
+      round_index: number;
+      role: 'explorer' | 'deep_critic' | 'arbiter';
+      stage: string;
+      agent_instance_id: string;
+      parent_invocation_attempt_ids: string[];
+      role_level_summary_ref?: TopicSelectionFunctionalRef | null;
+      arbiter_issue_frame_ref?: TopicSelectionFunctionalRef | null;
+      arbiter_final_artifact_ref?: TopicSelectionFunctionalRef | null;
+    },
+    dynamicMaterialRefs: TopicSelectionDynamicPromptMaterialRecord[],
   ): TopicSelectionAgentRuntimeTokenBudgetInput {
     const resolvedProfile = this.contextPolicyProfileRegistry.resolveProfile(
       this.contextRuntimeProfileForSlot(role, stage),
     );
+    const dynamicMaterialRefsHash = dynamicMaterialRefs.length > 0
+      ? this.hash(dynamicMaterialRefs)
+      : null;
     return {
       context_policy_profile: resolvedProfile.profile,
       context_policy_profile_hash: resolvedProfile.profile_hash,
+      runtime_invocation_context_hash: this.hash({
+        schema_version: TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
+        invocation_slot_id: resolvedProfile.profile.invocation_slot_id,
+        scenario_context: {
+          identity_policy: 'not_semantic',
+          scenario_id: null,
+          scenario_case_id: null,
+          semantic_scenario_key: null,
+        },
+        loop_context: {
+          loop_kind: 'debate_round',
+          loop_stage: debateExtension.stage,
+          current_round_index: debateExtension.round_index,
+          remaining_round_budget: null,
+          loopback_source_node_id: null,
+          repair_origin_ref: null,
+          repair_origin_hash: null,
+        },
+        debate_context: {
+          debate_loop_id: debateExtension.debate_loop_id,
+          debate_policy_id: debateExtension.debate_policy_id,
+          round_index: debateExtension.round_index,
+          role: debateExtension.role,
+          stage: debateExtension.stage,
+          agent_instance_id: debateExtension.agent_instance_id,
+          parent_invocation_attempt_ids_hash: debateExtension.parent_invocation_attempt_ids.length > 0
+            ? this.hash(debateExtension.parent_invocation_attempt_ids)
+            : null,
+          dynamic_material_refs_hash: dynamicMaterialRefsHash,
+        },
+      }),
+      dynamic_material_refs: dynamicMaterialRefs,
     };
+  }
+
+  private dynamicPromptMaterialRefsForDebateSlot(
+    input: TopicSelectionNeedDiscoveryDebateLoopInput,
+    role: 'explorer' | 'deep_critic' | 'arbiter',
+    stage: string,
+    refs: {
+      role_level_summary_ref?: TopicSelectionFunctionalRef | null;
+      role_level_summary_refs?: TopicSelectionFunctionalRef[] | null;
+      arbiter_issue_frame_ref?: TopicSelectionFunctionalRef | null;
+      arbiter_final_artifact_ref?: TopicSelectionFunctionalRef | null;
+    },
+  ): TopicSelectionDynamicPromptMaterialRecord[] {
+    const materialRefs = this.uniqueRefs([
+      refs.role_level_summary_ref,
+      ...(refs.role_level_summary_refs ?? []),
+      refs.arbiter_issue_frame_ref,
+      refs.arbiter_final_artifact_ref,
+    ].filter((ref): ref is TopicSelectionFunctionalRef => Boolean(ref)));
+    return materialRefs.map((materialRef) => ({
+      material_ref: materialRef,
+      material_hash: this.hash(materialRef),
+      generated_by_invocation_slot_id: `${role}.${stage}`,
+      generation_policy_ref: {
+        ref_type: 'debate_dynamic_material_policy',
+        ref_id: `${role}.${stage}.runtime-v1`,
+        title_card_id: input.title_card_id ?? null,
+      },
+      allowed_to_influence_prompt: true,
+      cannot_override_prompt_template: true,
+    }));
   }
 
   private contextPacketRefsForSlot(

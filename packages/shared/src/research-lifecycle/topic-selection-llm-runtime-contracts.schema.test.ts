@@ -8,6 +8,7 @@ import {
   TOPIC_SELECTION_OPERATOR_AUDIT_SUMMARY_SCHEMA_VERSION,
   TOPIC_SELECTION_PROMPT_QUALITY_REPORT_SCHEMA_VERSION,
   TOPIC_SELECTION_RUNTIME_AUDIT_ENVELOPE_SCHEMA_VERSION,
+  TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
   topicSelectionCompressionReportEnvelopeSchema,
   topicSelectionContextPacketCacheKeySchema,
   topicSelectionContextPacketCacheResultEnvelopeSchema,
@@ -21,6 +22,7 @@ import {
   topicSelectionPromptQualityReportSchema,
   topicSelectionRedactedPromptPacketArtifactSchema,
   topicSelectionRuntimeAuditEnvelopeSchema,
+  topicSelectionRuntimeInvocationContextSchema,
   topicSelectionTokenBudgetGateResultSchema,
   type TopicSelectionCompressionReportEnvelope,
   type TopicSelectionContextPacketCacheKey,
@@ -36,6 +38,7 @@ import {
   type TopicSelectionPromptQualityReport,
   type TopicSelectionRedactedPromptPacketArtifact,
   type TopicSelectionRuntimeAuditEnvelope,
+  type TopicSelectionRuntimeInvocationContext,
   type TopicSelectionTokenBudgetGateResult,
 } from './topic-selection-llm-runtime-contracts.js';
 
@@ -172,6 +175,7 @@ function cacheKey(): TopicSelectionContextPacketCacheKey {
     execution_mode: 'provider_llm',
     executor_kind: 'single_agent',
     context_family: 'v1a_n6_exploration',
+    runtime_invocation_context_hash: hash,
     input_refs_hash: hash,
     context_packet_hashes: [hashB],
     prompt_packet_hash: hashC,
@@ -257,6 +261,7 @@ function promptPacketIdentity(): TopicSelectionPromptPacketIdentity {
     prompt_template_version: 'v1',
     prompt_variant_key: 'single-agent.main',
     invocation_slot_id: 'v1a.n6.need-candidate-generation',
+    runtime_invocation_context_hash: hash,
     context_packet_hashes: [hashB],
     compression_report_ref: null,
     compression_report_hash: null,
@@ -373,6 +378,38 @@ function codexReuseProvenance(): TopicSelectionExactResponseReuseProvenance {
   };
 }
 
+function runtimeInvocationContext(): TopicSelectionRuntimeInvocationContext {
+  return {
+    schema_version: TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
+    invocation_slot_id: 'v1a.n6.need-candidate-generation',
+    scenario_context: {
+      identity_policy: 'semantic_identity',
+      scenario_id: 'scenario_001',
+      scenario_case_id: 'semantic-runtime-identity.case_001',
+      semantic_scenario_key: hash,
+    },
+    loop_context: {
+      loop_kind: 'supplemental_round',
+      loop_stage: 'need_candidate_generation',
+      current_round_index: 2,
+      remaining_round_budget: 1,
+      loopback_source_node_id: null,
+      repair_origin_ref: null,
+      repair_origin_hash: null,
+    },
+    debate_context: {
+      debate_loop_id: null,
+      debate_policy_id: null,
+      round_index: null,
+      role: null,
+      stage: null,
+      agent_instance_id: null,
+      parent_invocation_attempt_ids_hash: null,
+      dynamic_material_refs_hash: null,
+    },
+  };
+}
+
 function runtimeAuditEnvelope(): TopicSelectionRuntimeAuditEnvelope {
   return {
     schema_version: TOPIC_SELECTION_RUNTIME_AUDIT_ENVELOPE_SCHEMA_VERSION,
@@ -380,6 +417,7 @@ function runtimeAuditEnvelope(): TopicSelectionRuntimeAuditEnvelope {
     node_id: 'topic-selection.v1a.generate-need-candidate.v1',
     invocation_slot_id: 'v1a.n6.need-candidate-generation',
     node_attempt_id: 'node_attempt_001',
+    runtime_invocation_context_hash: hash,
     execution_mode: 'provider_llm',
     executor_kind: 'single_agent',
     run_mode: 'product',
@@ -503,11 +541,47 @@ test('topic-selection context policy profile rejects unknown context family and 
 test('topic-selection context packet cache key rejects missing profile schema policy fields', async () => {
   assert.equal(await validatesBody(topicSelectionContextPacketCacheKeySchema, cacheKey()), true);
 
-  for (const field of ['profile_hash', 'policy_version', 'schema_version']) {
+  for (const field of ['profile_hash', 'policy_version', 'schema_version', 'runtime_invocation_context_hash']) {
     const invalid = cacheKey() as unknown as Record<string, unknown>;
     delete invalid[field];
     assert.equal(await validatesBody(topicSelectionContextPacketCacheKeySchema, invalid), false);
   }
+});
+
+test('topic-selection runtime invocation context binds semantic scenario and loop identity', async () => {
+  assert.equal(
+    await validatesBody(topicSelectionRuntimeInvocationContextSchema, runtimeInvocationContext()),
+    true,
+  );
+
+  const nonSemanticWithScenario = {
+    ...runtimeInvocationContext(),
+    scenario_context: {
+      identity_policy: 'not_semantic',
+      scenario_id: 'scenario_001',
+      scenario_case_id: null,
+      semantic_scenario_key: null,
+    },
+  };
+  assert.equal(
+    await validatesBody(topicSelectionRuntimeInvocationContextSchema, nonSemanticWithScenario),
+    false,
+  );
+
+  const repairWithoutOrigin = {
+    ...runtimeInvocationContext(),
+    loop_context: {
+      ...runtimeInvocationContext().loop_context,
+      loop_kind: 'repair_from_node',
+      loopback_source_node_id: null,
+      repair_origin_ref: null,
+      repair_origin_hash: null,
+    },
+  };
+  assert.equal(
+    await validatesBody(topicSelectionRuntimeInvocationContextSchema, repairWithoutOrigin),
+    false,
+  );
 });
 
 test('topic-selection context packet cache result requires exact-hit artifact metadata and blocks stale artifacts', async () => {
@@ -574,6 +648,10 @@ test('topic-selection prompt packet identity requires variant and redacted ref-b
   const missingVariant = promptPacketIdentity() as unknown as Record<string, unknown>;
   delete missingVariant.prompt_variant_key;
   assert.equal(await validatesBody(topicSelectionPromptPacketIdentitySchema, missingVariant), false);
+
+  const missingRuntimeContextHash = promptPacketIdentity() as unknown as Record<string, unknown>;
+  delete missingRuntimeContextHash.runtime_invocation_context_hash;
+  assert.equal(await validatesBody(topicSelectionPromptPacketIdentitySchema, missingRuntimeContextHash), false);
 
   const missingCompressionHash = promptPacketIdentity() as unknown as Record<string, unknown>;
   delete missingCompressionHash.compression_report_hash;

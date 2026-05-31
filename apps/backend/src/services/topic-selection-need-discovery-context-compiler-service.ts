@@ -75,6 +75,7 @@ export type NeedDiscoveryRuntimeContextCacheBinding = {
   context_policy_profile: TopicSelectionContextPolicyProfile;
   context_policy_profile_hash: string;
   executor_kind: TopicSelectionExecutorKind;
+  runtime_invocation_context_hash: string;
   prompt_packet_hash: string;
   prompt_template_id: string;
   prompt_template_version: string;
@@ -491,6 +492,7 @@ export class TopicSelectionNeedDiscoveryContextCompilerService {
       execution_mode: packet.execution_mode,
       executor_kind: binding.executor_kind,
       context_family: binding.context_policy_profile.context_family,
+      runtime_invocation_context_hash: binding.runtime_invocation_context_hash,
       input_refs_hash: packet.input_refs_hash,
       context_packet_hashes: binding.context_packet_hashes ?? [packet.payload_hash],
       prompt_packet_hash: binding.prompt_packet_hash,

@@ -42,6 +42,7 @@ function keyBuilderInput() {
     execution_mode: 'provider_llm' as const,
     executor_kind: 'single_agent' as const,
     context_family: resolvedProfile.profile.context_family,
+    runtime_invocation_context_hash: hashA,
     input_refs: [
       ref('topic_scope', 'topic_scope_001'),
       ref('evidence_map', 'evidence_map_001'),
@@ -68,6 +69,7 @@ function promptIdentityInput() {
     prompt_template_version: 'v1',
     prompt_variant_key: 'need_candidate_generation',
     invocation_slot_id: resolvedProfile.profile.invocation_slot_id,
+    runtime_invocation_context_hash: hashA,
     context_packet_hashes: [hashA, hashB],
     compression_report_ref: null,
     compression_report_hash: null,
@@ -128,6 +130,12 @@ test('runtime key builder changes context cache hash on slot, context family, pr
     model_option_id: 'topic-selection.generate-need-candidate.single-agent.v1.openai-quality',
   }).hash;
   assert.notEqual(modelDrift, base);
+
+  const runtimeInvocationContextDrift = builder.buildContextPacketCacheKey({
+    ...keyBuilderInput(),
+    runtime_invocation_context_hash: hashB,
+  }).hash;
+  assert.notEqual(runtimeInvocationContextDrift, base);
 });
 
 test('runtime key builder rejects provider keys without model option or normalized params hash', () => {
@@ -203,6 +211,12 @@ test('runtime key builder creates prompt packet identity and binds variant, comp
   assert.equal(compressed.value.compression_report_ref?.ref_id, 'compression_report_001');
   assert.equal(compressed.value.compression_report_hash, hashB);
   assert.equal(compressed.value.compressed_context_hash, hashA);
+
+  const runtimeContextDrift = builder.buildPromptPacketIdentity({
+    ...promptIdentityInput(),
+    runtime_invocation_context_hash: hashB,
+  });
+  assert.notEqual(runtimeContextDrift.hash, base.hash);
 });
 
 test('runtime key builder rejects malformed prompt packet identity', () => {

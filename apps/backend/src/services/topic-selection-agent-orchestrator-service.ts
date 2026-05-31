@@ -17,9 +17,11 @@ import {
   type TopicSelectionAgentRunMode,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-profile-contracts';
 import {
+  TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
   TOPIC_SELECTION_PROMPT_QUALITY_REPORT_SCHEMA_VERSION,
   type TopicSelectionCompressionExecutorKind,
   type TopicSelectionContextPolicyProfile,
+  type TopicSelectionDynamicPromptMaterialRecord,
   type TopicSelectionExactResponseReuseProvenance,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-llm-runtime-contracts';
 import {
@@ -117,6 +119,8 @@ export type TopicSelectionAgentRuntimeTokenBudgetInput = {
   compression_report_ref?: TopicSelectionFunctionalRef | null;
   compression_report_hash?: string | null;
   compressed_context_hash?: string | null;
+  runtime_invocation_context_hash?: string | null;
+  dynamic_material_refs?: TopicSelectionDynamicPromptMaterialRecord[];
   context_payloads?: unknown[];
   extra_payloads?: unknown[];
   estimated_input_tokens_override?: number | null;
@@ -832,6 +836,7 @@ export class TopicSelectionAgentOrchestratorService {
       };
     }
 
+    const runtimeInvocationContextHash = this.runtimeInvocationContextHash(input, runtime);
     const promptPacket = this.promptPacketRuntime.buildPromptPacket({
       title_card_id: input.title_card_id ?? null,
       workflow_run_id: input.workflow_run_id,
@@ -841,12 +846,14 @@ export class TopicSelectionAgentOrchestratorService {
       prompt_template_version: input.prompt.version,
       prompt_variant_key: runtime.context_policy_profile.invocation_slot_id,
       invocation_slot_id: runtime.context_policy_profile.invocation_slot_id,
+      runtime_invocation_context_hash: runtimeInvocationContextHash,
       messages: input.messages,
       source_refs: this.promptSourceRefs(input),
       context_packet_hashes: this.promptContextPacketHashes(input),
       compression_report_ref: runtime.compression_report_ref ?? null,
       compression_report_hash: runtime.compression_report_hash ?? null,
       compressed_context_hash: runtime.compressed_context_hash ?? null,
+      dynamic_material_refs: runtime.dynamic_material_refs ?? [],
       output_contract: input.output_contract,
       context_policy_profile: runtime.context_policy_profile,
       context_policy_profile_hash: runtime.context_policy_profile_hash,
@@ -854,6 +861,7 @@ export class TopicSelectionAgentOrchestratorService {
       normalized_params_hash: resolvedProfile.normalized_params_hash,
       runtime_modifiers_hash: this.hash({
         compression_already_applied: runtime.compression_already_applied ?? false,
+        runtime_invocation_context_hash: runtimeInvocationContextHash,
         execution_mode: input.execution_mode,
         executor_kind: input.executor_kind,
         run_mode: input.run_mode,
@@ -1061,6 +1069,82 @@ export class TopicSelectionAgentOrchestratorService {
       return [];
     }
     return [this.hash(input.context_packet_refs)];
+  }
+
+  private runtimeInvocationContextHash(
+    input: TopicSelectionAgentInvocationRequest<unknown>,
+    runtime: TopicSelectionAgentRuntimeTokenBudgetInput,
+  ): string {
+    const suppliedHash = runtime.runtime_invocation_context_hash?.trim();
+    if (suppliedHash) {
+      return suppliedHash;
+    }
+
+    const debateExtension = input.debate_extension ?? null;
+    const dynamicMaterialRefsHash = runtime.dynamic_material_refs?.length
+      ? this.hash(runtime.dynamic_material_refs)
+      : null;
+    const debateDynamicMaterialRefsHash = debateExtension
+      ? this.hash({
+        dynamic_material_refs_hash: dynamicMaterialRefsHash,
+        role_level_summary_ref: debateExtension.role_level_summary_ref ?? null,
+        arbiter_issue_frame_ref: debateExtension.arbiter_issue_frame_ref ?? null,
+        arbiter_final_artifact_ref: debateExtension.arbiter_final_artifact_ref ?? null,
+      })
+      : null;
+
+    return this.hash({
+      schema_version: TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
+      invocation_slot_id: runtime.context_policy_profile.invocation_slot_id,
+      scenario_context: {
+        identity_policy: 'not_semantic',
+        scenario_id: null,
+        scenario_case_id: null,
+        semantic_scenario_key: null,
+      },
+      loop_context: debateExtension
+        ? {
+          loop_kind: 'debate_round',
+          loop_stage: debateExtension.stage,
+          current_round_index: debateExtension.round_index,
+          remaining_round_budget: null,
+          loopback_source_node_id: null,
+          repair_origin_ref: null,
+          repair_origin_hash: null,
+        }
+        : {
+          loop_kind: 'not_applicable',
+          loop_stage: null,
+          current_round_index: null,
+          remaining_round_budget: null,
+          loopback_source_node_id: null,
+          repair_origin_ref: null,
+          repair_origin_hash: null,
+        },
+      debate_context: debateExtension
+        ? {
+          debate_loop_id: debateExtension.debate_loop_id,
+          debate_policy_id: debateExtension.debate_policy_id,
+          round_index: debateExtension.round_index,
+          role: debateExtension.role,
+          stage: debateExtension.stage,
+          agent_instance_id: debateExtension.agent_instance_id,
+          parent_invocation_attempt_ids_hash: debateExtension.parent_invocation_attempt_ids.length > 0
+            ? this.hash(debateExtension.parent_invocation_attempt_ids)
+            : null,
+          dynamic_material_refs_hash: debateDynamicMaterialRefsHash,
+        }
+        : {
+          debate_loop_id: null,
+          debate_policy_id: null,
+          round_index: null,
+          role: null,
+          stage: null,
+          agent_instance_id: null,
+          parent_invocation_attempt_ids_hash: null,
+          dynamic_material_refs_hash: dynamicMaterialRefsHash,
+        },
+    });
   }
 
   private blockedSource<T>(

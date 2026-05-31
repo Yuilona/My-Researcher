@@ -201,6 +201,33 @@ v1a runtime closure blockers:
 - N8 semantic review must remain advisory and cannot replace human confirmation authority.
 - Cross-run context cache hits are allowed only for exact semantic cache identity; consumers must not require current workflow ownership, but must validate refs/hashes/profile/context-family before use.
 
+## v1b N7 Runtime First-Slice Candidate Rows
+These rows are the proposed first post-v1a promotion target. They are not implementation-ready until D19 locks the context families, required refs, prompt/cache identity fields, and handoff shape. Code MUST NOT bind runtime profiles for these rows until that decision is recorded.
+
+Proposed first-slice defaults for D19 discussion:
+- profile version: `v1`;
+- estimator: `ConservativeTokenEstimator`;
+- context cache persistence: artifact-ref runtime cache only, no DB-backed context packet index in this slice;
+- response reuse: provider response reuse blocked; Codex exact reuse requires explicit approved non-provider provenance; mocked reuse allowed only for test/acceptance fixtures;
+- support authority: support artifacts are non-authority and can only influence deterministic N7 gates through ref/hash-validated admission;
+- output context projections:
+  - `v1b_n7_to_n8_topic_question_contract_context` wraps the existing `N7ToN8Handoff@v1` payload for N8 value assessment;
+  - `v1b_n7_to_n6_failed_trial_loopback_context` carries failed-trial synthesis and regeneration context back to N6 when N7 exhausts candidate trials;
+- post-cache gates: N7 candidate selection, trial ledger, N8 debate admission, loopback routing, and persistence boundaries must still run.
+
+| Slot row id | Proposed profile id/version | Prompt variant key | Context/dynamic material to lock in D19 | Runtime policy to lock in D19 | First-slice tests |
+|---|---|---|---|---|---|
+| `n7_candidate_grouping` | `topic-selection.v1b.n7.candidate-grouping.context-runtime@v1` | `n7_candidate_grouping` | frozen N7 input, N6 handoff, candidate set/hash list, topic frame, workflow run context, optional prior grouping support ref/hash | support-only semantic; exact prompt/cache identity includes frozen input hash, N6 handoff hash, candidate set hash, profile hash, output contract, runtime modifiers, redaction policy; compression must preserve candidate ids/hashes, grouping rationale, risk/gap/recheck facts | exact replay no reinvoke; frozen input drift blocks; support hash drift blocks; cache hit does not choose candidate without deterministic N7 gate |
+| `n7_failed_trial_synthesis` | `topic-selection.v1b.n7.failed-trial-synthesis.context-runtime@v1` | `n7_failed_trial_synthesis` | frozen N7 input, N6 handoff, candidate set/hash list, N8 rejection/feedback refs, failed trial ledger refs/hashes, prior value/risk facts | support-only semantic; required when trial exhaustion loops back to N6; prompt/cache identity includes failed-trial ledger hash and feedback hash; compression must preserve failed reasons, accepted risks, residual risks, blockers, and loopback/recheck hints | missing required failed-trial context blocks; compression fact drop blocks; malformed reuse cannot create N6 loopback |
+| `n7_n8_debate_admission_review` | `topic-selection.v1b.n7.n8-debate-admission-review.context-runtime@v1` | `n7_n8_debate_admission_review` | frozen N7 input, selected candidate hash, N6 handoff, N8 gate-rejected feedback refs/hashes, grouping/failed-trial support refs when present | support-only semantic before deterministic N8 invocation admission; prompt/cache identity includes selected candidate hash and N8 feedback hash; compression must preserve debate need, value/risk facts, blockers, and recheck hints | gate-rejected feedback without support blocks; exact replay no reinvoke; support remains non-authority in N7->N8 handoff |
+
+v1b N7 first-slice blockers pending D19:
+- any production/provider support artifact with placeholder `prompt_packet_hash`, profile hash, slot spec hash, or normalized output hash is rejected unless D23 defines an explicit fixture-only exception;
+- any N7 runtime profile missing from the backend registry blocks before support admission or generation;
+- any context packet or support artifact with frozen input, source ref, profile, output contract, redaction, or context-family drift blocks before N7 deterministic gates;
+- any cache/reuse hit attempting to bypass N7 deterministic authority gates is invalid;
+- any compression report that drops candidate identity, failed-trial reasons, N6 handoff conclusions, N8 feedback, risk/gap/recheck hints, selected-candidate rationale, or accepted residual risks is invalid.
+
 ## Slot Inventory For Alignment
 This table locks the initial row inventory before implementation-ready cache/compression/reuse policy is filled for each slot.
 
@@ -257,6 +284,8 @@ First deep integration target: v1a N6. Its single-agent and debate rows are the 
 - Every provider-capable row must define token-budget gate behavior.
 - Every cache-capable row must define exact key fields and stale behavior.
 - Every compression-capable row must define quality checks and forbidden omissions.
+- Every LLM-capable row must define whether `runtime_invocation_context_hash` is `not_applicable`, `initial`, `supplemental_round`, `repair_from_node`, `debate_round`, or semantic-scenario-sensitive. The hash is semantic-only and must not include workflow-run or node-attempt ids.
+- Debate and generated prompt-material rows must identify dynamic material refs/hashes separately from fixed prompt template identity; dynamic material may influence a prompt but cannot override the template or authority boundary.
 
 ## Alignment Backlog
 These rows need explicit expansion before Phase 1 runtime implementation:

@@ -98,6 +98,16 @@
 | Runtime integration | external artifact admission bypasses runtime provenance/reuse validation | admission rejected |
 | v1b N7 context hub | missing required N6/N8 feedback/grouping context refs | context admission blocks or records explicit blocker |
 | v1b N7 context hub | valid support artifacts and frozen refs | produces ref-backed N7 handoff for N8/loopback without treating support as authority |
+| v1b N7 profile registry | D19-approved N7 profiles resolve by slot/profile id/version | profile hash is stable and registry blocks unknown, mismatch, or drifted profiles |
+| v1b N7 prompt identity | production/provider support artifact carries placeholder prompt packet/profile/slot hashes | support admission rejects it unless D23 marks it as fixture-only provenance |
+| v1b N7 prompt identity | frozen input, N6 handoff, candidate set, selected candidate, failed-trial ledger, or N8 feedback hash changes | prompt/cache identity changes and old support artifacts are not reused |
+| v1b N7 support admission | semantic support artifact normalized output hash differs from structured output hash or artifact payload hash | support admission blocks before N7 deterministic gates |
+| v1b N7 replay | exact replay of frozen N7 context and admitted support artifacts | no provider/Codex/mock reinvocation and N7 deterministic gates still run |
+| v1b N7 drift | frozen input or support artifact hash drift | no support reuse, no N7->N8 handoff mutation, and no authority write |
+| v1b N7 output context | N7 admits a topic-question contract for N8 | emits or indexes `v1b_n7_to_n8_topic_question_contract_context` tied to the existing `N7ToN8Handoff@v1` refs/hashes |
+| v1b N7 output context | N7 exhausts candidate trials and loops back to N6 | emits or indexes `v1b_n7_to_n6_failed_trial_loopback_context` with failed-trial synthesis and regeneration context, without pretending it is N8 forward handoff authority |
+| v1b N7 compression | compressed support context drops candidate identity, failed-trial reason, N6 handoff conclusion, N8 feedback, risk/gap/recheck hint, selected-candidate rationale, or accepted residual risk | compression quality gate blocks |
+| v1b N7 authority boundary | prompt/cache/reuse hit returns valid support metadata | candidate selection, trial ledger, N8 admission, loopback, and persistence gates still execute deterministically |
 | Token budget | over budget, compression disallowed | blocks before provider call |
 | Token budget | over budget, compression allowed | runs compression and records report |
 | v1a N6 compression | over target before compression and within target after compression | records `context_compression_report`, re-renders compressed prompt, performs one provider call, and still runs schema/admission/persistence gates |
@@ -122,6 +132,8 @@
 | v1a N6 provider mode historical response hit | treated as miss/block and cannot satisfy provider output |
 | v1a N6 stale context | cache miss/block and no unsafe authority writes |
 | v1a N6 read-through cache hit | existing context artifact ref is reused and candidate admission/persistence gates still run |
+| v1a N6 supplemental runtime identity | same context/model/input refs but `current_round_index > 1` | context packet cache misses because `runtime_invocation_context_hash` changes, and deterministic gates still run |
+| v1a N6 semantic scenario identity | same context/model/input refs but scenario is marked semantic-runtime-sensitive | context packet cache misses because semantic scenario identity participates in runtime hash |
 | v1a N6 Codex compression | long exploration context can be compressed only when profile allows it; arbiter/gate required facts remain preserved |
 | v1a N6 deterministic compression | over-target single-agent context records compression artifact, carries report provenance, re-renders compressed context, and does not skip deterministic gates |
 | v1a N6 compression identity | compression report artifact hash and compressed context hash are carried into prompt hash and invocation provenance |
@@ -129,6 +141,7 @@
 | v1a N6 compression quality block | missing required preserved facts surfaces `COMPRESSION_QUALITY_GATE_BLOCKED`, provider call count remains zero, and no authority write occurs |
 | v1a N6 slot isolation | single-agent, explorer, critic, arbiter framing, and arbiter final do not satisfy each other's cache/reuse keys |
 | v1a N6 dynamic issue frame | arbiter final synthesis uses fixed template plus issue-frame artifact ref; prompt hash changes when issue-frame hash changes |
+| v1a N6 debate dynamic material | role summaries or issue-frame refs change | prompt packet identity changes through bounded dynamic material refs; prompt template id/version stays fixed |
 | v1a N6 prompt quality gate | arbiter/final prompt missing blocker/risk/gap/recheck material blocks or warns according to profile |
 | v1a N6 debate prompt quality | governance markers and `risk-aware` domain text appear in debate context | prompt quality gate does not mask successful mocked debate execution |
 | v1a N6 duplicate merge hint | deterministic admission returns merge-hint/no-admissible result with `risk-aware` context | prompt quality gate does not mask deterministic admission blocker |
@@ -137,6 +150,13 @@
 | v1a N7 reused recommendation | residual risks/gaps still enforced |
 | v1b N4/N6/N8 | frozen input hash participates in reuse key |
 | v1b N7 | high-quality topic-question-contract context is admitted and produces N7->N8/loopback handoff refs |
+| v1b N7 exact replay | no extra LLM-like call, no duplicate topic-question-contract authority writes, and deterministic N7 gates still run |
+| v1b N7 frozen input drift | support reuse is rejected before candidate selection, N8 admission, loopback, or persistence |
+| v1b N7 support hash drift | semantic support artifact admission blocks before N7 deterministic gates |
+| v1b N7 placeholder prompt identity | production/provider support artifact with placeholder prompt packet metadata is rejected unless it is explicit fixture-only provenance |
+| v1b N7 compression preservation | risk/gap/recheck, failed-trial, N8 feedback, selected-candidate, and accepted-risk facts survive compression or the report blocks |
+| v1b N7 N7->N8 handoff | support artifacts are preserved as refs/hashes and remain non-authority in the handoff |
+| v1b N7 N7->N6 loopback context | failed-trial synthesis and regeneration hints are preserved as refs/hashes and remain non-authority repair context for N6 |
 | v1c N2 | promotion support compression cannot bypass deterministic promotion gate |
 | v1c feedback normalization | malformed reused packet cannot create downstream recheck |
 

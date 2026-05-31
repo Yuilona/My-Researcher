@@ -56,6 +56,7 @@ function buildCacheKey(): {
     execution_mode: 'provider_llm',
     executor_kind: 'single_agent',
     context_family: resolvedProfile.profile.context_family,
+    runtime_invocation_context_hash: hashA,
     input_refs_hash: hashA,
     context_packet_hashes: [hashB],
     prompt_packet_hash: hashC,

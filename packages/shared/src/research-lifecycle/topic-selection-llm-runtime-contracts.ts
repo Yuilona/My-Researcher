@@ -31,6 +31,8 @@ export const TOPIC_SELECTION_OPERATOR_AUDIT_SUMMARY_SCHEMA_VERSION =
   'TopicSelectionOperatorAuditSummary@v1' as const;
 export const TOPIC_SELECTION_HUMAN_TRUST_SUMMARY_SCHEMA_VERSION =
   'TopicSelectionHumanTrustSummary@v1' as const;
+export const TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION =
+  'TopicSelectionRuntimeInvocationContext@v1' as const;
 
 export const TOPIC_SELECTION_CONTEXT_FAMILIES = [
   'resource_sampling_literature_classification_batch',
@@ -170,6 +172,59 @@ export const TOPIC_SELECTION_RUNTIME_GATE_RESULTS = [
 export type TopicSelectionRuntimeGateResult =
   (typeof TOPIC_SELECTION_RUNTIME_GATE_RESULTS)[number];
 
+export const TOPIC_SELECTION_RUNTIME_SCENARIO_IDENTITY_POLICIES = [
+  'not_semantic',
+  'semantic_identity',
+] as const;
+export type TopicSelectionRuntimeScenarioIdentityPolicy =
+  (typeof TOPIC_SELECTION_RUNTIME_SCENARIO_IDENTITY_POLICIES)[number];
+
+export const TOPIC_SELECTION_RUNTIME_LOOP_KINDS = [
+  'not_applicable',
+  'initial',
+  'supplemental_round',
+  'repair_from_node',
+  'debate_round',
+] as const;
+export type TopicSelectionRuntimeLoopKind =
+  (typeof TOPIC_SELECTION_RUNTIME_LOOP_KINDS)[number];
+
+export interface TopicSelectionRuntimeScenarioContext {
+  identity_policy: TopicSelectionRuntimeScenarioIdentityPolicy;
+  scenario_id: string | null;
+  scenario_case_id: string | null;
+  semantic_scenario_key: string | null;
+}
+
+export interface TopicSelectionRuntimeLoopContext {
+  loop_kind: TopicSelectionRuntimeLoopKind;
+  loop_stage: string | null;
+  current_round_index: number | null;
+  remaining_round_budget: number | null;
+  loopback_source_node_id: string | null;
+  repair_origin_ref: TopicSelectionFunctionalRef | null;
+  repair_origin_hash: string | null;
+}
+
+export interface TopicSelectionRuntimeDebateContext {
+  debate_loop_id: string | null;
+  debate_policy_id: string | null;
+  round_index: number | null;
+  role: 'explorer' | 'deep_critic' | 'arbiter' | null;
+  stage: string | null;
+  agent_instance_id: string | null;
+  parent_invocation_attempt_ids_hash: string | null;
+  dynamic_material_refs_hash: string | null;
+}
+
+export interface TopicSelectionRuntimeInvocationContext {
+  schema_version: typeof TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION;
+  invocation_slot_id: string;
+  scenario_context: TopicSelectionRuntimeScenarioContext;
+  loop_context: TopicSelectionRuntimeLoopContext;
+  debate_context: TopicSelectionRuntimeDebateContext;
+}
+
 export interface TopicSelectionContextMemoryPolicy {
   allowed_memory_families: string[];
   required_use_labels: string[];
@@ -250,6 +305,7 @@ export interface TopicSelectionContextPacketCacheKey {
   execution_mode: TopicSelectionAgentExecutionMode;
   executor_kind: TopicSelectionExecutorKind;
   context_family: TopicSelectionContextFamily;
+  runtime_invocation_context_hash: string;
   input_refs_hash: string;
   context_packet_hashes: string[];
   prompt_packet_hash: string;
@@ -328,6 +384,7 @@ export interface TopicSelectionPromptPacketIdentity {
   prompt_template_version: string;
   prompt_variant_key: string;
   invocation_slot_id: string;
+  runtime_invocation_context_hash: string;
   context_packet_hashes: string[];
   compression_report_ref: TopicSelectionFunctionalRef | null;
   compression_report_hash: string | null;
@@ -437,6 +494,7 @@ export interface TopicSelectionRuntimeAuditEnvelope {
   node_id: string;
   invocation_slot_id: string;
   node_attempt_id: string;
+  runtime_invocation_context_hash: string;
   execution_mode: TopicSelectionAgentExecutionMode;
   executor_kind: TopicSelectionExecutorKind;
   run_mode: TopicSelectionAgentRunMode;
@@ -519,6 +577,158 @@ const nonEmptyFunctionalRefArray = {
   type: 'array',
   items: topicSelectionFunctionalRefSchema,
   minItems: 1,
+} as const;
+
+export const topicSelectionRuntimeScenarioContextSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'identity_policy',
+    'scenario_id',
+    'scenario_case_id',
+    'semantic_scenario_key',
+  ],
+  properties: {
+    identity_policy: { enum: [...TOPIC_SELECTION_RUNTIME_SCENARIO_IDENTITY_POLICIES] },
+    scenario_id: nullableStringId,
+    scenario_case_id: nullableStringId,
+    semantic_scenario_key: nullableStringId,
+  },
+  allOf: [
+    {
+      if: {
+        properties: { identity_policy: { const: 'not_semantic' } },
+        required: ['identity_policy'],
+      },
+      then: {
+        properties: {
+          scenario_id: { type: 'null' },
+          scenario_case_id: { type: 'null' },
+          semantic_scenario_key: { type: 'null' },
+        },
+      },
+    },
+    {
+      if: {
+        properties: { identity_policy: { const: 'semantic_identity' } },
+        required: ['identity_policy'],
+      },
+      then: {
+        properties: {
+          semantic_scenario_key: stringId,
+        },
+      },
+    },
+  ],
+} as const;
+
+export const topicSelectionRuntimeLoopContextSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'loop_kind',
+    'loop_stage',
+    'current_round_index',
+    'remaining_round_budget',
+    'loopback_source_node_id',
+    'repair_origin_ref',
+    'repair_origin_hash',
+  ],
+  properties: {
+    loop_kind: { enum: [...TOPIC_SELECTION_RUNTIME_LOOP_KINDS] },
+    loop_stage: nullableStringId,
+    current_round_index: {
+      anyOf: [{ type: 'integer', minimum: 1 }, { type: 'null' }],
+    },
+    remaining_round_budget: {
+      anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }],
+    },
+    loopback_source_node_id: nullableStringId,
+    repair_origin_ref: nullableFunctionalRef,
+    repair_origin_hash: nullableHashString,
+  },
+  allOf: [
+    {
+      if: {
+        properties: { loop_kind: { const: 'repair_from_node' } },
+        required: ['loop_kind'],
+      },
+      then: {
+        required: ['loopback_source_node_id', 'repair_origin_ref', 'repair_origin_hash'],
+        properties: {
+          loopback_source_node_id: stringId,
+          repair_origin_ref: topicSelectionFunctionalRefSchema,
+          repair_origin_hash: hashString,
+        },
+      },
+    },
+  ],
+} as const;
+
+export const topicSelectionRuntimeDebateContextSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'debate_loop_id',
+    'debate_policy_id',
+    'round_index',
+    'role',
+    'stage',
+    'agent_instance_id',
+    'parent_invocation_attempt_ids_hash',
+    'dynamic_material_refs_hash',
+  ],
+  properties: {
+    debate_loop_id: nullableStringId,
+    debate_policy_id: nullableStringId,
+    round_index: {
+      anyOf: [{ type: 'integer', minimum: 1 }, { type: 'null' }],
+    },
+    role: {
+      anyOf: [{ enum: ['explorer', 'deep_critic', 'arbiter'] }, { type: 'null' }],
+    },
+    stage: nullableStringId,
+    agent_instance_id: nullableStringId,
+    parent_invocation_attempt_ids_hash: nullableHashString,
+    dynamic_material_refs_hash: nullableHashString,
+  },
+  allOf: [
+    {
+      if: {
+        properties: { role: { enum: ['explorer', 'deep_critic', 'arbiter'] } },
+        required: ['role'],
+      },
+      then: {
+        required: ['debate_loop_id', 'debate_policy_id', 'round_index', 'stage', 'agent_instance_id'],
+        properties: {
+          debate_loop_id: stringId,
+          debate_policy_id: stringId,
+          round_index: { type: 'integer', minimum: 1 },
+          stage: stringId,
+          agent_instance_id: stringId,
+        },
+      },
+    },
+  ],
+} as const;
+
+export const topicSelectionRuntimeInvocationContextSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'invocation_slot_id',
+    'scenario_context',
+    'loop_context',
+    'debate_context',
+  ],
+  properties: {
+    schema_version: { const: TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION },
+    invocation_slot_id: stringId,
+    scenario_context: topicSelectionRuntimeScenarioContextSchema,
+    loop_context: topicSelectionRuntimeLoopContextSchema,
+    debate_context: topicSelectionRuntimeDebateContextSchema,
+  },
 } as const;
 
 export const topicSelectionContextMemoryPolicySchema = {
@@ -706,6 +916,7 @@ export const topicSelectionContextPacketCacheKeySchema = {
     'execution_mode',
     'executor_kind',
     'context_family',
+    'runtime_invocation_context_hash',
     'input_refs_hash',
     'context_packet_hashes',
     'prompt_packet_hash',
@@ -727,6 +938,7 @@ export const topicSelectionContextPacketCacheKeySchema = {
     execution_mode: { enum: [...TOPIC_SELECTION_AGENT_EXECUTION_MODES] },
     executor_kind: { enum: [...TOPIC_SELECTION_AGENT_EXECUTOR_KINDS] },
     context_family: { enum: [...TOPIC_SELECTION_CONTEXT_FAMILIES] },
+    runtime_invocation_context_hash: hashString,
     input_refs_hash: hashString,
     context_packet_hashes: hashArray,
     prompt_packet_hash: hashString,
@@ -901,6 +1113,7 @@ export const topicSelectionPromptPacketIdentitySchema = {
     'prompt_template_version',
     'prompt_variant_key',
     'invocation_slot_id',
+    'runtime_invocation_context_hash',
     'context_packet_hashes',
     'compression_report_ref',
     'compression_report_hash',
@@ -921,6 +1134,7 @@ export const topicSelectionPromptPacketIdentitySchema = {
     prompt_template_version: stringId,
     prompt_variant_key: stringId,
     invocation_slot_id: stringId,
+    runtime_invocation_context_hash: hashString,
     context_packet_hashes: hashArray,
     compression_report_ref: nullableFunctionalRef,
     compression_report_hash: nullableHashString,
@@ -1197,6 +1411,7 @@ export const topicSelectionRuntimeAuditEnvelopeSchema = {
     'node_id',
     'invocation_slot_id',
     'node_attempt_id',
+    'runtime_invocation_context_hash',
     'execution_mode',
     'executor_kind',
     'run_mode',
@@ -1233,6 +1448,7 @@ export const topicSelectionRuntimeAuditEnvelopeSchema = {
     node_id: stringId,
     invocation_slot_id: stringId,
     node_attempt_id: stringId,
+    runtime_invocation_context_hash: hashString,
     execution_mode: { enum: [...TOPIC_SELECTION_AGENT_EXECUTION_MODES] },
     executor_kind: { enum: [...TOPIC_SELECTION_AGENT_EXECUTOR_KINDS] },
     run_mode: { enum: [...TOPIC_SELECTION_AGENT_RUN_MODES] },

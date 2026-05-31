@@ -53,6 +53,7 @@ function promptPacket() {
     prompt_template_version: 'v1',
     prompt_variant_key: TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.need_candidate_generation,
     invocation_slot_id: TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.need_candidate_generation,
+    runtime_invocation_context_hash: hashA,
     messages: [
       {
         role: 'system',

@@ -35,6 +35,7 @@ export interface BuildTopicSelectionContextPacketCacheKeyInput {
   execution_mode: TopicSelectionAgentExecutionMode;
   executor_kind: TopicSelectionExecutorKind;
   context_family: TopicSelectionContextFamily;
+  runtime_invocation_context_hash: string;
   input_refs?: TopicSelectionFunctionalRef[];
   input_refs_hash?: string | null;
   context_packet_hashes: string[];
@@ -57,6 +58,7 @@ export interface BuildTopicSelectionPromptPacketIdentityInput {
   prompt_template_version: string;
   prompt_variant_key: string;
   invocation_slot_id: string;
+  runtime_invocation_context_hash: string;
   context_packet_hashes: string[];
   compression_report_ref?: TopicSelectionFunctionalRef | null;
   compression_report_hash?: string | null;
@@ -98,6 +100,7 @@ export class TopicSelectionLlmRuntimeKeyBuilderService {
       execution_mode: input.execution_mode,
       executor_kind: input.executor_kind,
       context_family: input.context_family,
+      runtime_invocation_context_hash: input.runtime_invocation_context_hash,
       input_refs_hash: input.input_refs_hash ?? this.hashFunctionalRefs(input.input_refs ?? []),
       context_packet_hashes: [...input.context_packet_hashes],
       prompt_packet_hash: input.prompt_packet_hash,
@@ -130,6 +133,7 @@ export class TopicSelectionLlmRuntimeKeyBuilderService {
       prompt_template_version: input.prompt_template_version,
       prompt_variant_key: input.prompt_variant_key,
       invocation_slot_id: input.invocation_slot_id,
+      runtime_invocation_context_hash: input.runtime_invocation_context_hash,
       context_packet_hashes: [...input.context_packet_hashes],
       compression_report_ref: input.compression_report_ref ?? null,
       compression_report_hash: input.compression_report_hash ?? null,
@@ -152,6 +156,7 @@ export class TopicSelectionLlmRuntimeKeyBuilderService {
       prompt_template_version: input.prompt_template_version,
       prompt_variant_key: input.prompt_variant_key,
       invocation_slot_id: input.invocation_slot_id,
+      runtime_invocation_context_hash: input.runtime_invocation_context_hash,
       context_packet_hashes: [...input.context_packet_hashes],
       compression_report_ref: input.compression_report_ref ?? null,
       compression_report_hash: input.compression_report_hash ?? null,

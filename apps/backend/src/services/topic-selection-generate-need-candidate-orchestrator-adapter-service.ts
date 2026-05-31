@@ -1,8 +1,9 @@
 import type {
   TopicSelectionFunctionalRef,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-control-plane-contracts';
-import type {
-  TopicSelectionContextPolicyProfile,
+import {
+  TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
+  type TopicSelectionContextPolicyProfile,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-llm-runtime-contracts';
 import {
   topicSelectionRankedCandidateDraftBatchSchema,
@@ -863,6 +864,7 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
     return {
       context_policy_profile: resolvedProfile.profile,
       context_policy_profile_hash: resolvedProfile.profile_hash,
+      runtime_invocation_context_hash: this.runtimeInvocationContextHash(input, resolvedProfile),
       compression_report_ref: options.compressionReportRef ?? null,
       compression_report_hash: options.compressionReportHash ?? null,
       compressed_context_hash: options.compressedContextHash ?? null,
@@ -872,6 +874,42 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
       schema_overhead_tokens_override: options.schemaOverheadTokensOverride
         ?? overrides.schema_overhead_tokens_override,
     };
+  }
+
+  private runtimeInvocationContextHash(
+    input: TopicSelectionGenerateNeedCandidateOrchestratorAdapterInput,
+    resolvedProfile: TopicSelectionResolvedContextPolicyProfile,
+  ): string {
+    const currentRoundIndex = input.current_round_index ?? 1;
+    return this.hash({
+      schema_version: TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
+      invocation_slot_id: resolvedProfile.profile.invocation_slot_id,
+      scenario_context: {
+        identity_policy: 'not_semantic',
+        scenario_id: null,
+        scenario_case_id: null,
+        semantic_scenario_key: null,
+      },
+      loop_context: {
+        loop_kind: currentRoundIndex > 1 ? 'supplemental_round' : 'initial',
+        loop_stage: 'need_candidate_generation',
+        current_round_index: currentRoundIndex,
+        remaining_round_budget: input.remaining_round_budget ?? null,
+        loopback_source_node_id: null,
+        repair_origin_ref: null,
+        repair_origin_hash: null,
+      },
+      debate_context: {
+        debate_loop_id: null,
+        debate_policy_id: null,
+        round_index: null,
+        role: null,
+        stage: null,
+        agent_instance_id: null,
+        parent_invocation_attempt_ids_hash: null,
+        dynamic_material_refs_hash: null,
+      },
+    });
   }
 
   private resolveSingleAgentRuntimeProfile(): TopicSelectionResolvedContextPolicyProfile {
@@ -1401,6 +1439,10 @@ export class TopicSelectionGenerateNeedCandidateOrchestratorAdapterService {
       unique.push(normalized);
     }
     return unique;
+  }
+
+  private hash(value: unknown): string {
+    return sha256Text(stableStringify(value));
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {

@@ -33,6 +33,7 @@ function promptPacketInput(overrides: Record<string, unknown> = {}) {
     prompt_template_version: 'v1',
     prompt_variant_key: 'need_candidate_generation',
     invocation_slot_id: TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.need_candidate_generation,
+    runtime_invocation_context_hash: 'a'.repeat(64),
     messages: [
       {
         role: 'system' as const,
@@ -77,6 +78,16 @@ test('prompt packet runtime creates redacted prompt artifact and passing quality
   assert.equal(serializedArtifact.includes('Return a grounded ranked candidate draft batch'), false);
   assert.equal(serializedArtifact.includes('context_packet_ref'), false);
   assert.equal(TOPIC_SELECTION_REDACTED_PROMPT_PACKET_ARTIFACT_SCHEMA_VERSION, 'TopicSelectionRedactedPromptPacketArtifact@v1');
+});
+
+test('prompt packet runtime binds runtime invocation context into prompt identity', () => {
+  const first = service.buildPromptPacket(promptPacketInput());
+  const second = service.buildPromptPacket(promptPacketInput({
+    runtime_invocation_context_hash: 'e'.repeat(64),
+  }));
+
+  assert.notEqual(second.identity.prompt_packet_hash, first.identity.prompt_packet_hash);
+  assert.equal(second.identity.runtime_invocation_context_hash, 'e'.repeat(64));
 });
 
 test('prompt packet runtime blocks forbidden prompt secrets and raw provider log text', () => {

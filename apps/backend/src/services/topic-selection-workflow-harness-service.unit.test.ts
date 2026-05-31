@@ -4748,9 +4748,31 @@ test('workflow harness stress-tests v1a N6 runtime cache boundaries', async () =
   llmGateway.setOutputForSchema(rankedSchemaName, rankedBatch(driftMissInput.node_attempt_id));
   const driftMiss = await workflowHarness.runGenerateNeedCandidateScenario(driftMissInput);
 
+  const supplementalRoundInput = {
+    ...baseProviderInput(
+      'runtime-stress-n6-cache-supplemental-runtime-miss',
+      'node_attempt_runtime_stress_cache_supplemental',
+      'workflow_run_runtime_stress_cache_supplemental',
+    ),
+    current_round_index: 2,
+    remaining_round_budget: 0,
+  };
+  llmGateway.setOutputForSchema(rankedSchemaName, rankedBatch(supplementalRoundInput.node_attempt_id));
+  const supplementalRound = await workflowHarness.runGenerateNeedCandidateScenario(supplementalRoundInput);
+
+  const semanticScenarioInput = baseProviderInput(
+    'semantic-runtime-identity.n6-cache-miss',
+    'node_attempt_runtime_stress_cache_semantic_scenario',
+    'workflow_run_runtime_stress_cache_semantic_scenario',
+  );
+  llmGateway.setOutputForSchema(rankedSchemaName, rankedBatch(semanticScenarioInput.node_attempt_id));
+  const semanticScenario = await workflowHarness.runGenerateNeedCandidateScenario(semanticScenarioInput);
+
   assertScenarioPassed(warm);
   assertScenarioPassed(exactHit);
   assertScenarioPassed(driftMiss);
+  assertScenarioPassed(supplementalRound);
+  assertScenarioPassed(semanticScenario);
   assert.equal(warm.compiled_context.exploration_context_packet.cache_hit, false);
   assert.equal(warm.compiled_context.arbiter_context_packet.cache_hit, false);
   assert.equal(exactHit.compiled_context.exploration_context_packet.cache_hit, true);
@@ -4765,6 +4787,10 @@ test('workflow harness stress-tests v1a N6 runtime cache boundaries', async () =
   );
   assert.equal(driftMiss.compiled_context.exploration_context_packet.cache_hit, false);
   assert.equal(driftMiss.compiled_context.arbiter_context_packet.cache_hit, false);
+  assert.equal(supplementalRound.compiled_context.exploration_context_packet.cache_hit, false);
+  assert.equal(supplementalRound.compiled_context.arbiter_context_packet.cache_hit, false);
+  assert.equal(semanticScenario.compiled_context.exploration_context_packet.cache_hit, false);
+  assert.equal(semanticScenario.compiled_context.arbiter_context_packet.cache_hit, false);
   assert.notEqual(
     driftMiss.compiled_context.exploration_context_ref.ref_id,
     warm.compiled_context.exploration_context_ref.ref_id,
@@ -4773,7 +4799,15 @@ test('workflow harness stress-tests v1a N6 runtime cache boundaries', async () =
     driftMiss.compiled_context.arbiter_context_ref.ref_id,
     warm.compiled_context.arbiter_context_ref.ref_id,
   );
-  assert.equal(llmGateway.calls.length, 3);
+  assert.notEqual(
+    supplementalRound.compiled_context.exploration_context_ref.ref_id,
+    warm.compiled_context.exploration_context_ref.ref_id,
+  );
+  assert.notEqual(
+    semanticScenario.compiled_context.arbiter_context_ref.ref_id,
+    warm.compiled_context.arbiter_context_ref.ref_id,
+  );
+  assert.equal(llmGateway.calls.length, 5);
   assert.equal((await needValidationRepository.listNeedCandidatesByTitleCardId('title_card_001')).length, 0);
 
   const exactHitArtifactKeys = (await controlPlaneRepository.listArtifactRefsByWorkflowRunId(
