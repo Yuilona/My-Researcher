@@ -8,7 +8,12 @@ import { fileURLToPath } from 'node:url';
 
 import { PrismaClient } from '@prisma/client';
 
-import { buildApp } from '../../apps/backend/src/app.ts';
+import {
+  buildApp,
+  resolveTitleCardManagementStoreConfig,
+} from '../../apps/backend/src/app.ts';
+import { PrismaTopicSelectionControlPlaneRepository } from '../../apps/backend/src/repositories/prisma/prisma-topic-selection-control-plane-repository.ts';
+import { PrismaTopicSelectionPromptPacketCacheStore } from '../../apps/backend/src/repositories/prisma/prisma-topic-selection-prompt-packet-cache-store.ts';
 import { PrismaTopicSelectionNeedValidationRepository } from '../../apps/backend/src/repositories/prisma/prisma-topic-selection-need-validation-repository.ts';
 import { BackendLlmGateway } from '../../apps/backend/src/services/llm-gateway.ts';
 import {
@@ -23,6 +28,10 @@ import {
   TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
   TopicSelectionModelProfileRegistryService,
 } from '../../apps/backend/src/services/topic-selection-model-profile-registry-service.ts';
+import { TopicSelectionAgentOrchestratorService } from '../../apps/backend/src/services/topic-selection-agent-orchestrator-service.ts';
+import { TopicSelectionControlPlaneService } from '../../apps/backend/src/services/topic-selection-control-plane-service.ts';
+import { TopicSelectionPromptPacketCacheService } from '../../apps/backend/src/services/topic-selection-prompt-packet-cache-service.ts';
+import { TopicSelectionV1bN7SupportRuntimeService } from '../../apps/backend/src/services/topic-selection-v1b-n7-support-runtime-service.ts';
 import {
   TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_DRAFT_SCHEMA_VERSION,
 } from '../../packages/shared/src/research-lifecycle/topic-selection-evidence-map-contracts.ts';
@@ -110,6 +119,11 @@ const REMOVED_LEGACY_WRITE_ROUTES = [
   '/topic-selection/v1b/topic-packages/drafts',
   '/topic-selection/v1b/topic-packages/package-route/v1c-input-bundles',
 ];
+const N7_RUNTIME_SUPPORT_SLOT_IDS = new Set([
+  'n7_candidate_grouping',
+  'n7_failed_trial_synthesis',
+  'n7_n8_debate_admission_review',
+]);
 
 function uniqueId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -137,6 +151,7 @@ function scenarioMode(raw) {
   const value = String(raw ?? 'positive').trim();
   if (
     value === 'positive'
+    || value === 'n7_runtime_smoke'
     || value === 'provider_negative_loopbacks'
     || value === 'external_codex_n6_variance'
     || value === 'external_codex_n4_variance'
@@ -214,6 +229,62 @@ function assertStatus(response, expected) {
   }
 }
 
+function groupBy(rows, key) {
+  const counts = {};
+  for (const row of rows) {
+    const value = row[key] ?? 'null';
+    counts[value] = (counts[value] ?? 0) + 1;
+  }
+  return counts;
+}
+
+async function promptPacketIndexSnapshot(prisma, since = null) {
+  const rows = await prisma.topicSelectionPromptPacketCacheIndex.findMany({
+    where: since ? { createdAt: { gte: since } } : undefined,
+    select: {
+      promptPacketHash: true,
+      invocationSlotId: true,
+      promptTemplateId: true,
+      promptTemplateVersion: true,
+      promptVariantKey: true,
+      contextPolicyProfileId: true,
+      outputContract: true,
+      modelOptionId: true,
+      qualityDecision: true,
+      freshnessStatus: true,
+      provenanceRef: true,
+      redactedPromptArtifactRef: true,
+      promptQualityReportRef: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+  const n7Rows = rows.filter((row) => N7_RUNTIME_SUPPORT_SLOT_IDS.has(row.invocationSlotId));
+  return {
+    total_count: rows.length,
+    n7_count: n7Rows.length,
+    by_invocation_slot_id: groupBy(rows, 'invocationSlotId'),
+    by_quality_decision: groupBy(rows, 'qualityDecision'),
+    by_freshness_status: groupBy(rows, 'freshnessStatus'),
+    n7_rows: n7Rows.map((row) => ({
+      prompt_packet_hash: row.promptPacketHash,
+      invocation_slot_id: row.invocationSlotId,
+      prompt_template_id: row.promptTemplateId,
+      prompt_template_version: row.promptTemplateVersion,
+      prompt_variant_key: row.promptVariantKey,
+      context_policy_profile_id: row.contextPolicyProfileId,
+      output_contract: row.outputContract,
+      model_option_id: row.modelOptionId,
+      quality_decision: row.qualityDecision,
+      freshness_status: row.freshnessStatus,
+      has_provenance_ref: Boolean(row.provenanceRef),
+      has_redacted_prompt_artifact_ref: Boolean(row.redactedPromptArtifactRef),
+      has_prompt_quality_report_ref: Boolean(row.promptQualityReportRef),
+      created_at: row.createdAt.toISOString(),
+    })),
+  };
+}
+
 async function invokeV1bHarnessNode(app, input) {
   const response = await app.inject({
     method: 'POST',
@@ -288,8 +359,12 @@ function sanitizeTelemetry(telemetry) {
     rate_limit_count: telemetry.rate_limit_count ?? null,
     input_tokens: telemetry.input_tokens ?? null,
     output_tokens: telemetry.output_tokens ?? null,
+    embedding_input_tokens: telemetry.embedding_input_tokens ?? null,
     total_tokens: telemetry.total_tokens ?? null,
     cost_usd: telemetry.cost_usd ?? null,
+    provider_side_cache_hit: telemetry.provider_side_cache_hit ?? null,
+    provider_side_cache_read_tokens: telemetry.provider_side_cache_read_tokens ?? null,
+    provider_side_cache_write_tokens: telemetry.provider_side_cache_write_tokens ?? null,
   };
 }
 
@@ -441,6 +516,19 @@ async function recordWorkflowHarnessSemanticArtifact(app, input, slot, payload, 
     adapter_policy_version: 'topic-selection-v1b-node-policy-v1',
     slot_spec_hash: 'e'.repeat(64),
     provenance_ref: ref('artifact_ref', provenance.artifact_ref_id, input.title_card_id ?? provenance.title_card_id),
+    runtime_provenance_class: options.runtimeProvenanceClass ?? 'fixture_replay',
+    context_policy_profile_id: options.contextPolicyProfileId ?? null,
+    context_policy_profile_version: options.contextPolicyProfileVersion ?? null,
+    context_policy_profile_hash: options.contextPolicyProfileHash ?? null,
+    prompt_variant_key: options.promptVariantKey ?? null,
+    runtime_invocation_context_hash: options.runtimeInvocationContextHash ?? null,
+    redaction_policy: options.redactionPolicy ?? null,
+    source_hashes: options.sourceHashes ?? {},
+    runtime_audit_ref: options.runtimeAuditRef ?? null,
+    runtime_audit_hash: options.runtimeAuditHash ?? null,
+    compression_report_ref: options.compressionReportRef ?? null,
+    compression_report_hash: options.compressionReportHash ?? null,
+    compressed_context_hash: options.compressedContextHash ?? null,
   };
 }
 
@@ -1551,6 +1639,15 @@ function n6LoopbackTriageSlot() {
   };
 }
 
+function n7CandidateGroupingSlot() {
+  return {
+    slot_id: 'n7_candidate_grouping',
+    allowed_effect: 'support_only',
+    output_contract: 'CandidateGroupingSupport@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_candidate_grouping_support,
+  };
+}
+
 function n7DebateAdmissionSlot() {
   return {
     slot_id: 'n7_n8_debate_admission_review',
@@ -1634,6 +1731,22 @@ async function recordN6LoopbackTriageArtifact(app, input, triagePayload) {
   );
 }
 
+function n7CandidateGroupingPayload(input) {
+  const payload = input.frozen_input.payload;
+  return {
+    selected_candidate_ref: payload.admissible_candidate_refs[1] ?? payload.admissible_candidate_refs[0],
+    selected_candidate_hash: payload.admissible_candidate_hashes[1] ?? payload.admissible_candidate_hashes[0],
+    priority_order: payload.admissible_candidate_refs.length > 1
+      ? [payload.admissible_candidate_refs[1], payload.admissible_candidate_refs[0]]
+      : [payload.admissible_candidate_refs[0]],
+    duplicate_or_overlap_groups: [],
+    candidate_relationships: {
+      ordered_by: 'runtime_smoke_codex_support',
+    },
+    grouping_summary: 'Runtime-verified Codex support prioritizes the higher-value non-overlapping candidate.',
+  };
+}
+
 function n7DebateAdmissionPayload(overrides = {}) {
   return {
     debate_level: 'provider_diverse_deep_debate',
@@ -1656,11 +1769,102 @@ function n7FailedTrialSynthesisPayload(n6Result, candidates) {
   };
 }
 
-async function recordN7SupportArtifact(app, input, slot, payload) {
-  return recordWorkflowHarnessSemanticArtifact(app, input, slot, payload, {
-    executionMode: 'codex_assisted',
-    profileId: slot.profile_id,
+function assertPrismaBackedHarness(label) {
+  const storeConfig = resolveTitleCardManagementStoreConfig();
+  assert.equal(
+    storeConfig.titleCardStrategy,
+    'prisma',
+    `${label} requires TITLE_CARD_REPOSITORY=prisma so runtime support artifacts share the HTTP harness store.`,
+  );
+}
+
+function createN7RuntimeSupportRuntime(prisma) {
+  assertPrismaBackedHarness('v1b N7 runtime support');
+  const controlPlane = new TopicSelectionControlPlaneService(
+    new PrismaTopicSelectionControlPlaneRepository(prisma),
+  );
+  const modelProfileRegistry = new TopicSelectionModelProfileRegistryService();
+  const promptPacketCache = new TopicSelectionPromptPacketCacheService({
+    store: new PrismaTopicSelectionPromptPacketCacheStore(prisma, {
+      allowMissingTableFallback: true,
+    }),
   });
+  const agentOrchestrator = new TopicSelectionAgentOrchestratorService({
+    controlPlane,
+    modelProfileRegistry,
+    promptPacketCache,
+  });
+  return new TopicSelectionV1bN7SupportRuntimeService(controlPlane, {
+    agentOrchestrator,
+    modelProfileRegistry,
+  });
+}
+
+async function assertRuntimeVerifiedN7SupportArtifact(app, semanticArtifact) {
+  assert.equal(semanticArtifact.runtime_provenance_class, 'runtime_verified');
+  assert.equal(semanticArtifact.execution_mode, 'codex_assisted');
+  assert.equal(semanticArtifact.allowed_effect, 'support_only');
+  assert.equal(semanticArtifact.model_option_id, null);
+  assert.match(semanticArtifact.prompt_packet_hash, /^[a-f0-9]{64}$/);
+  assert.match(semanticArtifact.runtime_invocation_context_hash, /^[a-f0-9]{64}$/);
+  assert.ok(semanticArtifact.runtime_audit_ref, 'runtime support requires audit ref.');
+  assert.match(semanticArtifact.runtime_audit_hash, /^[a-f0-9]{64}$/);
+  assert.ok(semanticArtifact.source_hashes?.frozen_input_hash, 'runtime support requires source hashes.');
+
+  const auditArtifact = await getWorkflowHarnessArtifact(app, semanticArtifact.runtime_audit_ref);
+  assert.equal(auditArtifact.checksum, semanticArtifact.runtime_audit_hash);
+  const provenance = auditArtifact.payload?.provenance;
+  assert.equal(provenance?.source_kind, 'codex_response');
+  assert.equal(provenance?.non_provider, true);
+  assert.equal(provenance?.execution_mode, 'codex_assisted');
+  assert.equal(provenance?.model_option_id, null);
+  assert.equal(provenance?.prompt_packet_hash, semanticArtifact.prompt_packet_hash);
+  assert.equal(provenance?.cache_status, 'not_applicable');
+  assert.equal(provenance?.response_reuse_ref, null);
+  assert.equal(provenance?.telemetry, null);
+  return auditArtifact.payload;
+}
+
+async function generateN7RuntimeSupportArtifact(app, runtime, input, slot, payload, options = {}) {
+  const runMode = options.runMode ?? input.run_mode ?? 'acceptance';
+  const generated = await runtime.generateSupportArtifact({
+    request: {
+      ...input,
+      run_mode: runMode,
+    },
+    slot_id: slot.slot_id,
+    execution_mode: 'codex_assisted',
+    run_mode: runMode,
+    codex_response: {
+      output: payload,
+      operator_label: options.operatorLabel ?? 'v1b-harness-e2e-runtime',
+    },
+    created_by: 'system',
+  });
+  assert.equal(generated.status, 'succeeded');
+  if (generated.status !== 'succeeded') {
+    assert.fail(`N7 runtime support generation blocked: ${JSON.stringify(generated.invocation_result)}`);
+  }
+  const auditSnapshot = await assertRuntimeVerifiedN7SupportArtifact(app, generated.semantic_artifact);
+  return {
+    semanticArtifact: generated.semantic_artifact,
+    structuredOutput: generated.structured_output,
+    summary: {
+      node_id: input.node_id,
+      slot_id: slot.slot_id,
+      execution_mode: 'codex_assisted',
+      runtime_provenance_class: generated.semantic_artifact.runtime_provenance_class,
+      context_policy_profile_id: generated.semantic_artifact.context_policy_profile_id,
+      prompt_packet_hash: generated.semantic_artifact.prompt_packet_hash,
+      runtime_invocation_context_hash: generated.semantic_artifact.runtime_invocation_context_hash,
+      runtime_audit_hash: generated.semantic_artifact.runtime_audit_hash,
+      context_packet_hash: generated.context_packet_hash,
+      output_hash: generated.semantic_artifact.structured_output_hash,
+      audit_source_kind: auditSnapshot.provenance?.source_kind ?? null,
+      audit_cache_status: auditSnapshot.provenance?.cache_status ?? null,
+      provider_telemetry_present: Boolean(auditSnapshot.provenance?.telemetry),
+    },
+  };
 }
 
 async function recordN8FeedbackArtifact(app, input, feedback) {
@@ -2367,7 +2571,7 @@ async function runReadyN6Fixture(app, setup, suffix, draftFactory = v1bHarnessN6
   };
 }
 
-async function runProviderN8GateReadmissionVariant(app, setup, suffix) {
+async function runProviderN8GateReadmissionVariant(app, setup, suffix, n7SupportRuntime) {
   const ready = await runReadyN6Fixture(app, setup, `${suffix}_n6_gate_readmission`);
   const n7InitialInput = await v1bHarnessN7Request(app, ready.n6, `${suffix}_n7_gate_readmission_initial`);
   const n7Initial = await invokeV1bHarnessNode(app, n7InitialInput);
@@ -2393,15 +2597,16 @@ async function runProviderN8GateReadmissionVariant(app, setup, suffix) {
     n8Rejected.hashes.gate_result_hash,
     `${suffix}_n7_gate_readmission_feedback`,
   );
-  const debateSupport = await recordN7SupportArtifact(
+  const debateSupport = await generateN7RuntimeSupportArtifact(
     app,
+    n7SupportRuntime,
     feedbackInput,
     n7DebateAdmissionSlot(),
     n7DebateAdmissionPayload(),
   );
   const readmitted = await invokeV1bHarnessNode(app, {
     ...feedbackInput,
-    semantic_artifacts: [debateSupport],
+    semantic_artifacts: [debateSupport.semanticArtifact],
   });
   assert.equal(readmitted.gate_status, 'admitted_with_warnings');
   assert.equal(readmitted.route_decision, 'invoke_next');
@@ -2409,7 +2614,7 @@ async function runProviderN8GateReadmissionVariant(app, setup, suffix) {
 
   return {
     case_id: 'n8_blocking_gate_to_n7_readmission',
-    semantic_artifacts: [...ready.semanticSummaries, n8Semantic.summary],
+    semantic_artifacts: [...ready.semanticSummaries, n8Semantic.summary, debateSupport.summary],
     nodes: {
       n6: summarizeNode(ready.n6),
       n7_initial: summarizeNode(n7Initial),
@@ -2419,7 +2624,7 @@ async function runProviderN8GateReadmissionVariant(app, setup, suffix) {
   };
 }
 
-async function runProviderN7TrialExhaustionVariant(app, setup, suffix) {
+async function runProviderN7TrialExhaustionVariant(app, setup, suffix, n7SupportRuntime) {
   const ready = await runReadyN6Fixture(
     app,
     setup,
@@ -2475,15 +2680,16 @@ async function runProviderN7TrialExhaustionVariant(app, setup, suffix) {
     secondN8,
   );
   const refreshedCandidates = await listV1bHarnessCandidates(app, ready.n6);
-  const synthesisSupport = await recordN7SupportArtifact(
+  const synthesisSupport = await generateN7RuntimeSupportArtifact(
     app,
+    n7SupportRuntime,
     exhaustedInput,
     n7FailedTrialSynthesisSlot(),
     n7FailedTrialSynthesisPayload(ready.n6, refreshedCandidates),
   );
   const exhausted = await invokeV1bHarnessNode(app, {
     ...exhaustedInput,
-    semantic_artifacts: [synthesisSupport],
+    semantic_artifacts: [synthesisSupport.semanticArtifact],
   });
   assert.equal(exhausted.gate_status, 'blocked');
   assert.equal(exhausted.failure_class, 'semantic_non_pass');
@@ -2494,7 +2700,12 @@ async function runProviderN7TrialExhaustionVariant(app, setup, suffix) {
   return {
     case_id: 'n7_trial_switch_and_exhaustion_to_n6_loopback',
     candidate_count: ready.candidates.length,
-    semantic_artifacts: [...ready.semanticSummaries, firstN8Semantic.summary, secondN8Semantic.summary],
+    semantic_artifacts: [
+      ...ready.semanticSummaries,
+      firstN8Semantic.summary,
+      secondN8Semantic.summary,
+      synthesisSupport.summary,
+    ],
     nodes: {
       n6: summarizeNode(ready.n6),
       n7_first_trial: summarizeNode(firstTrial),
@@ -2509,29 +2720,320 @@ async function runProviderN7TrialExhaustionVariant(app, setup, suffix) {
 async function runProviderBackedNegativeLoopbacks(app, suffix, existingBundle = null) {
   assert.equal(SEMANTIC_MODE, 'provider_llm', 'provider_negative_loopbacks requires provider_llm semantic mode.');
   assert.ok(PROVIDER_ID, 'provider_negative_loopbacks requires TOPIC_SELECTION_V1B_HARNESS_PROVIDER_ID.');
+  const prisma = new PrismaClient();
+  const n7SupportRuntime = createN7RuntimeSupportRuntime(prisma);
   const setup = await runV1bHarnessHttpSetupToN5(app, `${suffix}_setup`, existingBundle);
   const cases = [];
-  for (const loopbackTargetCode of [
-    'n6_regenerate_candidates',
-    'n6_debate_escalation',
-    'n6_loopback_to_n5_select_different_slice',
-  ]) {
-    cases.push(await invokeProviderNegativeN6Loopback(
+  try {
+    for (const loopbackTargetCode of [
+      'n6_regenerate_candidates',
+      'n6_debate_escalation',
+      'n6_loopback_to_n5_select_different_slice',
+    ]) {
+      cases.push(await invokeProviderNegativeN6Loopback(
+        app,
+        setup,
+        `${suffix}_${loopbackTargetCode}`,
+        loopbackTargetCode,
+      ));
+    }
+    cases.push(await runProviderN8GateReadmissionVariant(
       app,
       setup,
-      `${suffix}_${loopbackTargetCode}`,
-      loopbackTargetCode,
+      `${suffix}_gate_readmission`,
+      n7SupportRuntime,
     ));
+    cases.push(await runProviderN7TrialExhaustionVariant(
+      app,
+      setup,
+      `${suffix}_trial_exhaustion`,
+      n7SupportRuntime,
+    ));
+    return {
+      bundle: setup.bundle,
+      selectedOption: setup.selectedOption,
+      setupSemanticSummaries: setup.semanticSummaries,
+      setupNodes: setup.nodes,
+      cases,
+    };
+  } finally {
+    await prisma.$disconnect();
   }
-  cases.push(await runProviderN8GateReadmissionVariant(app, setup, `${suffix}_gate_readmission`));
-  cases.push(await runProviderN7TrialExhaustionVariant(app, setup, `${suffix}_trial_exhaustion`));
-  return {
-    bundle: setup.bundle,
-    selectedOption: setup.selectedOption,
-    setupSemanticSummaries: setup.semanticSummaries,
-    setupNodes: setup.nodes,
-    cases,
+}
+
+async function assertN7RuntimePromptIndex(prisma, startedAt) {
+  const snapshot = await promptPacketIndexSnapshot(prisma, startedAt);
+  for (const slotId of N7_RUNTIME_SUPPORT_SLOT_IDS) {
+    assert.ok(
+      snapshot.n7_rows.some((row) => row.invocation_slot_id === slotId),
+      `Expected Prisma prompt packet index row for ${slotId}.`,
+    );
+  }
+  for (const row of snapshot.n7_rows) {
+    assert.match(row.prompt_packet_hash, /^[a-f0-9]{64}$/);
+    assert.equal(row.model_option_id, null);
+    assert.ok(row.has_provenance_ref, 'Prompt index row must store provenance ref metadata.');
+    assert.ok(row.has_redacted_prompt_artifact_ref, 'Prompt index row must store redacted prompt ref metadata.');
+    assert.ok(row.has_prompt_quality_report_ref, 'Prompt index row must store prompt quality report ref metadata.');
+    assert.equal(Object.hasOwn(row, 'messages'), false);
+    assert.equal(Object.hasOwn(row, 'provider_response'), false);
+  }
+  return snapshot;
+}
+
+async function assertLoopbackProjection(app, result) {
+  const trace = await getWorkflowHarnessTraceSnapshotPayload(result.trace_snapshot_ref);
+  const projectionRef = trace.runtime_context_projection_ref;
+  assert.equal(projectionRef?.ref_type, 'artifact_ref');
+  const projectionArtifact = await getWorkflowHarnessArtifact(app, projectionRef);
+  assert.equal(projectionArtifact.artifact_kind, 'diagnostic');
+  assert.equal(projectionArtifact.payload?.projection_kind, 'v1b_n7_to_n6_failed_trial_loopback_context');
+  assert.equal(projectionArtifact.payload?.non_authority, true);
+  assert.equal(projectionArtifact.payload?.loopback_target_code, 'n7_loopback_to_n6');
+  return projectionArtifact.payload;
+}
+
+async function runN7RuntimeForwardVariant(app, setup, n7SupportRuntime, suffix) {
+  const ready = await runReadyN6Fixture(
+    app,
+    setup,
+    `${suffix}_n6_two_candidates`,
+    v1bHarnessN6TwoCandidateDraft,
+  );
+  const n7Input = {
+    ...(await v1bHarnessN7Request(app, ready.n6, `${suffix}_n7_grouped`)),
+    run_mode: 'product',
   };
+  const groupingSupport = await generateN7RuntimeSupportArtifact(
+    app,
+    n7SupportRuntime,
+    n7Input,
+    n7CandidateGroupingSlot(),
+    n7CandidateGroupingPayload(n7Input),
+    { runMode: 'product', operatorLabel: 'v1b-n7-runtime-smoke-grouping' },
+  );
+  const n7 = await invokeV1bHarnessNode(app, {
+    ...n7Input,
+    semantic_artifacts: [groupingSupport.semanticArtifact],
+  });
+  assert.equal(n7.route_decision, 'invoke_next');
+  assert.ok(['admitted', 'admitted_with_warnings'].includes(n7.gate_status));
+  assert.ok(n7.warnings.some((warning) => warning.code === 'candidate_grouping_preserved'));
+
+  const n8Input = await v1bHarnessN8Request(app, n7, `${suffix}_n8_downstream`);
+  const n8Semantic = await recordCodexAssistedSemanticDraft(
+    app,
+    n8Input,
+    n8DraftSlot(),
+    v1bHarnessN8ValueDraft(n8Input),
+  );
+  const n8 = await invokeV1bHarnessNode(app, {
+    ...n8Semantic.invocationInput,
+    semantic_artifacts: [n8Semantic.semanticArtifact],
+  });
+  assert.ok(['admitted', 'admitted_with_warnings'].includes(n8.gate_status));
+  assert.equal(n8.route_decision, 'invoke_next');
+
+  return {
+    case_id: 'n7_runtime_grouping_to_n8',
+    semantic_artifacts: [...ready.semanticSummaries, groupingSupport.summary, n8Semantic.summary],
+    nodes: {
+      n6: summarizeNode(ready.n6),
+      n7: summarizeNode(n7),
+      n8: summarizeNode(n8),
+    },
+  };
+}
+
+async function runN7RuntimeReadmissionVariant(app, setup, n7SupportRuntime, suffix) {
+  const ready = await runReadyN6Fixture(app, setup, `${suffix}_n6_ready`);
+  const n7InitialInput = await v1bHarnessN7Request(app, ready.n6, `${suffix}_n7_initial`);
+  const n7Initial = await invokeV1bHarnessNode(app, n7InitialInput);
+  assert.equal(n7Initial.route_decision, 'invoke_next');
+
+  const n8RejectedInput = await v1bHarnessN8Request(app, n7Initial, `${suffix}_n8_blocking_gate`);
+  const n8Semantic = await recordCodexAssistedSemanticDraft(
+    app,
+    n8RejectedInput,
+    n8DraftSlot(),
+    v1bHarnessN8BlockingGateDraft(n8RejectedInput),
+  );
+  const n8Rejected = await invokeV1bHarnessNode(app, {
+    ...n8Semantic.invocationInput,
+    semantic_artifacts: [n8Semantic.semanticArtifact],
+  });
+  assert.equal(n8Rejected.gate_status, 'blocked');
+  assert.equal(n8Rejected.error_code, 'N8_ADVANCE_WITH_BLOCKING_GATE');
+
+  const feedbackInput = {
+    ...(await v1bHarnessN7FeedbackRequest(
+      app,
+      n7InitialInput,
+      n7Initial,
+      'gate_rejected',
+      n8Rejected.hashes.gate_result_hash,
+      `${suffix}_n7_feedback`,
+    )),
+    run_mode: 'product',
+  };
+  const debateSupport = await generateN7RuntimeSupportArtifact(
+    app,
+    n7SupportRuntime,
+    feedbackInput,
+    n7DebateAdmissionSlot(),
+    n7DebateAdmissionPayload(),
+    { runMode: 'product', operatorLabel: 'v1b-n7-runtime-smoke-debate-admission' },
+  );
+  const readmitted = await invokeV1bHarnessNode(app, {
+    ...feedbackInput,
+    semantic_artifacts: [debateSupport.semanticArtifact],
+  });
+  assert.equal(readmitted.gate_status, 'admitted_with_warnings');
+  assert.equal(readmitted.route_decision, 'invoke_next');
+  assert.equal(readmitted.authority_ref?.ref_id, n7Initial.authority_ref?.ref_id);
+
+  return {
+    case_id: 'n8_gate_rejection_runtime_readmission',
+    semantic_artifacts: [...ready.semanticSummaries, n8Semantic.summary, debateSupport.summary],
+    nodes: {
+      n6: summarizeNode(ready.n6),
+      n7_initial: summarizeNode(n7Initial),
+      n8_blocking_gate: summarizeNode(n8Rejected),
+      n7_readmitted: summarizeNode(readmitted),
+    },
+  };
+}
+
+async function runN7RuntimeExhaustionVariant(app, setup, n7SupportRuntime, suffix) {
+  const ready = await runReadyN6Fixture(
+    app,
+    setup,
+    `${suffix}_n6_two_candidates`,
+    v1bHarnessN6TwoCandidateDraft,
+  );
+  const n7InitialInput = await v1bHarnessN7Request(app, ready.n6, `${suffix}_n7_first_trial`);
+  const firstTrial = await invokeV1bHarnessNode(app, n7InitialInput);
+  assert.equal(firstTrial.route_decision, 'invoke_next');
+
+  const firstN8Input = await v1bHarnessN8Request(app, firstTrial, `${suffix}_n8_first_non_advance`);
+  const firstN8Semantic = await recordCodexAssistedSemanticDraft(
+    app,
+    firstN8Input,
+    n8DraftSlot(),
+    v1bHarnessN8NonAdvanceDraft(firstN8Input),
+  );
+  const firstN8 = await invokeV1bHarnessNode(app, {
+    ...firstN8Semantic.invocationInput,
+    semantic_artifacts: [firstN8Semantic.semanticArtifact],
+  });
+  assert.equal(firstN8.route_decision, 'invoke_next');
+  assert.ok(firstN8.authority_ref);
+
+  const secondTrialInput = await v1bHarnessN7FeedbackRequest(
+    app,
+    n7InitialInput,
+    firstTrial,
+    'semantic_candidate_failure',
+    firstN8.hashes.gate_result_hash,
+    `${suffix}_n7_second_trial`,
+    firstN8,
+  );
+  const secondTrial = await invokeV1bHarnessNode(app, secondTrialInput);
+  assert.equal(secondTrial.route_decision, 'invoke_next');
+  assert.notEqual(secondTrial.authority_ref?.ref_id, firstTrial.authority_ref?.ref_id);
+
+  const secondN8Input = await v1bHarnessN8Request(app, secondTrial, `${suffix}_n8_second_non_advance`);
+  const secondN8Semantic = await recordCodexAssistedSemanticDraft(
+    app,
+    secondN8Input,
+    n8DraftSlot(),
+    v1bHarnessN8NonAdvanceDraft(secondN8Input),
+  );
+  const secondN8 = await invokeV1bHarnessNode(app, {
+    ...secondN8Semantic.invocationInput,
+    semantic_artifacts: [secondN8Semantic.semanticArtifact],
+  });
+  assert.equal(secondN8.route_decision, 'invoke_next');
+  assert.ok(secondN8.authority_ref);
+
+  const exhaustedInput = {
+    ...(await v1bHarnessN7FeedbackRequest(
+      app,
+      n7InitialInput,
+      secondTrial,
+      'semantic_candidate_failure',
+      secondN8.hashes.gate_result_hash,
+      `${suffix}_n7_exhausted`,
+      secondN8,
+    )),
+    run_mode: 'product',
+  };
+  const refreshedCandidates = await listV1bHarnessCandidates(app, ready.n6);
+  const synthesisSupport = await generateN7RuntimeSupportArtifact(
+    app,
+    n7SupportRuntime,
+    exhaustedInput,
+    n7FailedTrialSynthesisSlot(),
+    n7FailedTrialSynthesisPayload(ready.n6, refreshedCandidates),
+    { runMode: 'product', operatorLabel: 'v1b-n7-runtime-smoke-failed-trial' },
+  );
+  const exhausted = await invokeV1bHarnessNode(app, {
+    ...exhaustedInput,
+    semantic_artifacts: [synthesisSupport.semanticArtifact],
+  });
+  assert.equal(exhausted.gate_status, 'blocked');
+  assert.equal(exhausted.route_decision, 'loopback');
+  assert.equal(exhausted.error_code, 'N7_CANDIDATE_TRIALS_EXHAUSTED');
+  const loopbackProjection = await assertLoopbackProjection(app, exhausted);
+
+  return {
+    case_id: 'n7_runtime_failed_trial_to_n6_loopback',
+    candidate_count: ready.candidates.length,
+    loopback_projection_kind: loopbackProjection.projection_kind,
+    semantic_artifacts: [
+      ...ready.semanticSummaries,
+      firstN8Semantic.summary,
+      secondN8Semantic.summary,
+      synthesisSupport.summary,
+    ],
+    nodes: {
+      n6: summarizeNode(ready.n6),
+      n7_first_trial: summarizeNode(firstTrial),
+      n8_first_non_advance: summarizeNode(firstN8),
+      n7_second_trial: summarizeNode(secondTrial),
+      n8_second_non_advance: summarizeNode(secondN8),
+      n7_exhausted: summarizeNode(exhausted),
+    },
+  };
+}
+
+async function runN7RuntimeSmoke(app, suffix, existingBundle = null) {
+  const startedAt = new Date();
+  const prisma = new PrismaClient();
+  const n7SupportRuntime = createN7RuntimeSupportRuntime(prisma);
+  try {
+    const promptIndexBefore = await promptPacketIndexSnapshot(prisma);
+    const setup = await runV1bHarnessHttpSetupToN5(app, `${suffix}_setup`, existingBundle);
+    const cases = [
+      await runN7RuntimeForwardVariant(app, setup, n7SupportRuntime, `${suffix}_forward`),
+      await runN7RuntimeReadmissionVariant(app, setup, n7SupportRuntime, `${suffix}_readmission`),
+      await runN7RuntimeExhaustionVariant(app, setup, n7SupportRuntime, `${suffix}_exhaustion`),
+    ];
+    const promptIndexAfter = await promptPacketIndexSnapshot(prisma);
+    const promptIndexCreated = await assertN7RuntimePromptIndex(prisma, startedAt);
+    return {
+      bundle: setup.bundle,
+      selectedOption: setup.selectedOption,
+      setupSemanticSummaries: setup.semanticSummaries,
+      setupNodes: setup.nodes,
+      prompt_index_before: promptIndexBefore,
+      prompt_index_after: promptIndexAfter,
+      prompt_index_created: promptIndexCreated,
+      cases,
+    };
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
 function externalCodexN4Prompt(bundle, sampleIndex) {
@@ -3095,6 +3597,9 @@ class FixtureTopicSelectionV1aLlmGateway {
         embedding_input_tokens: null,
         total_tokens: 0,
         cost_usd: null,
+        provider_side_cache_hit: null,
+        provider_side_cache_read_tokens: null,
+        provider_side_cache_write_tokens: null,
       },
     };
   }
@@ -3745,6 +4250,27 @@ async function main() {
             Object.entries(result.setupNodes).map(([node, nodeResult]) => [node, summarizeNode(nodeResult)]),
           ),
           samples: result.samples,
+        });
+        continue;
+      }
+
+      if (SCENARIO === 'n7_runtime_smoke') {
+        const result = await runN7RuntimeSmoke(app, suffix, existingBundle);
+        runs.push({
+          run_index: index + 1,
+          scenario: SCENARIO,
+          v1b_input_bundle_source: existingBundle ? 'existing' : 'created_in_run',
+          title_card_id: result.bundle.title_card_id,
+          v1b_input_bundle_id: result.bundle.v1b_input_bundle_id,
+          selected_option_id: result.selectedOption.research_slice_option_id,
+          setup_semantic_artifacts: result.setupSemanticSummaries,
+          setup_nodes: Object.fromEntries(
+            Object.entries(result.setupNodes).map(([node, nodeResult]) => [node, summarizeNode(nodeResult)]),
+          ),
+          prompt_index_before: result.prompt_index_before,
+          prompt_index_after: result.prompt_index_after,
+          prompt_index_created: result.prompt_index_created,
+          cases: result.cases,
         });
         continue;
       }

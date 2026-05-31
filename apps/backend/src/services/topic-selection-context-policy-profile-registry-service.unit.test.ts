@@ -12,6 +12,8 @@ import {
   TOPIC_SELECTION_V1A_N7_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1A_N8_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1A_N8_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
 } from './topic-selection-context-policy-profile-registry-service.js';
 
@@ -78,6 +80,60 @@ test('context policy profile registry validates and resolves v1a runtime profile
   });
   assert.equal(confirmation.profile.context_family, 'v1a_n8_human_confirmation_semantic_review');
   assert.equal(confirmation.profile.functional_template, 'human_review_advisory');
+
+  const grouping = service.resolveProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS.candidate_grouping,
+    invocation_slot_id: TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS.candidate_grouping,
+  });
+  assert.equal(grouping.profile.context_family, 'v1b_n7_topic_question_hardening');
+  assert.equal(grouping.profile.functional_template, 'support_only_semantic');
+  assert.deepEqual(
+    grouping.profile.compression_policy.allowed_executor_kinds,
+    ['deterministic_structural', 'codex_assisted'],
+  );
+  assert.equal(
+    grouping.profile.compression_policy.preserved_fact_kinds.includes('candidate_identity'),
+    true,
+  );
+  assert.equal(
+    grouping.profile.compression_policy.preserved_fact_kinds.includes('overlap_group'),
+    true,
+  );
+  assert.equal(
+    grouping.profile.compression_policy.allowed_executor_kinds.includes(
+      'provider_llm' as never,
+    ),
+    false,
+  );
+
+  const failedTrial = service.resolveProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS.failed_trial_synthesis,
+    invocation_slot_id: TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS.failed_trial_synthesis,
+  });
+  assert.equal(
+    failedTrial.profile.compression_policy.preserved_fact_kinds.includes('n8_feedback'),
+    true,
+  );
+  assert.equal(
+    failedTrial.profile.compression_policy.preserved_fact_kinds.includes('loopback_target'),
+    true,
+  );
+
+  const debateAdmission = service.resolveProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS.n8_debate_admission_review,
+    invocation_slot_id: TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS.n8_debate_admission_review,
+  });
+  assert.equal(
+    debateAdmission.profile.compression_policy.preserved_fact_kinds.includes('n8_gate_rejection_reason'),
+    true,
+  );
+  assert.equal(
+    debateAdmission.profile.cache_policy.post_cache_gates.includes('n8_admission_boundary'),
+    true,
+  );
 });
 
 test('context policy profile registry fails closed for unknown profile, version mismatch, slot mismatch, and hash drift', () => {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  TOPIC_SELECTION_V1B_N7_RUNTIME_CONTEXT_PROJECTION_SCHEMA_VERSION,
   TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_NODE_IDS,
   TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_NODE_POLICIES,
   TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS,
@@ -77,6 +78,13 @@ import { InMemoryTopicSelectionV1bTopicPackageRepository } from '../repositories
 import { AppError } from '../errors/app-error.js';
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
 import { TopicSelectionV1bWorkflowHarnessService } from './topic-selection-v1b-workflow-harness-service.js';
+import {
+  TopicSelectionV1bN7SupportRuntimeService,
+  type TopicSelectionV1bN7RuntimeSupportPayload,
+} from './topic-selection-v1b-n7-support-runtime-service.js';
+import type {
+  TopicSelectionV1bN7SupportSlotId,
+} from './topic-selection-v1b-n7-support-admission-service.js';
 import {
   sha256Text,
   stableStringify,
@@ -224,6 +232,19 @@ function semanticArtifact(
     adapter_policy_version: 'topic-selection-v1b-node-policy-v1',
     slot_spec_hash: 'e'.repeat(64),
     provenance_ref: ref('artifact_ref', `${input.node_attempt_id}_provenance`),
+    runtime_provenance_class: 'fixture_replay',
+    context_policy_profile_id: null,
+    context_policy_profile_version: null,
+    context_policy_profile_hash: null,
+    prompt_variant_key: null,
+    runtime_invocation_context_hash: null,
+    redaction_policy: null,
+    source_hashes: {},
+    runtime_audit_ref: null,
+    runtime_audit_hash: null,
+    compression_report_ref: null,
+    compression_report_hash: null,
+    compressed_context_hash: null,
     ...overrides,
   };
 }
@@ -1124,6 +1145,31 @@ function n7DebateAdmissionPayload(
   };
 }
 
+async function generateN7RuntimeSupportArtifact<T extends TopicSelectionV1bN7RuntimeSupportPayload>(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  slotId: TopicSelectionV1bN7SupportSlotId,
+  output: T,
+): Promise<TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef> {
+  const runtime = new TopicSelectionV1bN7SupportRuntimeService(ctx.controlPlane);
+  const generated = await runtime.generateSupportArtifact({
+    request: input,
+    slot_id: slotId,
+    execution_mode: 'codex_assisted',
+    run_mode: input.run_mode ?? 'acceptance',
+    codex_response: {
+      output,
+      operator_label: 'unit-test-runtime',
+    },
+    created_by: 'system',
+  });
+  assert.equal(generated.status, 'succeeded');
+  if (generated.status !== 'succeeded') {
+    throw new Error('Expected N7 runtime support generation to succeed.');
+  }
+  return generated.semantic_artifact;
+}
+
 async function recordN8FeedbackArtifact(
   ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
   input: TopicSelectionV1bWorkflowHarnessRunRequest,
@@ -1666,6 +1712,19 @@ async function assertNoTraceArtifactForAttempt(
     && (artifact.payload as { node_id?: string } | null)?.node_id === input.node_id
   );
   assert.equal(failedTraceArtifacts.length, 0);
+}
+
+async function assertNoRuntimeContextProjectionForAttempt(
+  ctx: ReturnType<typeof makeContext>,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+): Promise<void> {
+  const artifacts = await ctx.controlPlane.listArtifactRefsByWorkflowRunId(input.workflow_run_id);
+  const projections = artifacts.filter((artifact) =>
+    artifact.artifact_kind === 'diagnostic'
+    && (artifact.payload as { schema_version?: string } | null)?.schema_version
+      === TOPIC_SELECTION_V1B_N7_RUNTIME_CONTEXT_PROJECTION_SCHEMA_VERSION
+    && (artifact.payload as { node_attempt_id?: string } | null)?.node_attempt_id === input.node_attempt_id);
+  assert.equal(projections.length, 0);
 }
 
 async function assertAuthorityWriteFailureCanRetry(
@@ -2607,6 +2666,7 @@ test('v1b workflow harness multi-record authority write failures do not leave re
         ),
         null,
       );
+      await assertNoRuntimeContextProjectionForAttempt(ctx, input);
     });
   }
 
@@ -3352,6 +3412,24 @@ test('v1b workflow harness N7 materializes an active TopicQuestionContract from 
   assert.equal(handoffPayload?.trial_ledger_ref?.ref_id, decision?.topic_question_selection_decision_id);
   assert.equal(handoffPayload?.n8_debate_admission_ref?.ref_type, 'artifact_ref');
 
+  const trace = await ctx.controlPlane.getTraceSnapshot(result.trace_snapshot_ref!.ref_id);
+  const projectionRef = trace?.payload.runtime_context_projection_ref as TopicSelectionFunctionalRef | null;
+  assert.equal(projectionRef?.ref_type, 'artifact_ref');
+  const projectionArtifact = await ctx.controlPlane.getArtifactRef(projectionRef!.ref_id);
+  const projection = projectionArtifact?.payload as {
+    n7_handoff_hash?: string;
+    n7_handoff_ref?: TopicSelectionFunctionalRef;
+    non_authority?: boolean;
+    projection_kind?: string;
+    topic_question_contract_ref?: TopicSelectionFunctionalRef;
+  } | null;
+  assert.equal(projectionArtifact?.artifact_kind, 'diagnostic');
+  assert.equal(projection?.projection_kind, 'v1b_n7_to_n8_topic_question_contract_context');
+  assert.equal(projection?.non_authority, true);
+  assert.equal(projection?.n7_handoff_ref?.ref_id, result.handoff_ref!.ref_id);
+  assert.equal(projection?.n7_handoff_hash, result.hashes.handoff_hash);
+  assert.equal(projection?.topic_question_contract_ref?.ref_id, result.authority_ref!.ref_id);
+
   const transitionRecord = await ctx.controlPlaneRepository.findChainTransitionAttemptById(
     result.transition_attempt_ref!.ref_id,
   );
@@ -3431,6 +3509,221 @@ test('v1b workflow harness N7 accepts Codex grouping support but blocks unknown 
   assert.equal(blocked.gate_status, 'blocked');
   assert.equal(blocked.error_code, 'N7_GROUPING_UNKNOWN_CANDIDATE_REF');
   assert.equal(blocked.authority_ref, null);
+});
+
+test('v1b workflow harness N7 support admission blocks fixture replay in product mode and legacy provenance', async () => {
+  const productCtx = await seedHarnessV1aBundle();
+  const { n6: productN6 } = await runReadyN6(productCtx);
+  const productInput = await n7Request(productCtx, productN6, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n7_product_fixture_support',
+    node_attempt_id: 'node_attempt_v1b_n7_product_fixture_support',
+  });
+  const fixtureSupport = await recordN7SupportArtifact(productCtx, productInput, {
+    allowed_effect: 'support_only',
+    output_contract: 'CandidateGroupingSupport@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_candidate_grouping_support,
+    slot_id: 'n7_candidate_grouping',
+  }, n7GroupingPayload(productInput) as unknown as Record<string, unknown>);
+  const productBlocked = await productCtx.service.invokeNode({
+    ...productInput,
+    semantic_artifacts: [fixtureSupport],
+  });
+  assert.equal(productBlocked.gate_status, 'blocked');
+  assert.equal(productBlocked.error_code, 'N7_SUPPORT_ARTIFACT_PROVENANCE_CLASS_INVALID');
+  assert.equal(productBlocked.authority_ref, null);
+
+  const legacyCtx = await seedHarnessV1aBundle();
+  const { n6: legacyN6 } = await runReadyN6(legacyCtx);
+  const legacyInput = await n7Request(legacyCtx, legacyN6, {
+    workflow_run_id: 'workflow_run_v1b_n7_legacy_support',
+    node_attempt_id: 'node_attempt_v1b_n7_legacy_support',
+  });
+  const legacySupport = await recordN7SupportArtifact(legacyCtx, legacyInput, {
+    allowed_effect: 'support_only',
+    output_contract: 'CandidateGroupingSupport@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_candidate_grouping_support,
+    slot_id: 'n7_candidate_grouping',
+  }, n7GroupingPayload(legacyInput) as unknown as Record<string, unknown>);
+  const legacyBlocked = await legacyCtx.service.invokeNode({
+    ...legacyInput,
+    semantic_artifacts: [{
+      ...legacySupport,
+      runtime_provenance_class: 'legacy_unverified',
+    }],
+  });
+  assert.equal(legacyBlocked.gate_status, 'blocked');
+  assert.equal(legacyBlocked.error_code, 'N7_SUPPORT_ARTIFACT_LEGACY_UNVERIFIED');
+  assert.equal(legacyBlocked.authority_ref, null);
+});
+
+test('v1b workflow harness N7 admits runtime-verified Codex support in product mode', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n6 } = await runReadyN6(ctx);
+  const input = await n7Request(ctx, n6, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n7_runtime_verified_support',
+    node_attempt_id: 'node_attempt_v1b_n7_runtime_verified_support',
+  });
+  const runtime = new TopicSelectionV1bN7SupportRuntimeService(ctx.controlPlane);
+  const grouping = n7GroupingPayload(input);
+  const generated = await runtime.generateSupportArtifact({
+    request: input,
+    slot_id: 'n7_candidate_grouping',
+    execution_mode: 'codex_assisted',
+    run_mode: 'product',
+    codex_response: {
+      output: grouping,
+      operator_label: 'test-runtime',
+    },
+    created_by: 'system',
+  });
+
+  assert.equal(generated.status, 'succeeded');
+  if (generated.status !== 'succeeded') {
+    throw new Error('Expected runtime N7 support generation to succeed.');
+  }
+  assert.equal(generated.semantic_artifact.runtime_provenance_class, 'runtime_verified');
+  assert.equal(generated.semantic_artifact.prompt_variant_key, 'n7_candidate_grouping');
+  assert.equal(
+    generated.semantic_artifact.context_policy_profile_id,
+    'topic-selection.v1b.n7.candidate-grouping.context-runtime@v1',
+  );
+  assert.notEqual(generated.semantic_artifact.prompt_packet_hash, 'c'.repeat(64));
+  assert.ok(generated.semantic_artifact.runtime_audit_ref);
+  assert.ok(generated.semantic_artifact.runtime_audit_hash);
+  assert.equal(generated.semantic_artifact.source_hashes.n6_handoff_hash, input.frozen_input.payload.n6_handoff_hash);
+
+  const result = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [generated.semantic_artifact],
+  });
+  assert.ok(['admitted', 'admitted_with_warnings'].includes(result.gate_status));
+  assert.equal(result.route_decision, 'invoke_next');
+  assert.equal(result.authority_ref?.ref_type, 'topic_question_contract');
+  assert.ok(result.warnings.some((warning) => warning.code === 'candidate_grouping_preserved'));
+});
+
+test('v1b workflow harness N7 runtime support exact replay does not rewrite authority artifacts', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n6 } = await runReadyN6(ctx);
+  const input = await n7Request(ctx, n6, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n7_runtime_support_replay',
+    node_attempt_id: 'node_attempt_v1b_n7_runtime_support_replay',
+  });
+  const support = await generateN7RuntimeSupportArtifact(
+    ctx,
+    input,
+    'n7_candidate_grouping',
+    n7GroupingPayload(input),
+  );
+  const first = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [support],
+  });
+  const artifactRefsBeforeReplay = await ctx.controlPlane.listArtifactRefsByWorkflowRunId(input.workflow_run_id);
+  const replay = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [support],
+  });
+  const artifactRefsAfterReplay = await ctx.controlPlane.listArtifactRefsByWorkflowRunId(input.workflow_run_id);
+
+  assert.equal(replay.replay_provenance?.replayed, true);
+  assert.equal(replay.authority_ref?.ref_id, first.authority_ref?.ref_id);
+  assert.equal(replay.handoff_ref?.ref_id, first.handoff_ref?.ref_id);
+  assert.equal(artifactRefsAfterReplay.length, artifactRefsBeforeReplay.length);
+});
+
+test('v1b workflow harness N7 runtime support drift blocks before authority write', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n6 } = await runReadyN6(ctx);
+  const input = await n7Request(ctx, n6, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n7_runtime_support_source_drift',
+    node_attempt_id: 'node_attempt_v1b_n7_runtime_support_source_drift',
+  });
+  const support = await generateN7RuntimeSupportArtifact(
+    ctx,
+    input,
+    'n7_candidate_grouping',
+    n7GroupingPayload(input),
+  );
+  const blocked = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [{
+      ...support,
+      source_hashes: {
+        ...support.source_hashes,
+        n6_handoff_hash: '9'.repeat(64),
+      },
+    }],
+  });
+
+  assert.equal(blocked.gate_status, 'blocked');
+  assert.equal(blocked.error_code, 'N7_SUPPORT_ARTIFACT_SOURCE_HASH_DRIFT');
+  assert.equal(blocked.authority_ref, null);
+  assert.equal(blocked.handoff_ref, null);
+});
+
+test('v1b workflow harness N7 runtime support audit drift blocks before authority write', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n6 } = await runReadyN6(ctx);
+  const input = await n7Request(ctx, n6, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n7_runtime_support_audit_drift',
+    node_attempt_id: 'node_attempt_v1b_n7_runtime_support_audit_drift',
+  });
+  const support = await generateN7RuntimeSupportArtifact(
+    ctx,
+    input,
+    'n7_candidate_grouping',
+    n7GroupingPayload(input),
+  );
+  const blocked = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [{
+      ...support,
+      runtime_audit_hash: '6'.repeat(64),
+    }],
+  });
+
+  assert.equal(blocked.gate_status, 'blocked');
+  assert.equal(blocked.error_code, 'N7_SUPPORT_ARTIFACT_RUNTIME_CONTEXT_DRIFT');
+  assert.equal(blocked.authority_ref, null);
+  assert.equal(blocked.handoff_ref, null);
+});
+
+test('v1b workflow harness N7 runtime support cannot bypass deterministic candidate gates', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n6 } = await runReadyN6(ctx);
+  const input = await n7Request(ctx, n6, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n7_runtime_support_no_authority_bypass',
+    node_attempt_id: 'node_attempt_v1b_n7_runtime_support_no_authority_bypass',
+  });
+  const unknownCandidateRef = ref('topic_question_candidate', 'unknown_runtime_candidate', TITLE_CARD_ID);
+  const invalidGrouping: TopicSelectionV1bCandidateGroupingSupportPayload = {
+    ...n7GroupingPayload(input),
+    priority_order: [unknownCandidateRef],
+    selected_candidate_hash: '8'.repeat(64),
+    selected_candidate_ref: unknownCandidateRef,
+  };
+  const support = await generateN7RuntimeSupportArtifact(
+    ctx,
+    input,
+    'n7_candidate_grouping',
+    invalidGrouping,
+  );
+  const blocked = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [support],
+  });
+
+  assert.equal(blocked.gate_status, 'blocked');
+  assert.equal(blocked.error_code, 'N7_GROUPING_UNKNOWN_CANDIDATE_REF');
+  assert.equal(blocked.authority_ref, null);
+  assert.equal(blocked.handoff_ref, null);
 });
 
 test('v1b workflow harness N7 blocks duplicate grouping priority and initial failed-trial synthesis', async () => {
@@ -3580,6 +3873,23 @@ test('v1b workflow harness N7 consumes N8 feedback to select next candidate or l
   assert.equal(exhausted.handoff_ref, null);
   assert.equal(exhausted.authority_ref?.ref_type, 'topic_question_selection_decision');
   await assertTraceLoopbackTargetCode(ctx, exhausted, 'n7_loopback_to_n6');
+  const exhaustedTrace = await ctx.controlPlane.getTraceSnapshot(exhausted.trace_snapshot_ref!.ref_id);
+  const loopbackProjectionRef = exhaustedTrace?.payload.runtime_context_projection_ref as TopicSelectionFunctionalRef | null;
+  assert.equal(loopbackProjectionRef?.ref_type, 'artifact_ref');
+  const loopbackProjectionArtifact = await ctx.controlPlane.getArtifactRef(loopbackProjectionRef!.ref_id);
+  const loopbackProjection = loopbackProjectionArtifact?.payload as {
+    failed_trial_synthesis_hash?: string;
+    loopback_target_code?: string;
+    non_authority?: boolean;
+    projection_kind?: string;
+    topic_question_candidate_set_ref?: TopicSelectionFunctionalRef;
+  } | null;
+  assert.equal(loopbackProjectionArtifact?.artifact_kind, 'diagnostic');
+  assert.equal(loopbackProjection?.projection_kind, 'v1b_n7_to_n6_failed_trial_loopback_context');
+  assert.equal(loopbackProjection?.non_authority, true);
+  assert.equal(loopbackProjection?.loopback_target_code, 'n7_loopback_to_n6');
+  assert.equal(loopbackProjection?.topic_question_candidate_set_ref?.ref_id, n6.authority_ref!.ref_id);
+  assert.equal(loopbackProjection?.failed_trial_synthesis_hash, exhaustedTrace?.payload.synthesis_hash);
   const exhaustedDecision = await ctx.topicQuestionRepository.findSelectionDecisionById(exhausted.authority_ref!.ref_id);
   assert.equal(exhaustedDecision?.admission_review.loopback_target_code, 'n7_loopback_to_n6');
 });
@@ -3598,7 +3908,7 @@ test('v1b workflow harness N7 readmits gate-rejected feedback with updated debat
   const feedbackInput = await n7FeedbackRequest(ctx, initialInput, first, 'gate_rejected');
   const missingAdmission = await ctx.service.invokeNode(feedbackInput);
   assert.equal(missingAdmission.gate_status, 'blocked');
-  assert.equal(missingAdmission.error_code, 'N7_GATE_READMISSION_DEBATE_ADMISSION_REQUIRED');
+  assert.equal(missingAdmission.error_code, 'N7_REQUIRED_SUPPORT_ARTIFACT_MISSING');
   assert.equal(missingAdmission.authority_ref, null);
   assert.equal(missingAdmission.handoff_ref, null);
 
@@ -3665,6 +3975,44 @@ test('v1b workflow harness N7 blocks incomplete failed-trial synthesis before N6
   const secondTrial = await ctx.service.invokeNode(await n7FeedbackRequest(ctx, initialInput, first));
   const candidates = await ctx.topicQuestionRepository.listCandidatesByCandidateSetId(n6.authority_ref!.ref_id);
   const exhaustedInput = await n7FeedbackRequest(ctx, initialInput, secondTrial);
+  const missingSynthesis = await ctx.service.invokeNode({
+    ...exhaustedInput,
+    node_attempt_id: 'node_attempt_v1b_n7_exhausted_missing_synthesis',
+  });
+  assert.equal(missingSynthesis.gate_status, 'blocked');
+  assert.equal(missingSynthesis.error_code, 'N7_REQUIRED_SUPPORT_ARTIFACT_MISSING');
+  assert.equal(missingSynthesis.route_decision, 'blocked');
+  assert.equal(missingSynthesis.authority_ref, null);
+  assert.equal(missingSynthesis.handoff_ref, null);
+
+  const unknownCandidateRef = ref('topic_question_candidate', 'unknown_failed_trial_candidate', TITLE_CARD_ID);
+  const unknownRefSynthesis: TopicSelectionV1bN8FailedTrialSynthesisSupportPayload = {
+    exhausted_candidate_refs: [
+      ...candidates.map((candidate) => ref('topic_question_candidate', candidate.topic_question_candidate_id, TITLE_CARD_ID)),
+      unknownCandidateRef,
+    ],
+    failure_reason_codes: ['value_not_supported'],
+    synthesis_summary: 'This synthesis carries an unknown exhausted candidate and must not route to N6.',
+    n6_regeneration_hints: ['Unknown failed candidates must not enter N6 regeneration context.'],
+    affected_refs: [n6.authority_ref!, unknownCandidateRef],
+  };
+  const unknownRefResult = await ctx.service.invokeNode({
+    ...exhaustedInput,
+    node_attempt_id: 'node_attempt_v1b_n7_exhausted_unknown_synthesis_ref',
+    semantic_artifacts: [
+      await recordN7SupportArtifact(ctx, exhaustedInput, {
+        allowed_effect: 'support_only',
+        output_contract: 'N8FailedTrialSynthesisSupport@v1',
+        profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n7_failed_trial_synthesis_support,
+        slot_id: 'n7_failed_trial_synthesis',
+      }, unknownRefSynthesis as unknown as Record<string, unknown>),
+    ],
+  });
+  assert.equal(unknownRefResult.gate_status, 'blocked');
+  assert.equal(unknownRefResult.error_code, 'N7_FAILED_TRIAL_SYNTHESIS_UNKNOWN_REF');
+  assert.equal(unknownRefResult.authority_ref, null);
+  assert.equal(unknownRefResult.handoff_ref, null);
+
   const incompleteSynthesis: TopicSelectionV1bN8FailedTrialSynthesisSupportPayload = {
     exhausted_candidate_refs: [
       ref('topic_question_candidate', candidates[0]!.topic_question_candidate_id, TITLE_CARD_ID),

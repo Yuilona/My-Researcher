@@ -13,6 +13,7 @@ import {
   type TopicSelectionContextPolicyProfile,
   type TopicSelectionContextPolicyProfileRegistry,
   type TopicSelectionContextSourceKind,
+  type TopicSelectionCompressionExecutorKind,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-llm-runtime-contracts';
 import { AppError } from '../errors/app-error.js';
 import {
@@ -75,6 +76,21 @@ export const TOPIC_SELECTION_V1A_N8_CONTEXT_RUNTIME_PROFILE_IDS = {
 
 export const TOPIC_SELECTION_V1A_N8_INVOCATION_SLOT_IDS = {
   confirmation_semantic_review: 'confirmation_semantic_review',
+} as const;
+
+export const TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS = {
+  candidate_grouping:
+    'topic-selection.v1b.n7.candidate-grouping.context-runtime@v1',
+  failed_trial_synthesis:
+    'topic-selection.v1b.n7.failed-trial-synthesis.context-runtime@v1',
+  n8_debate_admission_review:
+    'topic-selection.v1b.n7.n8-debate-admission-review.context-runtime@v1',
+} as const;
+
+export const TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS = {
+  candidate_grouping: 'n7_candidate_grouping',
+  failed_trial_synthesis: 'n7_failed_trial_synthesis',
+  n8_debate_admission_review: 'n7_n8_debate_admission_review',
 } as const;
 
 export type TopicSelectionContextPolicyProfileRegistryValidationIssueCode =
@@ -186,7 +202,10 @@ function contextPolicyProfile(input: {
   estimated_input_token_target: number;
   estimated_output_token_budget: number;
   post_reuse_gates?: string[];
+  post_cache_gates?: string[];
   allowed_source_kinds?: TopicSelectionContextSourceKind[];
+  allowed_executor_kinds?: TopicSelectionCompressionExecutorKind[];
+  preserved_fact_kinds?: string[];
 }): TopicSelectionContextPolicyProfile {
   return {
     schema_version: TOPIC_SELECTION_CONTEXT_POLICY_PROFILE_SCHEMA_VERSION,
@@ -217,10 +236,10 @@ function contextPolicyProfile(input: {
     },
     compression_policy: {
       compression_mode: 'required_when_over_budget',
-      allowed_executor_kinds: ['deterministic_structural', 'codex_assisted'],
+      allowed_executor_kinds: input.allowed_executor_kinds ?? ['deterministic_structural', 'codex_assisted'],
       compression_strategy_id: 'topic-selection-context-compression',
       compression_strategy_version: 'v1',
-      preserved_fact_kinds: [...COMMON_PRESERVED_FACT_KINDS],
+      preserved_fact_kinds: input.preserved_fact_kinds ?? [...COMMON_PRESERVED_FACT_KINDS],
       forbidden_payload_classes: [...COMMON_FORBIDDEN_PAYLOAD_CLASSES],
       quality_gate_required: true,
     },
@@ -229,7 +248,7 @@ function contextPolicyProfile(input: {
       cache_scope: 'context_identity_preprocessing',
       exact_key_fields: [...REQUIRED_CACHE_KEY_FIELDS],
       stale_behavior: 'block',
-      post_cache_gates: [...REQUIRED_POST_CACHE_GATES],
+      post_cache_gates: input.post_cache_gates ?? [...REQUIRED_POST_CACHE_GATES],
     },
     token_budget_policy: {
       estimated_input_token_target: input.estimated_input_token_target,
@@ -341,6 +360,100 @@ const DEFAULT_TOPIC_SELECTION_CONTEXT_POLICY_PROFILE_REGISTRY:
           'schema_validation',
           'semantic_review_gate',
           'human_authority_boundary',
+        ],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS.candidate_grouping,
+        invocation_slot_id: TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS.candidate_grouping,
+        functional_template: 'support_only_semantic',
+        context_family: 'v1b_n7_topic_question_hardening',
+        estimated_input_token_target: 18000,
+        estimated_output_token_budget: 1200,
+        preserved_fact_kinds: [
+          ...COMMON_PRESERVED_FACT_KINDS,
+          'candidate_identity',
+          'candidate_order',
+          'overlap_group',
+          'grouping_rationale',
+          'priority_signal',
+          'candidate_relationship_hint',
+        ],
+        post_reuse_gates: [
+          'schema_validation',
+          'support_artifact_admission',
+          'deterministic_gate',
+          'authority_boundary',
+        ],
+        post_cache_gates: [
+          'schema_validation',
+          'support_artifact_admission',
+          'deterministic_gate',
+          'authority_boundary',
+        ],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS.failed_trial_synthesis,
+        invocation_slot_id: TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS.failed_trial_synthesis,
+        functional_template: 'support_only_semantic',
+        context_family: 'v1b_n7_topic_question_hardening',
+        estimated_input_token_target: 20000,
+        estimated_output_token_budget: 1400,
+        preserved_fact_kinds: [
+          ...COMMON_PRESERVED_FACT_KINDS,
+          'failure_reason',
+          'failed_candidate_identity',
+          'affected_ref',
+          'previous_n7_handoff',
+          'n8_feedback',
+          'regeneration_hint',
+          'loopback_target',
+        ],
+        post_reuse_gates: [
+          'schema_validation',
+          'support_artifact_admission',
+          'deterministic_gate',
+          'loopback_boundary',
+          'authority_boundary',
+        ],
+        post_cache_gates: [
+          'schema_validation',
+          'support_artifact_admission',
+          'deterministic_gate',
+          'loopback_boundary',
+          'authority_boundary',
+        ],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS.n8_debate_admission_review,
+        invocation_slot_id: TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS.n8_debate_admission_review,
+        functional_template: 'support_only_semantic',
+        context_family: 'v1b_n7_topic_question_hardening',
+        estimated_input_token_target: 18000,
+        estimated_output_token_budget: 1200,
+        preserved_fact_kinds: [
+          ...COMMON_PRESERVED_FACT_KINDS,
+          'n8_gate_rejection_reason',
+          'debate_admission_need',
+          'candidate_identity',
+          'failed_contract_identity',
+          'value_risk_fact',
+        ],
+        post_reuse_gates: [
+          'schema_validation',
+          'support_artifact_admission',
+          'deterministic_gate',
+          'n8_admission_boundary',
+          'authority_boundary',
+        ],
+        post_cache_gates: [
+          'schema_validation',
+          'support_artifact_admission',
+          'deterministic_gate',
+          'n8_admission_boundary',
+          'authority_boundary',
         ],
       }),
     ],

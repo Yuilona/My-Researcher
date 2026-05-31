@@ -51,6 +51,9 @@
 - [x] v1a production boundary keeps context packet cache process-local and artifact-ref-only; restart/deploy cache misses are safe recompilation paths, not correctness dependencies.
 - [x] Production-shaped local/dev Prisma smokes verify persistent prompt-index read-through semantics, provider-required non-response-reuse behavior, over-budget provider call count `0`, v1a N1-N9 main WorkflowHarness execution, N6-N9 exact replay/input-hash drift behavior, and default mock-sample fallback to the balanced T-112 fixture.
 - [x] Prisma-backed v1a runtime stress runner repeatedly executes N1-N9 replay smoke, verifies prompt packet index growth/slot distribution, confirms exact replay and drift branches do not invoke the LLM gateway, and supports parameterized single-agent or multi-agent-debate N6 modes.
+- [x] v1b N7 runtime first slice routes promoted support generation through `TopicSelectionV1bN7SupportRuntimeService`, emits `runtime_verified` support artifacts, and blocks fixture/legacy/product identity drift before deterministic gates.
+- [x] Prisma-backed v1b N7 runtime smoke verifies N6->N7->N8, N8->N7 readmission, N7->N6 loopback projection, N7 prompt-index metadata rows, non-provider audit provenance, and provider-response non-reuse for all three N7 support slots.
+- [x] v1b N7 quality closure verifies runtime audit artifact dereference/checksum/provenance binding, unknown failed-trial synthesis ref blocking, and post-authority-write runtime projection recording.
 - [x] Live OpenAI/DashScope provider canaries verify provider-backed v1a N6 invocations perform token-budget preflight before gateway calls and do not treat prompt-cache hits as provider response reuse.
 - [x] v1a WorkflowHarness runtime policy stress verifies N1-N4 context producer lineage/source-health/hash-drift behavior, N9 publish replay/lineage drift boundaries, N6 exact context-cache hit/drift/stale behavior, provider-required call counts, deterministic gate artifacts after cache hit, N6 compression/re-render, and N5/N7/N8 token-budget audit decisions.
 - [ ] Provider-backed invocations outside the promoted v1a N6 first slice perform token-budget preflight before calling OpenAI/DashScope/DeepSeek-compatible gateways.
@@ -61,3 +64,7 @@
 - [ ] Cache hits do not create duplicate authority writes and do not skip deterministic gates.
 - [ ] v1a, v1b, and v1c harness smokes verify happy path, stale cache, token-over-budget, and response-reuse boundaries.
 - [x] Live OpenAI/DashScope v1a N6 provider canaries record telemetry and prove provider-required scenarios still perform live provider calls.
+
+## Current Focus
+- v1b N7 runtime first slice is closed for L1-L3 plus minimum adversarial quality coverage.
+- Next implementation focus is the post-N7 v1b runtime expansion, ordered as N6, then N8, then N4.

@@ -28,6 +28,7 @@ import {
   topicSelectionV1bResearchSliceOptionSetDraftPayloadSchema,
   topicSelectionV1bTopicQuestionCandidateSetDraftPayloadSchema,
   topicSelectionV1bTopicValueAssessmentDraftPayloadSchema,
+  topicSelectionV1bN7RuntimeContextProjectionSchema,
   type TopicSelectionV1bAcceptedConstraintProfilePayload,
   type TopicSelectionV1bAcceptedSliceSelectionPayload,
   type TopicSelectionV1bN1HarnessFrozenInputPayload,
@@ -38,6 +39,8 @@ import {
   type TopicSelectionV1bN6HarnessFrozenInputPayload,
   type TopicSelectionV1bN6LoopbackTriageSupportPayload,
   type TopicSelectionV1bN7HarnessFrozenInputPayload,
+  type TopicSelectionV1bN7RuntimeContextProjection,
+  type TopicSelectionV1bN7ToN8HandoffPayload,
   type TopicSelectionV1bN8HarnessFrozenInputPayload,
   type TopicSelectionV1bN9HarnessFrozenInputPayload,
   type TopicSelectionV1bN10HarnessFrozenInputPayload,
@@ -689,6 +692,19 @@ function semanticArtifact(
     adapter_policy_version: 'topic-selection-v1b-node-policy-v1',
     slot_spec_hash: HASH_F,
     provenance_ref: ref('artifact_ref', 'provenance_001'),
+    runtime_provenance_class: 'fixture_replay',
+    context_policy_profile_id: null,
+    context_policy_profile_version: null,
+    context_policy_profile_hash: null,
+    prompt_variant_key: null,
+    runtime_invocation_context_hash: null,
+    redaction_policy: null,
+    source_hashes: {},
+    runtime_audit_ref: null,
+    runtime_audit_hash: null,
+    compression_report_ref: null,
+    compression_report_hash: null,
+    compressed_context_hash: null,
     ...overrides,
   };
 }
@@ -872,6 +888,81 @@ function canonicalV1cPublicationHandoff(): TopicSelectionV1bWorkflowHarnessHando
       draft_topic_package_ref: ref('topic_package', 'package_001'),
       draft_topic_package_hash: HASH_F,
     },
+  };
+}
+
+function canonicalN7RuntimeContextProjection(
+  kind: TopicSelectionV1bN7RuntimeContextProjection['projection_kind'] =
+    'v1b_n7_to_n8_topic_question_contract_context',
+): TopicSelectionV1bN7RuntimeContextProjection {
+  if (kind === 'v1b_n7_to_n6_failed_trial_loopback_context') {
+    return {
+      schema_version: 'TopicSelectionV1bN7RuntimeContextProjection@v1',
+      projection_kind: 'v1b_n7_to_n6_failed_trial_loopback_context',
+      node_id: 'topic-selection.v1b.materialize-topic-question-contract.v1',
+      workflow_run_id: 'workflow_run_v1b_001',
+      node_attempt_id: 'node_attempt_v1b_n7_001',
+      route_decision: 'loopback',
+      non_authority: true,
+      context_cache_scope: 'process_local_runtime_only',
+      context_authority: 'non_authority_runtime_context',
+      source_refs: [
+        ref('artifact_ref', 'n6_handoff_001'),
+        ref('artifact_ref', 'n8_feedback_001'),
+        ref('artifact_ref', 'failed_trial_synthesis_001'),
+      ],
+      source_hashes: {
+        frozen_input_hash: HASH_A,
+        n6_handoff_hash: HASH_B,
+        n8_feedback_hash: HASH_C,
+        failed_trial_synthesis_hash: HASH_D,
+      },
+      support_refs: [ref('artifact_ref', 'failed_trial_synthesis_001')],
+      support_hashes: {
+        n7_failed_trial_synthesis: HASH_D,
+      },
+      preserved_fact_kinds: ['failure_reason_codes', 'failed_candidate_identity', 'regeneration_hints'],
+      loopback_target_code: 'n7_loopback_to_n6',
+      topic_question_candidate_set_ref: ref('topic_question_candidate_set', 'candidate_set_001'),
+      topic_question_candidate_set_hash: HASH_A,
+      n6_handoff_hash: HASH_B,
+      n8_feedback_ref: ref('artifact_ref', 'n8_feedback_001'),
+      n8_feedback_hash: HASH_C,
+      failed_trial_synthesis_ref: ref('artifact_ref', 'failed_trial_synthesis_001'),
+      failed_trial_synthesis_hash: HASH_D,
+      exhausted_candidate_refs: [ref('topic_question_candidate', 'candidate_001')],
+      exhausted_candidate_hashes: [HASH_E],
+      failure_reason_codes: ['value_not_supported'],
+      n6_regeneration_hints: ['Regenerate with stronger value evidence.'],
+      synthesis_summary: 'All current candidates failed value support.',
+    };
+  }
+
+  const payload = payloadForHandoff('N7ToN8Handoff') as TopicSelectionV1bN7ToN8HandoffPayload;
+  return {
+    schema_version: 'TopicSelectionV1bN7RuntimeContextProjection@v1',
+    projection_kind: 'v1b_n7_to_n8_topic_question_contract_context',
+    node_id: 'topic-selection.v1b.materialize-topic-question-contract.v1',
+    workflow_run_id: 'workflow_run_v1b_001',
+    node_attempt_id: 'node_attempt_v1b_n7_001',
+    route_decision: 'invoke_next',
+    non_authority: true,
+    context_cache_scope: 'process_local_runtime_only',
+    context_authority: 'non_authority_runtime_context',
+    source_refs: [ref('artifact_ref', 'n7_handoff_001'), payload.topic_question_contract_ref],
+    source_hashes: {
+      frozen_input_hash: HASH_A,
+      n7_handoff_hash: HASH_B,
+      topic_question_contract_hash: payload.topic_question_contract_hash,
+    },
+    support_refs: [payload.n8_debate_admission_ref],
+    support_hashes: {
+      n7_n8_debate_admission_review: payload.n8_debate_admission_hash,
+    },
+    preserved_fact_kinds: ['topic_question_contract', 'answerability_plan', 'active_candidate_identity'],
+    n7_handoff_ref: ref('artifact_ref', 'n7_handoff_001'),
+    n7_handoff_hash: HASH_B,
+    ...payload,
   };
 }
 
@@ -1307,6 +1398,28 @@ test('topic-selection v1b handoff schema rejects edge target route and payload m
   assert.equal(await validatesBody(topicSelectionV1bWorkflowHarnessHandoffSchema, wrongPayload), false);
 });
 
+test('topic-selection v1b N7 runtime context projection schema accepts route projections and rejects authority drift', async () => {
+  assert.equal(
+    await validatesBody(topicSelectionV1bN7RuntimeContextProjectionSchema, canonicalN7RuntimeContextProjection()),
+    true,
+  );
+  assert.equal(
+    await validatesBody(
+      topicSelectionV1bN7RuntimeContextProjectionSchema,
+      canonicalN7RuntimeContextProjection('v1b_n7_to_n6_failed_trial_loopback_context'),
+    ),
+    true,
+  );
+
+  const authorityDrift = canonicalN7RuntimeContextProjection() as unknown as Record<string, unknown>;
+  authorityDrift.non_authority = false;
+  assert.equal(await validatesBody(topicSelectionV1bN7RuntimeContextProjectionSchema, authorityDrift), false);
+
+  const wrongRoute = canonicalN7RuntimeContextProjection('v1b_n7_to_n6_failed_trial_loopback_context') as unknown as Record<string, unknown>;
+  wrongRoute.route_decision = 'invoke_next';
+  assert.equal(await validatesBody(topicSelectionV1bN7RuntimeContextProjectionSchema, wrongRoute), false);
+});
+
 test('topic-selection v1b semantic support artifact schema rejects unknown slots wrong effects and raw payload leakage', async () => {
   assert.equal(
     await validatesBody(topicSelectionV1bWorkflowHarnessSemanticSupportArtifactRefSchema, semanticArtifact()),
@@ -1365,6 +1478,46 @@ test('topic-selection v1b semantic support artifact schema rejects unknown slots
     await validatesBody(topicSelectionV1bWorkflowHarnessSemanticSupportArtifactRefSchema, semanticArtifact({
       execution_mode: 'codex_assisted',
       model_option_id: `${TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.research_slice_options_single_agent}.openai-balanced`,
+    })),
+    false,
+  );
+  assert.equal(
+    await validatesBody(topicSelectionV1bWorkflowHarnessSemanticSupportArtifactRefSchema, semanticArtifact({
+      runtime_provenance_class: 'runtime_verified',
+      context_policy_profile_id: 'topic-selection.v1b.n7.candidate-grouping.context-runtime@v1',
+      context_policy_profile_version: 'v1',
+      context_policy_profile_hash: HASH_A,
+      prompt_variant_key: 'n7_candidate_grouping',
+      runtime_invocation_context_hash: HASH_B,
+      redaction_policy: 'topic-selection-redacted-ref-backed-v1',
+      source_hashes: { frozen_input_hash: HASH_C },
+      runtime_audit_ref: ref('artifact_ref', 'runtime_audit_001'),
+      runtime_audit_hash: HASH_D,
+    })),
+    true,
+  );
+  assert.equal(
+    await validatesBody(topicSelectionV1bWorkflowHarnessSemanticSupportArtifactRefSchema, semanticArtifact({
+      runtime_provenance_class: 'runtime_verified',
+      context_policy_profile_id: 'topic-selection.v1b.n7.candidate-grouping.context-runtime@v1',
+      context_policy_profile_version: 'v1',
+      context_policy_profile_hash: HASH_A,
+      prompt_variant_key: 'n7_candidate_grouping',
+      runtime_invocation_context_hash: HASH_B,
+      redaction_policy: 'topic-selection-redacted-ref-backed-v1',
+      source_hashes: { frozen_input_hash: HASH_C },
+      runtime_audit_ref: ref('runtime_audit', 'runtime_audit_001'),
+      runtime_audit_hash: HASH_D,
+    })),
+    false,
+  );
+  assert.equal(
+    await validatesBody(topicSelectionV1bWorkflowHarnessSemanticSupportArtifactRefSchema, semanticArtifact({
+      runtime_provenance_class: 'runtime_verified',
+      context_policy_profile_id: null,
+      source_hashes: {},
+      runtime_audit_ref: null,
+      runtime_audit_hash: null,
     })),
     false,
   );

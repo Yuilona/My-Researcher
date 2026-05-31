@@ -316,10 +316,186 @@
 ## 2026-05-31 - D19 Output Context Clarification
 - Confirmed D19.1: v1b N7 may proceed as the first post-v1a runtime slice, without promoting v1b N4/N6/N8 in the same slice.
 - Clarified that v1b already has a workflow-level `N7ToN8Handoff@v1` contract. T-112 does not need to invent the business handoff; it needs runtime context families/profiles for cache, compression, prompt identity, token budget, replay, and audit semantics.
+- Locked D19-B/C for planning:
+  - N7 support-slot inputs share the runtime context family `v1b_n7_topic_question_hardening` in this slice;
+  - support slot isolation comes from `invocation_slot_id`, prompt variant, profile hash, frozen input hash, and support artifact identity rather than one top-level runtime family per support slot;
+  - N7 output context is route-specific and does not reuse the support-slot input family.
 - Corrected the proposed N7 output context model from one generic handoff family to two route-specific runtime context projections:
   - `v1b_n7_to_n8_topic_question_contract_context` wraps the existing N7-to-N8 forward handoff and is consumed by N8 value assessment;
   - `v1b_n7_to_n6_failed_trial_loopback_context` carries failed-trial synthesis, N8 feedback, failed candidate lineage, and regeneration hints back to N6.
-- The N7-to-N6 projection is initially a T-112 runtime context artifact, not automatically a new workflow handoff kind. D19 should still decide whether it remains runtime-only or becomes a formal `N7ToN6Handoff@v1` in a later contract slice.
+- The N7-to-N6 projection is initially a T-112 runtime context artifact, not a new workflow handoff kind in this first slice. A formal `N7ToN6Handoff@v1` remains deferred until the N6 loopback generation surface is promoted.
+
+## 2026-05-31 - D19-D Per-Slot Policy Lock
+- Locked `n7_candidate_grouping` as an optional support-only semantic slot for duplicate/overlap grouping, candidate relationship hints, priority support, and risk/gap/recheck visibility. It may use accepted risks and residual gaps only as labeled hints, never as standalone candidate evidence.
+- Locked `n7_failed_trial_synthesis` as the support-only repair context for N7 candidate-trial exhaustion and N6 regeneration. It may carry failure history, N8 feedback, failed-candidate lineage, and regeneration hints, but it cannot create new candidate authority or downstream recheck authority.
+- Locked `n7_n8_debate_admission_review` as the support-only admission review for N8 gate-rejected feedback and readmission/debate escalation. It may use current N8 feedback and directly relevant prior rejection/value facts, but it must not import unrelated long-term memory.
+- D19-D first-slice cache identity requirements:
+  - `n7_candidate_grouping`: frozen input hash, N6 handoff hash, candidate set hash, candidate hashes/order, profile hash, prompt variant, output contract, runtime modifiers, and redaction policy;
+  - `n7_failed_trial_synthesis`: failed-trial ledger hash, N8 feedback hash, previous N7 handoff hash, failed candidate hashes, candidate set hash, profile hash, prompt variant, output contract, runtime modifiers, and redaction policy;
+  - `n7_n8_debate_admission_review`: selected or failed candidate hash, N8 feedback hash, previous N7 handoff hash, failed contract hash, optional value assessment hash, profile hash, prompt variant, output contract, runtime modifiers, and redaction policy.
+- D19-D first-slice compression preserved facts:
+  - `n7_candidate_grouping`: candidate ids/hashes, overlap groups, grouping rationale, priority signals, candidate relationship hints, risk/gap/recheck hints;
+  - `n7_failed_trial_synthesis`: failure reasons, failed candidate ids/hashes, affected refs, previous N7 handoff refs/hashes, regeneration hints, loopback target, accepted risks, residual risks, blocker codes, and recheck hints;
+  - `n7_n8_debate_admission_review`: N8 gate rejection reason, debate/admission need, selected or failed candidate identity, failed contract identity, value/risk facts, blockers, accepted risks, residual risks, and recheck hints.
+- D19 is now closed for v1b N7 first-slice planning. Remaining pre-implementation decisions are D23 for semantic support generation/admission path, D20 for context packet persistence stance confirmation, D21 for broader compression policy, and D22 for verification/stress layering.
+
+## 2026-05-31 - D23-A Semantic Support Generation Path Lock
+- Locked D23-A: production/provider/Codex generation for promoted v1b N7 semantic support slots must pass through the shared T-112 runtime boundary.
+- A v1b `SemanticSupportAdapter` may own node semantics, including slot selection, context compilation, frozen input/N6 handoff/N8 feedback binding, output contract selection, and optional-support behavior.
+- The adapter must delegate mechanical runtime semantics to `AgentOrchestrator` or an equivalent shared runtime facade:
+  - prompt packet identity;
+  - prompt packet cache;
+  - token-budget preflight;
+  - compression report validation;
+  - provider-required live-call guard;
+  - exact response reuse provenance guard;
+  - provider telemetry separation;
+  - runtime audit envelope.
+- Direct `BackendLlmGateway` support generation is not T-112-compliant for promoted v1b N7 slots. A direct provider/script-generated support artifact may be admitted only if D23-B/D admission rules accept its runtime provenance, and placeholder prompt/profile/slot hashes remain blocked except for D23-C fixture-only exceptions.
+
+## 2026-05-31 - D23-B Frozen Support Artifact Admission Lock
+- Locked D23-B: frozen or externally produced v1b N7 support artifacts may be consumed only through runtime admission before N7 deterministic gates.
+- Admission must verify:
+  - slot id is one of `n7_candidate_grouping`, `n7_failed_trial_synthesis`, or `n7_n8_debate_admission_review`;
+  - `normalized_output_ref` resolves to a frozen control-plane artifact;
+  - artifact payload hash, `normalized_output_hash`, `structured_output_hash`, and declared support artifact hash all match;
+  - `context_policy_profile_id`, `context_policy_profile_hash`, `prompt_packet_hash`, `runtime_invocation_context_hash`, output contract, prompt variant key, and redaction policy match the current promoted-slot runtime identity;
+  - frozen input hash, N6 handoff hash, candidate set hash, and slot-specific source hashes match the current N7 run;
+  - execution provenance is explicit, including provider live-call telemetry refs for `provider_llm`, `non_provider=true` for Codex/mock/reuse, and approval refs for Codex exact reuse.
+- Admission success only adds the artifact as non-authority support context. It does not create authority, satisfy provider live-call requirements, or skip N7 deterministic gates.
+- Admission failure blocks before N7 deterministic gates. Missing runtime provenance must not be downgraded to a warning, inferred by rehashing, or treated as a cache hit.
+
+## 2026-05-31 - D23-C LLM-Operable Provenance Class Lock
+- Locked D23-C around LLM-operable provenance rather than human-oriented audit completeness.
+- v1b N7 support artifacts must carry a machine-readable `runtime_provenance_class`:
+  - `runtime_verified`: produced or admitted through the T-112 runtime with real prompt/profile/runtime/source hashes. Eligible for production admission, prompt/cache/replay analysis, and LLM workflow-quality optimization evidence.
+  - `fixture_replay`: explicit test/acceptance fixture or mocked replay. May drive harness/unit/acceptance tests, may contain synthetic or placeholder runtime identity, and must remain non-provider/non-authority. Not eligible for production admission or real prompt packet cache rows.
+  - `legacy_unverified`: direct script/provider or historical artifact without verified runtime identity. May be used for migration diagnostics only. Not eligible for promoted-slot production admission, prompt cache rows, response reuse, or LLM workflow optimization evidence.
+- Synthetic or placeholder runtime identity is allowed only under `runtime_provenance_class=fixture_replay`.
+- Product/provider/Codex production admission requires `runtime_provenance_class=runtime_verified`.
+- The purpose of this classification is to make downstream LLM agents robust when deciding whether an artifact is reusable workflow evidence, fixture coverage evidence, or migration-only diagnostic material.
+
+## 2026-05-31 - D23-D Admission Failure Semantics Lock
+- Locked D23-D: v1b N7 support artifact admission fails closed before deterministic gates.
+- Optional absent support is distinct from malformed present support:
+  - `n7_candidate_grouping` is optional. Complete absence may continue with a `support_absent` warning/context note, but a present malformed, drifted, legacy, or provenance-incomplete artifact blocks.
+  - `n7_failed_trial_synthesis` is conditionally required for candidate-trial exhaustion and N6 loopback. It blocks when absent on that required path, may be absent on non-required paths, and blocks when present but invalid.
+  - `n7_n8_debate_admission_review` is conditionally required when N8 feedback is `gate_rejected` and N7 needs readmission/debate admission. It blocks when absent on that required path, may be absent on non-required paths, and blocks when present but invalid.
+- Admission failure must emit machine-readable blocker codes suitable for LLM workflow repair:
+  - `N7_SUPPORT_ARTIFACT_PROVENANCE_MISSING`;
+  - `N7_SUPPORT_ARTIFACT_PROVENANCE_CLASS_INVALID`;
+  - `N7_SUPPORT_ARTIFACT_PROMPT_IDENTITY_DRIFT`;
+  - `N7_SUPPORT_ARTIFACT_PROFILE_DRIFT`;
+  - `N7_SUPPORT_ARTIFACT_RUNTIME_CONTEXT_DRIFT`;
+  - `N7_SUPPORT_ARTIFACT_SOURCE_HASH_DRIFT`;
+  - `N7_SUPPORT_ARTIFACT_PAYLOAD_HASH_MISMATCH`;
+  - `N7_REQUIRED_SUPPORT_ARTIFACT_MISSING`;
+  - `N7_SUPPORT_ARTIFACT_LEGACY_UNVERIFIED`.
+- Admission failure must not silently downgrade to warning, discard the bad artifact and continue, or implicitly trigger provider/Codex regeneration. Regeneration requires an explicit support-generation path.
+
+## 2026-05-31 - D23-E Legacy Path Retirement Lock
+- Locked D23-E: avoid long-term dual-track semantics between legacy v1b direct provider/script support generation and the promoted T-112 runtime path.
+- Current v1b harness and scripts do not directly conflict with T-112 because v1b N7 is not yet runtime-promoted. They remain useful for deterministic workflow semantics, handoff, and loopback coverage.
+- Once v1b N7 support slots are promoted, legacy direct provider/script support generation must not produce `runtime_verified` artifacts and must not be accepted in production admission.
+- Migration sequence:
+  - keep existing harness coverage while adding runtime-backed N7 support generation/admission tests;
+  - classify existing fixture-style artifacts as `fixture_replay` through test helpers;
+  - classify direct provider/script or historical outputs without runtime identity as `legacy_unverified` diagnostics during migration;
+  - after runtime-backed replacement tests pass, remove promoted-slot direct `BackendLlmGateway`/script generation paths instead of leaving a permanent alternate path.
+- Legacy paths may remain only for migration diagnostics outside promoted-slot admission. They must not feed product admission, prompt packet cache rows, response reuse, or LLM workflow optimization evidence.
+
+## 2026-05-31 - D22 Verification Ladder Lock
+- Locked D22 for v1b N7 runtime first slice as a promotion-gate ladder rather than generic throughput stress.
+- Layer 1, unit/contract:
+  - profile registry and profile hash drift;
+  - runtime key builder and prompt identity drift;
+  - support artifact admission helper;
+  - `runtime_provenance_class` classification;
+  - compression preserved-fact validation;
+  - response reuse/provider-live guard regressions.
+- Layer 2, harness policy stress:
+  - exact replay without reinvocation;
+  - frozen input drift;
+  - support artifact hash drift;
+  - optional absent versus malformed present support;
+  - conditionally required support missing;
+  - cache hit still runs N7 deterministic gates;
+  - no authority bypass for candidate selection, trial ledger, N8 admission, loopback, or persistence.
+- Layer 3, Prisma-backed local/dev runtime smoke:
+  - N6->N7->N8 forward path with runtime-verified support;
+  - N8->N7 feedback/readmission path;
+  - N7->N6 failed-trial loopback context projection;
+  - prompt packet cache remains metadata-only;
+  - provider responses are not reused;
+  - runtime audit/provenance artifacts are persisted or referenced as designed.
+- Layer 4, executor/canary:
+  - Codex-assisted or provider-capable N7 support generation, when enabled, must pass through shared runtime;
+  - direct provider legacy generation must be detected as non-compliant or removed from promoted paths;
+  - live provider canaries are optional for N7 until a provider-required N7 support surface is explicitly promoted.
+- Layer 5, adversarial/long-context:
+  - large candidate sets;
+  - long N8 feedback;
+  - failed-trial history;
+  - placeholder runtime identity;
+  - `fixture_replay` and `legacy_unverified` product-admission attempts;
+  - raw provider log/secret-shaped payloads;
+  - compression dropping risk/gap/recheck or failed-trial facts.
+- Entry and exit gates:
+  - first implementation may begin after D19/D23 are locked and L1/L2 cases are specified;
+  - legacy promoted-slot direct provider/script paths must fully exit only after L1-L3 pass for the runtime-backed N7 support path;
+  - expansion to v1b N4/N6/N8 requires N7 L1-L3 plus minimum L5 coverage for provenance class, drift, compression fact preservation, and no authority bypass.
+
+## 2026-05-31 - D20 v1b N7 Context Packet Persistence Lock
+- Locked D20 for the v1b N7 first slice: do not add a DB-backed context packet cache index.
+- v1b N7 uses:
+  - control-plane artifact refs/hashes for support artifacts, N7 output projections, and handoff context;
+  - the existing prompt packet persistent index for prompt identity metadata;
+  - process-local/runtime context packet cache for exact context artifact read-through when available.
+- Context packet cache misses after process restart or deploy are acceptable. The node may recompile ref-backed context packets because they are acceleration/audit artifacts, not business authority.
+- N7 output projections remain ref-backed artifacts:
+  - `v1b_n7_to_n8_topic_question_contract_context`;
+  - `v1b_n7_to_n6_failed_trial_loopback_context`.
+- A DB-backed context packet cache may be reconsidered only after v1b/v1c rollout proves a concrete cross-process reuse requirement and defines freshness, migration, retention, cleanup, and non-authority semantics.
+
+## 2026-05-31 - D21 v1b/v1c Compression Executor Lock
+- Locked D21: `deterministic_structural` is the default compression executor for v1b/v1c runtime rollout.
+- `codex_assisted` compression is allowed only when the slot profile explicitly permits semantic long-context compression. Its output remains non-authority, ref-backed, hash-checked, and quality-gated.
+- Provider LLM compression is disallowed by default for v1b/v1c. A provider-required live slot must not silently use a provider-generated compressed context unless a future slot profile and canary explicitly promote that behavior.
+- Compression reports and compressed context hashes must participate in prompt identity. Compression report drift or compressed context drift must change the prompt packet hash and block stale support admission.
+- Compression cannot generate or override executable prompt content, deterministic gate inputs, support artifact authority, loopback authority, downstream recheck authority, or ref/hash lineage.
+- v1b N7 first-slice support-slot executor policy:
+  - `n7_candidate_grouping`: default `deterministic_structural`; `codex_assisted` may be enabled only for large candidate sets or semantic grouping-rationale compression; provider LLM compression is disallowed; preserved facts are candidate ids/hashes, candidate order, overlap groups, grouping rationale, priority signals, candidate relationship hints, and risk/gap/recheck hints.
+  - `n7_failed_trial_synthesis`: default `deterministic_structural`; `codex_assisted` may be enabled only for long failed-trial history or N8 feedback semantic compression; provider LLM compression is disallowed; preserved facts are failure reasons, failed candidate ids/hashes, affected refs, previous N7 handoff refs/hashes, N8 feedback hash, regeneration hints, loopback target, accepted risks, residual risks, blockers, and recheck hints.
+  - `n7_n8_debate_admission_review`: default `deterministic_structural`; `codex_assisted` may be enabled only for N8 feedback and value/risk context compression, not for rewriting the admission recommendation; provider LLM compression is disallowed; preserved facts are N8 gate rejection reason, debate/admission need, selected or failed candidate identity, failed contract identity, value/risk facts, blockers, accepted risks, residual risks, and recheck hints.
+- Broader v1b/v1c defaults:
+  - v1b N4/N6/N8 should start with structural compression first; Codex-assisted compression requires explicit profile permission and slot-specific preserved facts.
+  - v1c promotion support and bounded debate role contexts should start with structural compression first; Codex-assisted compression may be considered only for explicit long-context support slots.
+  - v1c downstream feedback normalization must preserve downstream source refs, malformed evidence markers, and recheck hints. Malformed reuse or compression must not create a downstream recheck.
+
+## 2026-05-31 - v1b N7 Implementation Checklist and Readiness Review
+- Converted D19-D23 into the Phase 2 implementation checklist in `01-plan.md`. The checklist is ordered by dependency: contract envelope, profile registry, admission helper, context/projection builder, runtime-backed generation adapter, harness integration, L1/L2 verification, L3 smoke, legacy exit, and governance.
+- Readiness verdict: v1b N7 is ready to start L1/L2 implementation preparation. It is not ready for runtime promotion, provider/Codex production support generation, legacy path exit, or v1b N4/N6/N8 expansion until the blockers below are implemented and verified.
+- Blocker R1, support artifact runtime envelope is incomplete for D23:
+  - current shared `TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef` carries `prompt_packet_hash`, `input_hash`, `slot_spec_hash`, and `provenance_ref`, but it does not yet carry `runtime_provenance_class`, context policy profile id/version/hash, runtime invocation context hash, redaction policy, compression identity, source hash bundle, or runtime audit ref/hash;
+  - current request validation accepts the same legacy envelope shape, so production admission cannot yet distinguish `runtime_verified`, `fixture_replay`, and `legacy_unverified` from schema alone;
+  - the v1b harness e2e helper still defaults `prompt_packet_hash` to a placeholder hash when no value is supplied, which must become fixture-only after D23 is implemented.
+- Blocker R2, v1b N7 context runtime profiles are not registered:
+  - the runtime profile registry currently contains v1a N5/N6/N7/N8 runtime profiles only;
+  - existing v1b model profiles for N7 support slots are agent/model profiles, not `ContextPolicyProfile` entries and do not satisfy T-112 profile hash, context family, compression, cache, or reuse semantics.
+- Blocker R3, N7 support admission is still payload/hash-only:
+  - current `resolveN7SemanticPayload` validates normalized output payload shape and matching payload hashes, but it does not verify profile hash, prompt packet hash against current runtime identity, runtime invocation context hash, source hashes, provenance class, redaction policy, or compression identity;
+  - optional/conditionally-required slot behavior exists in deterministic N7 logic, but D23 blocker-code semantics still need a dedicated runtime admission helper.
+- Blocker R4, runtime-backed N7 support generation does not exist yet:
+  - current harness/script support artifact creation can produce non-runtime semantic artifacts for N7 support slots;
+  - promoted-slot provider/Codex generation must be routed through `AgentOrchestrator` or an equivalent shared runtime facade before any support artifact can be classified as `runtime_verified`.
+- Non-blocking assets already present:
+  - N7 frozen input and N6 handoff loading already verify candidate-set lineage, candidate refs/hashes, and N8 feedback shape;
+  - deterministic N7 candidate selection, trial switching, gate readmission, failed-trial loopback, and N7-to-N8 handoff behavior already have harness coverage;
+  - N7 support payload contracts and model profile IDs already exist and can be reused as output-contract/model-profile inputs, as long as they are not treated as runtime profiles.
+- Recommended first code slice:
+  - implement I1/I2/I3 together, with no provider execution and no legacy removal;
+  - land schema/profile/admission unit tests first;
+  - only then wire the admission helper into N7 harness paths and add L2 replay/drift/no-authority-bypass tests.
 
 ## 2026-05-31 - v1a Runtime Invocation Context Contract
 - Added `TopicSelectionRuntimeInvocationContext@v1` as the shared identity envelope for runtime-only semantic modifiers. The envelope captures semantic scenario identity, loop/repair identity, debate round/role/stage identity, parent invocation hashes, and dynamic prompt material hashes.
@@ -336,3 +512,106 @@
 - Re-ran a production-shaped OpenAI v1a provider slice with real provider calls for N5, N6, and N7. The full N1-N9 flow passed and published the v1b input bundle.
 - A DashScope N6 provider slice exposed provider prompt fragility: generated candidates were schema-valid but not validation-ready because they omitted non-empty `scope_notes`. Hardened the fixed N6 prompt compiler with explicit readiness constraints for `scope_notes` and `speculative=false`, then reran the DashScope N6 provider slice successfully.
 - Locked D20 for v1a: persistent DB context packet cache is not part of this production boundary. The deployed v1a path may lose context packet cache hits across process restarts and safely recompiles ref-backed context packets. Persistent prompt packet cache remains Prisma-backed; provider response reuse remains blocked for `provider_llm`.
+
+## 2026-05-31 - v1b N7 Admission First Slice Implemented
+- Implemented the first v1b N7 runtime slice for I1/I2/I3, plus partial I6 harness admission wiring. This slice intentionally does not add provider/Codex support generation, DB-backed context packet persistence, or legacy-path removal.
+- Closed R1 for the promoted-slot admission envelope:
+  - `TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef` now carries `runtime_provenance_class`, context policy profile id/version/hash, prompt variant key, runtime invocation context hash, redaction policy, source hashes, runtime audit ref/hash, and compression identity fields;
+  - shared schema validation requires full runtime identity for `runtime_verified`;
+  - fixture helpers and local harness scripts explicitly classify placeholder identity as `fixture_replay`.
+- Closed R2 for the first N7 admission profile set:
+  - added N7 `ContextPolicyProfile` entries for `n7_candidate_grouping`, `n7_failed_trial_synthesis`, and `n7_n8_debate_admission_review`;
+  - all three bind to `v1b_n7_topic_question_hardening`, support-only semantics, D21 executor policy, D19 preserved facts, and slot-specific post-cache gates.
+- Closed R3 for present-artifact admission:
+  - added `TopicSelectionV1bN7SupportAdmissionService`;
+  - admission distinguishes absent optional support, missing required support, `fixture_replay`, `legacy_unverified`, runtime identity drift, exact source-hash drift, exact prompt-packet hash drift, prompt/profile/runtime drift, payload hash drift, and compression identity drift;
+  - malformed or drifted present support blocks before N7 deterministic gates and returns machine-readable `N7_SUPPORT_ARTIFACT_*` blocker codes.
+- Wired the admission helper into N7 support consumption in `TopicSelectionV1bWorkflowHarnessService`. Existing deterministic N7 authority behavior remains unchanged: candidate selection, trial ledger, N8 admission/readmission, failed-trial loopback routing, replay checks, and persistence gates still own business authority.
+- Product-mode N7 support admission now rejects `fixture_replay` and `legacy_unverified` artifacts. Non-product fixtures remain usable for harness coverage but cannot be treated as production runtime evidence.
+- At this admission-first-slice stage, I5 runtime-backed support generation had not yet been implemented; the later runtime support adapter section below closes the prompt packet hash gap for generated Codex/mocked support artifacts.
+- Remaining blockers before runtime promotion after the later runtime support adapter:
+  - process-local read-through caching for reusable N7 support context packets is still pending; route-specific output projection artifacts are implemented;
+  - broader L2/L3 stress and Prisma-backed v1b N7 smoke are still pending;
+  - legacy direct provider/script support-generation paths must fully exit only after runtime-backed N7 support generation/admission L1-L3 pass.
+
+## 2026-05-31 - v1b N7 Route Projection First Slice Implemented
+- Implemented the I4 route-projection portion for v1b N7 without adding a DB-backed context packet cache or changing business authority writes.
+- Added `TopicSelectionV1bN7RuntimeContextProjection@v1` with two strict projection kinds:
+  - `v1b_n7_to_n8_topic_question_contract_context`;
+  - `v1b_n7_to_n6_failed_trial_loopback_context`.
+- Both projection kinds are non-authority runtime context artifacts:
+  - `non_authority=true`;
+  - `context_cache_scope=process_local_runtime_only`;
+  - `context_authority=non_authority_runtime_context`.
+- The N7 forward and gate-readmission paths now record a diagnostic projection artifact tied to the persisted `N7ToN8Handoff@v1` ref/hash, topic-question contract refs/hashes, answerability plan, trial ledger, selected candidate, candidate set, selected research slice, debate-admission artifact, and optional candidate-grouping support.
+- The N7 candidate-trials-exhausted path now records a diagnostic projection artifact for N6 regeneration context, including candidate set identity, N6 handoff hash, optional N8 feedback ref/hash, failed-trial synthesis ref/hash, exhausted candidate refs/hashes, failure reason codes, regeneration hints, and synthesis summary.
+- `TopicSelectionV1bWorkflowHarnessService` records projection artifacts as control-plane `diagnostic` artifacts and includes `runtime_context_projection_ref` and `runtime_context_projection_hash` in admitted trace payloads. Selection decisions include the projection ref in `artifact_refs`, but the projection does not become handoff authority, loopback authority, or persisted business authority.
+- Fixture and route helpers were updated to preserve the expanded semantic support envelope. The v1b harness e2e script also now preserves provider-side cache telemetry fields in sanitized audit snapshots, matching the shared T-112 agent invocation audit contract.
+- Remaining I4 boundary after the route-projection slice:
+  - support-generation context compilation still needed to move behind the shared runtime adapter;
+  - process-local read-through caching for N7 support context packets remained deferred;
+  - direct external support artifacts still could not be promoted to product `runtime_verified` admission without a true prompt packet hash from the shared runtime.
+
+## 2026-05-31 - v1b N7 Runtime-Backed Support Generation Implemented
+- Added `TopicSelectionV1bN7SupportRuntimeService` as the first runtime-backed N7 semantic support adapter.
+- The adapter owns the N7 support-slot binding for:
+  - `n7_candidate_grouping`;
+  - `n7_failed_trial_synthesis`;
+  - `n7_n8_debate_admission_review`.
+- For each support slot, the adapter compiles a non-authority `TopicSelectionV1bN7SupportRuntimeContextPacket@v1` from the frozen N7 payload, N6 handoff/candidate refs and hashes, selected research slice, generation artifact, candidate gate hash, optional grouping hash, and optional N8 feedback identity.
+- The support context packet uses the locked `v1b_n7_topic_question_hardening` family and remains a diagnostic runtime artifact, not handoff authority or business authority.
+- Support generation now invokes `TopicSelectionAgentOrchestratorService.invokeStructuredOutput`, so prompt packet identity, prompt quality report, token-budget preflight, prompt cache handling, response-reuse guard, compression provenance, schema validation, and runtime audit are delegated to the shared T-112 runtime boundary.
+- Generated N7 support artifacts are classified as `runtime_verified` only after:
+  - structured output schema validation passes;
+  - output hash matches orchestrator provenance;
+  - prompt packet hash and runtime invocation context hash are available;
+  - runtime audit ref/hash is recorded;
+  - context policy profile hash, source hash bundle, redaction policy, and compression identity are populated.
+- `TopicSelectionV1bWorkflowHarnessService` now computes N7 support admission expected identity through the runtime service instead of using fixture placeholder prompt hashes. Product-mode `runtime_verified` Codex support can be admitted as non-authority context before deterministic N7 gates.
+- The N7 support profiles continue to disallow `provider_llm`; first implementation covers `codex_assisted` and `mocked_llm`. Provider telemetry separation is inherited from `AgentOrchestrator` but has no promoted provider N7 support path yet.
+- Remaining work:
+  - add process-local read-through caching for reusable N7 support context packets if L2/L3 evidence shows it is useful;
+  - broaden L2 stress for exact replay, source drift, compression fact drop, and conditionally required support;
+  - add L3 Prisma-backed v1b N7 runtime smoke and prompt-index metadata checks;
+  - fully remove any promoted-slot legacy support generation path only after L1-L3 pass.
+
+## 2026-05-31 - v1b N7 Runtime First Slice L2/L3 Closure
+- Closed the v1b N7 first-slice L2 harness stress items for runtime-backed support admission:
+  - exact replay with runtime-verified support returns replay provenance without rewriting authority or handoff artifacts;
+  - source-hash drift blocks before authority/handoff writes;
+  - malformed runtime support cannot bypass deterministic candidate gates;
+  - conditionally required `n7_n8_debate_admission_review` and `n7_failed_trial_synthesis` support now share `N7_REQUIRED_SUPPORT_ARTIFACT_MISSING`;
+  - compression quality gate tests now use the real v1b N7 context profiles and block dropped candidate identity/order/rationale, N8 feedback, loopback target, regeneration hints, gate rejection reason, debate admission need, and value/risk facts.
+- Added Prisma-backed L3 smoke scenario `n7_runtime_smoke` to `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` and package script `pnpm topic-selection:v1b-n7-runtime-smoke`.
+- The smoke exercises:
+  - N6->N7->N8 forward path with runtime-verified `n7_candidate_grouping`;
+  - N8 blocking-gate feedback -> N7 readmission with runtime-verified `n7_n8_debate_admission_review`;
+  - N7 failed-trial exhaustion -> N6 loopback projection with runtime-verified `n7_failed_trial_synthesis`;
+  - Prisma prompt packet index metadata rows for all three N7 support slots;
+  - runtime audit provenance with `source_kind=codex_response`, `non_provider=true`, `cache_status=not_applicable`, `response_reuse_ref=null`, and no provider telemetry.
+- Removed the promoted-slot direct N7 support writer from the v1b harness e2e script. Provider-negative loopback scenarios now generate N7 support through `TopicSelectionV1bN7SupportRuntimeService`, and the package script enforces Prisma-backed storage so runtime artifacts share the HTTP harness store.
+- Fixture helpers remain available for non-promoted fixture paths through `fixture_replay`; they are not allowed to produce `runtime_verified` support or prompt packet cache evidence.
+- First-slice status after this closure:
+  - v1b N7 L1-L3 and promoted-slot legacy exit are complete;
+  - DB-backed context packet cache remains intentionally out of scope per D20;
+  - v1b N4/N6/N8 expansion remains gated on minimum L5/adversarial coverage and explicit promotion of their matrix rows.
+
+## 2026-05-31 - v1b N7 Quality Review Closure
+- Closed the code-quality findings from the v1b N7 first-slice review before moving to the post-N7 v1b expansion.
+- Runtime-verified N7 support admission now binds the support artifact to a real runtime audit artifact:
+  - `runtime_audit_ref` must be an `artifact_ref`;
+  - `provenance_ref` must equal `runtime_audit_ref`;
+  - the referenced audit artifact must exist, have the declared checksum, belong to the same workflow run, and carry a succeeded invocation audit snapshot;
+  - audit provenance must match node/workflow/attempt, execution mode, run mode, profile, output contract, prompt packet hash, structured output hash, and non-provider semantics;
+  - response reuse must remain `null`, cache status must stay `not_applicable`, and provider telemetry must stay absent for promoted Codex/mocked N7 support paths.
+- Failed-trial synthesis support is now constrained to the frozen N7/N8 boundary before N6 loopback projection:
+  - every exhausted candidate ref must belong to the frozen admissible candidate set;
+  - every affected ref must be part of the frozen N7 source refs, candidate set, admissible candidates, selected research slice, generation artifact, optional grouping artifact, or N8 feedback artifact;
+  - unknown refs block with `N7_FAILED_TRIAL_SYNTHESIS_UNKNOWN_REF`;
+  - projection building no longer fabricates fallback hashes for unknown candidate refs.
+- Runtime context projection artifacts are now recorded only after authority persistence succeeds:
+  - `prepareAdmittedControlPlane` no longer records N7 runtime projections;
+  - `persistAdmittedResult` writes authority first, then records the non-authority runtime projection, then builds the final trace snapshot;
+  - N7 authority-write failure tests assert no replayable trace, no authority record, and no orphaned runtime projection artifact for the failed attempt.
+- Minimum adversarial quality coverage for the N7 expansion gate is now satisfied by focused negative tests for audit drift, unknown failed-trial refs, deterministic-gate bypass, and projection orphan prevention.
+- Post-N7 runtime expansion may proceed with v1b N6 first, then v1b N8, then v1b N4. The expansion should preserve the N7 rule that audit artifacts are LLM-operable workflow-quality evidence, not human-only documentation and not business authority.

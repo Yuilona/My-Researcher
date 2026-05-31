@@ -141,6 +141,24 @@ export const TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_SEMANTIC_FALLBACK_POLICIES = [
 export type TopicSelectionV1bWorkflowHarnessSemanticFallbackPolicy =
   (typeof TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_SEMANTIC_FALLBACK_POLICIES)[number];
 
+export const TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUNTIME_PROVENANCE_CLASSES = [
+  'runtime_verified',
+  'fixture_replay',
+  'legacy_unverified',
+] as const;
+export type TopicSelectionV1bWorkflowHarnessRuntimeProvenanceClass =
+  (typeof TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUNTIME_PROVENANCE_CLASSES)[number];
+
+export const TOPIC_SELECTION_V1B_N7_RUNTIME_CONTEXT_PROJECTION_SCHEMA_VERSION =
+  'TopicSelectionV1bN7RuntimeContextProjection@v1' as const;
+
+export const TOPIC_SELECTION_V1B_N7_RUNTIME_CONTEXT_PROJECTION_KINDS = [
+  'v1b_n7_to_n8_topic_question_contract_context',
+  'v1b_n7_to_n6_failed_trial_loopback_context',
+] as const;
+export type TopicSelectionV1bN7RuntimeContextProjectionKind =
+  (typeof TOPIC_SELECTION_V1B_N7_RUNTIME_CONTEXT_PROJECTION_KINDS)[number];
+
 export const TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_SEMANTIC_SLOT_IDS = [
   'n2_constraint_profile_semantic_support',
   'n3_readiness_classification',
@@ -1015,6 +1033,19 @@ export interface TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef {
   adapter_policy_version: string;
   slot_spec_hash: string;
   provenance_ref: TopicSelectionFunctionalRef;
+  runtime_provenance_class: TopicSelectionV1bWorkflowHarnessRuntimeProvenanceClass;
+  context_policy_profile_id: string | null;
+  context_policy_profile_version: string | null;
+  context_policy_profile_hash: string | null;
+  prompt_variant_key: string | null;
+  runtime_invocation_context_hash: string | null;
+  redaction_policy: string | null;
+  source_hashes: Record<string, string>;
+  runtime_audit_ref: TopicSelectionFunctionalRef | null;
+  runtime_audit_hash: string | null;
+  compression_report_ref: TopicSelectionFunctionalRef | null;
+  compression_report_hash: string | null;
+  compressed_context_hash: string | null;
 }
 
 export interface TopicSelectionV1bWorkflowHarnessAuthorityRef {
@@ -1116,6 +1147,72 @@ export interface TopicSelectionV1bN7ToN8HandoffPayload {
   candidate_grouping_ref: TopicSelectionFunctionalRef | null;
   candidate_grouping_hash: string | null;
 }
+
+export interface TopicSelectionV1bN7RuntimeContextProjectionBase {
+  schema_version: typeof TOPIC_SELECTION_V1B_N7_RUNTIME_CONTEXT_PROJECTION_SCHEMA_VERSION;
+  projection_kind: TopicSelectionV1bN7RuntimeContextProjectionKind;
+  node_id: 'topic-selection.v1b.materialize-topic-question-contract.v1';
+  workflow_run_id: string;
+  node_attempt_id: string;
+  route_decision: 'invoke_next' | 'loopback';
+  non_authority: true;
+  context_cache_scope: 'process_local_runtime_only';
+  context_authority: 'non_authority_runtime_context';
+  source_refs: TopicSelectionFunctionalRef[];
+  source_hashes: Record<string, string>;
+  support_refs: TopicSelectionFunctionalRef[];
+  support_hashes: Record<string, string>;
+  preserved_fact_kinds: string[];
+}
+
+export interface TopicSelectionV1bN7ToN8TopicQuestionContractContextProjection
+extends TopicSelectionV1bN7RuntimeContextProjectionBase {
+  projection_kind: 'v1b_n7_to_n8_topic_question_contract_context';
+  route_decision: 'invoke_next';
+  n7_handoff_ref: TopicSelectionFunctionalRef;
+  n7_handoff_hash: string;
+  topic_question_ref: TopicSelectionFunctionalRef;
+  topic_question_hash: string;
+  topic_question_contract_ref: TopicSelectionFunctionalRef;
+  topic_question_contract_hash: string;
+  answerability_plan_ref: TopicSelectionFunctionalRef;
+  answerability_plan_hash: string;
+  trial_ledger_ref: TopicSelectionFunctionalRef;
+  trial_ledger_hash: string;
+  topic_question_candidate_set_ref: TopicSelectionFunctionalRef;
+  topic_question_candidate_set_hash: string;
+  active_candidate_ref: TopicSelectionFunctionalRef;
+  active_candidate_hash: string;
+  selected_research_slice_ref: TopicSelectionFunctionalRef;
+  selected_research_slice_hash: string;
+  n8_debate_admission_ref: TopicSelectionFunctionalRef;
+  n8_debate_admission_hash: string;
+  candidate_grouping_ref: TopicSelectionFunctionalRef | null;
+  candidate_grouping_hash: string | null;
+}
+
+export interface TopicSelectionV1bN7ToN6FailedTrialLoopbackContextProjection
+extends TopicSelectionV1bN7RuntimeContextProjectionBase {
+  projection_kind: 'v1b_n7_to_n6_failed_trial_loopback_context';
+  route_decision: 'loopback';
+  loopback_target_code: 'n7_loopback_to_n6';
+  topic_question_candidate_set_ref: TopicSelectionFunctionalRef;
+  topic_question_candidate_set_hash: string;
+  n6_handoff_hash: string;
+  n8_feedback_ref: TopicSelectionFunctionalRef | null;
+  n8_feedback_hash: string | null;
+  failed_trial_synthesis_ref: TopicSelectionFunctionalRef;
+  failed_trial_synthesis_hash: string;
+  exhausted_candidate_refs: TopicSelectionFunctionalRef[];
+  exhausted_candidate_hashes: string[];
+  failure_reason_codes: string[];
+  n6_regeneration_hints: string[];
+  synthesis_summary: string;
+}
+
+export type TopicSelectionV1bN7RuntimeContextProjection =
+  | TopicSelectionV1bN7ToN8TopicQuestionContractContextProjection
+  | TopicSelectionV1bN7ToN6FailedTrialLoopbackContextProjection;
 
 export interface TopicSelectionV1bN8ToN9HandoffPayload {
   topic_value_assessment_ref: TopicSelectionFunctionalRef;
@@ -1517,6 +1614,10 @@ const nullableStringId = { anyOf: [stringId, { type: 'null' }] } as const;
 const hashString = { type: 'string', pattern: '^[a-f0-9]{64}$' } as const;
 const nullableHashString = { anyOf: [hashString, { type: 'null' }] } as const;
 const objectPayload = { type: 'object', additionalProperties: true } as const;
+const hashMap = {
+  type: 'object',
+  additionalProperties: hashString,
+} as const;
 const functionalRefArray = { type: 'array', items: topicSelectionFunctionalRefSchema } as const;
 const nullableFunctionalRef = { anyOf: [topicSelectionFunctionalRefSchema, { type: 'null' }] } as const;
 const strictFunctionalRefSchema = {
@@ -1525,6 +1626,17 @@ const strictFunctionalRefSchema = {
   required: ['ref_type', 'ref_id'],
   properties: {
     ref_type: stringId,
+    ref_id: stringId,
+    version_id: nullableStringId,
+    title_card_id: nullableStringId,
+  },
+} as const;
+const strictArtifactFunctionalRefSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['ref_type', 'ref_id'],
+  properties: {
+    ref_type: { const: 'artifact_ref' },
     ref_id: stringId,
     version_id: nullableStringId,
     title_card_id: nullableStringId,
@@ -2490,6 +2602,19 @@ export const topicSelectionV1bWorkflowHarnessSemanticSupportArtifactRefSchema = 
     'adapter_policy_version',
     'slot_spec_hash',
     'provenance_ref',
+    'runtime_provenance_class',
+    'context_policy_profile_id',
+    'context_policy_profile_version',
+    'context_policy_profile_hash',
+    'prompt_variant_key',
+    'runtime_invocation_context_hash',
+    'redaction_policy',
+    'source_hashes',
+    'runtime_audit_ref',
+    'runtime_audit_hash',
+    'compression_report_ref',
+    'compression_report_hash',
+    'compressed_context_hash',
   ],
   properties: {
     slot_id: semanticSlotId,
@@ -2510,6 +2635,21 @@ export const topicSelectionV1bWorkflowHarnessSemanticSupportArtifactRefSchema = 
     adapter_policy_version: stringId,
     slot_spec_hash: hashString,
     provenance_ref: strictFunctionalRefSchema,
+    runtime_provenance_class: {
+      enum: [...TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUNTIME_PROVENANCE_CLASSES],
+    },
+    context_policy_profile_id: nullableStringId,
+    context_policy_profile_version: nullableStringId,
+    context_policy_profile_hash: nullableHashString,
+    prompt_variant_key: nullableStringId,
+    runtime_invocation_context_hash: nullableHashString,
+    redaction_policy: nullableStringId,
+    source_hashes: hashMap,
+    runtime_audit_ref: nullableStrictFunctionalRef,
+    runtime_audit_hash: nullableHashString,
+    compression_report_ref: nullableStrictFunctionalRef,
+    compression_report_hash: nullableHashString,
+    compressed_context_hash: nullableHashString,
     raw_provider_response: false,
     provider_id: false,
     model_id: false,
@@ -2518,6 +2658,31 @@ export const topicSelectionV1bWorkflowHarnessSemanticSupportArtifactRefSchema = 
   },
   allOf: [
     ...semanticArtifactSlotRules,
+    {
+      if: {
+        required: ['runtime_provenance_class'],
+        properties: {
+          runtime_provenance_class: { const: 'runtime_verified' },
+        },
+      },
+      then: {
+        properties: {
+          context_policy_profile_id: stringId,
+          context_policy_profile_version: stringId,
+          context_policy_profile_hash: hashString,
+          prompt_variant_key: stringId,
+          runtime_invocation_context_hash: hashString,
+          redaction_policy: stringId,
+          source_hashes: {
+            type: 'object',
+            minProperties: 1,
+            additionalProperties: hashString,
+          },
+          runtime_audit_ref: strictArtifactFunctionalRefSchema,
+          runtime_audit_hash: hashString,
+        },
+      },
+    },
     {
       if: {
         required: ['execution_mode'],
@@ -2713,6 +2878,139 @@ export const topicSelectionV1bWorkflowHarnessAuthorityRefSchema = {
     policy_version: stringId,
     schema_version: stringId,
   },
+} as const;
+
+const n7RuntimeContextProjectionBaseRequired = [
+  'schema_version',
+  'projection_kind',
+  'node_id',
+  'workflow_run_id',
+  'node_attempt_id',
+  'route_decision',
+  'non_authority',
+  'context_cache_scope',
+  'context_authority',
+  'source_refs',
+  'source_hashes',
+  'support_refs',
+  'support_hashes',
+  'preserved_fact_kinds',
+] as const;
+
+const n7RuntimeContextProjectionBaseProperties = {
+  schema_version: { const: TOPIC_SELECTION_V1B_N7_RUNTIME_CONTEXT_PROJECTION_SCHEMA_VERSION },
+  projection_kind: { enum: [...TOPIC_SELECTION_V1B_N7_RUNTIME_CONTEXT_PROJECTION_KINDS] },
+  node_id: { const: 'topic-selection.v1b.materialize-topic-question-contract.v1' },
+  workflow_run_id: stringId,
+  node_attempt_id: stringId,
+  route_decision: { enum: ['invoke_next', 'loopback'] },
+  non_authority: { const: true },
+  context_cache_scope: { const: 'process_local_runtime_only' },
+  context_authority: { const: 'non_authority_runtime_context' },
+  source_refs: strictFunctionalRefArray,
+  source_hashes: hashMap,
+  support_refs: strictFunctionalRefArray,
+  support_hashes: hashMap,
+  preserved_fact_kinds: stringArray,
+} as const;
+
+const topicSelectionV1bN7ToN8TopicQuestionContractContextProjectionSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    ...n7RuntimeContextProjectionBaseRequired,
+    'n7_handoff_ref',
+    'n7_handoff_hash',
+    'topic_question_ref',
+    'topic_question_hash',
+    'topic_question_contract_ref',
+    'topic_question_contract_hash',
+    'answerability_plan_ref',
+    'answerability_plan_hash',
+    'trial_ledger_ref',
+    'trial_ledger_hash',
+    'topic_question_candidate_set_ref',
+    'topic_question_candidate_set_hash',
+    'active_candidate_ref',
+    'active_candidate_hash',
+    'selected_research_slice_ref',
+    'selected_research_slice_hash',
+    'n8_debate_admission_ref',
+    'n8_debate_admission_hash',
+    'candidate_grouping_ref',
+    'candidate_grouping_hash',
+  ],
+  properties: {
+    ...n7RuntimeContextProjectionBaseProperties,
+    projection_kind: { const: 'v1b_n7_to_n8_topic_question_contract_context' },
+    route_decision: { const: 'invoke_next' },
+    n7_handoff_ref: strictFunctionalRefSchema,
+    n7_handoff_hash: hashString,
+    topic_question_ref: strictFunctionalRefSchema,
+    topic_question_hash: hashString,
+    topic_question_contract_ref: strictFunctionalRefSchema,
+    topic_question_contract_hash: hashString,
+    answerability_plan_ref: strictFunctionalRefSchema,
+    answerability_plan_hash: hashString,
+    trial_ledger_ref: strictFunctionalRefSchema,
+    trial_ledger_hash: hashString,
+    topic_question_candidate_set_ref: strictFunctionalRefSchema,
+    topic_question_candidate_set_hash: hashString,
+    active_candidate_ref: strictFunctionalRefSchema,
+    active_candidate_hash: hashString,
+    selected_research_slice_ref: strictFunctionalRefSchema,
+    selected_research_slice_hash: hashString,
+    n8_debate_admission_ref: strictFunctionalRefSchema,
+    n8_debate_admission_hash: hashString,
+    candidate_grouping_ref: nullableStrictFunctionalRef,
+    candidate_grouping_hash: nullableHashString,
+  },
+} as const;
+
+const topicSelectionV1bN7ToN6FailedTrialLoopbackContextProjectionSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    ...n7RuntimeContextProjectionBaseRequired,
+    'loopback_target_code',
+    'topic_question_candidate_set_ref',
+    'topic_question_candidate_set_hash',
+    'n6_handoff_hash',
+    'n8_feedback_ref',
+    'n8_feedback_hash',
+    'failed_trial_synthesis_ref',
+    'failed_trial_synthesis_hash',
+    'exhausted_candidate_refs',
+    'exhausted_candidate_hashes',
+    'failure_reason_codes',
+    'n6_regeneration_hints',
+    'synthesis_summary',
+  ],
+  properties: {
+    ...n7RuntimeContextProjectionBaseProperties,
+    projection_kind: { const: 'v1b_n7_to_n6_failed_trial_loopback_context' },
+    route_decision: { const: 'loopback' },
+    loopback_target_code: { const: 'n7_loopback_to_n6' },
+    topic_question_candidate_set_ref: strictFunctionalRefSchema,
+    topic_question_candidate_set_hash: hashString,
+    n6_handoff_hash: hashString,
+    n8_feedback_ref: nullableStrictFunctionalRef,
+    n8_feedback_hash: nullableHashString,
+    failed_trial_synthesis_ref: strictFunctionalRefSchema,
+    failed_trial_synthesis_hash: hashString,
+    exhausted_candidate_refs: strictFunctionalRefArray,
+    exhausted_candidate_hashes: { type: 'array', items: hashString },
+    failure_reason_codes: stringArray,
+    n6_regeneration_hints: stringArray,
+    synthesis_summary: stringId,
+  },
+} as const;
+
+export const topicSelectionV1bN7RuntimeContextProjectionSchema = {
+  anyOf: [
+    topicSelectionV1bN7ToN8TopicQuestionContractContextProjectionSchema,
+    topicSelectionV1bN7ToN6FailedTrialLoopbackContextProjectionSchema,
+  ],
 } as const;
 
 const handoffPayloadSchemas = {

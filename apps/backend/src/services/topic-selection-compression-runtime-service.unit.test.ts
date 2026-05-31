@@ -10,6 +10,8 @@ import { AppError } from '../errors/app-error.js';
 import {
   TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
 } from './topic-selection-context-policy-profile-registry-service.js';
 import { TopicSelectionCompressionRuntimeService } from './topic-selection-compression-runtime-service.js';
@@ -34,6 +36,14 @@ function resolvedProfile() {
     invocation_slot_id:
       TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS.need_candidate_generation,
   });
+}
+
+function resolvedV1bN7Profile(input: {
+  context_policy_profile_id: string;
+  invocation_slot_id: string;
+}) {
+  const registry = new TopicSelectionContextPolicyProfileRegistryService();
+  return registry.resolveProfile(input);
 }
 
 function inputContext() {
@@ -75,6 +85,21 @@ function requiredFacts() {
     method_family_gap: ['gap_hybrid_adaptation'],
     unresolved_challenge: ['challenge_prior_art_boundary'],
     recheck_hint: ['recheck_after_supplemental_round'],
+  };
+}
+
+function v1bN7RequiredFacts() {
+  return {
+    blocker: ['N7_SUPPORT_GATE_REQUIRED'],
+    residual_risk: ['risk_value_evidence_thin'],
+    n8_feedback: ['feedback_ref_001'],
+    loopback_target: ['topic-selection.v1b.N6'],
+    regeneration_hint: ['hint_needs_clearer_research_axis'],
+    candidate_identity: ['candidate_ref_001'],
+    failed_candidate_identity: ['candidate_ref_002'],
+    n8_gate_rejection_reason: ['novelty_gate_failed'],
+    debate_admission_need: ['need_additional_value_risk_review'],
+    value_risk_fact: ['risk_value_evidence_thin'],
   };
 }
 
@@ -152,6 +177,127 @@ test('compression quality gate blocks when required risk gap and recheck facts a
   assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_METHOD_FAMILY_GAP_DROPPED'));
   assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_RECHECK_HINT_DROPPED'));
   assert.equal(result.report.quality_gate_result, 'blocked');
+});
+
+test('compression quality gate blocks when v1b N7 runtime support facts are dropped', () => {
+  const failedTrialProfile = resolvedV1bN7Profile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS.failed_trial_synthesis,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS.failed_trial_synthesis,
+  });
+  const debateAdmissionProfile = resolvedV1bN7Profile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS.n8_debate_admission_review,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS.n8_debate_admission_review,
+  });
+  const groupingProfile = resolvedV1bN7Profile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS.candidate_grouping,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS.candidate_grouping,
+  });
+  const runtime = new TopicSelectionCompressionRuntimeService();
+
+  const failedTrialResult = runtime.createReport({
+    context_policy_profile: failedTrialProfile.profile,
+    context_policy_profile_hash: failedTrialProfile.profile_hash,
+    compression_report_ref: ref('artifact_ref', 'compression_report_v1b_n7_failed_trial'),
+    source_refs: [ref('artifact_ref', 'n7_failed_trial_context_packet')],
+    input_context: {
+      n8_feedback: ['feedback_ref_001'],
+      loopback_target: 'topic-selection.v1b.N6',
+      regeneration_hint: 'hint_needs_clearer_research_axis',
+    },
+    compressed_context: {
+      summary: 'Dropped failed-trial loopback facts.',
+    },
+    summary: 'Incomplete failed-trial synthesis compression.',
+    compression_executor_kind: 'codex_assisted',
+    required_preserved_facts: v1bN7RequiredFacts(),
+    compressed_preserved_facts: {
+      blocker: ['N7_SUPPORT_GATE_REQUIRED'],
+      residual_risk: ['risk_value_evidence_thin'],
+      failed_candidate_identity: ['candidate_ref_002'],
+    },
+    estimated_input_tokens_before_override: 1000,
+    estimated_input_tokens_after_override: 420,
+  });
+
+  assert.equal(failedTrialResult.quality_gate_result, 'blocked');
+  assert.ok(failedTrialResult.blocker_codes.includes('COMPRESSION_REQUIRED_N8_FEEDBACK_DROPPED'));
+  assert.ok(failedTrialResult.blocker_codes.includes('COMPRESSION_REQUIRED_LOOPBACK_TARGET_DROPPED'));
+  assert.ok(failedTrialResult.blocker_codes.includes('COMPRESSION_REQUIRED_REGENERATION_HINT_DROPPED'));
+
+  const debateAdmissionResult = runtime.createReport({
+    context_policy_profile: debateAdmissionProfile.profile,
+    context_policy_profile_hash: debateAdmissionProfile.profile_hash,
+    compression_report_ref: ref('artifact_ref', 'compression_report_v1b_n7_debate_admission'),
+    source_refs: [ref('artifact_ref', 'n7_debate_admission_context_packet')],
+    input_context: {
+      n8_gate_rejection_reason: 'novelty_gate_failed',
+      debate_admission_need: 'need_additional_value_risk_review',
+      value_risk_fact: 'risk_value_evidence_thin',
+    },
+    compressed_context: {
+      summary: 'Dropped debate admission value-risk context.',
+    },
+    summary: 'Incomplete debate admission compression.',
+    compression_executor_kind: 'codex_assisted',
+    required_preserved_facts: v1bN7RequiredFacts(),
+    compressed_preserved_facts: {
+      candidate_identity: ['candidate_ref_001'],
+      failed_contract_identity: ['contract_ref_001'],
+    },
+    estimated_input_tokens_before_override: 1000,
+    estimated_input_tokens_after_override: 430,
+  });
+
+  assert.equal(debateAdmissionResult.quality_gate_result, 'blocked');
+  assert.ok(
+    debateAdmissionResult.blocker_codes.includes(
+      'COMPRESSION_REQUIRED_N8_GATE_REJECTION_REASON_DROPPED',
+    ),
+  );
+  assert.ok(
+    debateAdmissionResult.blocker_codes.includes(
+      'COMPRESSION_REQUIRED_DEBATE_ADMISSION_NEED_DROPPED',
+    ),
+  );
+  assert.ok(debateAdmissionResult.blocker_codes.includes('COMPRESSION_REQUIRED_VALUE_RISK_FACT_DROPPED'));
+
+  const groupingResult = runtime.createReport({
+    context_policy_profile: groupingProfile.profile,
+    context_policy_profile_hash: groupingProfile.profile_hash,
+    compression_report_ref: ref('artifact_ref', 'compression_report_v1b_n7_grouping'),
+    source_refs: [ref('artifact_ref', 'n7_grouping_context_packet')],
+    input_context: {
+      candidate_identity: ['candidate_ref_001'],
+      candidate_order: ['candidate_ref_001', 'candidate_ref_002'],
+      grouping_rationale: 'candidate_ref_001 has clearer research axis',
+    },
+    compressed_context: {
+      summary: 'Dropped grouping identity facts.',
+    },
+    summary: 'Incomplete candidate grouping compression.',
+    compression_executor_kind: 'codex_assisted',
+    required_preserved_facts: {
+      candidate_identity: ['candidate_ref_001'],
+      candidate_order: ['candidate_ref_001', 'candidate_ref_002'],
+      grouping_rationale: ['grouping_rationale_ref_001'],
+    },
+    compressed_preserved_facts: {
+      priority_signal: ['higher_value'],
+    },
+    estimated_input_tokens_before_override: 1000,
+    estimated_input_tokens_after_override: 390,
+  });
+
+  assert.equal(groupingResult.quality_gate_result, 'blocked');
+  assert.ok(groupingResult.blocker_codes.includes('COMPRESSION_REQUIRED_CANDIDATE_IDENTITY_DROPPED'));
+  assert.ok(groupingResult.blocker_codes.includes('COMPRESSION_REQUIRED_CANDIDATE_ORDER_DROPPED'));
+  assert.ok(groupingResult.blocker_codes.includes('COMPRESSION_REQUIRED_GROUPING_RATIONALE_DROPPED'));
 });
 
 test('compression quality gate blocks forbidden hidden reasoning raw logs and secrets', () => {
