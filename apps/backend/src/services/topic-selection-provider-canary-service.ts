@@ -9,6 +9,10 @@ import {
   stableStringify,
 } from './literature-content-processing-utils.js';
 import {
+  type TopicSelectionV1bTopicQuestionCandidateSetDraftPayload,
+  topicSelectionV1bTopicQuestionCandidateSetDraftPayloadSchema,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-workflow-harness-contracts';
+import {
   TopicSelectionAgentOrchestratorService,
   type TopicSelectionAgentInvocationRequest,
   type TopicSelectionAgentInvocationResult,
@@ -43,8 +47,8 @@ export interface TopicSelectionProviderCanaryLiveRequiredEvidence {
   model_option_id: string;
   provider_required_live: true;
   provider_call_count: number;
-  first_status: TopicSelectionAgentInvocationResult<TopicSelectionProviderCanaryCandidateDraftBatch>['status'];
-  second_status: TopicSelectionAgentInvocationResult<TopicSelectionProviderCanaryCandidateDraftBatch>['status'];
+  first_status: TopicSelectionAgentInvocationResult<unknown>['status'];
+  second_status: TopicSelectionAgentInvocationResult<unknown>['status'];
   first_prompt_packet_hash: string | null;
   second_prompt_packet_hash: string | null;
   prompt_artifact_ref_reused: boolean;
@@ -58,7 +62,7 @@ export interface TopicSelectionProviderCanaryOverBudgetEvidence {
   provider_id: TopicSelectionProviderCanaryProviderId;
   model_option_id: string;
   provider_call_count: number;
-  status: TopicSelectionAgentInvocationResult<TopicSelectionProviderCanaryCandidateDraftBatch>['status'];
+  status: TopicSelectionAgentInvocationResult<unknown>['status'];
   error_code: string | null | undefined;
   token_budget_gate_decision: string | null;
   blocker_codes: string[];
@@ -187,10 +191,10 @@ export class TopicSelectionProviderCanaryService {
     const invocation = this.v1bN6ProviderInvocation(input.provider_id, {
       estimated_input_tokens_override: 1000,
     });
-    const first = await orchestrator.invokeStructuredOutput<TopicSelectionProviderCanaryCandidateDraftBatch>(
+    const first = await orchestrator.invokeStructuredOutput<TopicSelectionV1bTopicQuestionCandidateSetDraftPayload>(
       invocation,
     );
-    const second = await orchestrator.invokeStructuredOutput<TopicSelectionProviderCanaryCandidateDraftBatch>(
+    const second = await orchestrator.invokeStructuredOutput<TopicSelectionV1bTopicQuestionCandidateSetDraftPayload>(
       invocation,
     );
 
@@ -209,7 +213,7 @@ export class TopicSelectionProviderCanaryService {
     const modelOptionId = this.v1bN6ModelOptionId(input.provider_id);
     const countingGateway = new CountingTopicSelectionProviderCanaryGateway(this.llmGateway);
     const orchestrator = this.makeOrchestrator(countingGateway);
-    const result = await orchestrator.invokeStructuredOutput<TopicSelectionProviderCanaryCandidateDraftBatch>(
+    const result = await orchestrator.invokeStructuredOutput<TopicSelectionV1bTopicQuestionCandidateSetDraftPayload>(
       this.v1bN6ProviderInvocation(input.provider_id, {
         estimated_input_tokens_override: 200_000,
         compression_already_applied: true,
@@ -308,7 +312,7 @@ export class TopicSelectionProviderCanaryService {
       estimated_input_tokens_override: number;
       compression_already_applied?: boolean;
     },
-  ): TopicSelectionAgentInvocationRequest<TopicSelectionProviderCanaryCandidateDraftBatch> {
+  ): TopicSelectionAgentInvocationRequest<TopicSelectionV1bTopicQuestionCandidateSetDraftPayload> {
     const resolvedContextProfile = this.contextProfileRegistry.resolveProfile({
       context_policy_profile_id:
         TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS.question_candidate_draft,
@@ -338,17 +342,20 @@ export class TopicSelectionProviderCanaryService {
       },
       prompt_variant_key: 'n6_question_candidate_draft.initial_from_n5',
       schema_name: 'topic_selection_v1b_n6_provider_canary_draft',
-      schema: this.canarySchema(),
+      schema: topicSelectionV1bTopicQuestionCandidateSetDraftPayloadSchema as unknown as Record<string, unknown>,
       messages: [
         {
           role: 'system',
           content:
-            'Return only JSON matching the requested schema for a v1b N6 provider live invocation canary.',
+            'Return only JSON matching TopicQuestionCandidateSetDraft@v1 for a v1b N6 provider live invocation canary.',
         },
         {
           role: 'user',
-          content:
-            'Return one synthetic canary draft with draft_id "draft_canary_001" and candidate_need "v1b N6 provider live invocation canary".',
+          content: [
+            'Return one synthetic topic-question candidate set draft.',
+            'Use the supplied reference draft values exactly unless JSON Schema validation requires a small correction.',
+            stableStringify(this.v1bN6CanaryReferenceDraft()),
+          ].join(' '),
         },
       ],
       context_packet_refs: [
@@ -376,8 +383,8 @@ export class TopicSelectionProviderCanaryService {
   private liveRequiredEvidence(input: {
     providerId: TopicSelectionProviderCanaryProviderId;
     modelOptionId: string;
-    first: TopicSelectionAgentInvocationResult<TopicSelectionProviderCanaryCandidateDraftBatch>;
-    second: TopicSelectionAgentInvocationResult<TopicSelectionProviderCanaryCandidateDraftBatch>;
+    first: TopicSelectionAgentInvocationResult<unknown>;
+    second: TopicSelectionAgentInvocationResult<unknown>;
     countingGateway: CountingGateway;
   }): TopicSelectionProviderCanaryLiveRequiredEvidence {
     return {
@@ -448,6 +455,104 @@ export class TopicSelectionProviderCanaryService {
           },
         },
       },
+    };
+  }
+
+  private v1bN6CanaryReferenceDraft(): TopicSelectionV1bTopicQuestionCandidateSetDraftPayload {
+    const evidenceRef = this.ref('evidence_unit', 'provider_canary_evidence_001');
+    const boundaryRef = this.ref('research_slice_boundary', 'provider_canary_boundary_001');
+    const needRef = this.ref('validated_need', 'provider_canary_need_001');
+    return {
+      question_frame: {
+        target_setting: 'Local-first CS paper engineering assistant workflows.',
+        target_community: 'LLM systems researchers',
+        object_scope: 'v1b N6 provider live invocation canary',
+        task_scope: 'topic-question candidate generation and runtime provenance checks',
+        intervention_or_approach: 'Shared runtime provider canary over AgentOrchestrator and BackendLlmGateway',
+        comparison_baseline: 'transport-only provider canary without the N6 output contract',
+        observable_outcome: 'valid structured TopicQuestionCandidateSetDraft output and live provider telemetry',
+        assumption_refs: [],
+        evidence_refs: [evidenceRef],
+        frame_payload: {
+          canary: true,
+          non_authority: true,
+        },
+      },
+      recommended_candidate_keys: ['provider_canary_candidate'],
+      generation_notes: ['Synthetic canary draft for provider/runtime validation only.'],
+      human_review_triggers: [],
+      candidates: [
+        {
+          candidate_key: 'provider_canary_candidate',
+          main_question:
+            'How can a shared LLM runtime preserve provider-live semantics for v1b N6 topic-question generation?',
+          sub_questions: [
+            'Which prompt-cache and token-budget signals must remain auditable before deterministic N6 gates run?',
+          ],
+          question_type: 'system',
+          contribution_hypothesis: 'system',
+          source_validated_need_refs: [needRef],
+          answerability_plan: {
+            datasets_or_resources: ['provider canary trace fixtures'],
+            metrics: ['provider call count', 'prompt packet hash equality', 'response reuse absence'],
+            baselines: ['transport-only canary'],
+            ablations_or_comparisons: ['prompt cache hit without response reuse'],
+            evaluation_setting: 'local/dev provider canary execution',
+            dependency_risks: ['provider structured output behavior may drift'],
+            open_dependencies: [],
+            known_gaps: [],
+            required_evidence_refs: [evidenceRef],
+          },
+          answerability_verdict: 'answerable',
+          expected_claim:
+            'The shared runtime can keep provider-required calls live while reusing prompt packet metadata.',
+          fallback_claim: 'The canary validates provider transport and runtime provenance for N6.',
+          max_claim_strength: 'Bounded workflow-runtime claim only.',
+          observable_success_criteria: ['two provider calls occur', 'response reuse refs remain null'],
+          boundary_check: {
+            preserved_boundary_refs: [boundaryRef],
+            excluded_boundary_refs: [],
+            boundary_violations: [],
+            prohibited_claims: ['business authority creation', 'topic promotion decision'],
+            allowed_refinements: ['tighten canary wording'],
+          },
+          traceability_check: {
+            support_evidence_refs: [evidenceRef],
+            challenge_evidence_refs: [evidenceRef],
+            baseline_evidence_refs: [evidenceRef],
+            context_evidence_refs: [evidenceRef],
+            mapped_evidence_refs: [evidenceRef],
+            unmapped_assumptions: [],
+          },
+          falsification_conditions: [
+            {
+              condition_type: 'claim_overstrong',
+              severity: 'hard',
+              statement: 'If response reuse is non-null, the provider-live runtime claim is false.',
+              trigger_evidence_refs: [evidenceRef],
+              trigger_source_refs: [needRef],
+              related_contract_fields: ['response_reuse_refs'],
+              expected_action: 'lower_claim_strength',
+              check_timing: 'before_value_assessment',
+              confidence: 'high',
+            },
+          ],
+          risk_notes: ['Synthetic provider canary output is non-authority.'],
+          blockers: [],
+          objections: [],
+          human_review_triggers: [],
+          confidence: 0.8,
+        },
+      ],
+    };
+  }
+
+  private ref(refType: string, refId: string) {
+    return {
+      ref_type: refType,
+      ref_id: refId,
+      title_card_id: 'title_card_provider_canary',
+      version_id: null,
     };
   }
 

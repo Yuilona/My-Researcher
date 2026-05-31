@@ -5,6 +5,10 @@ import type {
   LlmStructuredOutputRequest,
   LlmStructuredOutputResponse,
 } from './llm-gateway.js';
+import {
+  type TopicSelectionV1bTopicQuestionCandidateSetDraftPayload,
+  topicSelectionV1bTopicQuestionCandidateSetDraftPayloadSchema,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-workflow-harness-contracts';
 import { BackendLlmGateway } from './llm-gateway.js';
 import { InMemoryTopicSelectionControlPlaneRepository } from '../repositories/in-memory-topic-selection-control-plane-repository.js';
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
@@ -25,21 +29,125 @@ class StubProviderCanaryGateway {
     request: LlmStructuredOutputRequest,
   ): Promise<LlmStructuredOutputResponse<T>> {
     this.calls.push(request);
-    const output: TopicSelectionProviderCanaryCandidateDraftBatch = {
-      batch_id: `canary_batch_${request.model.providerId}`,
-      drafts: [
-        {
-          draft_id: 'draft_canary_001',
-          candidate_need: 'provider live invocation canary',
-        },
-      ],
-    };
+    const output = request.schemaName === 'topic_selection_v1b_n6_provider_canary_draft'
+      ? v1bN6CanaryOutput()
+      : v1aCanaryOutput(request);
     return {
       parsed: output as T,
       raw: { output },
       telemetry: telemetry(request),
     };
   }
+}
+
+function v1aCanaryOutput(request: LlmStructuredOutputRequest): TopicSelectionProviderCanaryCandidateDraftBatch {
+  return {
+    batch_id: `canary_batch_${request.model.providerId}`,
+    drafts: [
+      {
+        draft_id: 'draft_canary_001',
+        candidate_need: 'provider live invocation canary',
+      },
+    ],
+  };
+}
+
+function functionalRef(refType: string, refId: string) {
+  return {
+    ref_type: refType,
+    ref_id: refId,
+    title_card_id: 'title_card_provider_canary',
+    version_id: null,
+  };
+}
+
+function v1bN6CanaryOutput(): TopicSelectionV1bTopicQuestionCandidateSetDraftPayload {
+  const evidenceRef = functionalRef('evidence_unit', 'provider_canary_evidence_001');
+  const boundaryRef = functionalRef('research_slice_boundary', 'provider_canary_boundary_001');
+  const needRef = functionalRef('validated_need', 'provider_canary_need_001');
+  return {
+    question_frame: {
+      target_setting: 'Local-first CS paper engineering assistant workflows.',
+      target_community: 'LLM systems researchers',
+      object_scope: 'v1b N6 provider live invocation canary',
+      task_scope: 'topic-question candidate generation and runtime provenance checks',
+      intervention_or_approach: 'Shared runtime provider canary over AgentOrchestrator and BackendLlmGateway',
+      comparison_baseline: 'transport-only provider canary without the N6 output contract',
+      observable_outcome: 'valid structured TopicQuestionCandidateSetDraft output and live provider telemetry',
+      assumption_refs: [],
+      evidence_refs: [evidenceRef],
+      frame_payload: {
+        canary: true,
+        non_authority: true,
+      },
+    },
+    recommended_candidate_keys: ['provider_canary_candidate'],
+    generation_notes: ['Synthetic canary draft for provider/runtime validation only.'],
+    human_review_triggers: [],
+    candidates: [
+      {
+        candidate_key: 'provider_canary_candidate',
+        main_question:
+          'How can a shared LLM runtime preserve provider-live semantics for v1b N6 topic-question generation?',
+        sub_questions: [
+          'Which prompt-cache and token-budget signals must remain auditable before deterministic N6 gates run?',
+        ],
+        question_type: 'system',
+        contribution_hypothesis: 'system',
+        source_validated_need_refs: [needRef],
+        answerability_plan: {
+          datasets_or_resources: ['provider canary trace fixtures'],
+          metrics: ['provider call count', 'prompt packet hash equality', 'response reuse absence'],
+          baselines: ['transport-only canary'],
+          ablations_or_comparisons: ['prompt cache hit without response reuse'],
+          evaluation_setting: 'local/dev provider canary execution',
+          dependency_risks: ['provider structured output behavior may drift'],
+          open_dependencies: [],
+          known_gaps: [],
+          required_evidence_refs: [evidenceRef],
+        },
+        answerability_verdict: 'answerable',
+        expected_claim:
+          'The shared runtime can keep provider-required calls live while reusing prompt packet metadata.',
+        fallback_claim: 'The canary validates provider transport and runtime provenance for N6.',
+        max_claim_strength: 'Bounded workflow-runtime claim only.',
+        observable_success_criteria: ['two provider calls occur', 'response reuse refs remain null'],
+        boundary_check: {
+          preserved_boundary_refs: [boundaryRef],
+          excluded_boundary_refs: [],
+          boundary_violations: [],
+          prohibited_claims: ['business authority creation', 'topic promotion decision'],
+          allowed_refinements: ['tighten canary wording'],
+        },
+        traceability_check: {
+          support_evidence_refs: [evidenceRef],
+          challenge_evidence_refs: [evidenceRef],
+          baseline_evidence_refs: [evidenceRef],
+          context_evidence_refs: [evidenceRef],
+          mapped_evidence_refs: [evidenceRef],
+          unmapped_assumptions: [],
+        },
+        falsification_conditions: [
+          {
+            condition_type: 'claim_overstrong',
+            severity: 'hard',
+            statement: 'If response reuse is non-null, the provider-live runtime claim is false.',
+            trigger_evidence_refs: [evidenceRef],
+            trigger_source_refs: [needRef],
+            related_contract_fields: ['response_reuse_refs'],
+            expected_action: 'lower_claim_strength',
+            check_timing: 'before_value_assessment',
+            confidence: 'high',
+          },
+        ],
+        risk_notes: ['Synthetic provider canary output is non-authority.'],
+        blockers: [],
+        objections: [],
+        human_review_triggers: [],
+        confidence: 0.8,
+      },
+    ],
+  };
 }
 
 function telemetry(request: LlmStructuredOutputRequest): LlmCallTelemetry {
@@ -142,6 +250,7 @@ async function assertV1bN6PromptCacheLiveRequiredCanary(providerId: TopicSelecti
   assert.equal(gateway.calls[0]!.prompt.promptTemplateId, 'topic-selection-v1b-n6-provider-canary-live-required');
   assert.equal(gateway.calls[0]!.schemaName, 'topic_selection_v1b_n6_provider_canary_draft');
   assert.ok(gateway.calls[0]!.schemaName.length <= 64);
+  assert.deepEqual(gateway.calls[0]!.schema, topicSelectionV1bTopicQuestionCandidateSetDraftPayloadSchema);
   assert.equal(gateway.calls[1]!.model.providerId, providerId);
   assert.equal(result.first_prompt_packet_hash, result.second_prompt_packet_hash);
   assert.equal(result.prompt_artifact_ref_reused, true);

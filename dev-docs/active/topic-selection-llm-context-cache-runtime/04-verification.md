@@ -477,6 +477,15 @@
 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after the T-112 documentation sync. |
 | `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registry remains structurally valid; no provider/config-key drift was introduced by the N6 canary changes. |
 
+## 2026-05-31 - v1b N6 L3/L4/L5 Quality Fix Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | 12 provider canary tests executed: 8 local tests passed and 4 live-provider tests skipped by explicit env/key gates. The local v1b N6 canary now uses the real `TopicQuestionCandidateSetDraft@v1` schema and canonical N6 fixture output. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-compression-runtime-service.unit.test.ts` | passed | 8/8 compression runtime tests passed after adding N6 blockers, accepted risks, method-family gaps, and unresolved challenges to the long-context fact-drop test. |
+| `pnpm --filter @paper-engineering-assistant/backend typecheck` | passed | Backend TypeScript compile passed after switching v1b N6 provider canary generics to the real N6 output contract. |
+| `pnpm topic-selection:v1b-n6-runtime-smoke` | passed | Prisma-backed `n6_runtime_smoke` passed with run id `v1b-harness-e2e-1780239385851-996f73`. The smoke now asserts exact N6 prompt hashes, prompt-index delta, and Prisma model-level metadata-only behavior. |
+| `T112_V1B_N6_PROVIDER_CANARY_LIVE=1 BACKEND_TEST_PRESERVE_REAL_ENV=1 pnpm --filter @paper-engineering-assistant/backend exec node --env-file=../../.env.local --test --loader ts-node/esm src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | 12 provider canary tests executed: 10 passed and 2 skipped. The live v1b N6 OpenAI and DashScope canaries both passed using the real N6 output schema; DashScope completed within the 300-second timeout. |
+
 ## Required Before Implementation
 - Contract design reviewed against T-088/T-089 D-18. Done.
 - First slice selected and approved: shared contracts/runtime primitives followed by v1a N6 single-agent and debate slots. Done.

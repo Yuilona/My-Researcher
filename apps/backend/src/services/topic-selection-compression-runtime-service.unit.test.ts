@@ -107,6 +107,7 @@ function v1bN7RequiredFacts() {
 
 function v1bN6RequiredFacts() {
   return {
+    blocker: ['blocker_candidate_scope_unclear'],
     selected_slice_identity: ['research_slice_ref_001'],
     n5_handoff: ['n5_handoff_hash_001'],
     selected_option_identity: ['selected_option_ref_001'],
@@ -120,6 +121,9 @@ function v1bN6RequiredFacts() {
     non_goal: ['non_goal_promotion_001'],
     source_health_warning: ['source_health_partial'],
     residual_risk: ['risk_context_thin'],
+    accepted_risk: ['accepted_risk_provider_variance'],
+    method_family_gap: ['gap_method_family_runtime_only'],
+    unresolved_challenge: ['challenge_candidate_overlap'],
     recheck_hint: ['recheck_after_value_trial'],
   };
 }
@@ -346,7 +350,11 @@ test('compression quality gate blocks when v1b N6 long-context facts are dropped
         evidence_ref: 'evidence_ref_001',
         boundary_ref: 'boundary_ref_001',
         assumption_ref: 'assumption_ref_001',
+        blocker: 'blocker_candidate_scope_unclear',
         risk_note: 'risk_context_thin',
+        accepted_risk: 'accepted_risk_provider_variance',
+        method_family_gap: 'gap_method_family_runtime_only',
+        unresolved_challenge: 'challenge_candidate_overlap',
         recheck_hint: 'recheck_after_value_trial',
       })),
     },
@@ -373,6 +381,7 @@ test('compression quality gate blocks when v1b N6 long-context facts are dropped
   });
 
   assert.equal(result.quality_gate_result, 'blocked');
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_BLOCKER_DROPPED'));
   assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_N5_HANDOFF_DROPPED'));
   assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_OPTION_SET_IDENTITY_DROPPED'));
   assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_EVIDENCE_REF_DROPPED'));
@@ -380,6 +389,9 @@ test('compression quality gate blocks when v1b N6 long-context facts are dropped
   assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_ASSUMPTION_REF_DROPPED'));
   assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_CLAIM_CEILING_DROPPED'));
   assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_NON_GOAL_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_ACCEPTED_RISK_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_METHOD_FAMILY_GAP_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_UNRESOLVED_CHALLENGE_DROPPED'));
   assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_RECHECK_HINT_DROPPED'));
 });
 

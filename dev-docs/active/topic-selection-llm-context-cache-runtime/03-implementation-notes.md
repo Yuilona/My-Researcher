@@ -733,3 +733,19 @@
 - Updated first-slice status:
   - `n6_question_candidate_draft.initial_from_n5` now has L1/L2 implementation, L3 Prisma-backed smoke, L4 local/live provider canary evidence, and L5 long-context/adversarial compression coverage.
   - Next v1b N6 work should promote P2.1b regeneration/triage paths instead of widening the initial N5->N6 path further.
+
+## 2026-05-31 - v1b N6 L3/L4/L5 Quality Fixes
+- Tightened the v1b N6 provider canary so it now uses the real `TopicQuestionCandidateSetDraft@v1` schema instead of the generic provider transport canary batch schema.
+  - The canary still remains non-authority and continues through `AgentOrchestrator -> BackendLlmGateway`.
+  - The OpenAI schema name stays within the provider `text.format.name` 64-character limit.
+  - Unit fake-gateway output now returns a canonical N6 topic-question candidate draft fixture and validates against the real N6 schema.
+- Expanded N6 long-context compression tests to cover the full inherited common preserved-fact surface:
+  - blockers;
+  - accepted risks;
+  - method-family gaps;
+  - unresolved challenges;
+  - residual risks and recheck hints.
+- Strengthened Prisma-backed N6 smoke prompt-index assertions.
+  - N6 prompt index checks now bind to the exact generated prompt packet hashes for the initial and drift branches.
+  - The smoke asserts the N6 prompt-index delta equals the generated N6 prompt hash count.
+  - The smoke also checks Prisma runtime model metadata to ensure `TopicSelectionPromptPacketCacheIndex` does not persist prompt payloads, provider responses, provider telemetry payloads, raw provider logs, authority payloads, or secrets.

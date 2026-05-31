@@ -306,6 +306,30 @@ async function promptPacketIndexSnapshot(prisma, since = null) {
   };
 }
 
+function assertPromptPacketIndexModelMetadataOnly(prisma) {
+  const fields = prisma._runtimeDataModel?.models?.TopicSelectionPromptPacketCacheIndex?.fields
+    ?.map((field) => field.name);
+  assert.ok(Array.isArray(fields), 'Expected Prisma runtime model metadata for TopicSelectionPromptPacketCacheIndex.');
+  assert.ok(fields.includes('promptPacketHash'), 'Prompt packet index model metadata is incomplete.');
+  for (const forbiddenField of [
+    'messages',
+    'promptPayload',
+    'providerResponse',
+    'providerResponsePayload',
+    'providerTelemetry',
+    'providerTelemetryPayload',
+    'rawProviderLogs',
+    'authorityPayload',
+    'secret',
+  ]) {
+    assert.equal(
+      fields.includes(forbiddenField),
+      false,
+      `Prompt packet index must not persist ${forbiddenField}.`,
+    );
+  }
+}
+
 async function invokeV1bHarnessNode(app, input) {
   const response = await app.inject({
     method: 'POST',
@@ -2898,8 +2922,10 @@ async function assertN7RuntimePromptIndex(prisma, startedAt) {
   return snapshot;
 }
 
-async function assertN6RuntimePromptIndex(prisma, startedAt) {
+async function assertN6RuntimePromptIndex(prisma, startedAt, expectedPromptPacketHashes = []) {
+  assertPromptPacketIndexModelMetadataOnly(prisma);
   const snapshot = await promptPacketIndexSnapshot(prisma, startedAt);
+  const expectedHashes = [...new Set(expectedPromptPacketHashes)];
   assert.ok(
     snapshot.n6_rows.some((row) =>
       row.invocation_slot_id === N6_RUNTIME_DRAFT_SLOT_ID
@@ -2907,6 +2933,19 @@ async function assertN6RuntimePromptIndex(prisma, startedAt) {
     ),
     'Expected Prisma prompt packet index row for n6_question_candidate_draft.initial_from_n5.',
   );
+  if (expectedHashes.length > 0) {
+    assert.equal(
+      snapshot.n6_rows.length,
+      expectedHashes.length,
+      'Expected exactly one N6 prompt packet index row for each generated N6 runtime prompt hash.',
+    );
+    for (const promptPacketHash of expectedHashes) {
+      assert.ok(
+        snapshot.n6_rows.some((row) => row.prompt_packet_hash === promptPacketHash),
+        `Expected N6 prompt packet index row for ${promptPacketHash}.`,
+      );
+    }
+  }
   for (const row of snapshot.n6_rows) {
     assert.match(row.prompt_packet_hash, /^[a-f0-9]{64}$/);
     assert.equal(row.model_option_id, null);
@@ -3247,8 +3286,22 @@ async function runN6RuntimeSmoke(app, suffix, existingBundle = null) {
     assert.equal(drift.authority_ref, null);
     assert.equal(drift.handoff_ref, null);
 
+    const expectedPromptPacketHashes = [
+      runtimeDraft.summary.prompt_packet_hash,
+      driftDraft.summary.prompt_packet_hash,
+    ];
+    const expectedPromptPacketHashCount = new Set(expectedPromptPacketHashes).size;
     const promptIndexAfter = await promptPacketIndexSnapshot(prisma);
-    const promptIndexCreated = await assertN6RuntimePromptIndex(prisma, startedAt);
+    assert.equal(
+      promptIndexAfter.n6_count - promptIndexBefore.n6_count,
+      expectedPromptPacketHashCount,
+      'Expected N6 prompt packet index delta to match generated N6 runtime prompt hashes.',
+    );
+    const promptIndexCreated = await assertN6RuntimePromptIndex(
+      prisma,
+      startedAt,
+      expectedPromptPacketHashes,
+    );
     return {
       bundle: setup.bundle,
       selectedOption: setup.selectedOption,
