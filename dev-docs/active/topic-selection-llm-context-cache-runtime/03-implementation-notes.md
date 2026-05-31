@@ -615,3 +615,79 @@
   - N7 authority-write failure tests assert no replayable trace, no authority record, and no orphaned runtime projection artifact for the failed attempt.
 - Minimum adversarial quality coverage for the N7 expansion gate is now satisfied by focused negative tests for audit drift, unknown failed-trial refs, deterministic-gate bypass, and projection orphan prevention.
 - Post-N7 runtime expansion may proceed with v1b N6 first, then v1b N8, then v1b N4. The expansion should preserve the N7 rule that audit artifacts are LLM-operable workflow-quality evidence, not human-only documentation and not business authority.
+
+## 2026-05-31 - D24 v1b N6 Chain Alignment Started
+- Agreed to align v1b N6 holistically before implementation because N6 has multiple chain surfaces:
+  - N5->N6 initial generation;
+  - N7->N6 fallback/regeneration after failed candidate trials;
+  - N6->prior-node fallback through triage, debate escalation, or slice rollback;
+  - N6 internal orchestration from draft generation/admission through deterministic gate, authority write, and N6->N7 handoff.
+- D24 will be discussed in this order:
+  - D24-A promoted scope;
+  - D24-B N5->N6 initial generation;
+  - D24-C N7->N6 fallback regeneration;
+  - D24-D N6->prior-node fallback;
+  - D24-E N6 internal orchestration;
+  - D24-F cache/compression/replay boundaries;
+  - D24-G verification and legacy exit.
+- Accepted D24-A scope:
+  - first implementation slice promotes only `n6_question_candidate_draft` with generation mode `initial_from_n5`;
+  - `n6_loopback_triage` remains support-only guarded/planned behavior and is not mandatory in the first implementation slice;
+  - `regeneration_after_n7_loopback`, `regeneration_after_n6_gate_failure`, and provider canary paths remain later slices;
+  - matrix promotion is limited to the first-slice `n6_question_candidate_draft.initial_from_n5` row;
+  - provider canary evidence is not required before implementation starts.
+- Accepted direction for D24-B:
+  - `N5ToN6Handoff@v1` remains the only authority input for initial N5->N6 generation;
+  - `n6_question_candidate_draft` generates or admits `TopicQuestionCandidateSetDraft@v1` only as a model draft before `N6TopicQuestionCandidateGate`;
+  - N6 deterministic gates remain responsible for schema validation, source/ref/hash validation, answerability/falsification/claim-ceiling checks, candidate admission, authority writes, and `N6ToN7Handoff@v1`;
+  - initial generation uses `v1b_topic_question_candidate_context` and generation mode `initial_from_n5`;
+  - prompt/cache identity must include frozen input hash, `n5_handoff_hash`, selected research slice ref/hash, option-set ref/hash, selected-option ref/hash, selection-decision ref/hash, constraint/readiness refs/hashes, prompt variant, output contract, profile id/version/hash, model/runtime params hash, and redaction policy;
+  - N6 draft artifacts should carry `runtime_verified`, `fixture_replay`, or `legacy_unverified` provenance classes so downstream LLM agents can reason about workflow-quality evidence without treating diagnostics as authority;
+  - first implementation should use `codex_assisted` and `mocked_llm`; provider canary should follow after runtime identity, admission, replay, and deterministic-gate boundaries are stable.
+- Complexity assessment for D24-B:
+  - overall complexity is medium-high but controllable if isolated;
+  - main complexity comes from N6 draft artifacts being gate inputs rather than support-only artifacts, the existing direct frozen semantic artifact path, a larger context compiler surface, many prompt/cache identity fields, and the requirement that promoted-slot legacy direct generation exits cleanly after replacement tests pass;
+  - relative simplifiers are the existing N6 deterministic gate, existing `N5ToN6Handoff@v1`, existing draft schema, and strong frozen lineage/ref/hash validation;
+  - do not implement D24-B together with N7->N6 fallback regeneration or N6->prior-node fallback.
+- Accepted direction for D24-C:
+  - N7->N6 fallback regeneration overlaps heavily with existing WorkflowHarness behavior, and that overlap is intentional;
+  - existing harness semantics remain the business authority skeleton: N7 candidate-trial exhaustion, N7 loopback projection recording after successful authority persistence, N6 frozen lineage validation, N6 deterministic candidate gate, N6 authority writes, and `N6ToN7Handoff@v1` emission should not be reimplemented in a new runtime flow;
+  - T-112 should add only the shared runtime boundary around N6 draft generation/admission when regeneration needs LLM-like work;
+  - regeneration should use the existing `n6_question_candidate_draft` slot with generation mode `regeneration_after_n7_loopback`, not a new business node;
+  - `v1b_n7_to_n6_failed_trial_loopback_context` remains a non-authority runtime projection that enters prompt/cache identity, compression preserved facts, and runtime audit, while `N5ToN6Handoff@v1` remains the authority input;
+  - implementation risk is mainly legacy direct draft generation/admission becoming a long-term dual path. After replacement tests pass, promoted-slot direct frozen semantic draft generation must exit rather than remain soft-disabled.
+- Accepted direction for D24-D:
+  - `n6_loopback_triage` is a support-only runtime slot for N6 failure routing and is not mandatory for every N6 failure;
+  - simple candidate-level or question-frame-level failures may use deterministic fallback without invoking triage;
+  - runtime triage is allowed only when N6 needs failure attribution, debate escalation advice, or rollback-to-N5 advice;
+  - triage can provide failure scope, dominant reason codes, affected refs, regeneration hints, debate escalation recommendation, and upstream rollback recommendation;
+  - triage cannot create candidate authority, select a new slice, rewrite N5 selection, emit `N6ToN7Handoff@v1`, or create downstream recheck authority;
+  - malformed or drifted present triage support blocks, while absent optional triage falls back to conservative deterministic routing.
+- Accepted direction for D24-E:
+  - v1b N6 runtime design targets node orchestration, not harness orchestration;
+  - the node runtime adapter is the SSOT for slot/profile/generation-mode binding, N6 runtime context compilation, shared runtime invocation, `runtime_verified` draft artifact creation, and admission expected identity;
+  - `WorkflowHarness` should call and verify that node adapter, execute existing deterministic gates, record traces/replay/smoke evidence, and validate persistence, but must not define a separate prompt/cache/compression/admission/authority semantic path;
+  - the unified N6 internal order is frozen authority input validation -> generation mode selection -> mode-specific non-authority runtime context loading -> runtime context packet compilation -> shared prompt/cache/token/compression/audit runtime -> draft admission -> N6 deterministic gate -> authority write -> `N6ToN7Handoff@v1`;
+  - runtime success does not mean N6 business success. N6 business success requires deterministic gate success, authority persistence success, and handoff emission;
+  - if authority write fails, N6 must not record a replayable success trace or emit a downstream handoff.
+- Accepted direction for D24-F:
+  - N6 cache, compression, replay, and audit artifacts are primarily LLM-operable workflow-quality evidence rather than human-facing audit reports;
+  - prompt/cache identity should let later agents and replay runners decide whether frozen lineage, generation mode, mode-specific context, prompt variant, profile, model/runtime params, redaction policy, and compression state are reusable or drifted;
+  - compression reports should let automatic compressors, evaluators, and repair loops verify preserved facts, detect dropped facts, and block unsafe compression before another LLM draft is generated;
+  - runtime audit should let later agents distinguish context drift, token-budget failure, schema failure, admission failure, deterministic gate failure, authority-write failure, provider telemetry, and response-reuse provenance;
+  - replay evidence should prove workflow equivalence and boundary preservation, not only saved LLM calls;
+  - provider response reuse remains blocked for `provider_llm`, and provider-side cache telemetry remains telemetry only;
+  - context packet cache remains process-local/runtime-only for the N6 expansion. Cache hits cannot skip prompt packet identity, runtime audit, draft admission, deterministic gate, authority write, or `N6ToN7Handoff@v1`.
+- Accepted direction for D24-G:
+  - verification follows D22 layering: L1 unit/contract, L2 WorkflowHarness policy stress, L3 Prisma-backed local/dev smoke, L4 provider/executor canary, and L5 adversarial/long-context stress;
+  - first implementation entry does not require provider canary. Provider canary follows after Codex/mocked runtime identity, admission, replay, prompt-index, and deterministic-gate boundaries are stable;
+  - first-slice minimum completion requires L1/L2 for the N5->N6 initial path, documentation updates, and removal of promoted-slot legacy direct draft generation for that path;
+  - N7->N6 regeneration implementation requires initial-path L1/L2 pass plus N7 loopback projection identity, drift, orphan, and unknown-ref tests;
+  - `fixture_replay` artifacts and unit fixture helpers may remain, but product/acceptance promoted paths must not directly submit legacy frozen semantic drafts to N6 gate;
+  - placeholder prompt hashes must not enter real prompt packet cache rows, and `legacy_unverified` artifacts must not be downgraded to warnings for product admission;
+  - LLM-like call delta `0` is useful replay evidence, but N6 replay success also requires frozen input identity, runtime/admission identity, deterministic gate replay, authority refs/hashes, and `N6ToN7Handoff@v1` hash equivalence.
+- Implementation readiness review:
+  - verdict: ready to start Slice 1 implementation preparation;
+  - ready scope is `n6_question_candidate_draft.initial_from_n5` through Codex/mocked shared runtime;
+  - not ready in Slice 1: N7->N6 regeneration, N6 gate-failure retry, `n6_loopback_triage` runtime generation, provider canary, and DB-backed context packet cache;
+  - first code steps should add the v1b N6 first-slice context runtime profile, N6 draft runtime/admission contracts and tests, node-level N6 draft runtime adapter, WorkflowHarness adapter calls for the promoted initial path, and promoted initial-path legacy exit after replacement L1/L2 tests pass.

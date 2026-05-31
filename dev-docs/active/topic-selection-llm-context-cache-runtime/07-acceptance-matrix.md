@@ -153,6 +153,16 @@
 | v1b N7 debate-admission compression | compression drops N8 gate rejection reason, debate/admission need, selected/failed candidate identity, failed contract identity, value/risk facts, blockers, accepted/residual risks, or recheck hints | compression quality gate blocks |
 | v1b N7 compression boundary | compressed context attempts to generate or override executable prompt content, deterministic gate inputs, support authority, loopback authority, downstream recheck authority, or ref/hash lineage | runtime blocks before deterministic gates |
 | v1b N7 authority boundary | prompt/cache/reuse hit returns valid support metadata | candidate selection, trial ledger, N8 admission, loopback, and persistence gates still execute deterministically |
+| v1b N6 D24 profile registry | `n6_question_candidate_draft.initial_from_n5` resolves by slot/profile id/version | profile hash is stable and registry blocks unknown, mismatch, or drifted profiles |
+| v1b N6 D24 prompt identity | frozen input hash, `n5_handoff_hash`, selected slice/option/option-set/selection/profile/readiness refs and hashes, prompt variant, output contract, profile hash, model/runtime params, redaction policy, and compression identity are unchanged | prompt packet identity is stable and reusable as LLM-operable workflow evidence |
+| v1b N6 D24 prompt identity drift | any frozen N5 lineage ref/hash or generation mode changes | prompt/cache identity changes and old draft artifacts cannot be admitted for the promoted initial path |
+| v1b N6 D24 runtime draft generation | node adapter compiles context and invokes shared runtime for `initial_from_n5` | prompt cache, token-budget, compression, provider telemetry separation, response-reuse guard, and runtime audit are recorded before draft admission |
+| v1b N6 D24 draft admission | `runtime_verified` draft has matching output hash, prompt packet hash, runtime invocation context hash, profile hash, source hash bundle, redaction policy, and runtime audit ref/hash | draft may enter `N6TopicQuestionCandidateGate` as non-authority gate input |
+| v1b N6 D24 draft admission | draft is `legacy_unverified`, fixture-only in product mode, missing runtime audit identity, or has placeholder prompt hash | admission blocks before N6 deterministic gate |
+| v1b N6 D24 authority boundary | prompt/cache/compression/replay/audit succeeds | N6 deterministic gate, authority write, and `N6ToN7Handoff@v1` emission still determine business success |
+| v1b N6 D24 compression | compression drops selected slice identity, N5 handoff hash, selected option identity, evidence refs, boundary refs, assumption refs, claim ceiling, non-goals, source-health warnings, or risk/gap/recheck hints | compression quality gate blocks before draft generation/admission continues |
+| v1b N6 D24 replay | exact replay of the promoted initial path | LLM-like call delta is `0`, and frozen input identity, runtime/admission identity, deterministic gate replay, authority refs/hashes, and `N6ToN7Handoff@v1` hash are equivalent |
+| v1b N6 D24 legacy exit | replacement L1/L2 tests pass for the promoted initial path | product/acceptance promoted paths no longer submit direct frozen semantic drafts to N6 gate; only explicit `fixture_replay` helpers remain outside product admission |
 | Token budget | over budget, compression disallowed | blocks before provider call |
 | Token budget | over budget, compression allowed | runs compression and records report |
 | v1a N6 compression | over target before compression and within target after compression | records `context_compression_report`, re-renders compressed prompt, performs one provider call, and still runs schema/admission/persistence gates |
@@ -194,6 +204,12 @@
 | v1a N6 first-slice readiness | profiles, key fields, prompt variants, token budgets, compression/reuse policies, audit projections, and focused tests are present | implementation gate passes |
 | v1a N7 reused recommendation | residual risks/gaps still enforced |
 | v1b N4/N6/N8 | frozen input hash participates in reuse key |
+| v1b N6 initial runtime draft | N5->N6 initial path uses `TopicSelectionV1bN6DraftRuntimeService` or equivalent node adapter | runtime-verified draft is produced/admitted, then existing N6 deterministic gate and authority write run |
+| v1b N6 initial exact replay | same frozen N5 lineage and same runtime identity are replayed | no extra LLM-like call, no duplicate authority writes, deterministic gate replay matches, and `N6ToN7Handoff@v1` hash is equivalent |
+| v1b N6 initial frozen-input drift | selected slice, selected option, option set, selection decision, constraint profile, intake readiness, or `n5_handoff_hash` changes | old prompt/cache/runtime draft identity is rejected before N6 deterministic gate |
+| v1b N6 initial prompt cache hit | prompt cache returns existing prompt artifact and quality report refs | draft execution/admission, schema validation, N6 deterministic gate, authority write, and handoff emission still run |
+| v1b N6 initial authority-write failure | deterministic gate passed but persistence fails | no replayable N6 success trace and no `N6ToN7Handoff@v1` is emitted |
+| v1b N6 initial legacy exit | replacement L1/L2 tests pass | promoted product/acceptance path no longer directly feeds legacy frozen semantic draft artifacts to N6 gate |
 | v1b N7 | high-quality topic-question-contract context is admitted and produces N7->N8/loopback handoff refs |
 | v1b N7 exact replay | no extra LLM-like call, no duplicate topic-question-contract authority writes, and deterministic N7 gates still run |
 | v1b N7 frozen input drift | support reuse is rejected before candidate selection, N8 admission, loopback, or persistence |

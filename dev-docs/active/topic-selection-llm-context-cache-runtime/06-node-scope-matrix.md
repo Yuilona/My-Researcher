@@ -241,6 +241,34 @@ v1b N7 first-slice blockers locked by D19-B/C:
 - any provider LLM compression attempt, profile-disallowed `codex_assisted` compression, or compression output that rewrites executable prompt/authority semantics is invalid;
 - any compression report that drops candidate identity, failed-trial reasons, N6 handoff conclusions, N8 feedback, risk/gap/recheck hints, selected-candidate rationale, or accepted residual risks is invalid.
 
+## v1b N6 D24 First-Slice Implementation-Ready Matrix
+
+D24 locks v1b N6 as the next post-N7 rollout target, but only the initial N5->N6 draft path is implementation-ready in the first slice.
+
+First-slice decisions:
+- promoted row: `n6_question_candidate_draft.initial_from_n5`;
+- runtime slot id remains `n6_question_candidate_draft`;
+- generation mode is `initial_from_n5` and participates in prompt/cache identity;
+- authority input remains `N5ToN6Handoff@v1`;
+- node orchestration is the SSOT; `WorkflowHarness` calls and verifies the node runtime adapter rather than defining prompt/cache/compression/admission semantics;
+- context packet cache remains process-local/runtime-only; no DB-backed context packet cache index is introduced;
+- prompt/context/compression/replay/audit artifacts are LLM-operable workflow-quality evidence, not business authority and not primarily human-facing audit reports;
+- provider canary is deferred until Codex/mocked runtime identity, admission, replay, prompt-index, and deterministic-gate boundaries are stable;
+- promoted-slot legacy direct draft generation must exit after replacement L1/L2 tests pass.
+
+| Slot row id | Proposed profile id/version | Prompt variant key | Locked context/dynamic material | Locked runtime policy | First-slice tests |
+|---|---|---|---|---|---|
+| `n6_question_candidate_draft.initial_from_n5` | `topic-selection.v1b.n6.question-candidate-draft.context-runtime@v1` | `n6_question_candidate_draft.initial_from_n5` | frozen `N5ToN6Handoff@v1`, frozen input hash, selected research slice ref/hash, research slice option set ref/hash, selected option ref/hash, N5 selection decision ref/hash, constraint profile ref/hash, intake readiness ref/hash, research slice boundaries, assumptions, evidence refs, source validated need ref, claim ceiling, non-goals, value assessment inputs | model draft before `N6TopicQuestionCandidateGate`; output contract `TopicQuestionCandidateSetDraft@v1`; allowed first-slice modes `codex_assisted` and `mocked_llm`; provider response reuse blocked; prompt cache reuses prompt artifacts only; compression defaults to `deterministic_structural` with `codex_assisted` allowed only when profile permits; must preserve selected slice identity, N5 handoff hash, option/option-set identity, constraint/readiness refs, evidence refs, boundary refs, assumption refs, claim ceiling, non-goals, source-health warnings, and risk/gap/recheck hints | profile/hash/slot drift blocks; prompt identity includes all frozen lineage fields; runtime-verified draft admission blocks missing audit/profile/prompt/source identity; cache hit does not skip N6 deterministic gate; exact replay has LLM-like call delta `0` and equivalent authority/handoff refs; authority-write failure emits no `N6ToN7Handoff@v1`; promoted direct draft path exits after L1/L2 pass |
+
+Guarded/planned N6 rows after the first slice:
+
+| Slot row id | Status | Required precondition before implementation |
+|---|---|---|
+| `n6_question_candidate_draft.regeneration_after_n7_loopback` | planned | first-slice initial path L1/L2 pass; N7 loopback projection identity, drift, orphan, unknown-ref, and compression preserved-fact tests planned |
+| `n6_question_candidate_draft.regeneration_after_n6_gate_failure` | planned | initial path L1/L2 pass; retry-history identity and deterministic fallback policy tests planned |
+| `n6_loopback_triage` | guarded/planned | support-only triage admission/runtime policy tests planned; triage remains optional and cannot create candidate, N5 selection, handoff, or downstream recheck authority |
+| `n6_question_candidate_draft.provider_canary` | deferred | Codex/mocked runtime path stable; prompt index metadata verified; provider non-reuse and over-budget zero-call canary tests planned |
+
 ## Slot Inventory For Alignment
 This table locks the initial row inventory before implementation-ready cache/compression/reuse policy is filled for each slot.
 
