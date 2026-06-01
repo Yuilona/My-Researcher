@@ -35,16 +35,23 @@ import {
   TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1B_N8_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
 } from './topic-selection-context-policy-profile-registry-service.js';
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
 import {
   TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID,
   TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID,
   TopicSelectionModelProfileRegistryService,
 } from './topic-selection-model-profile-registry-service.js';
+import type {
+  TopicSelectionV1cN2BoundedDebateRoleOutput,
+  TopicSelectionV1cN2BoundedDebateRoleSlotId,
+} from './topic-selection-v1c-n2-bounded-debate-admission-service.js';
 
 export type TopicSelectionProviderCanaryProviderId = 'openai' | 'dashscope';
 
@@ -80,6 +87,22 @@ export interface TopicSelectionProviderCanaryOverBudgetEvidence {
   error_code: string | null | undefined;
   token_budget_gate_decision: string | null;
   blocker_codes: string[];
+}
+
+export interface TopicSelectionProviderCanarySlotLiveRequiredEvidence
+  extends TopicSelectionProviderCanaryLiveRequiredEvidence {
+  invocation_slot_id: string;
+  context_policy_profile_id: string;
+  model_profile_id: string;
+  canary_surface: 'production_runtime_slot';
+}
+
+export interface TopicSelectionProviderCanarySlotOverBudgetEvidence
+  extends TopicSelectionProviderCanaryOverBudgetEvidence {
+  invocation_slot_id: string;
+  context_policy_profile_id: string;
+  model_profile_id: string;
+  canary_surface: 'production_runtime_slot';
 }
 
 type CountingGateway = TopicSelectionAgentOrchestratorLlmGateway & {
@@ -343,6 +366,69 @@ export class TopicSelectionProviderCanaryService {
     };
   }
 
+  async runV1cN2PromptCacheLiveRequiredCanary(input: {
+    provider_id: TopicSelectionProviderCanaryProviderId;
+    slot_id: TopicSelectionV1cN2BoundedDebateRoleSlotId;
+  }): Promise<TopicSelectionProviderCanarySlotLiveRequiredEvidence> {
+    const modelOptionId = this.v1cN2ModelOptionId(input.provider_id);
+    const contextPolicyProfileId = this.v1cN2ContextPolicyProfileId(input.slot_id);
+    const countingGateway = new CountingTopicSelectionProviderCanaryGateway(this.llmGateway);
+    const orchestrator = this.makeOrchestrator(countingGateway);
+    const invocation = this.v1cN2ProviderInvocation(input.provider_id, input.slot_id, {
+      estimated_input_tokens_override: 1000,
+    });
+    const first = await orchestrator.invokeStructuredOutput<TopicSelectionV1cN2BoundedDebateRoleOutput>(
+      invocation,
+    );
+    const second = await orchestrator.invokeStructuredOutput<TopicSelectionV1cN2BoundedDebateRoleOutput>(
+      invocation,
+    );
+
+    return {
+      ...this.liveRequiredEvidence({
+        providerId: input.provider_id,
+        modelOptionId,
+        first,
+        second,
+        countingGateway,
+      }),
+      invocation_slot_id: input.slot_id,
+      context_policy_profile_id: contextPolicyProfileId,
+      model_profile_id: TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID,
+      canary_surface: 'production_runtime_slot',
+    };
+  }
+
+  async runV1cN2OverBudgetZeroCallCanary(input: {
+    provider_id: TopicSelectionProviderCanaryProviderId;
+    slot_id: TopicSelectionV1cN2BoundedDebateRoleSlotId;
+  }): Promise<TopicSelectionProviderCanarySlotOverBudgetEvidence> {
+    const modelOptionId = this.v1cN2ModelOptionId(input.provider_id);
+    const contextPolicyProfileId = this.v1cN2ContextPolicyProfileId(input.slot_id);
+    const countingGateway = new CountingTopicSelectionProviderCanaryGateway(this.llmGateway);
+    const orchestrator = this.makeOrchestrator(countingGateway);
+    const result = await orchestrator.invokeStructuredOutput<TopicSelectionV1cN2BoundedDebateRoleOutput>(
+      this.v1cN2ProviderInvocation(input.provider_id, input.slot_id, {
+        estimated_input_tokens_override: 200_000,
+        compression_already_applied: true,
+      }),
+    );
+
+    return {
+      provider_id: input.provider_id,
+      model_option_id: modelOptionId,
+      invocation_slot_id: input.slot_id,
+      context_policy_profile_id: contextPolicyProfileId,
+      model_profile_id: TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID,
+      canary_surface: 'production_runtime_slot',
+      provider_call_count: countingGateway.callCount,
+      status: result.status,
+      error_code: result.error_code,
+      token_budget_gate_decision: result.token_budget_gate_result?.decision ?? null,
+      blocker_codes: result.blocker_codes,
+    };
+  }
+
   private makeOrchestrator(
     llmGateway: TopicSelectionAgentOrchestratorLlmGateway,
   ): TopicSelectionAgentOrchestratorService {
@@ -411,6 +497,81 @@ export class TopicSelectionProviderCanaryService {
       runtime_token_budget: {
         context_policy_profile: resolvedContextProfile.profile,
         context_policy_profile_hash: resolvedContextProfile.profile_hash,
+        estimated_input_tokens_override: runtimeOptions.estimated_input_tokens_override,
+        compression_already_applied: runtimeOptions.compression_already_applied ?? false,
+      },
+      created_by: 'system',
+    };
+  }
+
+  private v1cN2ProviderInvocation(
+    providerId: TopicSelectionProviderCanaryProviderId,
+    slotId: TopicSelectionV1cN2BoundedDebateRoleSlotId,
+    runtimeOptions: {
+      estimated_input_tokens_override: number;
+      compression_already_applied?: boolean;
+    },
+  ): TopicSelectionAgentInvocationRequest<TopicSelectionV1cN2BoundedDebateRoleOutput> {
+    const contextPolicyProfileId = this.v1cN2ContextPolicyProfileId(slotId);
+    const resolvedContextProfile = this.contextProfileRegistry.resolveProfile({
+      context_policy_profile_id: contextPolicyProfileId,
+      invocation_slot_id: slotId,
+    });
+    this.assertProviderRequiredLiveProfile(
+      resolvedContextProfile.profile.execution_modifiers,
+    );
+    const slotKey = this.slotKey(slotId);
+
+    return {
+      workspace_id: 'workspace_provider_canary',
+      title_card_id: 'title_card_provider_canary',
+      node_id: 'topic-selection.v1c.generate-promotion-support.v1',
+      workflow_run_id: `provider_canary_v1c_n2_${slotKey}_${providerId}_workflow_run_001`,
+      node_attempt_id: `provider_canary_v1c_n2_${slotKey}_${providerId}_node_attempt_001`,
+      invocation_attempt_id: `provider_canary_v1c_n2_${slotKey}_${providerId}_runtime_role`,
+      execution_mode: 'provider_llm',
+      executor_kind: 'single_agent',
+      run_mode: 'acceptance',
+      profile_id: TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID,
+      model_option_id: this.v1cN2ModelOptionId(providerId),
+      output_contract: 'TopicSelectionV1cBoundedMicroDebateRoleOrFinal@v1',
+      prompt: {
+        promptTemplateId: 'topic-selection-v1c-promotion-support-bounded-micro-debate',
+        version: '1',
+      },
+      prompt_variant_key: slotId,
+      schema_name: 'topic_selection_v1c_n2_provider_canary_role',
+      schema: this.v1cN2CanarySchema(slotId),
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Return only JSON matching TopicSelectionV1cBoundedMicroDebateRoleOrFinal@v1 for a v1c N2 provider live invocation canary.',
+        },
+        {
+          role: 'user',
+          content: [
+            'Return one synthetic bounded micro-debate role output.',
+            'Use the supplied reference draft values exactly unless JSON Schema validation requires a small correction.',
+            stableStringify(this.v1cN2CanaryReferenceDraft(slotId)),
+          ].join(' '),
+        },
+      ],
+      context_packet_refs: [
+        {
+          ref_type: 'artifact_ref',
+          ref_id: `provider_canary_v1c_n2_${slotKey}_${providerId}_context_packet_001`,
+          title_card_id: 'title_card_provider_canary',
+        },
+      ],
+      runtime_token_budget: {
+        context_policy_profile: resolvedContextProfile.profile,
+        context_policy_profile_hash: resolvedContextProfile.profile_hash,
+        runtime_invocation_context_hash: this.hash({
+          scenario_id: 'v1c_n2_bounded_promotion_support',
+          scenario_case_id: slotId,
+          provider_id: providerId,
+        }),
         estimated_input_tokens_override: runtimeOptions.estimated_input_tokens_override,
         compression_already_applied: runtimeOptions.compression_already_applied ?? false,
       },
@@ -702,6 +863,26 @@ export class TopicSelectionProviderCanaryService {
     return `${TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID}.${suffix}`;
   }
 
+  private v1cN2ModelOptionId(providerId: TopicSelectionProviderCanaryProviderId): string {
+    const suffix = providerId === 'openai'
+      ? 'openai-balanced'
+      : 'dashscope-thinking-budget';
+    return `${TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID}.${suffix}`;
+  }
+
+  private v1cN2ContextPolicyProfileId(slotId: TopicSelectionV1cN2BoundedDebateRoleSlotId): string {
+    if (slotId === TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.promotion_supporter_draft) {
+      return TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.promotion_supporter_draft;
+    }
+    if (slotId === TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.reviewer_critic_review) {
+      return TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.reviewer_critic_review;
+    }
+    if (slotId === TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.promotion_supporter_repair) {
+      return TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.promotion_supporter_repair;
+    }
+    return TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.synthesizer_final;
+  }
+
   private assertProviderRequiredLiveProfile(executionModifiers: string[]): void {
     if (!executionModifiers.includes('provider_required_live')) {
       throw new Error('Provider canary requires a context profile with provider_required_live.');
@@ -940,6 +1121,205 @@ export class TopicSelectionProviderCanaryService {
     };
   }
 
+  private v1cN2CanaryReferenceDraft(
+    slotId: TopicSelectionV1cN2BoundedDebateRoleSlotId,
+  ): TopicSelectionV1cN2BoundedDebateRoleOutput {
+    const evidenceRef = this.ref('evidence_unit', 'provider_canary_evidence_001');
+    const riskRef = this.ref('accepted_risk', 'provider_canary_accepted_risk_001');
+    const recheckRef = this.ref('recheck_request', 'provider_canary_recheck_001');
+    if (slotId === TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.promotion_supporter_draft) {
+      return {
+        schema_version: 'topic-selection-v1c-n2-bounded-micro-debate-role.v1',
+        role_slot: slotId,
+        support_summary: 'Synthetic provider canary support draft for N2 runtime semantics.',
+        support_points: [{
+          point_id: 'provider_canary_support_point_001',
+          point: 'The provider call is live while the prompt packet may be reused.',
+          source_refs: [evidenceRef],
+        }],
+        risk_acknowledgements: [{ risk_ref: riskRef, handling: 'Carry forward as non-authority canary evidence.' }],
+        recheck_obligations: [{ recheck_ref: recheckRef, handling: 'Carry forward without creating recheck authority.' }],
+      };
+    }
+    if (slotId === TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.reviewer_critic_review) {
+      return {
+        schema_version: 'topic-selection-v1c-n2-bounded-micro-debate-role.v1',
+        role_slot: slotId,
+        critic_findings: [{
+          finding_id: 'provider_canary_finding_001',
+          severity: 'warning',
+          issue: 'Provider output remains non-authority and must preserve response non-reuse semantics.',
+          required_resolution: 'The synthesizer final must retain the provider-live runtime boundary.',
+          source_refs: [evidenceRef],
+        }],
+        required_repairs: ['Preserve provider-live response non-reuse and ref-backed context boundaries.'],
+      };
+    }
+    if (slotId === TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.promotion_supporter_repair) {
+      return {
+        schema_version: 'topic-selection-v1c-n2-bounded-micro-debate-role.v1',
+        role_slot: slotId,
+        repaired_summary: 'Synthetic repair preserves the provider-live runtime boundary.',
+        accepted_findings: ['provider_canary_finding_001'],
+        rebutted_findings: [],
+        repair_actions: [{
+          finding_id: 'provider_canary_finding_001',
+          resolution_status: 'accepted_and_repaired',
+          repair_note: 'Explicitly retained null response reuse and prompt-cache-only reuse semantics.',
+          source_refs: [evidenceRef],
+        }],
+      };
+    }
+    return {
+      schema_version: 'topic-selection-v1c-n2-bounded-micro-debate-final.v1',
+      role_slot: slotId,
+      final_support_summary: 'Synthetic final support validates N2 provider-live runtime semantics.',
+      dossier_markdown: 'Prompt packet reuse is allowed, provider response reuse remains blocked, and output is non-authority.',
+      reviewer_questions: ['Does deterministic admission still own promotion support authority?'],
+      risk_notes: [{ risk_ref: riskRef, note: 'Synthetic provider canary output is non-authority.' }],
+      recheck_notes: [{ recheck_ref: recheckRef, note: 'No recheck authority is created by the provider output.' }],
+      n3_semantic_layer: {
+        claim_ceiling_alignment: {
+          status: 'addressed',
+          summary: 'Runtime-only claim; no topic quality authority.',
+          source_refs: [evidenceRef],
+        },
+        contribution_summary: {
+          status: 'addressed',
+          summary: 'Provider canary validates runtime provenance only.',
+          source_refs: [evidenceRef],
+        },
+        evaluation_plan_summary: {
+          status: 'addressed',
+          summary: 'Evaluate prompt-cache telemetry and null response reuse refs.',
+          source_refs: [evidenceRef],
+        },
+        evidence_support_map: {
+          status: 'addressed',
+          evidence_refs: [evidenceRef],
+        },
+        accepted_risk_acknowledgements: {
+          status: 'addressed',
+          risk_refs: [riskRef],
+        },
+        recheck_obligation_summary: {
+          status: 'addressed',
+          recheck_refs: [recheckRef],
+        },
+        critic_finding_resolution_map: [{
+          finding_id: 'provider_canary_finding_001',
+          resolution_status: 'accepted_and_repaired',
+          resolution_note: 'Provider output remains non-authority and response reuse remains null.',
+          source_refs: [evidenceRef],
+        }],
+        readiness_coverage_items: [
+          { slot: 'provider_live_non_reuse', status: 'addressed', source_refs: [evidenceRef] },
+        ],
+      },
+    };
+  }
+
+  private v1cN2CanarySchema(slotId: TopicSelectionV1cN2BoundedDebateRoleSlotId): Record<string, unknown> {
+    return this.schemaFromTemplate(this.v1cN2CanaryReferenceDraft(slotId), { slotId });
+  }
+
+  private schemaFromTemplate(
+    value: unknown,
+    options: { slotId?: TopicSelectionV1cN2BoundedDebateRoleSlotId } = {},
+    path: string[] = [],
+  ): Record<string, unknown> {
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        return {
+          type: 'array',
+          maxItems: 0,
+          items: {},
+        };
+      }
+      if (value.every((item) => this.isFunctionalRef(item))) {
+        return {
+          type: 'array',
+          minItems: value.length,
+          items: value.length === 1
+            ? this.exactFunctionalRefSchema(value[0] as ReturnType<typeof this.ref>)
+            : {
+                anyOf: value.map((item) => this.exactFunctionalRefSchema(item as ReturnType<typeof this.ref>)),
+              },
+        };
+      }
+      return {
+        type: 'array',
+        minItems: value.length,
+        items: this.schemaFromTemplate(value[0], options, [...path, '0']),
+      };
+    }
+    if (value === null) {
+      return { type: 'null' };
+    }
+    if (typeof value === 'boolean') {
+      return { type: 'boolean' };
+    }
+    if (typeof value === 'number') {
+      return Number.isInteger(value) ? { type: 'integer' } : { type: 'number' };
+    }
+    if (typeof value === 'string') {
+      const fieldName = path.at(-1);
+      if (fieldName === 'role_slot' && options.slotId) {
+        return { type: 'string', enum: [options.slotId] };
+      }
+      if (fieldName === 'schema_version') {
+        return { type: 'string', enum: [value] };
+      }
+      return { type: 'string', minLength: 1 };
+    }
+    if (value && typeof value === 'object') {
+      if (this.isFunctionalRef(value)) {
+        return this.exactFunctionalRefSchema(value as ReturnType<typeof this.ref>);
+      }
+      const properties = Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(([key, child]) => [
+          key,
+          this.schemaFromTemplate(child, options, [...path, key]),
+        ]),
+      );
+      return {
+        type: 'object',
+        additionalProperties: false,
+        required: Object.keys(properties),
+        properties,
+      };
+    }
+    return {};
+  }
+
+  private isFunctionalRef(value: unknown): boolean {
+    return Boolean(
+      value
+      && typeof value === 'object'
+      && !Array.isArray(value)
+      && typeof (value as Record<string, unknown>).ref_type === 'string'
+      && typeof (value as Record<string, unknown>).ref_id === 'string'
+      && typeof (value as Record<string, unknown>).title_card_id === 'string'
+      && Object.prototype.hasOwnProperty.call(value, 'version_id'),
+    );
+  }
+
+  private exactFunctionalRefSchema(ref: ReturnType<typeof this.ref>): Record<string, unknown> {
+    return {
+      type: 'object',
+      additionalProperties: false,
+      required: ['ref_type', 'ref_id', 'title_card_id', 'version_id'],
+      properties: {
+        ref_type: { type: 'string', enum: [ref.ref_type] },
+        ref_id: { type: 'string', enum: [ref.ref_id] },
+        title_card_id: { type: 'string', enum: [ref.title_card_id] },
+        version_id: ref.version_id === null
+          ? { type: 'null' }
+          : { type: 'string', enum: [ref.version_id] },
+      },
+    };
+  }
+
   private ref(refType: string, refId: string) {
     return {
       ref_type: refType,
@@ -951,5 +1331,9 @@ export class TopicSelectionProviderCanaryService {
 
   private hash(value: unknown): string {
     return sha256Text(stableStringify(value));
+  }
+
+  private slotKey(slotId: string): string {
+    return slotId.replace(/[^a-zA-Z0-9]+/gu, '_').replace(/^_+|_+$/gu, '');
   }
 }

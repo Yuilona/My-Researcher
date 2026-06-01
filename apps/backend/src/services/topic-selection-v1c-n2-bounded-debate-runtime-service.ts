@@ -11,6 +11,7 @@ import type {
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-profile-contracts';
 import {
   TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
+  type TopicSelectionCompressionExecutorKind,
   type TopicSelectionDynamicPromptMaterialRecord,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-llm-runtime-contracts';
 import type {
@@ -39,6 +40,8 @@ import {
 } from './topic-selection-model-profile-registry-service.js';
 import {
   TopicSelectionAgentOrchestratorService,
+  type TopicSelectionAgentRuntimeCompressionAttemptInput,
+  type TopicSelectionAgentRuntimeTokenBudgetInput,
   type TopicSelectionAgentInvocationResult,
   type TopicSelectionCodexAssistedAgentOutput,
   type TopicSelectionMockedAgentOutput,
@@ -46,6 +49,9 @@ import {
 import {
   TopicSelectionPromptPacketRuntimeService,
 } from './topic-selection-prompt-packet-runtime-service.js';
+import type {
+  TopicSelectionCompressionFactInventory,
+} from './topic-selection-compression-runtime-service.js';
 import {
   TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_ROLE_ORDER,
   type TopicSelectionV1cN2BoundedDebateAdmissionExpectedIdentity,
@@ -90,6 +96,21 @@ export interface TopicSelectionV1cN2BoundedDebateContextPacket {
   prior_role_artifact_hashes: Partial<Record<TopicSelectionV1cN2BoundedDebateRoleSlotId, string>>;
 }
 
+export type TopicSelectionV1cN2RuntimeTokenBudgetOverrides = {
+  estimated_input_tokens_override?: number | null;
+  schema_overhead_tokens_override?: number | null;
+  estimated_input_tokens_after_compression_override?: number | null;
+};
+
+export type TopicSelectionV1cN2RuntimeCompressionAttempt = {
+  compression_report_ref?: TopicSelectionFunctionalRef | null;
+  compressed_context: unknown;
+  summary: unknown;
+  compression_executor_kind: TopicSelectionCompressionExecutorKind;
+  compressed_preserved_facts?: TopicSelectionCompressionFactInventory | null;
+  estimated_input_tokens_after_override?: number | null;
+};
+
 export interface GenerateTopicSelectionV1cN2BoundedDebateRoleInput {
   handoff: TopicSelectionPromotionInputSnapshotHandoff;
   slot_id: TopicSelectionV1cN2BoundedDebateRoleSlotId;
@@ -100,6 +121,8 @@ export interface GenerateTopicSelectionV1cN2BoundedDebateRoleInput {
   execution_mode: TopicSelectionAgentExecutionMode;
   run_mode?: TopicSelectionAgentRunMode | null;
   model_option_id?: string | null;
+  runtime_token_budget_overrides?: TopicSelectionV1cN2RuntimeTokenBudgetOverrides | null;
+  compression_attempt?: TopicSelectionV1cN2RuntimeCompressionAttempt | null;
   codex_response?: TopicSelectionCodexAssistedAgentOutput<TopicSelectionV1cN2BoundedDebateRoleOutput> | null;
   mocked_output?: TopicSelectionMockedAgentOutput<TopicSelectionV1cN2BoundedDebateRoleOutput> | null;
   created_by?: 'human' | 'llm' | 'system' | 'hybrid';
@@ -233,13 +256,14 @@ export class TopicSelectionV1cN2BoundedDebateRuntimeService {
       input_refs: contextPacket.source_refs,
       context_packet_refs: [contextPacketRef],
       context_packet_hashes: [contextPacketHash],
-      runtime_token_budget: {
-        context_policy_profile: runtimeProfile.profile,
-        context_policy_profile_hash: runtimeProfile.profile_hash,
-        runtime_invocation_context_hash: runtimeInvocationContextHash,
-        dynamic_material_refs: dynamicMaterialRefs,
-        context_payloads: [contextPacket],
-      },
+      runtime_token_budget: this.runtimeTokenBudget({
+        runtimeProfile,
+        runtimeInvocationContextHash,
+        contextPacket,
+        dynamicMaterialRefs,
+        compressionAttempt: input.compression_attempt ?? null,
+        overrides: input.runtime_token_budget_overrides ?? null,
+      }),
       codex_response: input.codex_response ?? null,
       mocked_output: input.mocked_output ?? null,
       created_by: input.created_by ?? 'system',
@@ -510,9 +534,26 @@ export class TopicSelectionV1cN2BoundedDebateRuntimeService {
       package_draft_input_snapshot_hash: handoff.snapshot_hashes.package_draft_input_snapshot_hash,
       promotion_input_snapshot_hash: handoff.snapshot_hashes.promotion_input_snapshot_hash,
       topic_package_ref_hash: this.hash(handoff.topic_package_ref),
+      topic_question_ref_hash: this.hash(handoff.topic_question_ref),
       topic_question_contract_ref_hash: this.hash(handoff.topic_question_contract_ref),
       answerability_plan_ref_hash: this.hash(handoff.answerability_plan_ref),
+      research_slice_ref_hash: this.hash(handoff.research_slice_ref),
+      value_assessment_ref_hash: this.hash(handoff.topic_value_assessment_ref),
+      promotion_readiness_refs_hash: this.hash([
+        handoff.package_trace_boundary_check_ref,
+        handoff.package_readiness_assessment_ref,
+        handoff.value_disposition_decision_ref,
+      ]),
       selected_evidence_refs_hash: this.hash(handoff.evidence_refs.map((item) => item.evidence_ref)),
+      evidence_support_map_hash: this.hash(handoff.evidence_refs),
+      allowed_refs_hash: this.hash(this.allowedRefs(handoff)),
+      claim_ceiling_hash: this.hash(this.extractClaimCeiling(handoff)),
+      contribution_summary_hash: this.hash(
+        this.stringFromPath(handoff.snapshot.package_snapshot, ['contribution_summary']),
+      ),
+      evaluation_plan_hash: this.hash(
+        this.stringFromPath(handoff.snapshot.package_snapshot, ['evaluation_plan']),
+      ),
       accepted_risk_refs_hash: this.hash(handoff.accepted_risk_refs),
       blocker_refs_hash: this.hash(handoff.blocker_refs),
       recheck_request_refs_hash: this.hash(handoff.recheck_request_refs),
@@ -520,6 +561,142 @@ export class TopicSelectionV1cN2BoundedDebateRuntimeService {
       readiness_check_refs_hash: this.hash(handoff.readiness_check_refs),
       prior_role_artifact_hashes_hash: this.hash(priorRoleArtifactHashes),
     };
+  }
+
+  private runtimeTokenBudget(input: {
+    runtimeProfile: TopicSelectionResolvedContextPolicyProfile;
+    runtimeInvocationContextHash: string;
+    contextPacket: TopicSelectionV1cN2BoundedDebateContextPacket;
+    dynamicMaterialRefs: TopicSelectionDynamicPromptMaterialRecord[];
+    compressionAttempt: TopicSelectionV1cN2RuntimeCompressionAttempt | null;
+    overrides: TopicSelectionV1cN2RuntimeTokenBudgetOverrides | null;
+  }): TopicSelectionAgentRuntimeTokenBudgetInput {
+    const compressionAttempt = this.runtimeCompressionAttempt({
+      runtimeProfile: input.runtimeProfile,
+      contextPacket: input.contextPacket,
+      compressionAttempt: input.compressionAttempt,
+      overrides: input.overrides,
+    });
+    return {
+      context_policy_profile: input.runtimeProfile.profile,
+      context_policy_profile_hash: input.runtimeProfile.profile_hash,
+      runtime_invocation_context_hash: input.runtimeInvocationContextHash,
+      dynamic_material_refs: input.dynamicMaterialRefs,
+      context_payloads: [input.contextPacket],
+      compression_attempt: compressionAttempt,
+      estimated_input_tokens_override: input.overrides?.estimated_input_tokens_override,
+      schema_overhead_tokens_override: input.overrides?.schema_overhead_tokens_override,
+    };
+  }
+
+  private runtimeCompressionAttempt(input: {
+    runtimeProfile: TopicSelectionResolvedContextPolicyProfile;
+    contextPacket: TopicSelectionV1cN2BoundedDebateContextPacket;
+    compressionAttempt: TopicSelectionV1cN2RuntimeCompressionAttempt | null;
+    overrides: TopicSelectionV1cN2RuntimeTokenBudgetOverrides | null;
+  }): TopicSelectionAgentRuntimeCompressionAttemptInput | null {
+    const shouldBuildAttempt = Boolean(input.compressionAttempt)
+      || input.overrides?.estimated_input_tokens_after_compression_override !== undefined;
+    if (!shouldBuildAttempt) {
+      return null;
+    }
+    const requiredPreservedFacts = this.requiredCompressionFacts(input.contextPacket);
+    const defaultAttempt = this.defaultRuntimeCompressionAttempt(input.contextPacket, requiredPreservedFacts);
+    const attempt = input.compressionAttempt;
+    return {
+      compression_report_ref: attempt?.compression_report_ref ?? null,
+      source_refs: input.contextPacket.source_refs,
+      input_context: input.contextPacket,
+      compressed_context: attempt?.compressed_context ?? defaultAttempt.compressed_context,
+      summary: attempt?.summary ?? defaultAttempt.summary,
+      compression_executor_kind: attempt?.compression_executor_kind ?? 'deterministic_structural',
+      required_preserved_facts: requiredPreservedFacts,
+      compressed_preserved_facts: attempt
+        ? attempt.compressed_preserved_facts ?? null
+        : requiredPreservedFacts,
+      redaction_policy: input.runtimeProfile.profile.redaction_policy,
+      estimated_input_tokens_before_override: input.overrides?.estimated_input_tokens_override,
+      estimated_input_tokens_after_override:
+        attempt?.estimated_input_tokens_after_override
+        ?? input.overrides?.estimated_input_tokens_after_compression_override,
+    };
+  }
+
+  private defaultRuntimeCompressionAttempt(
+    contextPacket: TopicSelectionV1cN2BoundedDebateContextPacket,
+    requiredPreservedFacts: TopicSelectionCompressionFactInventory,
+  ): Pick<TopicSelectionAgentRuntimeCompressionAttemptInput, 'compressed_context' | 'summary'> {
+    return {
+      compressed_context: {
+        schema_version: 'TopicSelectionV1cN2BoundedDebateCompressedRuntimeContext@v1',
+        node_id: contextPacket.node_id,
+        workflow_run_id: contextPacket.workflow_run_id,
+        node_attempt_id: contextPacket.node_attempt_id,
+        slot_id: contextPacket.slot_id,
+        context_family: contextPacket.context_family,
+        non_authority: true,
+        source_context_packet_hash: this.hash(contextPacket),
+        source_refs: contextPacket.source_refs,
+        source_hashes: contextPacket.source_hashes,
+        prior_role_artifact_hashes: contextPacket.prior_role_artifact_hashes,
+        required_preserved_facts: requiredPreservedFacts,
+      },
+      summary: {
+        schema_version: 'TopicSelectionV1cN2BoundedDebateCompressionSummary@v1',
+        node_id: contextPacket.node_id,
+        slot_id: contextPacket.slot_id,
+        context_family: contextPacket.context_family,
+        non_authority: true,
+        preserved_fact_kinds: Object.keys(requiredPreservedFacts),
+      },
+    };
+  }
+
+  private requiredCompressionFacts(
+    contextPacket: TopicSelectionV1cN2BoundedDebateContextPacket,
+  ): TopicSelectionCompressionFactInventory {
+    const sourceHashes = contextPacket.source_hashes;
+    const hasPriorArtifacts = Object.keys(contextPacket.prior_role_artifact_hashes).length > 0;
+    const requiredFacts: TopicSelectionCompressionFactInventory = {
+      promotion_input_snapshot: this.factIds(contextPacket.promotion_input_snapshot_hash),
+      topic_package: this.factIds(sourceHashes.topic_package_ref_hash),
+      topic_question_contract: this.factIds(sourceHashes.topic_question_contract_ref_hash),
+      answerability_plan: this.factIds(sourceHashes.answerability_plan_ref_hash),
+      research_slice: this.factIds(sourceHashes.research_slice_ref_hash),
+      value_assessment: this.factIds(sourceHashes.value_assessment_ref_hash),
+      promotion_readiness: this.factIds(sourceHashes.promotion_readiness_refs_hash),
+      selected_evidence: this.factIds(sourceHashes.selected_evidence_refs_hash),
+      evidence_ref: this.factIds(sourceHashes.selected_evidence_refs_hash),
+      evidence_support_map: this.factIds(sourceHashes.evidence_support_map_hash),
+      claim_ceiling: this.factIds(sourceHashes.claim_ceiling_hash),
+      contribution_summary: this.factIds(sourceHashes.contribution_summary_hash),
+      evaluation_plan: this.factIds(sourceHashes.evaluation_plan_hash),
+      accepted_risk: this.factIds(sourceHashes.accepted_risk_refs_hash),
+      blocker: this.factIds(sourceHashes.blocker_refs_hash),
+      recheck_hint: this.factIds(sourceHashes.recheck_request_refs_hash),
+      recheck_obligation: this.factIds(sourceHashes.recheck_request_refs_hash),
+      memory_suggestion: this.factIds(sourceHashes.memory_suggestion_refs_hash),
+      source_health_warning: this.factIds(sourceHashes.package_snapshot_hash),
+      allowed_ref_manifest: this.factIds(sourceHashes.allowed_refs_hash),
+      critic_finding: hasPriorArtifacts
+        ? this.factIds(sourceHashes.prior_role_artifact_hashes_hash)
+        : [],
+      critic_resolution_map:
+        contextPacket.slot_id === TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.synthesizer_final
+          && hasPriorArtifacts
+          ? this.factIds(sourceHashes.prior_role_artifact_hashes_hash)
+          : [],
+      readiness_coverage_item: this.factIds(sourceHashes.readiness_check_refs_hash),
+    };
+    return Object.fromEntries(
+      Object.entries(requiredFacts)
+        .map(([factKind, factIds]) => [factKind, this.uniqueStrings(factIds ?? [])] as const)
+        .filter(([, factIds]) => factIds.length > 0),
+    );
+  }
+
+  private factIds(...values: Array<string | null | undefined>): string[] {
+    return this.uniqueStrings(values.filter((value): value is string => Boolean(value?.trim())));
   }
 
   private runtimeInvocationContextHash(
@@ -775,6 +952,10 @@ export class TopicSelectionV1cN2BoundedDebateRuntimeService {
       refs.push(ref);
     }
     return refs;
+  }
+
+  private uniqueStrings(values: string[]): string[] {
+    return [...new Set(values.filter((value) => value.trim().length > 0))];
   }
 
   private hash(value: unknown): string {

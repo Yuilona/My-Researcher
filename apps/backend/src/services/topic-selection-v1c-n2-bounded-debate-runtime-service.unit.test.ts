@@ -308,6 +308,35 @@ async function generateCandidates(input: {
   return candidates;
 }
 
+async function generatePriorArtifactsThroughRepair(input: {
+  runtime: TopicSelectionV1cN2BoundedDebateRuntimeService;
+  handoff: TopicSelectionPromotionInputSnapshotHandoff;
+}): Promise<TopicSelectionV1cN2BoundedDebateRoleArtifact[]> {
+  const priorArtifacts: TopicSelectionV1cN2BoundedDebateRoleArtifact[] = [];
+  for (const slot of TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_ROLE_ORDER.slice(0, 3)) {
+    const generated = await input.runtime.generateRoleArtifact({
+      handoff: input.handoff,
+      slot_id: slot,
+      prior_role_artifacts: priorArtifacts,
+      workflow_run_id: 'workflow_run_n2_bounded_debate_compression_001',
+      node_attempt_id: 'node_attempt_n2_bounded_debate_compression_001',
+      execution_mode: 'codex_assisted',
+      run_mode: 'acceptance',
+      codex_response: {
+        output: roleOutput(slot, input.handoff),
+        operator_label: 'unit-test',
+      },
+      created_by: 'system',
+    });
+    assert.equal(generated.status, 'succeeded');
+    if (generated.status !== 'succeeded') {
+      throw new Error('Expected N2 prior role generation to succeed.');
+    }
+    priorArtifacts.push(generated.role_artifact);
+  }
+  return priorArtifacts;
+}
+
 test('v1c N2 bounded debate runtime emits runtime-verified role artifacts admitted only through final synthesis', async () => {
   const { runtime, admission } = makeSubject();
   const handoff = makeHandoff();
@@ -456,4 +485,52 @@ test('v1c N2 bounded debate admission blocks dropped risk and recheck refs', asy
     throw new Error('Expected dropped risk/recheck refs to block.');
   }
   assert.equal(admitted.blocker.code, 'N2_BOUNDED_DEBATE_REQUIRED_REF_DROPPED');
+});
+
+test('v1c N2 bounded debate runtime compression quality gate blocks dropped final facts before output', async () => {
+  const { runtime } = makeSubject();
+  const handoff = makeHandoff();
+  const priorArtifacts = await generatePriorArtifactsThroughRepair({ runtime, handoff });
+  const generated = await runtime.generateRoleArtifact({
+    handoff,
+    slot_id: 'n2_bounded_micro_debate.synthesizer_final',
+    prior_role_artifacts: priorArtifacts,
+    workflow_run_id: 'workflow_run_n2_bounded_debate_compression_001',
+    node_attempt_id: 'node_attempt_n2_bounded_debate_compression_001',
+    execution_mode: 'codex_assisted',
+    run_mode: 'acceptance',
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 120_000,
+      estimated_input_tokens_after_compression_override: 12_000,
+    },
+    compression_attempt: {
+      compression_executor_kind: 'deterministic_structural',
+      compressed_context: {
+        summary: 'Intentionally incomplete v1c N2 final compressed context for quality-gate regression.',
+        raw_provider_logs: ['provider request body must never persist in compressed runtime context'],
+      },
+      summary: {
+        preserved_fact_kinds: ['promotion_input_snapshot'],
+      },
+      compressed_preserved_facts: {
+        promotion_input_snapshot: [handoff.snapshot_hashes.promotion_input_snapshot_hash],
+      },
+    },
+    codex_response: {
+      output: roleOutput('n2_bounded_micro_debate.synthesizer_final', handoff),
+      operator_label: 'unit-test-runtime',
+    },
+    created_by: 'system',
+  });
+
+  assert.equal(generated.status, 'blocked');
+  assert.equal(generated.invocation_result.status, 'blocked');
+  assert.equal(generated.invocation_result.error_code, 'COMPRESSION_QUALITY_GATE_BLOCKED');
+  assert.ok(generated.invocation_result.blocker_codes.includes('COMPRESSION_QUALITY_GATE_BLOCKED'));
+  assert.ok(generated.invocation_result.blocker_codes.includes('COMPRESSION_FORBIDDEN_PERSISTED_PAYLOAD'));
+  assert.ok(generated.invocation_result.blocker_codes.includes('COMPRESSION_REQUIRED_CLAIM_CEILING_DROPPED'));
+  assert.ok(generated.invocation_result.blocker_codes.includes('COMPRESSION_REQUIRED_ALLOWED_REF_MANIFEST_DROPPED'));
+  assert.ok(generated.invocation_result.blocker_codes.includes('COMPRESSION_REQUIRED_CRITIC_RESOLUTION_MAP_DROPPED'));
+  assert.ok(generated.invocation_result.blocker_codes.includes('COMPRESSION_REQUIRED_RECHECK_OBLIGATION_DROPPED'));
+  assert.equal(generated.invocation_result.structured_output, null);
 });

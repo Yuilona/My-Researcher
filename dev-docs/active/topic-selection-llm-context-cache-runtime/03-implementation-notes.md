@@ -1456,3 +1456,24 @@
 - Strengthened replay/cache smoke coverage.
   - Harness replay now reuses the exact admitted runtime envelope instead of re-running fresh N2 runtime artifacts; this matches the new identity-bound replay semantics.
   - Prisma smoke now replays the stable first N2 slot and asserts prompt-cache read-through by verifying the redacted prompt artifact ref and prompt quality report ref are reused without adding prompt-index rows.
+
+## 2026-06-02 - D28-I Step 4 N2 L4/L5 Provider Canary and Compression Adversarial Landed
+- Added v1c N2 slot-level provider canaries to `TopicSelectionProviderCanaryService`.
+  - New local and optional live canaries cover all four bounded micro-debate slots:
+    - `n2_bounded_micro_debate.promotion_supporter_draft`;
+    - `n2_bounded_micro_debate.reviewer_critic_review`;
+    - `n2_bounded_micro_debate.promotion_supporter_repair`;
+    - `n2_bounded_micro_debate.synthesizer_final`.
+  - The canary path is `TopicSelectionProviderCanaryService -> TopicSelectionAgentOrchestratorService -> BackendLlmGateway`.
+  - This service-level L4 canary explicitly exercises the production N2 bounded-debate runtime profile and reports `canary_surface=production_runtime_slot`; the registry `provider-canary` profile remains canary-only and is not the canonical runtime profile.
+  - It validates provider-required-live behavior on prompt-cache hits, prompt packet hash stability, redacted prompt artifact and prompt quality report reuse, null provider response reuse refs, provider telemetry separation, and over-budget zero-call blocking.
+  - The v1c N2 provider-canary schema is derived from the slot reference draft with exact `role_slot`/`schema_version`, required slot-specific fields, closed object shapes, and exact functional-ref identity checks. A malformed minimal `{schema_version, role_slot}` provider output is blocked instead of being accepted as live-provider evidence.
+  - Live OpenAI/DashScope coverage is explicitly gated by `T112_V1C_N2_PROVIDER_CANARY_LIVE=1` plus `BACKEND_TEST_PRESERVE_REAL_ENV=1` and provider credentials; default local tests use the fake gateway only.
+- Extended `TopicSelectionV1cN2BoundedDebateRuntimeService` compression wiring.
+  - The role-generation input now supports `runtime_token_budget_overrides` and `compression_attempt`, matching the existing v1b N4/N8 runtime pattern.
+  - N2 runtime computes required compression facts from the frozen promotion input snapshot, source hashes, allowed-ref manifest, accepted risk/blocker/recheck/memory refs, prior role hashes, critic findings, critic resolution map, and readiness coverage.
+  - Compression attempts are still acceleration/audit inputs only: quality-gate blockers stop before structured output, and admission/deterministic N3 remain authoritative.
+- Added L5 adversarial/long-context coverage.
+  - N2 runtime test blocks final-slot generation when compressed context drops required final facts or carries `raw_provider_logs`.
+  - Compression runtime tests block dropped N2 long-context facts and adversarial persisted provider payloads directly at the shared compression layer.
+- No DB schema, route contract, prompt template, provider credential/config, DB-backed context packet cache, or harness authority boundary was changed.

@@ -825,6 +825,19 @@
 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed. |
 | `git diff --check` | passed | No whitespace errors after the review hardening changes. |
 
+## 2026-06-02 - D28-I Step 4 N2 L4/L5 Provider Canary and Compression Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | Provider canary tests passed: 31 discovered, 21 local tests passed, 10 live-provider tests skipped by explicit env/key gates. New v1c N2 local tests cover all four bounded slots for OpenAI/DashScope prompt-cache-live-required semantics, over-budget zero-call blocking, production-runtime-slot evidence labels, and malformed minimal provider-output blocking. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-v1c-n2-bounded-debate-runtime-service.unit.test.ts` | passed | N2 bounded debate runtime/admission tests passed: 7/7. New L5 test blocks final-slot generation before output when compression drops claim/allowed-ref/critic-resolution/recheck facts or persists raw provider logs. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-compression-runtime-service.unit.test.ts` | passed | Compression runtime tests passed: 15/15. New N2 cases block dropped bounded-debate long-context facts and adversarial persisted raw provider logs at the shared compression layer. |
+| `pnpm --filter @paper-engineering-assistant/backend exec tsc --noEmit --pretty false` | passed | Backend TypeScript compile passed after adding N2 compression runtime inputs and provider canary service methods. |
+| `pnpm topic-selection:v1c-n2-runtime-smoke` | passed | Prisma-backed N2 runtime smoke passed after provider-canary schema hardening. It verified 4 prompt-index rows, stable support/gate replay, final prompt drift blocking, and no N3 gate before explicit N3. Artifact dir: `.ai/.tmp/topic-selection-v1c-n2-runtime-smoke/v1c-n2-runtime-smoke-2026-06-01T23-06-41-584Z`. |
+| `pnpm topic-selection:v1c-harness-acceptance` | passed | v1c harness acceptance passed with 17 rows and 29 node-trace entries after N2 L4/L5 review fixes. Artifact dir: `.ai/.tmp/topic-selection-v1c-acceptance/v1c-harness-2026-06-01T23-06-47-238Z`. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registries remain structurally valid; no provider/config-key drift was introduced. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after N2 L4/L5 documentation sync. |
+| `git diff --check -- apps/backend/src/services/topic-selection-provider-canary-service.ts apps/backend/src/services/topic-selection-provider-canary-service.unit.test.ts apps/backend/src/services/topic-selection-v1c-n2-bounded-debate-runtime-service.ts apps/backend/src/services/topic-selection-v1c-n2-bounded-debate-runtime-service.unit.test.ts apps/backend/src/services/topic-selection-compression-runtime-service.unit.test.ts dev-docs/active/topic-selection-llm-context-cache-runtime/03-implementation-notes.md dev-docs/active/topic-selection-llm-context-cache-runtime/04-verification.md dev-docs/active/topic-selection-llm-context-cache-runtime/06-node-scope-matrix.md` | passed | No whitespace errors in the N2 L4/L5 code/test/docs changes. |
+
 ## Required Before Implementation
 - Contract design reviewed against T-088/T-089 D-18. Done.
 - First slice selected and approved: shared contracts/runtime primitives followed by v1a N6 single-agent and debate slots. Done.

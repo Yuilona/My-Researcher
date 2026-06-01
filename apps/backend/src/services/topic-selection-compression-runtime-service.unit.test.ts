@@ -18,6 +18,8 @@ import {
   TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1B_N8_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
 } from './topic-selection-context-policy-profile-registry-service.js';
 import { TopicSelectionCompressionRuntimeService } from './topic-selection-compression-runtime-service.js';
@@ -130,6 +132,37 @@ function v1bN4RequiredFacts() {
     risk_gap_blocker_fact: ['gap_code_scope_boundary'],
     memory_suggestion: ['memory_suggestion_ref_001'],
     planning_input: ['planning_input_hash_001'],
+  };
+}
+
+function v1cN2RequiredFacts() {
+  return {
+    blocker: ['blocker_ref_hash_001'],
+    residual_risk: ['risk_provider_schema_drift'],
+    accepted_risk: ['accepted_risk_provider_variance'],
+    source_health_warning: ['source_health_partial_n2'],
+    method_family_gap: ['gap_runtime_only_claim'],
+    unresolved_challenge: ['challenge_claim_ceiling_ambiguity'],
+    recheck_hint: ['recheck_after_outline_lock'],
+    promotion_input_snapshot: ['promotion_input_snapshot_hash_001'],
+    topic_package: ['topic_package_ref_hash_001'],
+    topic_question_contract: ['topic_question_contract_hash_001'],
+    answerability_plan: ['answerability_plan_hash_001'],
+    research_slice: ['research_slice_hash_001'],
+    value_assessment: ['value_assessment_hash_001'],
+    promotion_readiness: ['promotion_readiness_hash_001'],
+    selected_evidence: ['selected_evidence_hash_001'],
+    evidence_ref: ['evidence_ref_hash_001'],
+    evidence_support_map: ['evidence_support_map_hash_001'],
+    claim_ceiling: ['claim_ceiling_hash_001'],
+    contribution_summary: ['contribution_summary_hash_001'],
+    evaluation_plan: ['evaluation_plan_hash_001'],
+    recheck_obligation: ['recheck_obligation_hash_001'],
+    memory_suggestion: ['memory_suggestion_hash_001'],
+    allowed_ref_manifest: ['allowed_ref_manifest_hash_001'],
+    critic_finding: ['critic_finding_hash_001'],
+    critic_resolution_map: ['critic_resolution_map_hash_001'],
+    readiness_coverage_item: ['readiness_coverage_hash_001'],
   };
 }
 
@@ -510,6 +543,108 @@ test('compression quality gate blocks v1b N4 adversarial persisted payloads', ()
     compression_executor_kind: 'deterministic_structural',
     required_preserved_facts: v1bN4RequiredFacts(),
     compressed_preserved_facts: v1bN4RequiredFacts(),
+    estimated_input_tokens_before_override: 22_000,
+    estimated_input_tokens_after_override: 7_000,
+  });
+
+  assert.equal(result.quality_gate_result, 'blocked');
+  assert.ok(result.blocker_codes.includes('COMPRESSION_FORBIDDEN_PERSISTED_PAYLOAD'));
+  assert.match(result.warning_codes.join(' '), /compressed_payload\.raw_provider_logs/);
+});
+
+test('compression quality gate blocks when v1c N2 bounded debate long-context facts are dropped', () => {
+  const n2Profile = resolvedContextProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.synthesizer_final,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.synthesizer_final,
+  });
+  const runtime = new TopicSelectionCompressionRuntimeService();
+  const result = runtime.createReport({
+    context_policy_profile: n2Profile.profile,
+    context_policy_profile_hash: n2Profile.profile_hash,
+    compression_report_ref: ref('artifact_ref', 'compression_report_v1c_n2_long_context'),
+    source_refs: [ref('artifact_ref', 'n2_bounded_debate_context_packet')],
+    input_context: {
+      frozen_n1_handoff: {
+        promotion_input_snapshot_hash: 'promotion_input_snapshot_hash_001',
+        topic_package_ref_hash: 'topic_package_ref_hash_001',
+        topic_question_contract_hash: 'topic_question_contract_hash_001',
+        answerability_plan_hash: 'answerability_plan_hash_001',
+        research_slice_hash: 'research_slice_hash_001',
+      },
+      long_debate_context_chunks: Array.from({ length: 24 }, (_, index) => ({
+        chunk_id: `n2_chunk_${index + 1}`,
+        selected_evidence: 'selected_evidence_hash_001',
+        evidence_ref: 'evidence_ref_hash_001',
+        claim_ceiling: 'claim_ceiling_hash_001',
+        contribution_summary: 'contribution_summary_hash_001',
+        evaluation_plan: 'evaluation_plan_hash_001',
+        accepted_risk: 'accepted_risk_provider_variance',
+        recheck_obligation: 'recheck_obligation_hash_001',
+        memory_suggestion: 'memory_suggestion_hash_001',
+        allowed_ref_manifest: 'allowed_ref_manifest_hash_001',
+        critic_finding: 'critic_finding_hash_001',
+        critic_resolution_map: 'critic_resolution_map_hash_001',
+        readiness_coverage_item: 'readiness_coverage_hash_001',
+      })),
+    },
+    compressed_context: {
+      frozen_n1_handoff: {
+        promotion_input_snapshot_hash: 'promotion_input_snapshot_hash_001',
+      },
+      summary: 'Dropped debate facts, allowed refs, critic resolution, readiness coverage, and recheck obligations.',
+    },
+    summary: 'Incomplete v1c N2 bounded debate compression.',
+    compression_executor_kind: 'codex_assisted',
+    required_preserved_facts: v1cN2RequiredFacts(),
+    compressed_preserved_facts: {
+      promotion_input_snapshot: ['promotion_input_snapshot_hash_001'],
+      topic_package: ['topic_package_ref_hash_001'],
+    },
+    estimated_input_tokens_before_override: 52_000,
+    estimated_input_tokens_after_override: 12_000,
+  });
+
+  assert.equal(result.quality_gate_result, 'blocked');
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_CLAIM_CEILING_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_CONTRIBUTION_SUMMARY_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_EVALUATION_PLAN_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_ACCEPTED_RISK_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_RECHECK_OBLIGATION_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_MEMORY_SUGGESTION_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_ALLOWED_REF_MANIFEST_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_CRITIC_FINDING_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_CRITIC_RESOLUTION_MAP_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_READINESS_COVERAGE_ITEM_DROPPED'));
+});
+
+test('compression quality gate blocks v1c N2 bounded debate adversarial persisted payloads', () => {
+  const n2Profile = resolvedContextProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.promotion_supporter_draft,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.promotion_supporter_draft,
+  });
+  const runtime = new TopicSelectionCompressionRuntimeService();
+  const result = runtime.createReport({
+    context_policy_profile: n2Profile.profile,
+    context_policy_profile_hash: n2Profile.profile_hash,
+    compression_report_ref: ref('artifact_ref', 'compression_report_v1c_n2_adversarial_payload'),
+    source_refs: [ref('artifact_ref', 'n2_bounded_debate_context_packet')],
+    input_context: {
+      promotion_input_snapshot_hash: 'promotion_input_snapshot_hash_001',
+      topic_package_ref_hash: 'topic_package_ref_hash_001',
+      selected_evidence_hash: 'selected_evidence_hash_001',
+    },
+    compressed_context: {
+      preserved_hashes: ['promotion_input_snapshot_hash_001', 'topic_package_ref_hash_001'],
+      raw_provider_logs: ['provider request body must never persist in N2 compressed context'],
+    },
+    summary: 'Compressed N2 context with an adversarial raw provider log field.',
+    compression_executor_kind: 'deterministic_structural',
+    required_preserved_facts: v1cN2RequiredFacts(),
+    compressed_preserved_facts: v1cN2RequiredFacts(),
     estimated_input_tokens_before_override: 22_000,
     estimated_input_tokens_after_override: 7_000,
   });
