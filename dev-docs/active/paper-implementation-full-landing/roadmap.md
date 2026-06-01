@@ -12,7 +12,7 @@
 ## Why This Is A Parent Package
 - 论文实施跨越 `选题管理 -> 论文管理 -> 实验基座 -> 写作入口`，不是单一 endpoint、单一 UI 页面或单一 backend service。
 - 该工作需要统一 AI workflow、harness、gate、trace、实验执行证据、claim boundary、dossier readiness 和桌面工作台。
-- 现有 `research-argument-control-plane-v1` 提供可迁移的 legacy/transition assets，`experiment-foundation-v1` 提供重要实验基座；但没有一个母包统筹完整论文实施闭环。
+- `experiment-foundation-v1` 提供重要实验基座；论文实施闭环由 `PaperImplementation` 直接承载，不通过旧控制面 wrapper。
 - 本包只做全功能落地治理与 roadmap 收口；可执行实现必须拆成 scoped child tasks。
 
 ## Module Ownership Decision Baseline
@@ -25,7 +25,6 @@
 | Dataset, baseline, benchmark, run recipe, execution result | `实验基座` | 作为实验资产与执行证据 owner。 |
 | Writing-ready material package | `PaperImplementation` | `ImplementationDossier` 是写作前完整研究材料包；`WritingEntryPacket` 可作为下游写作入口摘要投影。 |
 | Final writing/editing/LaTeX/Prism integration | downstream writing lane | 本母包只输出可写作材料，不实现正文编辑器。 |
-| Historical research-argument assets | legacy/transition | `research-argument` 不再作为独立 authority domain 继续推进；其有效能力等待 `PaperImplementation` 吸收或替代后移除。 |
 
 ## Confirmed Semantic Baseline
 - `PaperProject` and `PaperImplementation` are separate semantic domains.
@@ -41,7 +40,7 @@
 3. Downstream writing/editor surfaces consume dossier/packet outputs; they must not infer claim authority from loose evidence, run records, or LLM memo.
 4. `实验基座` owns reusable assets and execution facts; `PaperImplementation` consumes them through WorkOrder and trace refs.
 5. `选题管理` authority is immutable from implementation; implementation findings must be emitted as feedback/recheck events.
-6. `research-argument` is a legacy/transition asset only; it must not create, mutate, or decide authoritative implementation state.
+6. Retired pre-writing control-plane artifacts must not create, mutate, wrap, adapt, or decide authoritative implementation state.
 
 ## Confirmed Intake Decision
 - Do not rename existing `PaperProjectBridge` contracts, routes, database model, or historical task docs.
@@ -74,25 +73,24 @@
 ## Confirmed Motive Kernel Decision
 - `CoreMotiveVersion` is a first-class `PaperImplementation` domain object.
 - `PaperImplementation` owns motive identity/version, validation cycle, claim trace, dossier readiness, and writing-prep authority.
-- Existing `research-argument` graph/readiness/code/docs are retained only as legacy/transition assets.
-- `research-argument` may provide migration input, rule/reference material, or optional read-model/projection adapters.
-- `research-argument` must not be used as the authority root for motive, claim, trace, dossier, or writing-ready decisions.
-- After `PaperImplementation` absorbs or replaces the useful `research-argument` capabilities, the remaining `research-argument` contracts, docs, storage, and services should be removed through a dedicated decommission child task.
+- Former research-argument graph/readiness/code/docs are retired historical artifacts, not migration inputs or compatibility adapters.
+- `PaperImplementation` is the only current authority root for motive, claim, trace, dossier, and writing-ready decisions.
+- Do not add wrappers, bridge DTOs, read-model adapters, or planner/runtime paths around the retired control plane.
 
 ### D3 Landing Rules
-1. New implementation contracts must hang `CoreMotiveVersion`, `ValidationCycle`, `ClaimTracePacket`, and `ImplementationDossier` from `ImplementationProject`, not from `ResearchArgumentWorkspace`.
-2. `research-argument` identifiers may appear only as legacy source refs, migration refs, or adapter refs.
-3. No child task may add new `research-argument` authority writes, desktop surfaces, planner/critic runtime, or readiness gates.
-4. If a legacy `WritingEntryPacket` concept is reused, it must be redefined as a downstream projection from `ImplementationDossier`, not as a separate readiness authority.
-5. `ReadyForWritingEntry` from `research-argument` is historical vocabulary; future writing readiness is decided by `ImplementationDossierReadinessGate`.
-6. A future migration/decommission child task must inventory the remaining `research-argument` contracts, Prisma models, services, tests, glossary/context entries, and archived docs before removal.
+1. New implementation contracts must hang `CoreMotiveVersion`, `ValidationCycle`, `ClaimTracePacket`, and `ImplementationDossier` from `ImplementationProject`.
+2. Retired control-plane identifiers must not appear in PaperImplementation API, DB, shared-contract, UI, or context surfaces.
+3. No child task may add wrappers, read-model adapters, planner/critic runtime, desktop surfaces, authority writes, or readiness gates around retired control-plane artifacts.
+4. `WritingEntryPacket` is a downstream projection from `ImplementationDossier`, not a compatibility projection from retired readiness objects.
+5. Writing readiness is decided by `ImplementationDossierReadinessGate`.
+6. Archived historical docs may mention retired terms, but active implementation plans must not depend on them.
 
 ## Confirmed Dossier / Writing Packet Decision
 - `ImplementationDossier` is the full, authoritative, traceable pre-writing research material package owned by `PaperImplementation`.
 - `WritingEntryPacket` is a downstream writing-entry projection derived from an `ImplementationDossier`.
 - `WritingEntryPacket` must not decide writing readiness, weaken dossier blockers, or become a second claim authority.
 - `ImplementationDossierReadinessGate` is the only gate that can mark implementation material writing-ready.
-- Legacy `research-argument` `WritingEntryPacket` is migration/reference material only; future packet behavior must be redefined as an `ImplementationDossier` projection.
+- `WritingEntryPacket` behavior is defined directly as an `ImplementationDossier` projection; no retired packet shape is a compatibility source.
 
 ### D4 Landing Rules
 1. Every exported `WritingEntryPacket` must carry `implementation_dossier_id`, `implementation_dossier_version`, `dossier_readiness_gate_result_ref`, `trace_manifest_ref`, and a projection timestamp/hash.
@@ -250,7 +248,7 @@
 6. The AI workflow harness child depends on trace/gate/workorder foundations and must not introduce authority writes.
 7. The desktop workbench child depends on backend command/read-model contracts and must not be accepted on mock UI alone.
 8. The evaluation suite must convert frozen rules into contract/replay/adversarial/trace/dossier tests and record residual risk.
-9. A child task that touches `research-argument` must label the work as legacy/transition compatibility or decommission, not new authority expansion.
+9. A child task must not touch retired pre-writing control-plane artifacts except to archive historical docs or strengthen negative guards.
 10. If a child task discovers a decision conflict with D1-D10, it must return to the parent roadmap instead of creating an alternate local rule.
 
 ## Terminology Note
@@ -258,7 +256,6 @@
 - 工程文档中必须精确区分：
   - `paper-project` lifecycle container；
   - `paper-implementation` implementation operation lane；
-  - `research-argument` legacy/transition asset set, not implementation authority；
   - `experiment-foundation` execution and evidence substrate；
   - `paper-implementation-full-landing` as this parent-task umbrella phrase.
 - 不使用 `论文管理` 作为 backend catch-all bounded context 名称；每个 child task 必须声明真实 owner。
@@ -269,7 +266,6 @@
 | User instruction | chat, 2026-05-20 | carrier module, support modules, parent-package request | highest |
 | Paper implementation design docs | `/Volumes/DataDisk/Project/_docs/Researcher/paper_implementation_design_docs/` | target lifecycle, frozen rules, gates, harnesses, roadmap | high |
 | Project context and glossary | `docs/context/` | canonical naming and existing contracts | high |
-| Research argument package | `dev-docs/active/research-argument-control-plane-v1/` | legacy readiness, writing packet, risk report, bridge baseline for migration or replacement | high for inventory; non-authoritative for future architecture |
 | Experiment foundation package | `dev-docs/active/experiment-foundation-v1/` | experiment substrate and reusable asset baseline | high |
 | Topic-selection packages | `dev-docs/active/topic-selection-*` | promoted topic, workflow harness, bridge loopback baseline | high |
 
@@ -305,7 +301,7 @@
 |---|---|---|---|---|
 | D1 | `论文管理` internal domain split | Confirmed semantic split: `PaperImplementation` is the research implementation lane under `论文管理`; `PaperProject` is the writing lifecycle / delivery container; neither should become a catch-all backend context. | confirmed | shared contracts |
 | D2 | `ImplementationProject` identity | Preserve current `PaperProjectBridge` contracts as the topic-selection promotion handoff carrier. Add neutral `ImplementationIntakeSnapshot` derived from an active `TopicSelectionPaperProjectBridgeHandoff`; bootstrap `ImplementationProject` only from that snapshot. Store `paper_project_bridge_id + bridge_payload_hash` as immutable source refs. | confirmed | persistence |
-| D3 | `CoreMotiveVersion` location | Confirmed: `CoreMotiveVersion` and motive/claim/dossier authority live in `PaperImplementation`. `research-argument` is legacy/transition only and will be removed after useful capabilities are absorbed or replaced. | confirmed | motive kernel |
+| D3 | `CoreMotiveVersion` location | Confirmed: `CoreMotiveVersion` and motive/claim/dossier authority live in `PaperImplementation`. Retired pre-writing control-plane artifacts are not wrappers, migration inputs, or compatibility adapters. | confirmed | motive kernel |
 | D4 | `ImplementationDossier` vs `WritingEntryPacket` | Confirmed: `ImplementationDossier` is the full authoritative pre-writing material package; `WritingEntryPacket` is a derived downstream writing-entry projection and cannot decide readiness. | confirmed | bridge design |
 | D5 | `ResearchWorkOrder` mapping | Confirmed: `ResearchWorkOrder` is the PaperImplementation-owned governance envelope; `experiment-foundation` owns reusable assets, recipes, execution jobs, structured results, and evidence candidates. WorkOrder stores refs/hashes and ingests outputs into `RunEvidenceUnit`. | confirmed | experiment harness |
 | D6 | Trace kernel scope | Confirmed: implement `TraceManifest`, `ClaimTracePacket`, `CitationCandidate`, and memo-as-evidence guard before claim/dossier readiness; missing trace blocks writing-ready export. | confirmed | P0 |

@@ -11,7 +11,7 @@
 - `BenchmarkAsset` stores benchmark/testbed identity and default protocol refs, not full evaluation rules.
 - `EvaluationProtocol` stores versioned/hashable metrics, aggregation, seeds, reporting, comparison, budget, and tuning fairness rules.
 - `BaselineAsset` stores method/model identity; `BaselineImplementationVersion` stores code/runtime/entrypoint/version.
-- `research-argument.baseline_set` remains a workspace selection of refs.
+- Retired workspace-selection fields remain outside canonical baseline metadata.
 - Missing protocol version/hash blocks formal comparison and RunRecipe locking.
 
 ## Review Gate

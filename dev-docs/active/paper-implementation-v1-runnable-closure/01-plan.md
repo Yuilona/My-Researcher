@@ -45,4 +45,4 @@
 | Evidence gate | Final run evidence must follow T-104/T-102 target-specific trace behavior. |
 | AI gate | T-099/T-105 outputs remain proposal/evaluation artifacts only. |
 | Writing gate | Writing output stops at `WritingEntryPacket` projection unless a later decision expands scope. |
-| Legacy gate | `research-argument` remains legacy/transition and cannot become replay authority. |
+| Retired control-plane gate | Retired pre-writing control-plane artifacts cannot become replay authority. |

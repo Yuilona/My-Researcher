@@ -28,21 +28,18 @@
   - treat optional `target_paper_project_ref` as a link, not the implementation authority root.
 - Finalized the landing rule: existing bridge surfaces stay stable; new implementation behavior must attach to `ImplementationIntakeSnapshot` / `ImplementationProject`, and any bridge touch in child tasks is compatibility maintenance only.
 
-## 2026-05-20 - CoreMotive / ResearchArgument Decision
+## 2026-05-20 - CoreMotive / Retired Control Plane Decision
 - Landed D3 as confirmed.
-- Decided `CoreMotiveVersion` is a first-class `PaperImplementation` object, not a `research-argument` graph object.
-- Marked `research-argument` as a legacy/transition asset:
-  - useful existing capabilities may be inventoried, migrated, projected, or replaced;
-  - no new authority state, readiness gate, desktop surface, or planner/critic runtime should be added under `research-argument`;
-  - future writing readiness must be decided by `ImplementationDossierReadinessGate`, not legacy `ReadyForWritingEntry`;
-  - after `PaperImplementation` absorbs or replaces useful capabilities, remaining `research-argument` assets should be removed via a dedicated decommission child task.
+- Decided `CoreMotiveVersion` is a first-class `PaperImplementation` object.
+- Superseded on 2026-06-01 by T-113: the former control plane is retired historical material only, not a migration input, wrapper, adapter, or compatibility authority.
+- Future writing readiness must be decided by `ImplementationDossierReadinessGate`.
 
 ## 2026-05-20 - Dossier / Writing Packet Decision
 - Landed D4 as confirmed.
 - Decided `ImplementationDossier` is the full authoritative pre-writing research material package owned by `PaperImplementation`.
 - Decided `WritingEntryPacket` is a downstream projection from a specific dossier version, not an independent writing-readiness authority.
 - Required future packet projections to carry source dossier id/version/hash, dossier readiness gate result, trace manifest ref, and projection policy/version metadata.
-- Legacy `research-argument` `WritingEntryPacket` remains migration/reference material only.
+- `WritingEntryPacket` is defined directly as a projection from `ImplementationDossier`, with no retired packet compatibility source.
 
 ## 2026-05-20 - WorkOrder / Experiment Foundation Decision
 - Landed D5 as confirmed.
@@ -128,7 +125,7 @@
   - `08-queryability-field-matrix.md`;
   - `09-child-readiness-checklist.md`.
 - Confirmed the current repo has reusable/adaptable surfaces for `PaperProjectBridge`, `experiment-foundation`, topic-selection runtime patterns, and desktop workbench patterns.
-- Confirmed `research-argument` remains legacy/transition only and must not become PaperImplementation authority.
+- Confirmed retired control-plane artifacts must not become PaperImplementation authority or compatibility wrappers.
 - Confirmed PaperImplementation domain contracts are intentionally missing and assigned to T-093 through T-101.
 - Confirmed next order: T-093, T-097, T-094, T-095, T-096, T-098, T-099, T-100, T-101.
 - Clarified that the child package table is a coverage inventory; the implementation execution baseline starts T-093 then T-097 before T-094.
@@ -143,7 +140,7 @@
 ## 2026-05-21 - T-094 Closure
 - Closed `T-094 paper-implementation-motive-evidence-board` as backend minimum closure.
 - Landed shared contracts, Prisma persistence, repository/service layers, REST routes, and tests for motive identity, motive set, motive version, assertions, evidence boards, evidence bindings, cross-board reviews, portfolio decisions, and motive evolution decisions.
-- Confirmed `research-argument` remains legacy/transition only and no T-094 authority state was added under it.
+- Confirmed no T-094 authority state was added under retired control-plane artifacts.
 - Confirmed T-095 entry conditions: use admitted, trace-complete motive versions and board outputs; do not schedule validation from drafts or display summaries alone.
 
 ## 2026-05-21 - T-095 Closure
@@ -184,5 +181,5 @@
 
 ## 2026-05-22 - Final Cleanup And Commit Review
 - Rechecked the full PaperImplementation task package set and confirmed the flow remains coherent from intake bootstrap through trace, motive, validation, work order, dossier, AI harness, desktop workbench, and final evaluation.
-- Rechecked code boundaries for double-track risk: no PaperImplementation product path reintroduces `research-argument` authority or treats `PaperProjectBridge` as the implementation aggregate root.
+- Rechecked code boundaries for double-track risk: no PaperImplementation product path reintroduces a retired control-plane authority or treats `PaperProjectBridge` as the implementation aggregate root.
 - T-101 quality repair is included in the parent closure evidence: failed-run evidence is modeled as a negative-result claim in the final replay, missing trace and confirmation bypass are blocked directly, and route-level command/read-model smoke is included.

@@ -25,4 +25,4 @@ All runtime components from the implementation design docs have either executabl
 |---|---|---|
 | Live provider / cloud canaries | Default suite is credential-free by design. | Future ops/evaluation task when product-mode providers are enabled. |
 | Browser-level automated workbench E2E | T-100 already has Chrome screenshot evidence; T-101 uses static/route checks to avoid adding Playwright. | Future UI test-harness task if browser automation becomes standard. |
-| `research-argument` decommission | It is already legacy/transition and outside V1 implementation authority. | Dedicated decommission task after PaperImplementation absorbs useful legacy capabilities. |
+| Retired pre-writing control-plane decommission | Current runtime/shared/persistence/context surfaces are removed by T-113. | Keep archived docs historical and maintain negative guards only. |

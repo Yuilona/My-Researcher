@@ -98,7 +98,7 @@ experiment-foundation
 | ID | Topic | Conflicting inputs | Chosen decision | Precedence reason | Follow-up |
 |---|---|---|---|---|---|
 | D1 | Module ownership | UI placement under Literature vs canonical domain separation | UI 标签固定为“实验基座”，位于“文献管理”下方；代码和合同上独立为 `experiment-foundation` | 用户已确认 UI label 和 placement，项目术语要求 bounded context 精确 | Phase 1 固定 nav label 与 domain naming |
-| D2 | Baseline modeling | Existing `research-argument.baseline_set` vs reusable baseline assets | 新模块提供 reusable `BaselineAsset`，`baseline_set` 只引用资产 ids | 避免语义漂移和重复所有权 | Phase 1 合同中显式写入 |
+| D2 | Baseline modeling | Retired workspace-selection fields vs reusable baseline assets | 新模块提供 reusable `BaselineAsset`；workspace selections only reference asset ids | 避免语义漂移和重复所有权 | Phase 1 合同中显式写入 |
 | D3 | Implementation depth | Reuse target vs full experiment execution | V1 先做可登记、可检索、可绑定、可生成 RunRecipe；执行器作为后续扩展 | 降低 V1 风险，先建立复用基座 | Phase 3 readiness check 决定 runner 门槛 |
 | D4 | Data handling | Reusable dataset vs restricted raw files | 管理引用、协议、校验和访问状态，不把受限原始数据变成共享内容 | 本地优先和数据合规约束 | Phase 2 数据/存储设计 |
 | D5 | Training execution ownership | Self-built training platform vs external platform control plane | `experiment-foundation` 只做控制面和证据管道，训练平台负责计算执行 | 用户已确认项目不用自己搭训练平台 | Phase 4/5 固定 execution contracts |
@@ -224,7 +224,7 @@ This section is a non-binding, early hypothesis to help confirm expected project
   - list of existing research-argument fields to consume rather than duplicate
 - Verification:
   - review against `docs/project/overview/START-HERE.md`
-  - review against current literature and research-argument contracts
+  - review against current literature contracts and retired workspace-selection drift
 - Rollback:
   - N/A (documentation-only)
 
@@ -567,7 +567,7 @@ This section is a non-binding, early hypothesis to help confirm expected project
 | Risk | Likelihood | Impact | Mitigation | Detection | Rollback |
 |---|---:|---:|---|---|---|
 | Semantic drift into a broad “论文管理” bucket | med | high | Use `experiment-foundation`, `literature`, `research-argument`, `paper-project` as separate names | docs/context glossary and contract review | rename/refactor before public API freeze |
-| Duplicating `research-argument.baseline_set` | med | high | Baseline assets are reusable catalog entries; baseline sets are workspace selections | contract test and architecture review | remove duplicate DTO fields before persistence |
+| Duplicating retired workspace-selection fields | med | high | Baseline assets are reusable catalog entries; workspace selections are references | contract test and architecture review | remove duplicate DTO fields before persistence |
 | Raw data handling violates local/rights constraints | med | high | Store refs, checksums, access status, and protocols, not restricted raw copies | readiness report and storage audit | disable import/download path |
 | Cloud mirror becomes accidental canonical source | med | high | Treat OSS/PAI Dataset as `DatasetMirror`; require checksum validation against local manifest | mirror freshness check | mark mirror stale and regenerate |
 | V1 becomes full experiment runner too early | high | med | Limit V1 to asset library, run recipe, and external platform control plane | scope review at Phase 1 and 2 | disable submit/sync routes |

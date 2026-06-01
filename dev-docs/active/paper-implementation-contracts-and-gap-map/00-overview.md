@@ -23,7 +23,7 @@
 - [x] Object map covers intake, motive, portfolio, validation, work order, trace, result/claim/dossier, implementation harness, desktop, and evaluation.
 - [x] Design-doc components are assigned to owners: `ContextCompiler`, `ValidationCycleScheduler`, `ResearchWorkOrderBroker`, `RunMonitorAdapter`, `EvidenceLedgerWriter`, `GateService`, `MotiveEvolutionService`, `BudgetAndStopRuleService`, `PortfolioCoordinator`, `TraceHarness`, `StateWriter`, `DecisionWorkQueue`, `UpstreamFeedbackBridge`, and `EvaluationHarness`.
 - [x] Minimum columnized-field matrix covers gate/queue/trace/test fields and flags fields that must not remain JSON-only.
-- [x] Existing code/docs are classified as reuse, adapt, legacy/transition, or missing.
+- [x] Existing code/docs are classified as reuse, adapt, retired historical, or missing.
 - [x] Each later child task has explicit inputs, outputs, owner, gates, trace, and verification prerequisites.
 - [x] Any roadmap conflict is returned to `T-091` before implementation continues.
 

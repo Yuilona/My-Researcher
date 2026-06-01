@@ -54,7 +54,7 @@
   - `EvaluationProtocol` owns version/hash plus metric/evaluator/reporting/comparison/statistics/budget/tuning rules.
   - `BaselineAsset` is method/model identity only.
   - `BaselineImplementationVersion` owns code/runtime/entrypoint/version fields.
-  - `research-argument.baseline_set` remains a workspace selection and is not canonical baseline metadata.
+  - Retired workspace-selection fields remain rejected from canonical baseline metadata.
 - Mainline next owner is `T-072 experiment-foundation-version-lock-recipe-contracts`.
 
 ## T-070 dataset registry contract landing - 2026-05-17
@@ -101,7 +101,7 @@
 - Semantic decision:
   - `experiment-foundation` is independent from `literature`.
   - Literature can discover candidates; experiment foundation owns reusable implementation assets.
-  - Existing `research-argument.baseline_set` should not be duplicated. It should consume reusable `BaselineAsset` refs.
+  - Retired workspace-selection fields should not be duplicated; current consumers should use reusable `BaselineAsset` refs directly.
 
 ## Decision alignment state
 - `DP-01`: UI label. [confirmed]

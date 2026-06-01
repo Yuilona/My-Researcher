@@ -1,8 +1,10 @@
 # Research Argument Control Plane UI
 
+> Retired historical reference. This document is not a current canonical contract and must not be used to add runtime code, context registry entries, wrappers, or compatibility adapters. Current implementation authority belongs to `paper-implementation`.
+
 ## Summary
-- This document is the canonical product/UI contract for the research-argument control plane.
-- It freezes the minimum screens, explainability requirements, and action/audit interaction rules.
+- This document records the retired product/UI contract for the former pre-writing control plane.
+- The minimum screens, explainability requirements, and action/audit interaction rules are historical only.
 - It does not redesign the existing `title-card` workbench or define desktop implementation details.
 
 ## Owned Requirement/Journey Slice

@@ -260,7 +260,7 @@
 | DP-11 | LLM fine-tuning support | specialized `TrainingTaskSpec` profile, not a separate platform | execution pipeline and readiness |
 
 ## Risks & mitigations
-- Risk: 与 `research-argument.baseline_set` 语义重复。
+- Risk: 与 retired workspace-selection fields 语义重复。
   - Mitigation: 把 `BaselineAsset` 定义为 reusable catalog object，把 `baseline_set` 定义为 workspace selection。
 - Risk: 数据集资产管理变成未授权数据复制。
   - Mitigation: 默认保存 refs、checksums、access status 和 protocols，不复制受限 raw data；云端镜像必须通过 policy gate。

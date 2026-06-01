@@ -134,7 +134,6 @@ test('paper-implementation result claim dossier schemas load through direct and 
   assert.ok(researchLifecycleContracts.createResultInterpretationPacketRequestSchema);
   assert.ok(researchLifecycleContracts.implementationDossierSchema);
   assert.ok(researchLifecycleContracts.paperImplementationWritingEntryPacketSchema);
-  assert.ok(researchLifecycleContracts.researchArgumentWritingEntryPacketSchema);
   assert.equal('writingEntryPacketSchema' in researchLifecycleContracts, false);
 });
 

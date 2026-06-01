@@ -20,7 +20,7 @@ T-091 is closed. T-101 verification passed, and no unowned blocker remains.
 | Design-doc runtime components have owners/evidence | pass |
 | Full implementation flow is replayable without UI-only authority | pass |
 | Required query fields are not JSON-only | pass |
-| `research-argument` remains legacy/transition only | pass |
+| Retired pre-writing control-plane artifacts remain historical only and cannot act as wrappers | pass |
 | Residual risks are non-blocking and owned | pass |
 
 ## Final Handoff

@@ -7,7 +7,7 @@
 - Do not start `S9` UI before S3/S5 expose stable API and contract behavior.
 - Do not change Prisma, backend routes, desktop UI, platform adapters, or training execution in `S1`.
 - Do not make `experiment-foundation` a hidden submodel of `literature`; keep domain ownership separate.
-- Do not duplicate `research-argument.baseline_set`; reusable assets and workspace selections are different concepts.
+- Do not duplicate retired workspace-selection fields; reusable assets and workspace selections are different concepts.
 - Do not conflate baseline and benchmark; baseline is the comparison implementation, benchmark is the comparison protocol.
 - Do not require full benchmark reproduction before a baseline can enter the reusable catalog.
 - Do not treat a benchmark as proven just because it contains published result refs or leaderboard links.

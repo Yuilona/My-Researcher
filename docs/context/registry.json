@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-30T11:49:50.120Z",
+  "updatedAt": "2026-06-01T14:13:57.562Z",
   "artifacts": [
     {
       "id": "api-openapi",
@@ -47,8 +47,8 @@
         "glossary",
         "llm"
       ],
-      "checksumSha256": "d3e855ac8bcbcfaeb4952af418669ad50e1120e1a073fda09dec9a8616cfad92",
-      "lastUpdated": "2026-05-20T09:53:45.744Z",
+      "checksumSha256": "bbe06746ad99f2a81266d5a8f7102e47a2ae6287ea775abea4efecd725f3d222",
+      "lastUpdated": "2026-06-01T14:13:57.559Z",
       "source": {
         "kind": "manual",
         "notes": "Edit via ctl-context add-term/remove-term; then run ctl-context touch."
@@ -64,8 +64,8 @@
         "architecture",
         "llm"
       ],
-      "checksumSha256": "6f58f930c724944894145fc3d9bf52fba0c5e88e90f747cd8cedc5456970a0fe",
-      "lastUpdated": "2026-05-11T11:02:04.582Z",
+      "checksumSha256": "a4350eccd861714e8efc323a23d5e1b38cb5b1b01126ce391a4623bc4fcd7f83",
+      "lastUpdated": "2026-06-01T14:13:57.560Z",
       "source": {
         "kind": "manual",
         "notes": "Edit the Markdown file directly; then run ctl-context touch."
@@ -80,8 +80,8 @@
       "tags": [
         "db"
       ],
-      "checksumSha256": "045535065e0c645e166045a712fef6eaf48450e2ad409f1b01fa51c5a470b17f",
-      "lastUpdated": "2026-05-30T11:49:50.120Z",
+      "checksumSha256": "44ab307cf3f4c9218ba72f5358ebdbad808329e5014f547408c1608a85cde165",
+      "lastUpdated": "2026-06-01T14:04:51.744Z",
       "source": {
         "kind": "command",
         "command": "node .ai/scripts/ctl-db-ssot.mjs sync-to-context",
@@ -144,79 +144,6 @@
       }
     },
     {
-      "id": "research-argument-framework",
-      "type": "markdown",
-      "path": "docs/project/architecture/research-argument-framework.md",
-      "mode": "contract",
-      "tags": [
-        "architecture",
-        "llm",
-        "research-argument"
-      ],
-      "checksumSha256": "57334851d7a23e05020531708f15b0d67bfbb3352d7fa9b048b87ea73d140edc",
-      "lastUpdated": "2026-05-11T11:02:04.583Z",
-      "source": {
-        "kind": "command",
-        "command": "ctl-context add-artifact",
-        "cwd": "."
-      }
-    },
-    {
-      "id": "research-argument-data-schema",
-      "type": "markdown",
-      "path": "docs/project/architecture/research-argument-data-schema.md",
-      "mode": "contract",
-      "tags": [
-        "architecture",
-        "llm",
-        "research-argument"
-      ],
-      "checksumSha256": "e6c1e6ff13bcc9900da08b4c79acdabf9de9742a2154472514e653f2168c8845",
-      "lastUpdated": "2026-03-31T08:43:16.258Z",
-      "source": {
-        "kind": "command",
-        "command": "ctl-context add-artifact",
-        "cwd": "."
-      }
-    },
-    {
-      "id": "research-argument-planner-spec",
-      "type": "markdown",
-      "path": "docs/project/architecture/research-argument-planner-spec.md",
-      "mode": "contract",
-      "tags": [
-        "architecture",
-        "llm",
-        "research-argument"
-      ],
-      "checksumSha256": "d60918b97d873ffad70863d5352bccae2ed6254dfdbf806ee478ab674a4acf6a",
-      "lastUpdated": "2026-03-31T09:27:36.116Z",
-      "source": {
-        "kind": "command",
-        "command": "ctl-context add-artifact",
-        "cwd": "."
-      }
-    },
-    {
-      "id": "research-argument-control-plane-ui",
-      "type": "markdown",
-      "path": "docs/project/product/research-argument-control-plane-ui.md",
-      "mode": "contract",
-      "tags": [
-        "product",
-        "ui",
-        "llm",
-        "research-argument"
-      ],
-      "checksumSha256": "21591c2e1ac1c1b60f51db51875e0a26d3af4d4f2698ca0a2e17404f4e6a1c18",
-      "lastUpdated": "2026-03-31T09:27:36.120Z",
-      "source": {
-        "kind": "command",
-        "command": "ctl-context add-artifact",
-        "cwd": "."
-      }
-    },
-    {
       "id": "topic-selection-v1b-harness-runner",
       "type": "markdown",
       "path": "docs/context/process/topic-selection-v1b-harness-runner.md",
@@ -229,8 +156,8 @@
         "v1b",
         "harness"
       ],
-      "checksumSha256": "51a60ceaf563995638be46ff5b8a30b2980cb6e326d6af7a4d600e55b7136dab",
-      "lastUpdated": "2026-05-28T10:08:09.867Z",
+      "checksumSha256": "c92bd5d887fb4ceb615a323ce50cb6131559640f33df77f01339454cfd4aa66d",
+      "lastUpdated": "2026-06-01T14:13:57.561Z",
       "source": {
         "kind": "command",
         "command": "ctl-context add-artifact",

@@ -55,7 +55,7 @@
 | Desktop workbench as command/read-model surface | `T-100` | covered |
 | Queryable persistence fields for gates, queues, trace, and tests | `T-092`, all data-bearing children, `T-101` | covered after supplement |
 | Full-flow repeatable verification | `T-101` | covered |
-| `research-argument` legacy/transition downgrade | `T-092`, all implementation children as a boundary rule | covered |
+| Retired pre-writing control-plane removal | `T-113`, all implementation children as a boundary rule | covered |
 
 ## Flow Contract Review
 1. Intake bootstrap closes only when `ImplementationProject` has immutable upstream refs/hashes.
@@ -93,7 +93,7 @@ Residual risk handling:
 - Portfolio drift risk: `T-094` owns motive roles and portfolio decisions; `T-095` must not schedule cycles outside portfolio constraints.
 - Runtime-fragmentation risk: `T-099` owns the project-level harness contract; flow-node tasks must not create local harness variants.
 - Persistence-query risk: `T-092` maps required columnized fields, and `T-101` must fail closure if gate/queue/trace fields are only hidden in JSON.
-- Legacy drift risk: any `research-argument` touch must be labeled compatibility/decommission, not authority expansion.
+- Legacy drift risk: retired pre-writing control-plane artifacts must not be touched except archive maintenance or negative guards.
 
 ## Review Gate For Each Child
 Before moving from one child flow to the next, review:

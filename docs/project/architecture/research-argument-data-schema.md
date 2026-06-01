@@ -1,8 +1,10 @@
 # Research Argument Data Schema
 
+> Retired historical reference. This document is not a current canonical contract and must not be used to add runtime code, context registry entries, wrappers, or compatibility adapters. Current implementation authority belongs to `paper-implementation`.
+
 ## Summary
-- This document is the canonical data-schema contract for the research-argument middle layer.
-- It freezes domain nouns, read-model nouns, metadata helper nouns, and bridge/report artifact names.
+- This document records the retired data-schema contract for the former pre-writing control plane.
+- These domain nouns, read-model nouns, metadata helper nouns, and bridge/report artifact names are historical only.
 - It does not choose database tables, Prisma models, or queue implementation details.
 
 ## Owned Requirement/Journey Slice

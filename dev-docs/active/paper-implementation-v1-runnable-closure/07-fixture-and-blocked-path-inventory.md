@@ -65,7 +65,7 @@ P0 coverage is required for T-109 closure.
 | BP0-07 | `BP0-OVERCLAIM-001` | unsupported/overclaim claim candidate or dossier | claim/dossier/writing packet readiness blocks | T-109 replay or T-102/T-098 test reference |
 | BP0-08 | `BP0-AI-DIRECT-MUTATION-001` | AI harness run with direct authority mutation refs | Harness blocks and emits queue/quality signal | T-109 adjacent lane or T-099/T-101 test reference |
 | BP0-09 | `BP0-PROVIDER-LIVE-CONFUSION-001` | T-105 live preflight profile with `live_provider_enabled = true` | preflight result is blocked/skipped; no live provider execution | T-109 adjacent lane or T-105 test reference |
-| BP0-10 | `BP0-RESEARCH-ARGUMENT-AUTHORITY-001` | fixture or replay tries to use `research-argument` authority refs | replay rejects/excludes as authority input; only legacy/transition references allowed in docs | T-109 static/replay check |
+| BP0-10 | `BP0-RESEARCH-ARGUMENT-AUTHORITY-001` | fixture or replay tries to use retired control-plane authority refs | replay rejects/excludes them as authority input; only archived docs and negative guards may mention them | T-109 static/replay check |
 
 ## P1 Blocked Paths
 P1 paths should be covered where cheap or already covered. Otherwise assign an owner in `residual-risks.md`.

@@ -19,7 +19,7 @@ The T-101 queryability guard reads `prisma/schema.prisma` and parses `docs/conte
 | Live LLM/provider variance is not covered by default suite. | no | Future product-mode evaluation lane; T-101 default remains credential-free. |
 | Browser-level automated UI E2E is not introduced. | no | T-100 Chrome screenshot plus T-101 static and Fastify route-level checks are sufficient for V1 closure. |
 | Writing system ingestion of `WritingEntryPacket` is not part of PaperImplementation V1. | no | Downstream `PaperProject`/writing task owns consumption. |
-| `research-argument` legacy files still exist. | no | Already downgraded to legacy/transition; decommission requires separate cleanup task. |
+| Retired pre-writing control-plane current surfaces still exist. | no | T-113 removes current runtime/shared/persistence/context surfaces; archived docs remain historical only. |
 
 ## Closure Decision
 No unowned high-risk gap remains for T-091 V1 paper implementation landing.

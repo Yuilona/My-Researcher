@@ -14,7 +14,7 @@
 |---|---|---|
 | `literature` | papers, metadata, fulltext assets, key-content extraction, source refs | reusable dataset/baseline catalog lifecycle |
 | `experiment-foundation` | reusable dataset, benchmark, baseline, evaluation protocol, run recipe, readiness report, local canonical asset registry, training-platform control pipeline | paper-specific claims, paper writing, raw restricted data distribution, training platform compute runtime |
-| `research-argument` | workspace graph, baseline-set selection, protocol/baseline/repro readiness, writing-entry readiness | canonical asset metadata storage |
+| retired pre-writing control-plane archives | historical notes about workspace selections | canonical asset metadata storage; current readiness; writing-entry readiness |
 | `paper-project` | downstream lifecycle container, version spine, writing package, release/review gates | reusable asset catalog ownership |
 | Cloud/object storage mirror | execution input/output objects such as OSS paths or PAI Dataset refs | canonical dataset metadata, local data policy, claim-evidence semantics |
 | External training platform | resource scheduling, container/runtime execution, GPU allocation, low-level retry, platform-native logs | experiment asset catalog, paper evidence semantics, claim-evidence validation, canonical dataset metadata |

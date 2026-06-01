@@ -1,7 +1,7 @@
 # 03 Implementation Notes
 
 ## 2026-05-17
-- Created to resolve BenchmarkAsset / EvaluationProtocol overlap and preserve `research-argument.baseline_set` as a workspace selection.
+- Created to resolve BenchmarkAsset / EvaluationProtocol overlap and keep retired workspace-selection fields out of canonical baseline metadata.
 - Initial design decision: `BenchmarkAsset` references protocol versions; `EvaluationProtocol` owns versioned/hashable evaluation rules.
 
 ## 2026-05-17 - Landing
@@ -17,7 +17,7 @@
 - Added schema tests for canonical benchmark/protocol/baseline payloads and negative boundary cases:
   - `BenchmarkAsset` rejects embedded metric/evaluator/reporting/statistical/comparison/budget/tuning rules.
   - `EvaluationProtocolLock` requires protocol version and hash.
-  - `BaselineAsset` rejects implementation details and `research-argument.baseline_set` fields.
+  - `BaselineAsset` rejects implementation details and retired workspace-selection fields.
   - `BaselineImplementationVersion` requires code ref and entrypoint and rejects baseline-set ownership.
 - Handoff owner is `T-072 experiment-foundation-version-lock-recipe-contracts`.
 

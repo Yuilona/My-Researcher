@@ -8,7 +8,7 @@ T-101 converts the frozen roadmap and design-doc rules into repeatable checks. T
 |---|---|---|
 | D1 | `PaperImplementation` is the implementation lane; `PaperProject` is writing/delivery. | Full-flow replay starts from `ImplementationProject` and ends at dossier-derived writing packet only. |
 | D2 | Intake bootstraps from active bridge handoff plus matching hash. | `T-101 blocks authority bypass...` checks changed bridge hash conflict and admitted hash stability. |
-| D3 | `research-argument` is legacy/transition, not authority. | UI static boundary test rejects `research-argument` references in paper implementation workbench paths. |
+| D3 | Retired pre-writing control-plane artifacts are not authority, wrappers, or compatibility inputs. | UI static boundary test rejects retired authority references in paper implementation workbench paths. |
 | D4 | `ImplementationDossier` is writing-prep authority; packet is projection. | Full-flow replay creates ready dossier before `WritingEntryPacket`; packet carries dossier trace/hash lineage. |
 | D5 | Experiments run through `ResearchWorkOrder` and retain all outcomes. | Full-flow replay records a trusted failed run as `RunEvidenceUnit`; blocked-path anchors verify orphan callbacks stay untrusted. |
 | D6 | Writing-affecting objects require trace and claim packets. | Full-flow replay creates trace manifests, citation candidate, claim trace packet, dossier readiness, and packet projection. |

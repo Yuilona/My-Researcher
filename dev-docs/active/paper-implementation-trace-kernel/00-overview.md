@@ -30,4 +30,4 @@
 - Landed shared trace contracts, Prisma tables/migration, memory and Prisma repositories, trace kernel service, REST routes, route tests, service tests, and Prisma repository mapping tests.
 - Closed quality-review fixes for required-lineage completeness, citation source/target queryability, field-role uniqueness, empty claim packets, and human-judgment lineage ownership.
 - T-097 is backend-only. Trace repair UI remains T-100, and motive/validation/work-order/result/dossier authority remains T-094/T-095/T-096/T-098.
-- `research-argument` remains a legacy/transition asset and is not part of PaperImplementation trace authority.
+- Retired pre-writing control-plane artifacts are historical only and are not part of PaperImplementation trace authority.

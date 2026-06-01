@@ -1,15 +1,15 @@
 # 00 Overview
 
 ## Status
-- State: in-progress
-- Mode: legacy/transition
-- Next step: do not continue UI review surface or planner/critic generation under `research-argument`; future work should inventory, migrate, replace, or decommission these assets under `PaperImplementation`.
+- State: done
+- Mode: decommissioned
+- Next step: archived by T-113; do not continue UI review surface, planner/critic generation, readiness, or writing-entry work under `research-argument`.
 
 ## Supersession Notice
 - As of 2026-05-20, `research-argument` is no longer an independent authority domain.
 - `PaperImplementation` is the forward authority for motive versions, validation cycles, claim trace, dossier readiness, and writing-prep decisions.
-- Existing `research-argument` docs, contracts, persistence, services, and tests remain as legacy/transition assets until useful capabilities are absorbed or replaced by `PaperImplementation`.
-- After that absorption/replacement is complete, remaining `research-argument` assets should be removed through a dedicated decommission task.
+- Existing `research-argument` docs are historical archive material only.
+- Current contracts, persistence, services, and tests are removed by `T-113 paper-implementation-legacy-authority-cleanup`.
 
 ## Goal
 - Historical goal, retained for context:
@@ -47,7 +47,7 @@
 - [x] 已做新的 product/engineering 决策：先以 `T-086` 实现 backend-first writing-entry bridge，不推进 UI 或 planner。
 - [x] 已生成并完成新的 scoped implementation plan：`dev-docs/active/research-argument-writing-entry-bridge-acceptance/`。
 - [x] 2026-05-20 supersession decision recorded: do not continue `research-argument` as independent authority.
-- [ ] Future work, if needed, must be scoped as `PaperImplementation` migration/replacement/decommission work.
+- [x] Future work, if needed, must be scoped as `PaperImplementation` migration/replacement/decommission work.
 
 ## Child-task ownership
 - Completed:

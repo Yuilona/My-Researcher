@@ -19,4 +19,4 @@
 - `ClaimTracePacket` cannot be empty or supported only by decision/internal notes; it needs literature, experiment, or artifact support lineage.
 - Natural-language field roles are unique per owner ref, field name, and policy version to prevent conflicting role records.
 - Repair queue resolution is append/update metadata on the queue item only; it does not mutate immutable `TraceManifest` authority.
-- `research-argument` remains legacy/transition and is not part of the trace kernel authority path.
+- Retired pre-writing control-plane artifacts are historical only and are not part of the trace kernel authority path.

@@ -79,5 +79,5 @@ This file is the T-092 ownership map for paper implementation. It maps design-do
 ## Closure Decisions
 - No required design-doc object remains without a child owner.
 - No existing repo object should be promoted directly into PaperImplementation authority without a child-specific contract.
-- `research-argument` remains legacy/transition input only.
+- Retired pre-writing control-plane artifacts are historical only and not implementation inputs.
 - T-093 may start after this map because intake source refs and current repo handoff source are identified.

@@ -32,7 +32,7 @@ Project: `main`
 | T-020 shared-contract-compat-cleanup-and-consumer-migration | archived | F-000 | dev-docs/archive/shared-contract-compat-cleanup-and-consumer-migration |
 | T-021 topic-management-workbench-ui | archived | F-001 | dev-docs/archive/topic-management-workbench-ui |
 | T-022 desktop-legacy-css-retirement | archived | F-002 | dev-docs/archive/desktop-legacy-css-retirement |
-| T-023 research-argument-control-plane-v1 | in-progress | F-001 | dev-docs/active/research-argument-control-plane-v1 |
+| T-023 research-argument-control-plane-v1 | archived | F-001 | dev-docs/archive/research-argument-control-plane-v1 |
 | T-024 research-argument-contracts-and-ssot | archived | F-001 | dev-docs/archive/research-argument-contracts-and-ssot |
 | T-025 research-argument-graph-and-state-v1 | archived | F-001 | dev-docs/archive/research-argument-graph-and-state-v1 |
 | T-026 research-argument-titlecard-paper-bridge | archived | F-001 | dev-docs/archive/research-argument-titlecard-paper-bridge |
@@ -95,7 +95,7 @@ Project: `main`
 | T-083 backend-full-suite-environment-isolation | done | F-000 | dev-docs/active/backend-full-suite-environment-isolation |
 | T-084 topic-selection-real-e2e-canary | done | F-000 | dev-docs/active/topic-selection-real-e2e-canary |
 | T-085 topic-selection-real-e2e-scale-quality | done | F-000 | dev-docs/active/topic-selection-real-e2e-scale-quality |
-| T-086 research-argument-writing-entry-bridge-acceptance | done | F-001 | dev-docs/active/research-argument-writing-entry-bridge-acceptance |
+| T-086 research-argument-writing-entry-bridge-acceptance | archived | F-001 | dev-docs/archive/research-argument-writing-entry-bridge-acceptance |
 | T-087 topic-selection-desktop-workbench-v1abc | archived | F-001 | dev-docs/archive/topic-selection-desktop-workbench-v1abc |
 | T-088 topic-selection-workflow-runtime-foundation | in-progress | F-001 | dev-docs/active/topic-selection-workflow-runtime-foundation |
 | T-089 topic-selection-agent-workflow-review | planned | F-001 | dev-docs/active/topic-selection-agent-workflow-review |
@@ -122,4 +122,5 @@ Project: `main`
 | T-110 experiment-foundation-research-workbench | archived | F-001 | dev-docs/archive/experiment-foundation-research-workbench |
 | T-111 topic-selection-v1a-production-orchestration | done | F-000 | dev-docs/active/topic-selection-v1a-production-orchestration |
 | T-112 topic-selection-llm-context-cache-runtime | in-progress | F-001 | dev-docs/active/topic-selection-llm-context-cache-runtime |
+| T-113 paper-implementation-legacy-authority-cleanup | done | F-001 | dev-docs/active/paper-implementation-legacy-authority-cleanup |
 <!-- AUTO-GENERATED:END task-index -->

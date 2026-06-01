@@ -7,7 +7,6 @@
 | `论文管理` | user-facing carrier for paper implementation and paper lifecycle lanes | reusable experiment asset registry; final writing editor |
 | `PaperImplementation` | research implementation operation lane: motive validation, experiment work orders, result interpretation, claim trace, dossier readiness | paper version spine, writing package delivery, release gate |
 | `PaperProject` | writing lifecycle / delivery container: paper id, version spine, snapshots, writing package, artifact bundle, release/review gate | motive evolution, experiment interpretation, claim authority |
-| `research-argument` | legacy/transition assets: historical graph/state/readiness/risk/handoff contracts and implementations | new authority writes; implementation readiness; claim/dossier authority |
 | `实验基座` | dataset/baseline/benchmark/recipe/job/result/evidence substrate | final claim authority |
 | downstream writing lane | paper text drafting/editing/export | source evidence inference; claim readiness decisions |
 
@@ -70,14 +69,12 @@ Naming and authority contract:
 
 Child task rule: implementation child tasks may read bridge lineage and hashes, but must hang new implementation behavior from `ImplementationIntakeSnapshot` or `ImplementationProject`.
 
-## ResearchArgument Legacy Boundary
-`research-argument` is retired as an independent authority domain. It remains in the repo only as a transition asset until `PaperImplementation` absorbs or replaces its useful capabilities.
+## Retired Historical Boundary
+The former research-argument control plane is retired. Current code, Prisma SSOT, LLM-readable context, active planning, and PaperImplementation runtime surfaces must not depend on it as a wrapper, adapter, migration lane, or compatibility authority.
 
 Allowed uses:
-- inventory existing contracts, Prisma models, services, tests, and docs;
-- reuse vocabulary or deterministic checks as migration input;
-- expose read-only projections derived from `PaperImplementation` state, if a child task explicitly needs compatibility;
-- map legacy `WritingEntryPacket` / `SubmissionRiskReport` ideas into `ImplementationDossier` projections.
+- archived historical documentation;
+- negative guards that assert PaperImplementation evidence and UI paths do not use retired authority refs.
 
 Disallowed uses:
 - creating new `ResearchArgumentWorkspace` authority flows;
@@ -85,8 +82,6 @@ Disallowed uses:
 - deciding writing readiness through legacy `ReadyForWritingEntry`;
 - adding planner/critic generation or desktop control surfaces under `research-argument`;
 - writing back from legacy projections into `PaperImplementation` authority state.
-
-Removal rule: once `PaperImplementation` owns the equivalent motive/readiness/risk/writing-handoff capabilities, a dedicated decommission child task should remove or archive remaining `research-argument` code, contracts, persistence, and context entries.
 
 ## ImplementationDossier / WritingEntryPacket Boundary
 `ImplementationDossier` is the authoritative pre-writing material package. It contains the complete implementation state needed for writing: motive, assertions, evidence board, validation cycles, work orders, run evidence, result interpretation, claim candidates, claim trace packets, citation candidates, failed/negative paths, accepted risks, boundaries, and trace manifests.
@@ -98,7 +93,6 @@ Removal rule: once `PaperImplementation` owns the equivalent motive/readiness/ri
 | `ImplementationDossier` | `PaperImplementation` | Complete pre-writing research material package | authoritative writing-prep package |
 | `ImplementationDossierReadinessGate` | `PaperImplementation` | Decides whether dossier material is writing-ready | only writing-ready gate |
 | `WritingEntryPacket` | downstream projection | Summarizes selected dossier material for writing entry | non-authoritative projection |
-| legacy `research-argument` `WritingEntryPacket` | legacy/transition | Migration/reference input | non-authoritative |
 
 Rules:
 - A packet must point to its source dossier id, version/hash, readiness gate result, trace manifest, and projection policy version.
@@ -317,7 +311,7 @@ Rules:
 - `PaperImplementationWorkbench` emits commands and consumes read-models; it does not write authority state.
 - TraceHarness runs before writing readiness, not after writing starts.
 - `PaperImplementation` writes claim/dossier readiness; `PaperProject` consumes that readiness through dossier/packet projections.
-- Any `research-argument` adapter is read-only and non-authoritative unless a future migration task explicitly narrows that rule.
+- No wrapper or adapter may route PaperImplementation authority through retired pre-writing control-plane artifacts.
 - `WritingEntryPacket` is regenerated from dossier state and must never be the write target for implementation authority.
 - `ResearchWorkOrderHarness` is the only path from implementation planning into experiment-foundation execution.
 - `TraceHarness` must run before `ImplementationDossierReadinessGate` can pass.
@@ -360,6 +354,6 @@ AI may not:
 - Requiring confirmation for every draft/internal artifact and turning the workflow into a modal approval chain.
 - Building `PaperImplementationWorkbench` as a writing editor, experiment console, or local readiness engine.
 - Hard-freezing detailed UI fields before backend read-models and command contracts exist.
-- Continuing `research-argument` as a parallel claim-readiness authority.
+- Reintroducing a retired pre-writing control plane as a parallel claim-readiness authority.
 - Building desktop UI before trace and gate contracts exist.
 - Letting child tasks bypass the parent roadmap decisions.

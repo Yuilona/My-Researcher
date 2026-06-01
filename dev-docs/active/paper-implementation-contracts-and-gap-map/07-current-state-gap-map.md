@@ -17,7 +17,7 @@ This file classifies current repo assets as `reuse`, `adapt`, `legacy-transition
 | Topic-selection bridge | `packages/shared/src/research-lifecycle/topic-selection-v1c-paper-project-bridge-contracts.ts`, backend bridge service/repository, topic workbench bridge card | adapt | Use `TopicSelectionPaperProjectBridgeHandoff` as upstream handoff for T-093. Preserve existing `PaperProjectBridge` names; do not rename. |
 | Paper project intake | `TopicSelectionPaperProjectBridgeIntakeInput` / `TopicSelectionPaperProjectBridgeIntakeResult` exist for downstream paper intake | adapt | T-093 must create PaperImplementation intake separately; optional `target_paper_project_ref` remains a link. |
 | Research argument | `packages/shared/src/research-lifecycle/research-argument-*`, backend research-argument service/repository, active `research-argument-control-plane-v1` docs | legacy-transition | Useful vocabulary/checks may be inventoried. Do not add PaperImplementation authority, readiness, planner, or UI under research-argument. |
-| Legacy `WritingEntryPacket` | `research-argument-bridge-contracts.ts` defines packet and promotion response | legacy-transition | Future `WritingEntryPacket` must be regenerated from `ImplementationDossier`; legacy packet is migration/reference material only. |
+| Retired packet concept | Historical bridge docs defined packet and promotion response | retired | `WritingEntryPacket` is regenerated from `ImplementationDossier`; no retired packet shape is a migration/reference source. |
 | Experiment foundation contracts | `experiment-foundation-contracts.ts` defines datasets, locks, recipes, materialization, jobs, results, validation, evidence candidates, sidecars | adapt | T-096 consumes refs/hashes and does not copy reusable DTOs into PaperImplementation authority. |
 | Experiment foundation execution | backend execution repository/service/routes and desktop workbench exist | adapt | T-096 needs `ResearchWorkOrder`, `RunMonitorAdapter`, `EvidenceLedgerWriter`, `RunEvidenceUnit` before results are trusted implementation evidence. |
 | Topic-selection workflow harness | topic-selection workflow harness service and runtime docs exist | adapt | T-099 may reuse domain-neutral runtime patterns only; PaperImplementation owns its own snapshots, gates, harness, queue, StateWriter contract. |
@@ -43,7 +43,7 @@ This file classifies current repo assets as `reuse`, `adapt`, `legacy-transition
 | Risk | Owner | Blocking? | Closure path |
 |---|---|---|---|
 | `PaperProjectBridge` semantic drift into implementation authority | T-093 | yes | Bootstrap only from `ImplementationIntakeSnapshot`; keep bridge as upstream lineage. |
-| `research-argument` reactivated as a second authority lane | all children; T-092 guard | yes | Treat as legacy/transition; any reuse must be read-only migration/reference input. |
+| Retired pre-writing control plane reactivated as a second authority lane | all children; T-113 guard | yes | Do not reuse as migration/reference input; only archived docs and negative guards may mention it. |
 | Experiment execution without WorkOrder | T-096 | yes | `ResearchWorkOrderHarness` is the only trusted execution path. |
 | Trace added after writing readiness | T-097 / T-098 | yes | `TraceManifest` required before dossier readiness/export. |
 | AI proposal becomes authority write | T-099 | yes | Agents output proposals/quality signals only; StateWriter applies after gates. |

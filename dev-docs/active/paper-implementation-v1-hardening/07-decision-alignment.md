@@ -5,7 +5,7 @@
 |---|---|
 | D1 PaperImplementation vs PaperProject | Preserved. T-102 does not move implementation authority into writing. |
 | D2 Bootstrap from topic-selection bridge | Preserved. T-102 does not change intake authority. |
-| D3 `research-argument` legacy/transition | Preserved. T-102 does not read or revive it. |
+| D3 retired pre-writing control-plane boundary | Preserved. T-102 does not read, wrap, or revive it. |
 | D4 Dossier is writing-prep authority | Strengthened through claim readiness and support-source hardening. |
 | D5 Experiments through WorkOrder | Preserved. T-102 clarifies run outcome/readiness, not live execution. |
 | D6 Writing-affecting objects require trace | Strengthened through target-specific trace and alias coverage. |

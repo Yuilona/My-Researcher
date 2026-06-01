@@ -8,12 +8,15 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 112 (planned: 2, in-progress: 5, blocked: 0, done: 37, archived: 68)
+- Tasks: 113 (planned: 2, in-progress: 4, blocked: 0, done: 37, archived: 70)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
+| T-023 research-argument-control-plane-v1 | archived | F-001 | dev-docs/archive/research-argument-control-plane-v1 |
+| T-086 research-argument-writing-entry-bridge-acceptance | archived | F-001 | dev-docs/archive/research-argument-writing-entry-bridge-acceptance |
+| T-113 paper-implementation-legacy-authority-cleanup | done | F-001 | dev-docs/active/paper-implementation-legacy-authority-cleanup |
 | T-108 topic-selection-v1c-workflow-hardening | done | F-001 | dev-docs/active/topic-selection-v1c-workflow-hardening |
 | T-110 experiment-foundation-research-workbench | archived | F-001 | dev-docs/archive/experiment-foundation-research-workbench |
 | T-111 topic-selection-v1a-production-orchestration | done | F-000 | dev-docs/active/topic-selection-v1a-production-orchestration |
@@ -31,7 +34,4 @@ Project: `main`
 | T-094 paper-implementation-motive-evidence-board | done | F-001 | dev-docs/active/paper-implementation-motive-evidence-board |
 | T-095 paper-implementation-validation-cycle-planning | done | F-001 | dev-docs/active/paper-implementation-validation-cycle-planning |
 | T-096 paper-implementation-workorder-experiment-bridge | done | F-001 | dev-docs/active/paper-implementation-workorder-experiment-bridge |
-| T-098 paper-implementation-result-claim-dossier | done | F-001 | dev-docs/active/paper-implementation-result-claim-dossier |
-| T-099 paper-implementation-ai-workflow-harness | done | F-001 | dev-docs/active/paper-implementation-ai-workflow-harness |
-| T-100 paper-implementation-desktop-workbench | done | F-001 | dev-docs/active/paper-implementation-desktop-workbench |
 <!-- AUTO-GENERATED:END dashboard -->

@@ -23,7 +23,7 @@ It MUST NOT introduce a second root, a parallel evidence ledger, or a writing-la
 | Claim | `ClaimCandidate` remains bounded and provisional until claim trace/dossier gates admit it. |
 | Dossier | `ImplementationDossier` remains the pre-writing authority. |
 | Writing packet | `WritingEntryPacket` remains a projection, not a downstream writing authority. |
-| Legacy | `research-argument` remains legacy/transition only. |
+| Retired historical boundary | Former pre-writing control-plane artifacts remain historical only and must not become wrappers or authority inputs. |
 
 ## Compatibility Rules
 - Existing persisted objects SHOULD remain readable unless a migration is explicitly required.

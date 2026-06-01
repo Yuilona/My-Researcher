@@ -1881,7 +1881,7 @@ test('EvaluationProtocolLock schema requires protocol version and hash', async (
   }
 });
 
-test('BaselineAsset schema rejects implementation details and research-argument baseline_set fields', async () => {
+test('BaselineAsset schema rejects implementation details and retired selection fields', async () => {
   for (const leakedField of [
     'code_ref',
     'commit_hash',

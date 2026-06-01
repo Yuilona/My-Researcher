@@ -79,11 +79,11 @@ Define domain terms used across requirements and implementation.
 - Non-examples: topic profile、auto-pull rule、文献检索主题。
 - Notes: 创建 paper-project 时使用 `title_card_id`，不是 `topic_id`。
 
-### Research Argument Control Plane
-- Definition: 位于 title-card 与 paper-project 之间的写作前控制面，用结构化论证对象、readiness、decision、risk report 与 writing handoff packet 管理研究收敛。
-- Synonyms: research-argument, 研究论证控制面。
-- Non-examples: 论文文件管理器、任务看板、paper-project 持久化内部表。
-- Notes: 旧“论文管理”中关于论证控制的语义应落到该术语。
+### Paper Implementation
+- Definition: 论文实施 authority，负责 motive versions、validation cycles、work orders、run evidence、claim trace、implementation dossier 与 writing-ready decisions。
+- Synonyms: paper-implementation, 论文实施。
+- Non-examples: 论文文件管理器、任务看板、paper-project 生命周期容器。
+- Notes: 旧写作前控制面语义已收口到 PaperImplementation；不要新增兼容 wrapper 或平行 authority。
 
 ### Paper Project
 - Definition: 论文项目容器，负责 paper id、生命周期、version spine、stage/release gates、artifact bundle、writing package 与 paper literature links。
@@ -94,7 +94,7 @@ Define domain terms used across requirements and implementation.
 ### Paper Literature Collection
 - Definition: 某个 paper-project 下的文献链接集合，用于从 topic scope 同步候选文献并维护 seeded/selected/used/cited/dropped 等 citation status。
 - Synonyms: paper literature links, 论文文献集合。
-- Non-examples: 全局文献注册表、research-argument readiness。
+- Non-examples: 全局文献注册表、PaperImplementation readiness。
 - Notes: 桌面端当前 `论文管理` 导航主要展示该视图；该 UI label 不等同于 canonical bounded context。
 
 ### Abstract-level RAG

@@ -1,8 +1,10 @@
 # Research Argument Planner Spec
 
+> Retired historical reference. This document is not a current canonical contract and must not be used to add runtime code, context registry entries, wrappers, or compatibility adapters. Current implementation authority belongs to `paper-implementation`.
+
 ## Summary
-- This document is the canonical planner/advisory contract for the research-argument layer.
-- It freezes the advisory vocabulary consumed by `T-028` and referenced by the UI and bridge layers.
+- This document records the retired planner/advisory contract for the former pre-writing control plane.
+- The advisory vocabulary consumed by `T-028` and referenced by the former UI and bridge layers is historical only.
 - It does not define concrete runtime jobs, scheduling infrastructure, or model prompts.
 
 ## Owned Requirement/Journey Slice

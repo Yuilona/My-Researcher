@@ -9,7 +9,7 @@
 - Added `06-object-and-component-map.md` with PaperImplementation object ownership and design runtime component ownership.
 - Added `07-current-state-gap-map.md` with repo asset classification:
   - `PaperProjectBridge` is adapt-only upstream handoff material;
-  - `research-argument` is legacy/transition material only;
+  - retired pre-writing control-plane artifacts are historical material only;
   - `experiment-foundation` is consumed by refs/hashes, not copied;
   - topic-selection runtime and desktop patterns are reusable as patterns only;
   - PaperImplementation domain contracts are missing and owned by T-093 through T-101.

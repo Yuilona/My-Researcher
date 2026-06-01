@@ -42,21 +42,21 @@
 - 把评测设计提升到公平对标、统计稳健与可复现可审计的基线水平。
 - 缩短从初稿到投稿前可交付状态的迭代周期。
 
-## Legacy Research Argument References
-- The historical SSOT for the pre-writing research-argument layer lives in:
+## Retired Pre-Writing Control Plane References
+- The retired historical pre-writing control-plane references live in:
   - `docs/project/architecture/research-argument-framework.md`
   - `docs/project/architecture/research-argument-data-schema.md`
   - `docs/project/architecture/research-argument-planner-spec.md`
   - `docs/project/product/research-argument-control-plane-ui.md`
-- As of 2026-05-20, `research-argument` is a legacy/transition asset. It is not the forward authority for implementation readiness or writing-prep decisions.
-- Useful `research-argument` capabilities should be absorbed or replaced by `PaperImplementation`, then the remaining assets should be removed through a dedicated decommission task.
+- As of 2026-06-01, these references are historical archive material only. They are not a current bounded context, not a runtime surface, and not a wrapper or compatibility lane.
+- Forward implementation readiness and writing-prep authority belongs to `paper-implementation`.
 - `research-varify/` remains an intake directory only and is not the long-term SSOT for runtime, context, or shared contracts.
 
 ## Canonical Terminology Boundaries
 - `title-card` owns idea shaping, evidence basket, need/question/value/package, and promotion origin identity.
 - `paper-project` owns the downstream paper lifecycle container: paper id, version spine, stage/release gates, artifact bundle, writing package, and paper literature links.
 - `paper-implementation` owns the research implementation authority: motive versions, validation cycles, work orders, run evidence, result interpretation, claim trace, implementation dossier, and writing-ready decisions.
-- `research-argument` is legacy/transition only: historical graph/readiness/risk/writing-handoff assets may be migrated, projected, or replaced, but must not be extended as a parallel authority domain.
+- Retired pre-writing control-plane artifacts are historical archive material only and must not be used as migration adapters, compatibility wrappers, or a parallel authority domain.
 - `topic_id` remains valid for literature topic scope, retrieval, topic settings, and auto-pull contexts. It is not the origin field for `POST /paper-projects`; use `title_card_id` there.
 - `论文管理` / `paper management` is a legacy product bucket or desktop navigation label. Current implementation docs must use one of the canonical names above.
 
@@ -147,7 +147,7 @@ The original eight sub-functions remain historical requirement input. Current im
 3. 论文实施 / paper-implementation
    - Internal: ImplementationProject、CoreMotiveVersion、ValidationCycle、ResearchWorkOrder、RunEvidenceUnit、ClaimTracePacket、ImplementationDossier、DossierReadinessGate。
    - Integrations: topic-selection intake、experiment-foundation execution/evidence substrate、downstream writing lane。
-   - Legacy transition: historical `research-argument` graph/readiness/risk/writing-handoff assets are migration or replacement inputs only.
+   - Retired historical control-plane artifacts are not implementation inputs; use PaperImplementation contracts directly.
 4. 理论框架与研究设计
    - Internal: 假设与边界管理、问题定义模板、机制到证据映射。
    - Integrations: LLM 辅助结构化生成与审阅接口。
@@ -170,7 +170,7 @@ The original eight sub-functions remain historical requirement input. Current im
 Note:
 - Do not reintroduce `论文管理` as a catch-all module in current implementation plans.
 - Use `paper-implementation` when referring to research implementation authority, `paper-project` when referring to lifecycle container behavior, and `paper literature collection` when referring to the current desktop view.
-- Use `research-argument` only for legacy/transition assets pending absorption, replacement, or removal.
+- Do not add compatibility wrappers around retired pre-writing control-plane artifacts; use PaperImplementation, PaperProject, or paper literature collection terms directly.
 
 ## Data and integrations (high level)
 - Core entities: Project、Document、Section、Claim、Evidence、ClaimEvidence、Baseline、Protocol、ReproItem、Issue、Report。

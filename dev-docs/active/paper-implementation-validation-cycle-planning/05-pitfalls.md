@@ -13,7 +13,7 @@
 - `ValidationCycle` completion is an assessment record only; it must not create claims, evidence, or motive evolution by side effect.
 - Feedback candidates are local planning objects until explicit dispatch calls T-093 feedback event recording.
 - Required gate and handoff fields are queryable columns; full refs may be duplicated in JSON payloads but must not become the only lookup surface.
-- `research-argument` remains legacy/transition and is not part of validation planning authority.
+- Retired pre-writing control-plane artifacts are historical only and are not part of validation planning authority.
 - `trace_manifest_ref` must always point to TraceManifest authority; target refs belong in trace manifests and input snapshots, not in the trace-manifest reference slot.
 - Validation planning must not bypass the T-094 evidence board: every cycle needs an explicit or current trace-ready board for the target motive version.
 - T-096 handoff objects must preserve motive/cycle ownership; route and plan refs cannot be mixed across cycles.

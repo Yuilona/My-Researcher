@@ -11,13 +11,13 @@
 ## Non-goals
 - Do not build leaderboard behavior.
 - Do not require a full benchmark run for baseline catalog entry.
-- Do not change research-argument graph semantics.
+- Do not depend on retired pre-writing control-plane graph semantics.
 
 ## Responsibilities
 - Remove full metric/evaluator/reporting/comparison ownership from `BenchmarkAsset` where it belongs to `EvaluationProtocol`.
 - Add versionable protocol and baseline implementation concepts for downstream locks.
 - Define verification ladders for baseline and benchmark readiness.
-- Keep `research-argument.baseline_set` as workspace selection, not canonical baseline metadata.
+- Keep retired workspace-selection fields out of canonical baseline metadata.
 
 ## Boundary
 - Owns benchmark, protocol, metric definition, baseline identity, and baseline implementation contracts.
@@ -33,5 +33,5 @@
 - [x] `BenchmarkAsset` stores benchmark/testbed identity and default protocol refs, not full evaluation rules.
 - [x] `EvaluationProtocol` stores versioned/hashable metrics, evaluator, reporting, comparison, statistics, budget fairness, and tuning fairness rules.
 - [x] `BaselineAsset` stores method/model identity while `BaselineImplementationVersion` stores code/runtime/entrypoint/version fields.
-- [x] `research-argument.baseline_set` remains workspace selection and does not leak into canonical baseline assets.
+- [x] Retired workspace-selection fields do not leak into canonical baseline assets.
 - [x] Shared typecheck/test and project governance sync/lint pass.

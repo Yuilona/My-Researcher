@@ -3,7 +3,7 @@
 ## Do Not Repeat
 - Do not make `BenchmarkAsset` a full protocol blob.
 - Do not require benchmark_verified status for baseline catalog entry.
-- Do not duplicate `research-argument.baseline_set` as canonical metadata.
+- Do not duplicate retired workspace-selection fields as canonical metadata.
 - When a boundary relies on rejecting drift fields, forbid common alias variants explicitly; Fastify/Ajv can strip unknown properties before they surface as schema errors.
 
 ## 2026-05-17 - Forbidden-field Alias Drift

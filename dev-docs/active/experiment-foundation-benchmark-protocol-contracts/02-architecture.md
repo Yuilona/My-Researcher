@@ -13,7 +13,7 @@
 - `BenchmarkAsset` references protocol versions; it does not duplicate protocol internals.
 - `EvaluationProtocol` MUST be versioned and hashable before formal comparison.
 - `BaselineImplementationVersion` is the lockable comparison implementation.
-- `research-argument.baseline_set` consumes refs; it is not a canonical asset registry.
+- Retired workspace-selection fields consume refs historically; they are not a canonical asset registry or current dependency.
 
 ## Downstream Contract Support
 - `RunRecipe` locks baseline implementation version and evaluation protocol version/hash.

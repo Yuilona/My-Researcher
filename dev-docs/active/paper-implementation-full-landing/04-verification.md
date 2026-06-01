@@ -15,7 +15,7 @@
   - Notes: recheck after finalizing D2 intake landing rules.
 - `node .ai/scripts/ctl-project-governance.mjs lint --check --project main`
   - Result: passed.
-  - Notes: recheck after confirming D3 and marking `research-argument` as legacy/transition.
+  - Notes: recheck after confirming D3 and retiring the former control-plane lane.
 - `node .ai/skills/features/context-awareness/scripts/ctl-context.mjs verify --strict`
   - Result: passed.
   - Notes: verify context updates for `research-argument` legacy status.
@@ -69,7 +69,7 @@
 | 2026-05-20 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Verified governance consistency. |
 | 2026-05-20 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Rechecked after semantic baseline update. |
 | 2026-05-20 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Recheck after finalizing D2 intake landing rules. |
-| 2026-05-20 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Recheck after confirming D3 and marking `research-argument` as legacy/transition. |
+| 2026-05-20 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Recheck after confirming D3 and retiring the former control-plane lane. |
 | 2026-05-20 | `node .ai/skills/features/context-awareness/scripts/ctl-context.mjs verify --strict` | passed | Verify context updates for `research-argument` legacy status. |
 | 2026-05-20 | `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main` | passed | Regenerated project dashboard after updating `R-011` / `T-023` legacy transition metadata. |
 | 2026-05-20 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Recheck after confirming D4 dossier / writing packet boundary. |

@@ -1,27 +1,10 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-20T00:00:00Z",
+  "updatedAt": "2026-06-01T00:00:00Z",
   "terms": [
     {
-      "term": "Research Argument Control Plane",
-      "definition": "legacy/transition asset：历史上位于 title-card 与 paper-project 之间的 pre-writing 中间层，用结构化对象图、readiness、decision 与 handoff artifact 管理研究论证收敛。自 2026-05-20 起，它不再是独立 authority domain；有效能力等待 PaperImplementation 吸收或替代后移除。",
-      "scope": "research-argument",
-      "aliases": [
-        "research-argument",
-        "研究论证控制面",
-        "pre-writing control plane"
-      ],
-      "see_also": [
-        "PaperImplementation",
-        "ResearchArgumentWorkspace",
-        "AbstractState",
-        "WritingEntryPacket",
-        "PaperProject"
-      ]
-    },
-    {
       "term": "PaperProject",
-      "definition": "paper-project 是 downstream paper lifecycle container，拥有论文主键、version spine、stage/release gates、artifact bundle、writing package 和 paper literature links。它不拥有 pre-writing branch reasoning 或 readiness synthesis。",
+      "definition": "paper-project 是 downstream paper lifecycle container，拥有论文主键、version spine、stage/release gates、artifact bundle、writing package 和 paper literature links。它不拥有 implementation-stage claim readiness 或 dossier authority。",
       "scope": "research-lifecycle",
       "aliases": [
         "paper-project",
@@ -30,13 +13,13 @@
       ],
       "see_also": [
         "TitleCard",
-        "Research Argument Control Plane",
-        "WritingEntryPacket"
+        "PaperImplementation",
+        "PaperImplementationWritingEntryPacket"
       ]
     },
     {
       "term": "PaperImplementation",
-      "definition": "paper-implementation 是论文管理中的研究实施 authority lane，拥有 ImplementationProject、CoreMotiveVersion、ValidationCycle、ResearchWorkOrder、RunEvidenceUnit、ClaimTracePacket、ImplementationDossier 和 writing-ready decision。它吸收或替代 research-argument 的有效能力。",
+      "definition": "paper-implementation 是论文管理中的研究实施 authority lane，拥有 ImplementationProject、CoreMotiveVersion、ValidationCycle、ResearchWorkOrder、RunEvidenceUnit、ClaimTracePacket、ImplementationDossier 和 writing-ready decision。",
       "scope": "paper-implementation",
       "aliases": [
         "paper-implementation",
@@ -44,9 +27,8 @@
       ],
       "see_also": [
         "PaperProject",
-        "Research Argument Control Plane",
-        "WritingEntryPacket",
-        "SubmissionRiskReport"
+        "ImplementationDossier",
+        "PaperImplementationWritingEntryPacket"
       ]
     },
     {
@@ -60,8 +42,37 @@
       ],
       "see_also": [
         "PaperImplementation",
-        "WritingEntryPacket",
-        "SubmissionRiskReport"
+        "ImplementationDossierReadinessGate",
+        "PaperImplementationWritingEntryPacket"
+      ]
+    },
+    {
+      "term": "ImplementationDossierReadinessGate",
+      "definition": "PaperImplementation 中决定 ImplementationDossier 是否 writing-ready 的唯一 readiness gate。它必须检查 claim trace、citation candidates、failed/negative/inconclusive runs、accepted risks、blockers 和 trace manifests。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "dossier readiness gate",
+        "writing-ready gate"
+      ],
+      "see_also": [
+        "ImplementationDossier",
+        "ClaimTracePacket",
+        "TraceManifest"
+      ]
+    },
+    {
+      "term": "PaperImplementationWritingEntryPacket",
+      "definition": "从特定 ImplementationDossier 版本派生的 downstream writing-entry projection。它必须指向 source dossier、readiness gate result、trace refs 和 projection hash，不能独立决定 writing-ready，也不能覆盖 dossier authority。",
+      "scope": "paper-implementation",
+      "aliases": [
+        "writing entry packet",
+        "writing packet",
+        "写作交接包"
+      ],
+      "see_also": [
+        "ImplementationDossier",
+        "ImplementationDossierReadinessGate",
+        "PaperProject"
       ]
     },
     {
@@ -282,12 +293,12 @@
       ],
       "see_also": [
         "PaperProject",
-        "ResearchArgumentWorkspace"
+        "PaperImplementation"
       ]
     },
     {
       "term": "Paper Management Label",
-      "definition": "“论文管理”是历史产品分组和当前桌面导航标签，不是当前实现的 canonical bounded-context name。当前设计中应明确 paper-implementation、paper-project lifecycle 或 paper literature collection；research-argument 仅作为 legacy/transition asset 引用。",
+      "definition": "“论文管理”是历史产品分组和当前桌面导航标签，不是当前实现的 canonical bounded-context name。当前设计中应明确 paper-implementation、paper-project lifecycle 或 paper literature collection。",
       "scope": "terminology",
       "aliases": [
         "论文管理",
@@ -295,216 +306,7 @@
       ],
       "see_also": [
         "PaperImplementation",
-        "PaperProject",
-        "Research Argument Control Plane"
-      ]
-    },
-    {
-      "term": "ResearchArgumentWorkspace",
-      "definition": "legacy research-argument 的公开根对象，承载一个 title-card 对应的历史 pre-writing 论证空间及其当前 active branch、readiness 和 handoff refs。新实施 authority 不应挂在该对象下。",
-      "scope": "research-argument",
-      "aliases": [
-        "workspace"
-      ],
-      "see_also": [
-        "PaperImplementation",
-        "Research Branch",
-        "AbstractState"
-      ]
-    },
-    {
-      "term": "ResearchBranch",
-      "definition": "workspace 内的一条研究语义分支，表示某个 formulation、执行路线或论证路线，不等同于 Git branch。",
-      "scope": "research-argument",
-      "aliases": [
-        "Research Branch",
-        "branch"
-      ],
-      "see_also": [
-        "ResearchArgumentWorkspace",
-        "DecisionRecord"
-      ]
-    },
-    {
-      "term": "ArgumentObjectGraph",
-      "definition": "legacy research-argument 中保存结构化对象与关系图的语义层。它可作为迁移输入或只读投影参考，但不再是 PaperImplementation 的 source of truth。",
-      "scope": "research-argument",
-      "aliases": [
-        "argument graph",
-        "论证对象图"
-      ],
-      "see_also": [
-        "AbstractState",
-        "EvidenceRequirement",
-        "EvidenceItem"
-      ]
-    },
-    {
-      "term": "AbstractState",
-      "definition": "面向 reviewer-facing readiness 的 9 维抽象状态快照，用于表达当前离 WorthContinuing 或 ReadyForWritingEntry 还有多远。",
-      "scope": "research-argument",
-      "aliases": [
-        "readiness state",
-        "抽象状态"
-      ],
-      "see_also": [
-        "WorthContinuing",
-        "ReadyForWritingEntry"
-      ]
-    },
-    {
-      "term": "WorthContinuing",
-      "definition": "Stage 1 readiness 结论，表示该研究方向已经具备继续投入的基本价值、新颖性和可行性门槛。",
-      "scope": "research-argument",
-      "aliases": [
-        "stage-1 pass"
-      ],
-      "see_also": [
-        "AbstractState",
-        "ReadyForWritingEntry"
-      ]
-    },
-    {
-      "term": "ReadyForWritingEntry",
-      "definition": "legacy research-argument 的 Stage 2 readiness 结论。未来 writing-ready authority 应由 PaperImplementation 的 ImplementationDossierReadinessGate 决定。",
-      "scope": "research-argument",
-      "aliases": [
-        "writing-entry ready"
-      ],
-      "see_also": [
-        "PaperImplementation",
-        "AbstractState",
-        "WritingEntryPacket",
-        "SubmissionRiskReport"
-      ]
-    },
-    {
-      "term": "EvidenceRequirement",
-      "definition": "让某个 claim 成立所必须满足的证据要求，例如 main result、ablation、robustness 或 reproduction。",
-      "scope": "research-argument",
-      "aliases": [
-        "证据要求"
-      ],
-      "see_also": [
-        "EvidenceItem",
-        "Claim"
-      ]
-    },
-    {
-      "term": "EvidenceItem",
-      "definition": "已经收集到的证据项，可以来自 run、analysis、literature、manual input 或 artifact，并带有 support/weakens/refutes 等方向。",
-      "scope": "research-argument",
-      "aliases": [
-        "证据项"
-      ],
-      "see_also": [
-        "EvidenceRequirement",
-        "ArgumentObjectGraph"
-      ]
-    },
-    {
-      "term": "BaselineSet",
-      "definition": "一组对照对象及其选择理由、公平性风险与覆盖说明，是 EvaluationSoundness 的核心输入之一。",
-      "scope": "research-argument",
-      "aliases": [
-        "baseline set",
-        "对照集合"
-      ],
-      "see_also": [
-        "Protocol",
-        "SubmissionRiskReport"
-      ]
-    },
-    {
-      "term": "Boundary",
-      "definition": "对范围、限制、失效条件与 threat-to-validity 的结构化表示，用于约束 claim 并暴露风险。",
-      "scope": "research-argument",
-      "aliases": [
-        "边界条目"
-      ],
-      "see_also": [
-        "SubmissionRiskReport",
-        "DecisionRecord"
-      ]
-    },
-    {
-      "term": "DecisionRecord",
-      "definition": "research-argument 域内的结构性决策记录，涵盖 continue、pivot、kill、archive、reopen、advance 等动作及其审计信息。",
-      "scope": "research-argument",
-      "aliases": [
-        "decision",
-        "决策记录"
-      ],
-      "see_also": [
-        "LessonRecord",
-        "ResearchBranch"
-      ]
-    },
-    {
-      "term": "LessonRecord",
-      "definition": "从决策、失败或成功模式中沉淀出的结构化经验条目，用于后续 critique、planner 或人工回顾。",
-      "scope": "research-argument",
-      "aliases": [
-        "lesson",
-        "经验记录"
-      ],
-      "see_also": [
-        "DecisionRecord",
-        "CriticHub"
-      ]
-    },
-    {
-      "term": "WritingEntryPacket",
-      "definition": "downstream writing-entry projection：从特定 ImplementationDossier 版本派生的写作入口摘要，服务下游写作/editor ergonomics。它必须指向 source dossier、readiness gate result 和 trace refs，不能独立决定 writing-ready。legacy research-argument 版本仅作为迁移参考。",
-      "scope": "research-argument",
-      "aliases": [
-        "writing packet",
-        "写作交接包"
-      ],
-      "see_also": [
-        "PaperImplementation",
-        "ImplementationDossier",
-        "ReadyForWritingEntry",
-        "SubmissionRiskReport"
-      ]
-    },
-    {
-      "term": "SubmissionRiskReport",
-      "definition": "legacy research-argument 中按维度和风险项组织的 pre-writing reviewer-style 风险报告。未来如继续使用，应作为 PaperImplementation dossier/risk projection，而不是独立 authority artifact。",
-      "scope": "research-argument",
-      "aliases": [
-        "risk report",
-        "投稿风险报告"
-      ],
-      "see_also": [
-        "PaperImplementation",
-        "WritingEntryPacket",
-        "RuleEngine",
-        "CriticHub"
-      ]
-    },
-    {
-      "term": "CriticHub",
-      "definition": "多视角 reviewer-style critique 聚合层，负责生成非权威的 critique finding，并与 RuleEngine 共同支撑风险与建议输出。",
-      "scope": "research-argument",
-      "aliases": [
-        "critic hub"
-      ],
-      "see_also": [
-        "RuleEngine",
-        "SubmissionRiskReport"
-      ]
-    },
-    {
-      "term": "RuleEngine",
-      "definition": "research-argument 域中的确定性规则检查层，输出必须能映射到 severity、detail 和 pointers。",
-      "scope": "research-argument",
-      "aliases": [
-        "rule engine"
-      ],
-      "see_also": [
-        "CriticHub",
-        "SubmissionRiskReport"
+        "PaperProject"
       ]
     }
   ]

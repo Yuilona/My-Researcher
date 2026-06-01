@@ -87,7 +87,7 @@ requirements:
     feature_id: F-002
   - id: R-011
     title: "Research argument legacy transition baseline"
-    status: in-progress
+    status: cut
     description: "Retain the pre-writing research-argument workspace, readiness, bridge, and writing-handoff assets as legacy/transition material while PaperImplementation absorbs, replaces, or decommissions the useful capabilities."
     feature_id: F-001
   - id: R-012
@@ -280,13 +280,13 @@ tasks:
     updated: 2026-05-13
   - id: T-023
     slug: research-argument-control-plane-v1
-    status: in-progress
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-011
-    dev_docs_path: dev-docs/active/research-argument-control-plane-v1
-    updated: 2026-05-20
+    dev_docs_path: dev-docs/archive/research-argument-control-plane-v1
+    updated: 2026-06-01
   - id: T-024
     slug: research-argument-contracts-and-ssot
     status: archived
@@ -815,13 +815,13 @@ tasks:
     updated: 2026-05-18
   - id: T-086
     slug: research-argument-writing-entry-bridge-acceptance
-    status: done
+    status: archived
     milestone_id: M-001
     feature_id: F-001
     requirement_ids:
       - R-011
-    dev_docs_path: dev-docs/active/research-argument-writing-entry-bridge-acceptance
-    updated: 2026-05-18
+    dev_docs_path: dev-docs/archive/research-argument-writing-entry-bridge-acceptance
+    updated: 2026-06-01
   - id: T-087
     slug: topic-selection-desktop-workbench-v1abc
     status: archived
@@ -1054,3 +1054,12 @@ tasks:
       - R-009
     dev_docs_path: dev-docs/active/topic-selection-llm-context-cache-runtime
     updated: 2026-05-29
+  - id: T-113
+    slug: paper-implementation-legacy-authority-cleanup
+    status: done
+    milestone_id: M-001
+    feature_id: F-001
+    requirement_ids:
+      - R-013
+    dev_docs_path: dev-docs/active/paper-implementation-legacy-authority-cleanup
+    updated: 2026-06-01

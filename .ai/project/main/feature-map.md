@@ -53,7 +53,7 @@ Project: `main`
 | T-010 governance-event-delivery-observability-ops-v1 | archived | dev-docs/archive/governance-event-delivery-observability-ops-v1 |
 | T-014 automated-topic-management | archived | dev-docs/archive/automated-topic-management |
 | T-021 topic-management-workbench-ui | archived | dev-docs/archive/topic-management-workbench-ui |
-| T-023 research-argument-control-plane-v1 | in-progress | dev-docs/active/research-argument-control-plane-v1 |
+| T-023 research-argument-control-plane-v1 | archived | dev-docs/archive/research-argument-control-plane-v1 |
 | T-024 research-argument-contracts-and-ssot | archived | dev-docs/archive/research-argument-contracts-and-ssot |
 | T-025 research-argument-graph-and-state-v1 | archived | dev-docs/archive/research-argument-graph-and-state-v1 |
 | T-026 research-argument-titlecard-paper-bridge | archived | dev-docs/archive/research-argument-titlecard-paper-bridge |
@@ -100,7 +100,7 @@ Project: `main`
 | T-080 topic-selection-v1b-quality-deep-acceptance | archived | dev-docs/archive/topic-selection-v1b-quality-deep-acceptance |
 | T-081 topic-selection-v1b-quality-loopback-acceptance | archived | dev-docs/archive/topic-selection-v1b-quality-loopback-acceptance |
 | T-082 topic-selection-paper-project-bridge-downstream-acceptance | done | dev-docs/active/topic-selection-paper-project-bridge-downstream-acceptance |
-| T-086 research-argument-writing-entry-bridge-acceptance | done | dev-docs/active/research-argument-writing-entry-bridge-acceptance |
+| T-086 research-argument-writing-entry-bridge-acceptance | archived | dev-docs/archive/research-argument-writing-entry-bridge-acceptance |
 | T-087 topic-selection-desktop-workbench-v1abc | archived | dev-docs/archive/topic-selection-desktop-workbench-v1abc |
 | T-088 topic-selection-workflow-runtime-foundation | in-progress | dev-docs/active/topic-selection-workflow-runtime-foundation |
 | T-089 topic-selection-agent-workflow-review | planned | dev-docs/active/topic-selection-agent-workflow-review |
@@ -126,6 +126,7 @@ Project: `main`
 | T-109 paper-implementation-v1-runnable-closure | done | dev-docs/active/paper-implementation-v1-runnable-closure |
 | T-110 experiment-foundation-research-workbench | archived | dev-docs/archive/experiment-foundation-research-workbench |
 | T-112 topic-selection-llm-context-cache-runtime | in-progress | dev-docs/active/topic-selection-llm-context-cache-runtime |
+| T-113 paper-implementation-legacy-authority-cleanup | done | dev-docs/active/paper-implementation-legacy-authority-cleanup |
 
 ### F-002 Desktop Frontend Foundation
 
