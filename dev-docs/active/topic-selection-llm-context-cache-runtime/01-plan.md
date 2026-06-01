@@ -587,10 +587,16 @@
   - D25-E harness boundary: `WorkflowHarness` MUST NOT implement a parallel production validity decision for compression. It may assert that missing trial ledger, ref/hash drift, dropped risk facts, schema-invalid compact context, or rejected compression artifacts are blocked by runtime/admission services;
   - verify N7 projection drift, N8 feedback handoff back to N7, malformed support/compression blocking, runtime compression self-check blockers, provider non-reuse, deterministic feedback boundaries, and no authority bypass.
 - P2.3 v1b N4 research-slice option generation:
-  - bind N4 option-generation slots after N6/N8 expose the main context-handoff shape;
-  - use N4 outputs as upstream semantic context candidates, not as replacements for N7 deterministic authority gates;
-  - preserve slice identity, evidence lineage, method-family gaps, novelty/risk facts, and source-health warnings through runtime context identity;
-  - verify upstream drift into N6/N7, compression fact preservation, replay/idempotency, and prompt packet cache metadata-only behavior.
+  - first slice promotes only `n4_research_slice_option_draft.initial_from_n3`; N5 request-more-options and later loopback variants remain deferred until this initial path is stable;
+  - runtime context family is `v1b_n4_research_slice_option_generation`; product-mode admission requires `runtime_verified` provenance from `TopicSelectionV1bN4ResearchSliceRuntimeService`, while fixture replay is test/acceptance-only;
+  - N4 output remains `model_draft_for_gate`; it cannot create `ResearchSliceOptionSet`, `ResearchSliceOption`, `PlanResearchSliceRun`, `N4ToN5Handoff`, slice selection, package, recheck, or any authority record;
+  - prompt/cache identity MUST include frozen input hash, N2/N3 handoff hashes, N1 snapshot hash, N2 constraint profile hash, N3 readiness hash, planning-input hash, evidence role-bundle hash, evidence refs hash, constraint digest hash, claim ceiling hash, non-goals hash, accepted-risk/recheck/memory hashes, source hash bundle, output contract, profile hash, redaction policy, runtime modifiers, and compression identity when present;
+  - compression MUST preserve N3 handoff lineage, intake snapshot identity, constraint profile, intake readiness, validated need, evidence role bundle/refs, claim ceiling, non-goals, accepted risks, risk/gap/blocker facts, recheck hints, memory suggestions, source-health warnings, and planning input structure;
+  - L3 Prisma-backed local/dev smoke is implemented as `pnpm topic-selection:v1b-n4-runtime-smoke`;
+  - current L3 coverage verifies runtime-verified product admission, exact replay/idempotency, source-hash drift blocking, runtime audit non-provider provenance, response non-reuse, and prompt packet cache metadata-only behavior;
+  - L4 local and live provider/executor canary is implemented for OpenAI and DashScope over `AgentOrchestrator -> BackendLlmGateway`; live N4 provider canaries are explicit-gated by `T112_V1B_N4_PROVIDER_CANARY_LIVE=1` and provider keys;
+  - L5 long-context/adversarial coverage blocks dropped N4 preserved facts and forbidden persisted payloads before compressed context can become prompt input;
+  - N4 first-slice runtime closure evidence is complete for local/dev, local provider canary, live provider canary, and L5 adversarial compression.
 
 ### Shared Rules
 - Every promoted v1b LLM-like slot MUST pass through the shared runtime boundary for token-budget preflight, prompt packet identity/cache, compression report validation, runtime audit, provider telemetry separation, and response-reuse provenance.

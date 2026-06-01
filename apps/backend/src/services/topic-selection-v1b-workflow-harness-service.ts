@@ -177,6 +177,11 @@ import {
   TopicSelectionV1bN6DraftRuntimeService,
   type TopicSelectionV1bN6DraftGenerationMode,
 } from './topic-selection-v1b-n6-draft-runtime-service.js';
+import {
+  TopicSelectionV1bN4ResearchSliceAdmissionService,
+  type TopicSelectionV1bN4ResearchSliceAdmissionExpectedIdentity,
+} from './topic-selection-v1b-n4-research-slice-admission-service.js';
+import { TopicSelectionV1bN4ResearchSliceRuntimeService } from './topic-selection-v1b-n4-research-slice-runtime-service.js';
 import { TopicSelectionV1bN6LoopbackTriageAdmissionService } from './topic-selection-v1b-n6-loopback-triage-admission-service.js';
 import { TopicSelectionV1bN6LoopbackTriageRuntimeService } from './topic-selection-v1b-n6-loopback-triage-runtime-service.js';
 import {
@@ -320,6 +325,13 @@ type N4ValidatedOptionSet = {
   recommendedOptionId: string | null;
   requiresHumanReview: boolean;
   warnings: TopicSelectionGateIssue[];
+};
+
+type N4DraftResolution = {
+  artifactRefs: TopicSelectionFunctionalRef[];
+  draft: TopicSelectionV1bResearchSliceOptionSetDraftPayload;
+  draftHash: string;
+  semanticArtifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef;
 };
 
 type N5LoadedOptionSet = {
@@ -484,6 +496,8 @@ export class TopicSelectionV1bWorkflowHarnessService {
   private readonly idFactory: IdFactory;
   private readonly now: () => string;
   private readonly modelProfileRegistry: TopicSelectionModelProfileRegistryService;
+  private readonly n4ResearchSliceAdmission = new TopicSelectionV1bN4ResearchSliceAdmissionService();
+  private readonly n4ResearchSliceRuntime: TopicSelectionV1bN4ResearchSliceRuntimeService;
   private readonly n6DraftAdmission = new TopicSelectionV1bN6DraftAdmissionService();
   private readonly n6DraftRuntime: TopicSelectionV1bN6DraftRuntimeService;
   private readonly n6LoopbackTriageAdmission = new TopicSelectionV1bN6LoopbackTriageAdmissionService();
@@ -506,6 +520,9 @@ export class TopicSelectionV1bWorkflowHarnessService {
     this.idFactory = options.idFactory ?? ((prefix) => `${prefix}_${crypto.randomUUID()}`);
     this.now = options.now ?? (() => new Date().toISOString());
     this.modelProfileRegistry = options.modelProfileRegistry ?? new TopicSelectionModelProfileRegistryService();
+    this.n4ResearchSliceRuntime = new TopicSelectionV1bN4ResearchSliceRuntimeService(controlPlane, {
+      modelProfileRegistry: this.modelProfileRegistry,
+    });
     this.n6DraftRuntime = new TopicSelectionV1bN6DraftRuntimeService(controlPlane, {
       modelProfileRegistry: this.modelProfileRegistry,
     });
@@ -2375,13 +2392,6 @@ export class TopicSelectionV1bWorkflowHarnessService {
         message: payload.message,
       });
     }
-    const draftResolution = await this.resolveN4DraftPayload(input);
-    if (!draftResolution.ok) {
-      return this.persistBlockedResult(input, hashContext, {
-        blockerCode: draftResolution.code,
-        message: draftResolution.message,
-      });
-    }
 
     const v1bRepository = this.runnerDependencies.v1bIntakeRepository!;
     const researchSliceRepository = this.runnerDependencies.researchSliceRepository!;
@@ -2422,12 +2432,21 @@ export class TopicSelectionV1bWorkflowHarnessService {
     }
 
     const planningInput = this.buildN4PlanningInput(snapshot, profile, readiness);
+    const draftResolution = await this.resolveN4DraftPayload(input, payload.value, planningInput);
+    if (!draftResolution.ok) {
+      return this.persistBlockedResult(input, hashContext, {
+        blockerCode: draftResolution.code,
+        message: draftResolution.message,
+      });
+    }
+    const resolvedDraft = draftResolution.value;
+
     const planRunId = this.idFactory('plan_research_slice_run');
     const optionSetId = this.idFactory('research_slice_option_set');
     const optionSetRef = this.ref('research_slice_option_set', optionSetId, snapshot.title_card_id);
     const planRunRef = this.ref('plan_research_slice_run', planRunId, snapshot.title_card_id);
     const validation = this.validateAndBuildN4Options({
-      draft: draftResolution.draft,
+      draft: resolvedDraft.draft,
       optionSetId,
       planningInput,
       titleCardId: snapshot.title_card_id,
@@ -2441,7 +2460,7 @@ export class TopicSelectionV1bWorkflowHarnessService {
     }
 
     const authorityHash = this.hash({
-      draft_hash: draftResolution.draftHash,
+      draft_hash: resolvedDraft.draftHash,
       intake_readiness_hash: readinessHash,
       n3_handoff_hash: payload.value.n3_handoff_hash,
       option_keys: validation.value.options.map((option) => option.option_key),
@@ -2480,7 +2499,7 @@ export class TopicSelectionV1bWorkflowHarnessService {
       sourceGateResultHash: gateResultHash,
       upstreamLineageHash: this.hash({
         constraint_profile_hash: profileHash,
-        draft_hash: draftResolution.draftHash,
+        draft_hash: resolvedDraft.draftHash,
         intake_readiness_hash: readinessHash,
         n3_handoff_hash: payload.value.n3_handoff_hash,
         snapshot_hash: snapshotHash,
@@ -2502,7 +2521,7 @@ export class TopicSelectionV1bWorkflowHarnessService {
       targetRef: optionSetRef,
       tracePhase: 'T-107 N4 research slice option runner',
       tracePayload: {
-        draft_hash: draftResolution.draftHash,
+        draft_hash: resolvedDraft.draftHash,
         high_risk_option_count: validation.value.highRiskOptionCount,
         option_count: validation.value.options.length,
         recommended_option_id: validation.value.recommendedOptionId,
@@ -2512,7 +2531,7 @@ export class TopicSelectionV1bWorkflowHarnessService {
     }, {
       writeAuthority: async (prepared) => {
         const artifactRefs = this.uniqueRefs([
-          ...draftResolution.artifactRefs,
+          ...resolvedDraft.artifactRefs,
           prepared.handoffRef,
         ]);
         const now = this.now();
@@ -2540,12 +2559,12 @@ export class TopicSelectionV1bWorkflowHarnessService {
           memory_suggestion_refs: snapshot.memory_suggestion_refs,
           recheck_request_refs: snapshot.recheck_request_refs,
           gap_codes: snapshot.gap_codes,
-          workflow_profile_key: draftResolution.semanticArtifact.profile_id,
+          workflow_profile_key: resolvedDraft.semanticArtifact.profile_id,
           workflow_profile_version: input.policy_version,
           provider_id: null,
           model_id: null,
-          prompt_template_id: draftResolution.semanticArtifact.output_contract,
-          prompt_template_version: draftResolution.semanticArtifact.adapter_policy_version,
+          prompt_template_id: resolvedDraft.semanticArtifact.output_contract,
+          prompt_template_version: resolvedDraft.semanticArtifact.adapter_policy_version,
           input_snapshot_id: prepared.inputSnapshot.input_snapshot_id,
           workflow_run_id: input.workflow_run_id,
           option_set_id: optionSetId,
@@ -2576,20 +2595,20 @@ export class TopicSelectionV1bWorkflowHarnessService {
           option_count: validation.value.options.length,
           high_risk_option_count: validation.value.highRiskOptionCount,
           requires_human_review: validation.value.requiresHumanReview,
-          comparison_axes: draftResolution.draft.comparison_axes,
-          comparison_summary: draftResolution.draft.comparison_summary,
-          missing_option_types: draftResolution.draft.missing_option_types,
-          unresolved_disagreements: draftResolution.draft.unresolved_disagreements,
-          human_review_triggers: draftResolution.draft.human_review_triggers,
-          options_payload: { options: draftResolution.draft.options },
+          comparison_axes: resolvedDraft.draft.comparison_axes,
+          comparison_summary: resolvedDraft.draft.comparison_summary,
+          missing_option_types: resolvedDraft.draft.missing_option_types,
+          unresolved_disagreements: resolvedDraft.draft.unresolved_disagreements,
+          human_review_triggers: resolvedDraft.draft.human_review_triggers,
+          options_payload: { options: resolvedDraft.draft.options },
           comparison_payload: {
             authority_hash: authorityHash,
             constraint_profile_hash: profileHash,
-            draft_hash: draftResolution.draftHash,
+            draft_hash: resolvedDraft.draftHash,
             intake_readiness_hash: readinessHash,
             n3_handoff_hash: payload.value.n3_handoff_hash,
-            recommended_option_key: draftResolution.draft.recommended_option_key ?? null,
-            semantic_artifact_ref: draftResolution.semanticArtifact.normalized_output_ref,
+            recommended_option_key: resolvedDraft.draft.recommended_option_key ?? null,
+            semantic_artifact_ref: resolvedDraft.semanticArtifact.normalized_output_ref,
             warning_codes: validation.value.warnings.map((warning) => warning.code),
           },
           input_snapshot_id: prepared.inputSnapshot.input_snapshot_id,
@@ -10582,13 +10601,9 @@ export class TopicSelectionV1bWorkflowHarnessService {
 
   private async resolveN4DraftPayload(
     input: TopicSelectionV1bWorkflowHarnessRunRequest,
-  ): Promise<{
-    ok: true;
-    artifactRefs: TopicSelectionFunctionalRef[];
-    draft: TopicSelectionV1bResearchSliceOptionSetDraftPayload;
-    draftHash: string;
-    semanticArtifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef;
-  } | { ok: false; code: string; message: string }> {
+    payload: TopicSelectionV1bN4HarnessFrozenInputPayload,
+    planningInput: TopicSelectionV1bResearchSlicePlanningInput,
+  ): Promise<{ ok: true; value: N4DraftResolution } | { ok: false; code: string; message: string }> {
     const semanticArtifact = (input.semantic_artifacts ?? []).find((artifact) =>
       artifact.slot_id === 'n4_research_slice_option_draft'
       && artifact.allowed_effect === 'model_draft_for_gate'
@@ -10633,7 +10648,8 @@ export class TopicSelectionV1bWorkflowHarnessService {
     const draftHash = this.hash(draftPayload);
     if (
       draftHash !== semanticArtifact.normalized_output_hash
-      && draftHash !== semanticArtifact.structured_output_hash
+      || draftHash !== semanticArtifact.structured_output_hash
+      || draftHash !== semanticArtifact.support_artifact_hash
     ) {
       return {
         ok: false,
@@ -10641,17 +10657,158 @@ export class TopicSelectionV1bWorkflowHarnessService {
         message: 'N4 ResearchSliceOptionSetDraft payload hash does not match semantic artifact provenance.',
       };
     }
-    return {
-      ok: true,
-      artifactRefs: this.uniqueRefs([
-        semanticArtifact.support_artifact_ref,
-        semanticArtifact.normalized_output_ref,
-        semanticArtifact.provenance_ref,
-      ]),
-      draft: draftPayload,
+    if (
+      semanticArtifact.runtime_provenance_class === 'runtime_verified'
+      && semanticArtifact.execution_mode !== 'codex_assisted'
+      && semanticArtifact.execution_mode !== 'mocked_llm'
+    ) {
+      return {
+        ok: false,
+        code: 'N4_DRAFT_ARTIFACT_PROVENANCE_CLASS_INVALID',
+        message: 'runtime_verified v1b N4 research-slice draft artifacts must be generated by the N4 runtime.',
+      };
+    }
+    if (semanticArtifact.runtime_provenance_class === 'runtime_verified') {
+      const auditVerification = await this.verifyN4RuntimeVerifiedDraftAuditArtifact(input, semanticArtifact);
+      if (!auditVerification.ok) {
+        return auditVerification;
+      }
+    }
+    const admissionExecutionMode = semanticArtifact.execution_mode === 'mocked_llm'
+      ? 'mocked_llm'
+      : 'codex_assisted';
+    const expectedIdentity = this.resolveN4ResearchSliceAdmissionExpectedIdentity({
+      input,
+      payload,
+      planningInput,
       draftHash,
       semanticArtifact,
+      admissionExecutionMode,
+    });
+    if (!expectedIdentity.ok) {
+      return expectedIdentity;
+    }
+    const admission = this.n4ResearchSliceAdmission.admit({
+      artifact: semanticArtifact,
+      expected: expectedIdentity.value,
+      allow_fixture_replay: input.run_mode !== 'product',
+    });
+    if (!admission.admitted) {
+      return {
+        ok: false,
+        code: admission.blocker.code,
+        message: admission.blocker.message,
+      };
+    }
+    return {
+      ok: true,
+      value: {
+        artifactRefs: this.uniqueRefs([
+          semanticArtifact.support_artifact_ref,
+          semanticArtifact.normalized_output_ref,
+          semanticArtifact.provenance_ref,
+        ]),
+        draft: draftPayload,
+        draftHash,
+        semanticArtifact,
+      },
     };
+  }
+
+  private async verifyN4RuntimeVerifiedDraftAuditArtifact(
+    input: TopicSelectionV1bWorkflowHarnessRunRequest,
+    artifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef,
+  ): Promise<{ ok: true } | { ok: false; code: string; message: string }> {
+    if (
+      !artifact.runtime_audit_ref
+      || artifact.runtime_audit_ref.ref_type !== 'artifact_ref'
+      || !this.refsEqual(artifact.provenance_ref, artifact.runtime_audit_ref)
+    ) {
+      return this.n4RuntimeAuditDrift('N4 runtime research-slice draft provenance must point to its audit artifact_ref.');
+    }
+    const auditArtifact = await this.controlPlane.getArtifactRef(artifact.runtime_audit_ref.ref_id);
+    if (
+      !auditArtifact
+      || auditArtifact.artifact_kind !== 'diagnostic'
+      || auditArtifact.checksum !== artifact.runtime_audit_hash
+      || auditArtifact.workflow_run_id !== input.workflow_run_id
+    ) {
+      return this.n4RuntimeAuditDrift('N4 runtime research-slice draft audit artifact is missing or checksum-drifted.');
+    }
+    const auditPayload = auditArtifact.payload;
+    if (!this.isRecord(auditPayload) || !this.isRecord(auditPayload.provenance)) {
+      return this.n4RuntimeAuditDrift('N4 runtime research-slice draft audit payload is not a valid invocation audit snapshot.');
+    }
+    const provenance = auditPayload.provenance;
+    const expectedSourceKind = artifact.execution_mode === 'mocked_llm' ? 'mock_fixture' : 'codex_response';
+    if (
+      auditPayload.node_id !== input.node_id
+      || auditPayload.workflow_run_id !== input.workflow_run_id
+      || auditPayload.node_attempt_id !== input.node_attempt_id
+      || auditPayload.status !== 'succeeded'
+      || provenance.workflow_run_id !== input.workflow_run_id
+      || provenance.node_id !== input.node_id
+      || provenance.node_attempt_id !== input.node_attempt_id
+      || provenance.execution_mode !== artifact.execution_mode
+      || provenance.source_kind !== expectedSourceKind
+      || provenance.non_provider !== true
+      || provenance.run_mode !== artifact.run_mode
+      || provenance.profile_id !== artifact.profile_id
+      || provenance.model_option_id !== artifact.model_option_id
+      || provenance.output_contract !== artifact.output_contract
+      || provenance.prompt_packet_hash !== artifact.prompt_packet_hash
+      || provenance.structured_output_hash !== artifact.structured_output_hash
+      || provenance.cache_status !== 'not_applicable'
+      || provenance.response_reuse_ref !== null
+      || provenance.telemetry !== null
+    ) {
+      return this.n4RuntimeAuditDrift('N4 runtime research-slice draft audit provenance does not match the draft artifact identity.');
+    }
+    return { ok: true };
+  }
+
+  private n4RuntimeAuditDrift(message: string): { ok: false; code: string; message: string } {
+    return {
+      ok: false,
+      code: 'N4_DRAFT_ARTIFACT_RUNTIME_CONTEXT_DRIFT',
+      message,
+    };
+  }
+
+  private resolveN4ResearchSliceAdmissionExpectedIdentity(input: {
+    input: TopicSelectionV1bWorkflowHarnessRunRequest;
+    payload: TopicSelectionV1bN4HarnessFrozenInputPayload;
+    planningInput: TopicSelectionV1bResearchSlicePlanningInput;
+    draftHash: string;
+    semanticArtifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef;
+    admissionExecutionMode: Extract<TopicSelectionAgentExecutionMode, 'codex_assisted' | 'mocked_llm'>;
+  }): { ok: true; value: TopicSelectionV1bN4ResearchSliceAdmissionExpectedIdentity } | {
+    ok: false;
+    code: string;
+    message: string;
+  } {
+    try {
+      const value = this.n4ResearchSliceRuntime.buildAdmissionExpectedIdentity({
+        request: input.input,
+        frozenPayload: input.payload,
+        planningInput: input.planningInput,
+        normalizedPayloadHash: input.draftHash,
+        executionMode: input.admissionExecutionMode,
+        runMode: input.input.run_mode ?? input.semanticArtifact.run_mode,
+        profileId: input.semanticArtifact.profile_id,
+        modelOptionId: input.semanticArtifact.model_option_id,
+      });
+      return { ok: true, value };
+    } catch (error) {
+      if (error instanceof AppError) {
+        return {
+          ok: false,
+          code: 'N4_DRAFT_ARTIFACT_RUNTIME_CONTEXT_DRIFT',
+          message: error.message,
+        };
+      }
+      throw error;
+    }
   }
 
   private extractN4DraftPayload(

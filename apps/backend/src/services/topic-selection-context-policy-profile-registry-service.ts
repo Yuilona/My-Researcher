@@ -78,6 +78,15 @@ export const TOPIC_SELECTION_V1A_N8_INVOCATION_SLOT_IDS = {
   confirmation_semantic_review: 'confirmation_semantic_review',
 } as const;
 
+export const TOPIC_SELECTION_V1B_N4_CONTEXT_RUNTIME_PROFILE_IDS = {
+  research_slice_option_draft:
+    'topic-selection.v1b.n4.research-slice-options.context-runtime@v1',
+} as const;
+
+export const TOPIC_SELECTION_V1B_N4_INVOCATION_SLOT_IDS = {
+  research_slice_option_draft: 'n4_research_slice_option_draft',
+} as const;
+
 export const TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS = {
   question_candidate_draft:
     'topic-selection.v1b.n6.question-candidate-draft.context-runtime@v1',
@@ -381,6 +390,47 @@ const DEFAULT_TOPIC_SELECTION_CONTEXT_POLICY_PROFILE_REGISTRY:
           'schema_validation',
           'semantic_review_gate',
           'human_authority_boundary',
+        ],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1B_N4_CONTEXT_RUNTIME_PROFILE_IDS.research_slice_option_draft,
+        invocation_slot_id: TOPIC_SELECTION_V1B_N4_INVOCATION_SLOT_IDS.research_slice_option_draft,
+        functional_template: 'candidate_for_deterministic_gate',
+        context_family: 'v1b_n4_research_slice_option_generation',
+        estimated_input_token_target: 22000,
+        estimated_output_token_budget: 4096,
+        preserved_fact_kinds: [
+          ...COMMON_PRESERVED_FACT_KINDS,
+          'n3_handoff',
+          'intake_snapshot_identity',
+          'constraint_profile',
+          'intake_readiness',
+          'validated_need',
+          'evidence_role_bundle',
+          'evidence_ref',
+          'claim_ceiling',
+          'non_goal',
+          'accepted_risk',
+          'risk_gap_blocker_fact',
+          'recheck_hint',
+          'memory_suggestion',
+          'source_health_warning',
+          'planning_input',
+        ],
+        post_reuse_gates: [
+          'schema_validation',
+          'draft_admission',
+          'compression_structure_manifest',
+          'deterministic_gate',
+          'authority_boundary',
+        ],
+        post_cache_gates: [
+          'schema_validation',
+          'draft_admission',
+          'compression_structure_manifest',
+          'deterministic_gate',
+          'authority_boundary',
         ],
       }),
       contextPolicyProfile({

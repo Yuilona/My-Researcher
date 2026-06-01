@@ -9,8 +9,10 @@ import {
   stableStringify,
 } from './literature-content-processing-utils.js';
 import {
+  type TopicSelectionV1bResearchSliceOptionSetDraftPayload,
   type TopicSelectionV1bTopicQuestionCandidateSetDraftPayload,
   type TopicSelectionV1bTopicValueAssessmentDraftPayload,
+  topicSelectionV1bResearchSliceOptionSetDraftPayloadSchema,
   topicSelectionV1bTopicQuestionCandidateSetDraftPayloadSchema,
   topicSelectionV1bTopicValueAssessmentDraftPayloadSchema,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-workflow-harness-contracts';
@@ -27,6 +29,8 @@ import {
 import {
   TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1B_N4_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1B_N4_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1B_N8_CONTEXT_RUNTIME_PROFILE_IDS,
@@ -36,6 +40,7 @@ import {
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
 import {
   TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID,
   TopicSelectionModelProfileRegistryService,
@@ -175,6 +180,55 @@ export class TopicSelectionProviderCanaryService {
     const orchestrator = this.makeOrchestrator(countingGateway);
     const result = await orchestrator.invokeStructuredOutput<TopicSelectionProviderCanaryCandidateDraftBatch>(
       this.providerInvocation(input.provider_id, {
+        estimated_input_tokens_override: 200_000,
+        compression_already_applied: true,
+      }),
+    );
+
+    return {
+      provider_id: input.provider_id,
+      model_option_id: modelOptionId,
+      provider_call_count: countingGateway.callCount,
+      status: result.status,
+      error_code: result.error_code,
+      token_budget_gate_decision: result.token_budget_gate_result?.decision ?? null,
+      blocker_codes: result.blocker_codes,
+    };
+  }
+
+  async runV1bN4PromptCacheLiveRequiredCanary(
+    input: { provider_id: TopicSelectionProviderCanaryProviderId },
+  ): Promise<TopicSelectionProviderCanaryLiveRequiredEvidence> {
+    const modelOptionId = this.v1bN4ModelOptionId(input.provider_id);
+    const countingGateway = new CountingTopicSelectionProviderCanaryGateway(this.llmGateway);
+    const orchestrator = this.makeOrchestrator(countingGateway);
+    const invocation = this.v1bN4ProviderInvocation(input.provider_id, {
+      estimated_input_tokens_override: 1000,
+    });
+    const first = await orchestrator.invokeStructuredOutput<TopicSelectionV1bResearchSliceOptionSetDraftPayload>(
+      invocation,
+    );
+    const second = await orchestrator.invokeStructuredOutput<TopicSelectionV1bResearchSliceOptionSetDraftPayload>(
+      invocation,
+    );
+
+    return this.liveRequiredEvidence({
+      providerId: input.provider_id,
+      modelOptionId,
+      first,
+      second,
+      countingGateway,
+    });
+  }
+
+  async runV1bN4OverBudgetZeroCallCanary(
+    input: { provider_id: TopicSelectionProviderCanaryProviderId },
+  ): Promise<TopicSelectionProviderCanaryOverBudgetEvidence> {
+    const modelOptionId = this.v1bN4ModelOptionId(input.provider_id);
+    const countingGateway = new CountingTopicSelectionProviderCanaryGateway(this.llmGateway);
+    const orchestrator = this.makeOrchestrator(countingGateway);
+    const result = await orchestrator.invokeStructuredOutput<TopicSelectionV1bResearchSliceOptionSetDraftPayload>(
+      this.v1bN4ProviderInvocation(input.provider_id, {
         estimated_input_tokens_override: 200_000,
         compression_already_applied: true,
       }),
@@ -357,6 +411,80 @@ export class TopicSelectionProviderCanaryService {
       runtime_token_budget: {
         context_policy_profile: resolvedContextProfile.profile,
         context_policy_profile_hash: resolvedContextProfile.profile_hash,
+        estimated_input_tokens_override: runtimeOptions.estimated_input_tokens_override,
+        compression_already_applied: runtimeOptions.compression_already_applied ?? false,
+      },
+      created_by: 'system',
+    };
+  }
+
+  private v1bN4ProviderInvocation(
+    providerId: TopicSelectionProviderCanaryProviderId,
+    runtimeOptions: {
+      estimated_input_tokens_override: number;
+      compression_already_applied?: boolean;
+    },
+  ): TopicSelectionAgentInvocationRequest<TopicSelectionV1bResearchSliceOptionSetDraftPayload> {
+    const resolvedContextProfile = this.contextProfileRegistry.resolveProfile({
+      context_policy_profile_id:
+        TOPIC_SELECTION_V1B_N4_CONTEXT_RUNTIME_PROFILE_IDS.research_slice_option_draft,
+      invocation_slot_id:
+        TOPIC_SELECTION_V1B_N4_INVOCATION_SLOT_IDS.research_slice_option_draft,
+    });
+    this.assertProviderRequiredLiveProfile(
+      resolvedContextProfile.profile.execution_modifiers,
+    );
+
+    return {
+      workspace_id: 'workspace_provider_canary',
+      title_card_id: 'title_card_provider_canary',
+      node_id: 'topic-selection.v1b.generate-research-slice-options.v1',
+      workflow_run_id: `provider_canary_v1b_n4_${providerId}_workflow_run_001`,
+      node_attempt_id: `provider_canary_v1b_n4_${providerId}_node_attempt_001`,
+      invocation_attempt_id: `provider_canary_v1b_n4_${providerId}_initial_from_n3`,
+      execution_mode: 'provider_llm',
+      executor_kind: 'single_agent',
+      run_mode: 'acceptance',
+      profile_id: TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID,
+      model_option_id: this.v1bN4ModelOptionId(providerId),
+      output_contract: 'ResearchSliceOptionSetDraft@v1',
+      prompt: {
+        promptTemplateId: 'topic-selection-v1b-n4-provider-canary-live-required',
+        version: 'v1',
+      },
+      prompt_variant_key: 'n4_research_slice_option_draft.initial_from_n3',
+      schema_name: 'topic_selection_v1b_n4_provider_canary_draft',
+      schema: topicSelectionV1bResearchSliceOptionSetDraftPayloadSchema as unknown as Record<string, unknown>,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Return only JSON matching ResearchSliceOptionSetDraft@v1 for a v1b N4 provider live invocation canary.',
+        },
+        {
+          role: 'user',
+          content: [
+            'Return one synthetic research-slice option set draft.',
+            'Use the supplied reference draft values exactly unless JSON Schema validation requires a small correction.',
+            stableStringify(this.v1bN4CanaryReferenceDraft()),
+          ].join(' '),
+        },
+      ],
+      context_packet_refs: [
+        {
+          ref_type: 'artifact_ref',
+          ref_id: `provider_canary_v1b_n4_${providerId}_context_packet_001`,
+          title_card_id: 'title_card_provider_canary',
+        },
+      ],
+      runtime_token_budget: {
+        context_policy_profile: resolvedContextProfile.profile,
+        context_policy_profile_hash: resolvedContextProfile.profile_hash,
+        runtime_invocation_context_hash: this.hash({
+          scenario_id: 'v1b_n4_research_slice_option_generation',
+          scenario_case_id: 'provider_canary_initial_from_n3',
+          provider_id: providerId,
+        }),
         estimated_input_tokens_override: runtimeOptions.estimated_input_tokens_override,
         compression_already_applied: runtimeOptions.compression_already_applied ?? false,
       },
@@ -553,6 +681,13 @@ export class TopicSelectionProviderCanaryService {
     return `${TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID}.${suffix}`;
   }
 
+  private v1bN4ModelOptionId(providerId: TopicSelectionProviderCanaryProviderId): string {
+    const suffix = providerId === 'openai'
+      ? 'openai-balanced'
+      : 'dashscope-thinking-budget';
+    return `${TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID}.${suffix}`;
+  }
+
   private v1bN6ModelOptionId(providerId: TopicSelectionProviderCanaryProviderId): string {
     const suffix = providerId === 'openai'
       ? 'openai-balanced'
@@ -594,6 +729,66 @@ export class TopicSelectionProviderCanaryService {
           },
         },
       },
+    };
+  }
+
+  private v1bN4CanaryReferenceDraft(): TopicSelectionV1bResearchSliceOptionSetDraftPayload {
+    const evidenceRef = this.ref('evidence_unit', 'provider_canary_evidence_001');
+    const needRef = this.ref('validated_need', 'provider_canary_need_001');
+    return {
+      recommended_option_key: 'provider_canary_slice',
+      comparison_axes: ['runtime provenance', 'evidence traceability'],
+      comparison_summary:
+        'The synthetic slice is suitable only for validating N4 provider-live prompt-cache semantics.',
+      missing_option_types: [],
+      unresolved_disagreements: [],
+      human_review_triggers: [],
+      options: [
+        {
+          option_key: 'provider_canary_slice',
+          source_validated_need_refs: [needRef],
+          slice_statement:
+            'Validate provider-live runtime semantics for v1b N4 research-slice option drafting.',
+          problem_space: 'Runtime provenance and prompt-cache behavior in topic selection.',
+          target_setting: 'Local-first CS paper engineering assistant workflows.',
+          target_community: 'LLM systems researchers',
+          included_boundaries: ['N4 provider canary prompt-cache and token-budget semantics'],
+          excluded_boundaries: ['business authority creation', 'topic promotion decision', 'full paper implementation'],
+          contribution_type_candidate: 'workflow_system',
+          support_evidence_refs: [evidenceRef],
+          challenge_evidence_refs: [evidenceRef],
+          baseline_evidence_refs: [evidenceRef],
+          context_evidence_refs: [evidenceRef],
+          resource_assumptions: ['The canary uses synthetic ref-backed runtime evidence only.'],
+          data_assumptions: ['No business corpus data is used as authority in this canary.'],
+          evaluation_path:
+            'Run the provider canary twice and verify prompt packet reuse does not become provider response reuse.',
+          baseline_assumptions: ['A transport-only provider check is insufficient for N4 runtime semantics.'],
+          hard_blockers: [],
+          dependency_risks: ['Provider structured output behavior may drift.'],
+          slice_budget: { max_nodes: 1 },
+          expected_claim:
+            'The shared runtime can keep v1b N4 provider-required calls live while reusing prompt packet metadata.',
+          fallback_claim: 'The canary validates N4 provider transport and runtime provenance only.',
+          observable_success_criteria: ['two provider calls occur', 'response reuse refs remain null'],
+          main_risks: ['Synthetic provider canary output is non-authority.'],
+          baseline_risk: 'medium',
+          execution_risk: 'medium',
+          scope_risk: 'low',
+          claim_ceiling_alignment: {
+            status: 'aligned',
+            rationale: 'The claim is bounded to runtime semantics and auditability.',
+            confidence: 0.78,
+          },
+          confidence: 0.8,
+          requires_human_review: false,
+          human_review_triggers: [],
+          details_payload: {
+            canary: true,
+            non_authority: true,
+          },
+        },
+      ],
     };
   }
 

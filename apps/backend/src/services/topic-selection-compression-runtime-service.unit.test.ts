@@ -10,6 +10,8 @@ import { AppError } from '../errors/app-error.js';
 import {
   TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1B_N4_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1B_N4_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS,
@@ -104,6 +106,30 @@ function v1bN7RequiredFacts() {
     n8_gate_rejection_reason: ['novelty_gate_failed'],
     debate_admission_need: ['need_additional_value_risk_review'],
     value_risk_fact: ['risk_value_evidence_thin'],
+  };
+}
+
+function v1bN4RequiredFacts() {
+  return {
+    blocker: ['blocker_slice_scope_unclear'],
+    residual_risk: ['risk_slice_too_broad'],
+    accepted_risk: ['accepted_risk_provider_variance'],
+    source_health_warning: ['source_health_partial_n4'],
+    method_family_gap: ['gap_method_family_runtime_only'],
+    unresolved_challenge: ['challenge_slice_overlap'],
+    recheck_hint: ['recheck_after_slice_selection'],
+    n3_handoff: ['n3_handoff_hash_001'],
+    intake_snapshot_identity: ['intake_snapshot_hash_001'],
+    constraint_profile: ['constraint_profile_hash_001'],
+    intake_readiness: ['intake_readiness_hash_001'],
+    validated_need: ['validated_need_ref_hash_001'],
+    evidence_role_bundle: ['evidence_role_bundle_hash_001'],
+    evidence_ref: ['evidence_refs_hash_001'],
+    claim_ceiling: ['claim_ceiling_hash_001'],
+    non_goal: ['non_goal_promotion_001'],
+    risk_gap_blocker_fact: ['gap_code_scope_boundary'],
+    memory_suggestion: ['memory_suggestion_ref_001'],
+    planning_input: ['planning_input_hash_001'],
   };
 }
 
@@ -379,6 +405,118 @@ test('compression quality gate blocks when v1b N7 runtime support facts are drop
   assert.ok(groupingResult.blocker_codes.includes('COMPRESSION_REQUIRED_CANDIDATE_IDENTITY_DROPPED'));
   assert.ok(groupingResult.blocker_codes.includes('COMPRESSION_REQUIRED_CANDIDATE_ORDER_DROPPED'));
   assert.ok(groupingResult.blocker_codes.includes('COMPRESSION_REQUIRED_GROUPING_RATIONALE_DROPPED'));
+});
+
+test('compression quality gate blocks when v1b N4 long-context facts are dropped', () => {
+  const n4Profile = resolvedContextProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N4_CONTEXT_RUNTIME_PROFILE_IDS.research_slice_option_draft,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1B_N4_INVOCATION_SLOT_IDS.research_slice_option_draft,
+  });
+  const runtime = new TopicSelectionCompressionRuntimeService();
+  const result = runtime.createReport({
+    context_policy_profile: n4Profile.profile,
+    context_policy_profile_hash: n4Profile.profile_hash,
+    compression_report_ref: ref('artifact_ref', 'compression_report_v1b_n4_long_context'),
+    source_refs: [ref('artifact_ref', 'n4_research_slice_context_packet')],
+    input_context: {
+      frozen_n3_lineage: {
+        n3_handoff_hash: 'n3_handoff_hash_001',
+        intake_snapshot_hash: 'intake_snapshot_hash_001',
+        constraint_profile_hash: 'constraint_profile_hash_001',
+        intake_readiness_hash: 'intake_readiness_hash_001',
+        planning_input_hash: 'planning_input_hash_001',
+      },
+      long_research_slice_context_chunks: Array.from({ length: 24 }, (_, index) => ({
+        chunk_id: `slice_chunk_${index + 1}`,
+        validated_need: 'validated_need_ref_hash_001',
+        evidence_role_bundle: 'evidence_role_bundle_hash_001',
+        evidence_ref: 'evidence_refs_hash_001',
+        claim_ceiling: 'claim_ceiling_hash_001',
+        non_goal: 'non_goal_promotion_001',
+        blocker: 'blocker_slice_scope_unclear',
+        residual_risk: 'risk_slice_too_broad',
+        accepted_risk: 'accepted_risk_provider_variance',
+        source_health_warning: 'source_health_partial_n4',
+        method_family_gap: 'gap_method_family_runtime_only',
+        unresolved_challenge: 'challenge_slice_overlap',
+        recheck_hint: 'recheck_after_slice_selection',
+        risk_gap_blocker_fact: 'gap_code_scope_boundary',
+        memory_suggestion: 'memory_suggestion_ref_001',
+      })),
+    },
+    compressed_context: {
+      frozen_n3_lineage: {
+        intake_snapshot_hash: 'intake_snapshot_hash_001',
+      },
+      summary:
+        'Dropped N3 handoff, readiness, planning input, evidence, claim ceiling, non-goal, risk, and recheck facts.',
+    },
+    summary: 'Incomplete N4 long-context compression.',
+    compression_executor_kind: 'codex_assisted',
+    required_preserved_facts: v1bN4RequiredFacts(),
+    compressed_preserved_facts: {
+      intake_snapshot_identity: ['intake_snapshot_hash_001'],
+      constraint_profile: ['constraint_profile_hash_001'],
+      source_health_warning: ['source_health_partial_n4'],
+    },
+    estimated_input_tokens_before_override: 52_000,
+    estimated_input_tokens_after_override: 11_000,
+  });
+
+  assert.equal(result.quality_gate_result, 'blocked');
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_BLOCKER_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_RESIDUAL_RISK_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_ACCEPTED_RISK_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_METHOD_FAMILY_GAP_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_UNRESOLVED_CHALLENGE_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_RECHECK_HINT_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_N3_HANDOFF_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_INTAKE_READINESS_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_VALIDATED_NEED_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_EVIDENCE_ROLE_BUNDLE_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_EVIDENCE_REF_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_CLAIM_CEILING_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_NON_GOAL_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_RISK_GAP_BLOCKER_FACT_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_MEMORY_SUGGESTION_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_PLANNING_INPUT_DROPPED'));
+});
+
+test('compression quality gate blocks v1b N4 adversarial persisted payloads', () => {
+  const n4Profile = resolvedContextProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N4_CONTEXT_RUNTIME_PROFILE_IDS.research_slice_option_draft,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1B_N4_INVOCATION_SLOT_IDS.research_slice_option_draft,
+  });
+  const runtime = new TopicSelectionCompressionRuntimeService();
+  const result = runtime.createReport({
+    context_policy_profile: n4Profile.profile,
+    context_policy_profile_hash: n4Profile.profile_hash,
+    compression_report_ref: ref('artifact_ref', 'compression_report_v1b_n4_adversarial_payload'),
+    source_refs: [ref('artifact_ref', 'n4_research_slice_context_packet')],
+    input_context: {
+      n3_handoff_hash: 'n3_handoff_hash_001',
+      planning_input_hash: 'planning_input_hash_001',
+      evidence_refs_hash: 'evidence_refs_hash_001',
+    },
+    compressed_context: {
+      preserved_hashes: ['n3_handoff_hash_001', 'planning_input_hash_001', 'evidence_refs_hash_001'],
+      raw_provider_logs: ['provider request body must never persist in N4 compressed context'],
+    },
+    summary: 'Compressed N4 context with an adversarial raw provider log field.',
+    compression_executor_kind: 'deterministic_structural',
+    required_preserved_facts: v1bN4RequiredFacts(),
+    compressed_preserved_facts: v1bN4RequiredFacts(),
+    estimated_input_tokens_before_override: 22_000,
+    estimated_input_tokens_after_override: 7_000,
+  });
+
+  assert.equal(result.quality_gate_result, 'blocked');
+  assert.ok(result.blocker_codes.includes('COMPRESSION_FORBIDDEN_PERSISTED_PAYLOAD'));
+  assert.match(result.warning_codes.join(' '), /compressed_payload\.raw_provider_logs/);
 });
 
 test('compression quality gate blocks when v1b N6 long-context facts are dropped', () => {

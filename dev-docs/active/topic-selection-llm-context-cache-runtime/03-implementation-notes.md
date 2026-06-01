@@ -1027,6 +1027,24 @@
   - add uneven provider slices: DashScope N7/N8 and OpenAI N8;
   - optional N9 terminal context handoff audit projection.
 
+## 2026-06-01 - v1b N4 Runtime First Slice
+- Promoted the initial N4 research-slice option draft path.
+  - First slice is limited to `n4_research_slice_option_draft.initial_from_n3`.
+  - N5 request-more-options, N4 retry variants, provider canaries, and Prisma-backed smoke are deferred until the initial path is stable.
+  - Product-mode N4 admission now requires `runtime_verified` provenance from `TopicSelectionV1bN4ResearchSliceRuntimeService`; `fixture_replay` remains accepted only outside product.
+- Added N4 runtime/admission services.
+  - `TopicSelectionV1bN4ResearchSliceRuntimeService` builds a ref-backed context packet with frozen N1/N2/N3 lineage plus planning input derived from N1 intake snapshot, N2 constraint profile, and N3 readiness.
+  - Prompt identity includes frozen input hash, N2/N3 handoff hashes, N1/N2/N3 authority hashes, planning-input hash, evidence role-bundle hash, evidence refs hash, constraint digest hash, claim ceiling hash, non-goals hash, accepted-risk/recheck/memory hashes, output contract, profile hash, redaction policy, runtime modifiers, and compression identity when present.
+  - `TopicSelectionV1bN4ResearchSliceAdmissionService` blocks provenance/profile/prompt/runtime-audit/source-hash/payload drift and rejects legacy/unverified artifacts.
+- Added N4 compression self-check semantics.
+  - N4 emits a required-structure manifest for frozen lineage, planning input, evidence refs, required paths, preserved fact groups, forbidden authority fields, and deterministic gate ownership.
+  - Compression MUST preserve N3 handoff lineage, intake snapshot identity, constraint profile, readiness, validated need, evidence role bundle/refs, claim ceiling, non-goals, accepted risks, risk/gap/blocker facts, recheck hints, memory suggestions, source-health warnings, and planning input structure.
+  - Compression artifacts remain non-authority workflow evidence. Dropped required facts, forbidden payload classes, or manifest drift block before draft output/admission.
+- Preserved authority boundaries.
+  - Runtime output remains `model_draft_for_gate`.
+  - Only the deterministic N4 gate may create `ResearchSliceOptionSet`, `ResearchSliceOption`, `PlanResearchSliceRun`, or `N4ToN5Handoff`.
+  - Cache/compression/reuse cannot select a slice, create package/recheck records, or bypass N4 deterministic scope/evidence/claim-ceiling checks.
+
 ## 2026-06-01 - v1a Provider Slice Findings Closure
 - Ran the uneven v1a provider slices for DashScope N7/N8 and OpenAI N8 over the production-shaped N1-N9 harness using the balanced T-112 sample set.
 - DashScope N7 passed with one live provider invocation at the adjudication recommendation slot; no N7 code change was required.
@@ -1040,3 +1058,33 @@
 - Prompt binding now includes an explicit `output_lineage` block and instructs providers to copy lineage fields exactly, keep `review_reason_codes` empty for pass, and reserve reason codes for warning/manual-review cases.
 - The normalization is provider-only. Existing mocked/Codex lineage/provenance drift tests still block before `HumanConfirmedDecision` or `ValidatedNeed` authority writes.
 - OpenAI N8 passed after the same hardening, confirming the N8 provider slice is stable across OpenAI and DashScope through the shared `AgentOrchestrator -> BackendLlmGateway` path.
+
+## 2026-06-01 - v1b N4 L3 Prisma-Backed Runtime Smoke
+- Added `n4_runtime_smoke` to `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` and exposed it as `pnpm topic-selection:v1b-n4-runtime-smoke`.
+- The smoke reuses the existing Prisma-backed v1b WorkflowHarness rather than introducing a parallel runner.
+  - Setup drives N1/N2/N3 through HTTP and then loads persisted N1 intake snapshot, N2 constraint profile, and N3 readiness through the Prisma v1b intake repository to build the same planning input that production N4 admission derives.
+  - Runtime generation uses `TopicSelectionV1bN4ResearchSliceRuntimeService -> AgentOrchestrator` with the Prisma control plane and Prisma prompt packet cache store.
+  - Product-mode N4 admission consumes the generated `runtime_verified` semantic artifact and remains the only path that materializes `ResearchSliceOptionSet`, `ResearchSliceOption`, `PlanResearchSliceRun`, and `N4ToN5Handoff`.
+- L3 assertions cover product-mode runtime admission, exact replay with no additional artifact refs, source-hash drift blocking with `N4_DRAFT_ARTIFACT_SOURCE_HASH_DRIFT`, non-provider runtime audit provenance, response reuse staying `not_applicable`/`null`, and N4 prompt-index metadata-only rows.
+- This closes the N4 L3 local/dev smoke layer. N4 L4 provider/executor canary and L5 long-context/adversarial compression remain next.
+
+## 2026-06-01 - v1b N4 L4/L5 Local Verification Slice Implemented
+- Added v1b N4 provider canary methods to `TopicSelectionProviderCanaryService`.
+  - Local OpenAI/DashScope canaries use the real `ResearchSliceOptionSetDraft@v1` schema and N4 context profile.
+  - Prompt-cache exact hits still require two provider gateway calls, reuse only prompt artifact/quality-report refs, keep provider response cache status `not_applicable`, and keep response reuse refs `null`.
+  - Over-budget fixtures block with zero gateway calls.
+  - Live OpenAI/DashScope N4 provider canaries are present but gated by `T112_V1B_N4_PROVIDER_CANARY_LIVE=1`, `BACKEND_TEST_PRESERVE_REAL_ENV=1`, and provider keys.
+- Added N4 L5 compression/adversarial tests to `topic-selection-compression-runtime-service.unit.test.ts`.
+  - Dropping N4 long-context facts blocks for missing N3 handoff, intake readiness, validated need, evidence role bundle/refs, claim ceiling, non-goals, accepted risks, risk/gap/blocker facts, recheck hints, memory suggestions, and planning input.
+  - Persisting adversarial raw provider logs in compressed N4 context blocks with `COMPRESSION_FORBIDDEN_PERSISTED_PAYLOAD`.
+- `n4_research_slice_option_draft.initial_from_n3` now has L1/L2 implementation, L3 Prisma-backed smoke, L4 local provider canary gates, and L5 long-context/adversarial compression coverage. Fresh live provider evidence remains an explicit optional run, not an implicit default test.
+
+## 2026-06-01 - v1b N4 Live Provider Canary Evidence
+- Ran the explicit live v1b N4 provider canary gate with `T112_V1B_N4_PROVIDER_CANARY_LIVE=1` and local provider configuration.
+- OpenAI N4 live provider canary passed through `AgentOrchestrator -> BackendLlmGateway`.
+  - The canary used the N4 `ResearchSliceOptionSetDraft@v1` schema, live provider execution, and prompt-cache exact-hit repetition.
+  - It verified two provider calls, prompt packet hash equality, prompt artifact/quality-report reuse, provider response cache status `not_applicable`, null response reuse refs, and provider telemetry.
+- DashScope N4 live provider canary passed through the same runtime path.
+  - DashScope completed within the 300-second test timeout.
+  - The same provider-required-live and response non-reuse assertions passed.
+- N4 first-slice runtime closure now has L1/L2 implementation, L3 Prisma-backed smoke, L4 local and live provider evidence, and L5 long-context/adversarial compression coverage.

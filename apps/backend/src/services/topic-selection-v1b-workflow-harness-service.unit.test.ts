@@ -83,6 +83,7 @@ import {
   TopicSelectionV1bN6DraftRuntimeService,
   type TopicSelectionV1bN6DraftGenerationMode,
 } from './topic-selection-v1b-n6-draft-runtime-service.js';
+import { TopicSelectionV1bN4ResearchSliceRuntimeService } from './topic-selection-v1b-n4-research-slice-runtime-service.js';
 import { TopicSelectionV1bN6LoopbackTriageRuntimeService } from './topic-selection-v1b-n6-loopback-triage-runtime-service.js';
 import {
   TopicSelectionV1bN7SupportRuntimeService,
@@ -622,6 +623,88 @@ async function recordN4DraftArtifact(
     structured_output_hash: draftHash,
     provenance_ref: ref('artifact_ref', provenance.artifact_ref_id, TITLE_CARD_ID),
   });
+}
+
+async function n4RuntimePlanningInput(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+) {
+  const payload = input.frozen_input.payload as unknown as TopicSelectionV1bN4HarnessFrozenInputPayload;
+  const [snapshot, profile, readiness] = await Promise.all([
+    ctx.v1bRepository.findIntakeSnapshotById(payload.intake_snapshot_ref.ref_id),
+    ctx.v1bRepository.findResearchConstraintProfileById(payload.constraint_profile_ref.ref_id),
+    ctx.v1bRepository.findReadinessAssessmentById(payload.intake_readiness_ref.ref_id),
+  ]);
+  if (!snapshot || !profile || !readiness) {
+    throw new Error('N4 runtime fixture requires persisted N1/N2/N3 authorities.');
+  }
+  return {
+    v1b_input_bundle_ref: snapshot.v1b_input_bundle_ref,
+    v1b_intake_snapshot_ref: ref(
+      'v1b_intake_snapshot',
+      snapshot.v1b_intake_snapshot_id,
+      snapshot.title_card_id,
+      snapshot.snapshot_version,
+    ),
+    research_constraint_profile_ref: ref(
+      'research_constraint_profile',
+      profile.research_constraint_profile_id,
+      profile.title_card_id,
+      profile.profile_version,
+    ),
+    readiness_assessment_ref: ref(
+      'v1b_intake_readiness_assessment',
+      readiness.v1b_intake_readiness_assessment_id,
+      readiness.title_card_id,
+    ),
+    validated_need_ref: snapshot.validated_need_ref,
+    evidence_map_ref: snapshot.evidence_map_ref,
+    search_run_ref: snapshot.search_run_ref,
+    search_plan_ref: snapshot.search_plan_ref,
+    literature_snapshot_ref: snapshot.literature_snapshot_ref,
+    evidence_role_bundle: snapshot.evidence_role_bundle,
+    target_community: profile.target_community,
+    target_venue_class: profile.target_venue_class ?? null,
+    intended_contribution_style: profile.intended_contribution_style ?? null,
+    method_constraints: profile.method_constraints,
+    resource_constraints: profile.resource_constraints,
+    available_assets: profile.available_assets,
+    feasibility_budget: profile.feasibility_budget,
+    non_goals: profile.non_goals,
+    claim_ceiling: profile.claim_ceiling,
+    accepted_risk_refs: readiness.accepted_risk_refs,
+    gap_codes: snapshot.gap_codes,
+    memory_suggestion_refs: snapshot.memory_suggestion_refs,
+    recheck_request_refs: snapshot.recheck_request_refs,
+    handoff_payload: snapshot.handoff_payload,
+  };
+}
+
+async function generateN4RuntimeDraftArtifact(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  draft: TopicSelectionV1bResearchSliceOptionSetDraftPayload,
+  options: {
+    runMode?: NonNullable<TopicSelectionV1bWorkflowHarnessRunRequest['run_mode']>;
+  } = {},
+): Promise<TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef> {
+  const runtime = new TopicSelectionV1bN4ResearchSliceRuntimeService(ctx.controlPlane);
+  const generated = await runtime.generateDraftArtifact({
+    request: input,
+    planning_input: await n4RuntimePlanningInput(ctx, input),
+    execution_mode: 'codex_assisted',
+    run_mode: options.runMode ?? input.run_mode ?? 'acceptance',
+    codex_response: {
+      output: draft,
+      operator_label: 'unit-test-runtime',
+    },
+    created_by: 'system',
+  });
+  assert.equal(generated.status, 'succeeded');
+  if (generated.status !== 'succeeded') {
+    throw new Error('Expected N4 runtime draft generation to succeed.');
+  }
+  return generated.semantic_artifact;
 }
 
 async function runReadyN3(ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>) {
@@ -2611,6 +2694,142 @@ test('v1b workflow harness N4 creates research slice option set from frozen sema
     result.transition_attempt_ref!.ref_id,
   );
   assert.deepEqual(transitionRecord?.created_authority_refs, [result.authority_ref]);
+});
+
+test('v1b workflow harness N4 admits runtime-verified Codex research-slice draft in product mode', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n1, n2, n3 } = await runReadyN3(ctx);
+  const input = n4Request(n1, n2, n3, {
+    workflow_run_id: 'workflow_run_v1b_n4_runtime_product',
+    node_attempt_id: 'node_attempt_v1b_n4_runtime_product',
+    execution_spec: {
+      execution_mode: 'codex_assisted',
+      model_option_id: null,
+    },
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.research_slice_options_single_agent,
+    run_mode: 'product',
+  });
+  const draft = n4Draft();
+  const semanticArtifact = await generateN4RuntimeDraftArtifact(ctx, input, draft);
+
+  assert.equal(semanticArtifact.runtime_provenance_class, 'runtime_verified');
+  assert.equal(semanticArtifact.prompt_variant_key, 'n4_research_slice_option_draft.initial_from_n3');
+  assert.equal(
+    semanticArtifact.context_policy_profile_id,
+    'topic-selection.v1b.n4.research-slice-options.context-runtime@v1',
+  );
+  assert.match(semanticArtifact.source_hashes.n3_handoff_hash ?? '', /^[a-f0-9]{64}$/);
+  assert.match(semanticArtifact.source_hashes.planning_input_hash ?? '', /^[a-f0-9]{64}$/);
+
+  const result = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [semanticArtifact],
+  });
+  assert.equal(result.gate_status, 'admitted');
+  assert.equal(result.error_code, null);
+  assert.equal(result.authority_ref?.ref_type, 'research_slice_option_set');
+  assert.equal(result.handoff_ref?.ref_type, 'artifact_ref');
+});
+
+test('v1b workflow harness N4 blocks runtime research-slice draft source drift before authority write', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n1, n2, n3 } = await runReadyN3(ctx);
+  const input = n4Request(n1, n2, n3, {
+    workflow_run_id: 'workflow_run_v1b_n4_runtime_source_drift',
+    node_attempt_id: 'node_attempt_v1b_n4_runtime_source_drift',
+    execution_spec: {
+      execution_mode: 'codex_assisted',
+      model_option_id: null,
+    },
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.research_slice_options_single_agent,
+    run_mode: 'product',
+  });
+  const semanticArtifact = await generateN4RuntimeDraftArtifact(ctx, input, n4Draft());
+  const driftedArtifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef = {
+    ...semanticArtifact,
+    source_hashes: {
+      ...semanticArtifact.source_hashes,
+      planning_input_hash: '9'.repeat(64),
+    },
+  };
+
+  const result = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [driftedArtifact],
+  });
+  assert.equal(result.gate_status, 'blocked');
+  assert.equal(result.error_code, 'N4_DRAFT_ARTIFACT_SOURCE_HASH_DRIFT');
+  assert.equal(result.authority_ref, null);
+  assert.equal(result.handoff_ref, null);
+});
+
+test('v1b N4 runtime compression quality gate blocks dropped required planning facts before draft output', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n1, n2, n3 } = await runReadyN3(ctx);
+  const input = n4Request(n1, n2, n3, {
+    workflow_run_id: 'workflow_run_v1b_n4_runtime_compression_blocked',
+    node_attempt_id: 'node_attempt_v1b_n4_runtime_compression_blocked',
+  });
+  const runtime = new TopicSelectionV1bN4ResearchSliceRuntimeService(ctx.controlPlane);
+  const generated = await runtime.generateDraftArtifact({
+    request: input,
+    planning_input: await n4RuntimePlanningInput(ctx, input),
+    execution_mode: 'codex_assisted',
+    run_mode: 'acceptance',
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 120_000,
+      estimated_input_tokens_after_compression_override: 12_000,
+    },
+    compression_attempt: {
+      compression_executor_kind: 'deterministic_structural',
+      compressed_context: {
+        summary: 'Intentionally incomplete N4 compressed context for quality-gate regression.',
+        raw_provider_logs: ['must not be persisted in compressed runtime context'],
+      },
+      summary: {
+        preserved_fact_kinds: ['planning_input'],
+      },
+      compressed_preserved_facts: {
+        planning_input: ['incomplete'],
+      },
+    },
+    codex_response: {
+      output: n4Draft(),
+      operator_label: 'unit-test-runtime',
+    },
+    created_by: 'system',
+  });
+
+  assert.equal(generated.status, 'blocked');
+  assert.equal(generated.invocation_result.status, 'blocked');
+  assert.equal(generated.invocation_result.error_code, 'COMPRESSION_QUALITY_GATE_BLOCKED');
+  assert.ok(generated.invocation_result.blocker_codes.includes('COMPRESSION_QUALITY_GATE_BLOCKED'));
+  assert.ok(generated.invocation_result.blocker_codes.includes('COMPRESSION_FORBIDDEN_PERSISTED_PAYLOAD'));
+  assert.ok(generated.invocation_result.blocker_codes.includes('COMPRESSION_REQUIRED_N3_HANDOFF_DROPPED'));
+  assert.equal(generated.invocation_result.structured_output, null);
+});
+
+test('v1b workflow harness N4 blocks fixture replay research-slice draft in product mode', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n1, n2, n3 } = await runReadyN3(ctx);
+  const input = n4Request(n1, n2, n3, {
+    workflow_run_id: 'workflow_run_v1b_n4_fixture_product',
+    node_attempt_id: 'node_attempt_v1b_n4_fixture_product',
+    execution_spec: {
+      execution_mode: 'codex_assisted',
+      model_option_id: null,
+    },
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.research_slice_options_single_agent,
+    run_mode: 'product',
+  });
+  const result = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [await recordN4DraftArtifact(ctx, input, n4Draft())],
+  });
+  assert.equal(result.gate_status, 'blocked');
+  assert.equal(result.error_code, 'N4_DRAFT_ARTIFACT_PROVENANCE_CLASS_INVALID');
+  assert.equal(result.authority_ref, null);
+  assert.equal(result.handoff_ref, null);
 });
 
 test('v1b workflow harness N4 requires frozen semantic draft artifact and never live-executes execution_spec alone', async () => {

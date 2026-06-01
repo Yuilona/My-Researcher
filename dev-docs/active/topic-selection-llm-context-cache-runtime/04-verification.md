@@ -625,6 +625,18 @@
 | `T112_V1B_N8_PROVIDER_CANARY_LIVE=1 BACKEND_TEST_PRESERVE_REAL_ENV=1 pnpm --filter @paper-engineering-assistant/backend exec node --env-file=/Volumes/DataDisk/Project/My-Researcher/.env.local --test --loader ts-node/esm --test-name-pattern "provider canary live v1b N8" src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | Live v1b N8 OpenAI and DashScope canaries passed. Strong assertions now cover prompt-packet hash stability, prompt artifact/quality-report reuse, provider response cache statuses `not_applicable`, null response reuse refs, and two telemetry records. |
 | `git diff --check -- apps/backend/src/services/topic-selection-v1b-n8-value-assessment-admission-service.ts apps/backend/src/services/topic-selection-v1b-n8-value-assessment-runtime-service.ts apps/backend/src/services/topic-selection-v1b-workflow-harness-service.ts apps/backend/src/services/topic-selection-v1b-workflow-harness-service.unit.test.ts apps/backend/src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | No whitespace errors in the focused N8 quality-fix patch set. |
 
+## 2026-06-01 - v1b N4 Runtime First-Slice Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/backend exec tsc --noEmit` | passed | Backend TypeScript compile passed after adding N4 runtime/admission services, profile registry binding, and harness admission wiring. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm --test-name-pattern "v1b workflow harness N4\|v1b N4 runtime" src/services/topic-selection-v1b-workflow-harness-service.unit.test.ts` | passed | Focused N4 runtime/harness subset passed: 9 matching tests, 87 skipped. Coverage includes product-mode runtime-verified admission, source-hash drift blocking, fixture replay product blocking, compression dropped-fact/forbidden-payload blocking, frozen semantic fixture admission in acceptance, missing draft blocking, malformed draft blocking, semantic artifact hash drift, and frozen readiness drift. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-v1b-workflow-harness-service.unit.test.ts` | passed | Full v1b WorkflowHarness unit file passed: 96/96. This confirms the N4 runtime wiring did not regress existing N5-N11, N6 regeneration/triage, N7 support, N8 value, replay, or shell-admission coverage. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-context-policy-profile-registry-service.unit.test.ts` | passed | Context policy profile registry unit tests passed after adding the N4 profile id, invocation slot id, context family, preserved facts, and post-cache gates. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registry remains structurally valid; no provider/config-key drift was introduced by the N4 runtime slice. |
+| `git diff --check` | passed | No whitespace errors after the N4 runtime/documentation patch set. |
+| `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main` | passed | Project governance sync completed after N4 documentation updates. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after N4 documentation updates. |
+
 ## 2026-06-01 - v1a Provider Slices: DashScope N7/N8 + OpenAI N8
 | Command | Result | Notes |
 |---|---|---|
@@ -641,6 +653,29 @@
 | `git diff --check` | passed | No whitespace errors after v1a provider-slice code and documentation updates. |
 | `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main` | passed | Project governance sync completed after provider-slice documentation updates. |
 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed. |
+
+## 2026-06-01 - v1b N4 L3 Prisma-Backed Runtime Smoke
+| Command | Result | Notes |
+|---|---|---|
+| `node --check .ai/scripts/topic-selection-v1b-harness-e2e.mjs` | passed | v1b harness ESM script remains syntactically valid after adding `n4_runtime_smoke`. |
+| `node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package.json ok')"` | passed | Package JSON remains valid after adding `topic-selection:v1b-n4-runtime-smoke`. |
+| `git diff --check -- .ai/scripts/topic-selection-v1b-harness-e2e.mjs package.json` | passed | No whitespace errors in the N4 smoke script and package entry. |
+| `pnpm --filter @paper-engineering-assistant/backend exec tsc --noEmit` | passed | Backend TypeScript compile passed after importing the N4 runtime service and Prisma v1b intake repository into the ESM harness script. |
+| `TOPIC_SELECTION_V1B_HARNESS_RUN_ID=t112-v1b-n4-runtime-smoke-verify-20260601 pnpm topic-selection:v1b-n4-runtime-smoke` | passed | Prisma-backed `n4_runtime_smoke` passed. Product-mode runtime draft admission created a `ResearchSliceOptionSet` and `N4ToN5Handoff`; exact replay reused the same authority/handoff refs with no additional artifact refs; source-hash drift blocked with `N4_DRAFT_ARTIFACT_SOURCE_HASH_DRIFT`; runtime audit provenance stayed non-provider with response reuse `not_applicable`/`null`; prompt index created 2 N4 rows for `n4_research_slice_option_draft.initial_from_n3`. |
+
+## 2026-06-01 - v1b N4 L4/L5 Local Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | 24 provider canary tests executed: 16 local tests passed and 8 live-provider tests skipped by explicit env/key gates. New N4 local canaries cover OpenAI/DashScope prompt-cache-live-required behavior and zero-call over-budget blocking using the real `ResearchSliceOptionSetDraft@v1` schema. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-compression-runtime-service.unit.test.ts` | passed | 13/13 compression runtime tests passed. New N4 L5 cases block dropped N4 long-context facts and adversarial persisted raw provider logs. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registry remains structurally valid after adding N4 provider canary coverage; no provider/config-key drift was introduced. |
+| `pnpm --filter @paper-engineering-assistant/backend exec tsc --noEmit` | passed | Backend TypeScript compile passed after adding N4 provider canary methods, tests, and compression L5 coverage. |
+| `git diff --check -- apps/backend/src/services/topic-selection-provider-canary-service.ts apps/backend/src/services/topic-selection-provider-canary-service.unit.test.ts apps/backend/src/services/topic-selection-compression-runtime-service.unit.test.ts` | passed | No whitespace errors in the N4 L4/L5 code/test changes. |
+
+## 2026-06-01 - v1b N4 Live Provider Canary Evidence
+| Command | Result | Notes |
+|---|---|---|
+| `T112_V1B_N4_PROVIDER_CANARY_LIVE=1 BACKEND_TEST_PRESERVE_REAL_ENV=1 pnpm --filter @paper-engineering-assistant/backend exec node --env-file=/Volumes/DataDisk/Project/My-Researcher/.env.local --test --loader ts-node/esm --test-name-pattern "provider canary live v1b N4" src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | 24 tests discovered: 2 N4 live provider canaries passed and 22 nonmatching tests skipped by the test-name pattern. OpenAI completed in about 14.9 seconds; DashScope completed in about 159.8 seconds. Both used the configured `AgentOrchestrator -> BackendLlmGateway` path and preserved provider-required-live response non-reuse semantics. |
 
 ## Required Before Implementation
 - Contract design reviewed against T-088/T-089 D-18. Done.
