@@ -1013,3 +1013,16 @@
 - Remaining v1a work:
   - add uneven provider slices: DashScope N7/N8 and OpenAI N8;
   - optional N9 terminal context handoff audit projection.
+
+## 2026-06-01 - v1a N8 Runtime Quality Findings Closure
+- Closed the implementation-readiness review findings from the N8 semantic-review runtime slice.
+  - N8 semantic review lineage now validates `provenance_ref` against the runtime context packet ref, not only `context_packet_ref`, before human confirmation authority materialization.
+  - `AppError.details.review_reason_codes` now survive the N8 failure-to-human-review route so downstream audit/review consumers can see why `require_human_review` was selected.
+  - N8 semantic review context packet hashes are now computed from canonical business payload only; volatile `created_at` remains persisted metadata but no longer participates in `context_packet_hash` or downstream prompt/cache keys.
+- Added regression coverage.
+  - A provenance-drift mocked semantic review blocks before HumanConfirmedDecision/ValidatedNeed authority writes.
+  - A malformed semantic review output routes to `require_human_review` and preserves `SEMANTIC_REVIEW_FAILED`.
+  - The context packet hash test proves `created_at` is excluded from the stable hash while still present in the persisted packet.
+- Remaining v1a work:
+  - add uneven provider slices: DashScope N7/N8 and OpenAI N8;
+  - optional N9 terminal context handoff audit projection.

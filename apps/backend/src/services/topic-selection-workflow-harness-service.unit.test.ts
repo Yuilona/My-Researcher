@@ -4886,6 +4886,89 @@ test('workflow harness blocks human-confirm semantic review lineage drift before
   assert.equal(validatedNeeds.length, 0);
 });
 
+test('workflow harness blocks human-confirm semantic review provenance drift before authority writes', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const input = humanConfirmNeedScenarioInput(ctx, validateResult, {
+    workflow_run_id: 'workflow_run_human_confirm_review_provenance_drift',
+    node_attempt_id: 'node_attempt_human_confirm_review_provenance_drift',
+    execution_mode: 'mocked_llm',
+    mocked_output: null,
+    expectations: {
+      status: 'blocked',
+      route_outcome: 'blocked',
+      error_code: 'VERSION_CONFLICT',
+      blocker_codes: ['SEMANTIC_REVIEW_LINEAGE_MISMATCH'],
+      validated_need_created: false,
+      v1b_bundle_created: false,
+    },
+  });
+  const runtimeContextPlaceholder = refForTitleCard(
+    'artifact_ref',
+    TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_RUNTIME_CONTEXT_REF_PLACEHOLDER,
+    ctx.titleCard.title_card_id,
+  );
+  input.mocked_output = {
+    fixture_id: 'fixture_human_confirm_review_provenance_drift',
+    output: humanConfirmationSemanticReviewOutput(ctx, input, {
+      context_packet_ref: runtimeContextPlaceholder,
+      provenance_ref: refForTitleCard('artifact_ref', 'wrong_semantic_review_provenance', ctx.titleCard.title_card_id),
+      execution_mode: 'mocked_llm',
+    }),
+  };
+
+  const result = await ctx.workflowHarness.runHumanConfirmNeedScenario(input);
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.validated_need_ref, null);
+  assert.equal(result.node_result.human_decision_ref, null);
+  const validatedNeeds = await ctx.needValidationRepository.listValidatedNeedsByTitleCardId(ctx.titleCard.title_card_id);
+  assert.equal(validatedNeeds.length, 0);
+});
+
+test('workflow harness preserves human-confirm semantic review failure reasons on review routing', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const input = humanConfirmNeedScenarioInput(ctx, validateResult, {
+    workflow_run_id: 'workflow_run_human_confirm_review_failure_reason',
+    node_attempt_id: 'node_attempt_human_confirm_review_failure_reason',
+    execution_mode: 'mocked_llm',
+    mocked_output: null,
+    expectations: {
+      status: 'require_human_review',
+      route_outcome: 'require_human_review',
+      error_code: 'GATE_CONSTRAINT_FAILED',
+      blocker_codes: ['SCHEMA_VALIDATION_FAILED'],
+      review_reason_codes: ['SEMANTIC_REVIEW_FAILED'],
+      validated_need_created: false,
+      v1b_bundle_created: false,
+    },
+  });
+  const runtimeContextPlaceholder = refForTitleCard(
+    'artifact_ref',
+    TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_RUNTIME_CONTEXT_REF_PLACEHOLDER,
+    ctx.titleCard.title_card_id,
+  );
+  const malformedReview = humanConfirmationSemanticReviewOutput(ctx, input, {
+    context_packet_ref: runtimeContextPlaceholder,
+    provenance_ref: runtimeContextPlaceholder,
+    execution_mode: 'mocked_llm',
+  }) as unknown as Record<string, unknown>;
+  delete malformedReview.status;
+  input.mocked_output = {
+    fixture_id: 'fixture_human_confirm_review_schema_failure',
+    output: malformedReview as unknown as HumanConfirmationSemanticReview,
+  };
+
+  const result = await ctx.workflowHarness.runHumanConfirmNeedScenario(input);
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'require_human_review');
+  assert.deepEqual(result.node_result.review_reason_codes, ['SEMANTIC_REVIEW_FAILED']);
+  assert.equal(result.node_result.validated_need_ref, null);
+  assert.equal(result.node_result.human_decision_ref, null);
+});
+
 test('workflow harness replays identical human-confirm-need attempt before duplicate guard', async () => {
   const ctx = await seedValidateNeedAdjudicationRuntime();
   const validateResult = await runValidateNeedForHumanConfirm(ctx);

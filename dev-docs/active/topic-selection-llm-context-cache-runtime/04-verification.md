@@ -607,6 +607,15 @@
 | `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main` | passed | Project governance sync completed after documentation updates. |
 | `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registry remains structurally valid; no provider/config-key drift was introduced by the deterministic producer replay slice. |
 
+## 2026-06-01 - v1a N8 Runtime Quality-Fix Verification
+| Command | Result | Notes |
+|---|---|---|
+| `node --test --loader ts-node/esm --test-name-pattern "human-confirm semantic\|human-confirm-need\|human confirmation" src/services/topic-selection-workflow-harness-service.unit.test.ts` | passed | N8/human-confirm focused subset passed: 13 matching tests, 92 skipped. New coverage verifies stable context hash without `created_at`, semantic-review provenance drift blocking, and review reason preservation on semantic-review schema failure. |
+| `node --test --loader ts-node/esm src/services/topic-selection-v1a-llm-runtime-binding-service.unit.test.ts` | passed | 5/5 v1a runtime binding tests passed after the N8 quality fixes. |
+| `node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts` | passed | Full WorkflowHarness service unit file passed: 105/105. |
+| `pnpm --filter @paper-engineering-assistant/backend typecheck` | passed | Backend TypeScript compile passed after N8 provenance, review reason, stable context hash, and regression test updates. |
+| `git diff --check` | passed | No whitespace errors after the N8 quality-fix patch. |
+
 ## 2026-06-01 - v1b N8 Quality-Fix Verification
 | Command | Result | Notes |
 |---|---|---|
