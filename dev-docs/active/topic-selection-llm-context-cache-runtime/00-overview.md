@@ -69,8 +69,7 @@
 - [x] Live OpenAI/DashScope v1a N6 provider canaries record telemetry and prove provider-required scenarios still perform live provider calls.
 
 ## Current Focus
-- Current v1a production-readiness focus: D18.2/D18.3/D18.4/D18.5/D18.6 plus N1-N4 producer replay/drift smoke are closed. N5/N7/N8 runtime binding now lives outside `WorkflowHarness`, v1a runtime stress has separate `baseline` and `mocked_n5_n8` context modes with prompt-index assertions for N5/N6/N7/N8, N5/N7/N8 over-budget compression has report/rerender/post-gate closure, and N1-N4 deterministic context producers now have DB-backed exact replay/input-hash drift coverage.
-- Next v1a implementation focus: uneven provider slices for DashScope N7/N8 plus OpenAI N8.
+- Current v1a production-readiness focus is closed for the promoted T-112 runtime slice: D18.2/D18.3/D18.4/D18.5/D18.6, N1-N4 producer replay/drift smoke, N5/N7/N8 over-budget compression, and uneven provider slices for DashScope N7/N8 plus OpenAI N8 are complete. N5/N7/N8 runtime binding now lives outside `WorkflowHarness`, v1a runtime stress has separate `baseline` and `mocked_n5_n8` context modes with prompt-index assertions for N5/N6/N7/N8, and N1-N4 deterministic context producers have DB-backed exact replay/input-hash drift coverage.
 - v1b N7 runtime first slice is closed for L1-L3 plus minimum adversarial quality coverage.
 - D24 v1b N6 chain alignment is closed for first-slice planning.
 - v1b N6 `n6_question_candidate_draft.initial_from_n5` is implemented through L3 Prisma-backed smoke, L4 provider canary, and L5 long-context/adversarial compression coverage.

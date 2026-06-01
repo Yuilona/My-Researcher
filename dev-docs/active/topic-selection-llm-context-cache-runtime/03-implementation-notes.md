@@ -1026,3 +1026,17 @@
 - Remaining v1a work:
   - add uneven provider slices: DashScope N7/N8 and OpenAI N8;
   - optional N9 terminal context handoff audit projection.
+
+## 2026-06-01 - v1a Provider Slice Findings Closure
+- Ran the uneven v1a provider slices for DashScope N7/N8 and OpenAI N8 over the production-shaped N1-N9 harness using the balanced T-112 sample set.
+- DashScope N7 passed with one live provider invocation at the adjudication recommendation slot; no N7 code change was required.
+- DashScope N8 exposed two provider-hardening issues in the human-confirmation semantic-review slot.
+  - The provider produced schema-valid semantic output but did not reliably echo system-owned lineage fields. N8 now treats `provider_llm` semantic review lineage as runtime-owned: `workflow_run_id`, `node_attempt_id`, `review_id`, context/provenance refs, execution mode, profile id, policy version, and output schema version are stamped from the invocation context before authority materialization.
+  - The provider used `review_reason_codes` for positive rationale even when `status=pass`. N8 now clears provider pass-only positive reason codes when risk/check coverage is complete and there are no scope violations, recording `SEMANTIC_REVIEW_PASS_REASON_CODES_IGNORED`.
+- Tightened the N8 deterministic semantic gate so coverage and scope fields cannot be bypassed by a provider claiming `status=pass`.
+  - `risk_coverage != complete` blocks with `MISSING_ACCEPTED_RISK_COVERAGE`.
+  - `required_check_coverage != complete` blocks with `MISSING_REQUIRED_CHECK_COVERAGE`.
+  - non-empty `scope_violations` blocks with `SEMANTIC_REVIEW_SCOPE_VIOLATION`.
+- Prompt binding now includes an explicit `output_lineage` block and instructs providers to copy lineage fields exactly, keep `review_reason_codes` empty for pass, and reserve reason codes for warning/manual-review cases.
+- The normalization is provider-only. Existing mocked/Codex lineage/provenance drift tests still block before `HumanConfirmedDecision` or `ValidatedNeed` authority writes.
+- OpenAI N8 passed after the same hardening, confirming the N8 provider slice is stable across OpenAI and DashScope through the shared `AgentOrchestrator -> BackendLlmGateway` path.

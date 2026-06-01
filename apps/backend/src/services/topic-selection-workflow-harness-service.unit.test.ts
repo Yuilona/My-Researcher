@@ -4465,6 +4465,122 @@ test('workflow harness hydrates mocked human-confirm semantic review with runtim
   assert.equal(audit.token_budget_gate_result?.decision, 'within_budget');
 });
 
+test('workflow harness stamps provider human-confirm semantic review lineage before authority writes', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const input = humanConfirmNeedScenarioInput(ctx, validateResult, {
+    workflow_run_id: 'workflow_run_human_confirm_provider_lineage_stamp',
+    node_attempt_id: 'node_attempt_human_confirm_provider_lineage_stamp',
+    execution_mode: 'provider_llm',
+    execution_spec: {
+      execution_mode: 'provider_llm',
+      model_option_id: `${TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+    },
+    run_mode: 'product',
+    mocked_output: null,
+    model_option_id: `${TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+  });
+  ctx.llmGateway.setOutputForSchema(
+    TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION,
+    humanConfirmationSemanticReviewOutput(ctx, input, {
+      workflow_run_id: 'stale_workflow_run',
+      node_attempt_id: 'stale_node_attempt',
+      review_id: 'stale_semantic_review',
+      context_packet_ref: refForTitleCard('artifact_ref', 'stale_context_packet', ctx.titleCard.title_card_id),
+      provenance_ref: refForTitleCard('artifact_ref', 'stale_provider_provenance', ctx.titleCard.title_card_id),
+      execution_mode: 'provider_llm',
+      profile_id: 'topic-selection.confirmation-semantic-review.legacy-profile.v0',
+      review_reason_codes: ['human_confirmation_received'],
+      policy_version: 'stale-policy',
+      output_schema_version: 'stale-schema',
+    }),
+  );
+
+  const result = await ctx.workflowHarness.runHumanConfirmNeedScenario(input);
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'ready');
+  assert.equal(
+    result.node_result.warning_codes.includes('SEMANTIC_REVIEW_RUNTIME_LINEAGE_STAMPED'),
+    true,
+  );
+  assert.ok(result.node_result.semantic_review_ref);
+  assert.ok(result.node_result.semantic_review_context_packet_ref);
+  const reviewArtifact = await ctx.controlPlaneRepository.findArtifactRefById(
+    result.node_result.semantic_review_ref.ref_id,
+  );
+  const reviewPayload = reviewArtifact?.payload as {
+    semantic_review?: HumanConfirmationSemanticReview;
+  } | null;
+  const semanticReview = reviewPayload?.semantic_review;
+  assert.ok(semanticReview);
+  assert.equal(semanticReview.workflow_run_id, input.workflow_run_id);
+  assert.equal(semanticReview.node_attempt_id, input.node_attempt_id);
+  assert.equal(semanticReview.review_id, `${input.node_attempt_id}_semantic_review`);
+  assert.equal(semanticReview.execution_mode, 'provider_llm');
+  assert.equal(semanticReview.profile_id, TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID);
+  assert.equal(semanticReview.policy_version, input.policy_version);
+  assert.equal(semanticReview.output_schema_version, input.output_schema_version);
+  assert.deepEqual(semanticReview.context_packet_ref, result.node_result.semantic_review_context_packet_ref);
+  assert.deepEqual(semanticReview.provenance_ref, result.node_result.semantic_review_context_packet_ref);
+  assert.equal(
+    semanticReview.warning_codes.includes('SEMANTIC_REVIEW_RUNTIME_LINEAGE_STAMPED'),
+    true,
+  );
+  assert.equal(
+    semanticReview.warning_codes.includes('SEMANTIC_REVIEW_PASS_REASON_CODES_IGNORED'),
+    true,
+  );
+  assert.deepEqual(semanticReview.review_reason_codes, []);
+});
+
+test('workflow harness blocks provider human-confirm semantic review with incomplete coverage despite pass status', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const input = humanConfirmNeedScenarioInput(ctx, validateResult, {
+    workflow_run_id: 'workflow_run_human_confirm_provider_coverage_gate',
+    node_attempt_id: 'node_attempt_human_confirm_provider_coverage_gate',
+    execution_mode: 'provider_llm',
+    execution_spec: {
+      execution_mode: 'provider_llm',
+      model_option_id: `${TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+    },
+    run_mode: 'product',
+    mocked_output: null,
+    model_option_id: `${TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+    expectations: {
+      status: 'blocked',
+      route_outcome: 'blocked',
+      error_code: 'GATE_CONSTRAINT_FAILED',
+      blocker_codes: ['MISSING_ACCEPTED_RISK_COVERAGE'],
+      validated_need_created: false,
+      v1b_bundle_created: false,
+    },
+  });
+  ctx.llmGateway.setOutputForSchema(
+    TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION,
+    (request: LlmStructuredOutputRequest) => {
+      const payload = JSON.parse(request.messages[1]?.content ?? '{}') as {
+        context_packet_ref?: TopicSelectionFunctionalRef;
+      };
+      assert.ok(payload.context_packet_ref);
+      return humanConfirmationSemanticReviewOutput(ctx, input, {
+        context_packet_ref: payload.context_packet_ref,
+        provenance_ref: payload.context_packet_ref,
+        execution_mode: 'provider_llm',
+        risk_coverage: 'missing_required_acceptance',
+      });
+    },
+  );
+
+  const result = await ctx.workflowHarness.runHumanConfirmNeedScenario(input);
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(result.node_result.validated_need_ref, null);
+  assert.deepEqual(result.node_result.blocker_codes, ['MISSING_ACCEPTED_RISK_COVERAGE']);
+});
+
 test('workflow harness compresses over-target human-confirm semantic review context and still applies human authority gates', async () => {
   const ctx = await seedValidateNeedAdjudicationRuntime();
   const validateResult = await runValidateNeedForHumanConfirm(ctx);

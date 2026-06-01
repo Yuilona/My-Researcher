@@ -4403,7 +4403,30 @@ export class TopicSelectionWorkflowHarnessService {
           context_compression_report_ref: contextCompressionReportRef,
         });
       }
-      review = result.structured_output;
+      const normalizedReview = this.normalizeProviderHumanConfirmationSemanticReviewLineage({
+        input,
+        contextPacketRef,
+        executionMode,
+        review: result.structured_output,
+      });
+      review = normalizedReview.review;
+      if (normalizedReview.lineageStamped) {
+        runtimeWarningCodes = this.uniqueStrings([
+          ...runtimeWarningCodes,
+          'SEMANTIC_REVIEW_RUNTIME_LINEAGE_STAMPED',
+        ]);
+      }
+      const routingNormalizedReview = this.normalizeProviderHumanConfirmationSemanticReviewRouting({
+        executionMode,
+        review,
+      });
+      review = routingNormalizedReview.review;
+      if (routingNormalizedReview.reasonCodesCleared) {
+        runtimeWarningCodes = this.uniqueStrings([
+          ...runtimeWarningCodes,
+          'SEMANTIC_REVIEW_PASS_REASON_CODES_IGNORED',
+        ]);
+      }
     }
     this.assertHumanConfirmationSemanticReviewLineage(input, contextPacketRef, review, executionMode);
     const artifact = await this.requiredControlPlane().recordArtifactRef({
@@ -4620,6 +4643,82 @@ export class TopicSelectionWorkflowHarnessService {
     };
   }
 
+  private normalizeProviderHumanConfirmationSemanticReviewLineage(input: {
+    input: TopicSelectionWorkflowHarnessHumanConfirmNeedInput;
+    contextPacketRef: TopicSelectionFunctionalRef;
+    executionMode: TopicSelectionWorkflowHarnessHumanConfirmNeedExecutionMode;
+    review: HumanConfirmationSemanticReview;
+  }): { review: HumanConfirmationSemanticReview; lineageStamped: boolean } {
+    if (input.executionMode !== 'provider_llm') {
+      return { review: input.review, lineageStamped: false };
+    }
+    const expectedProfileId =
+      input.input.profile_id ?? TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID;
+    const expectedReviewId = `${input.input.node_attempt_id}_semantic_review`;
+    const lineageAlreadyMatches =
+      input.review.workflow_run_id === input.input.workflow_run_id
+      && input.review.node_attempt_id === input.input.node_attempt_id
+      && input.review.review_id === expectedReviewId
+      && this.sameFunctionalRef(input.review.context_packet_ref, input.contextPacketRef)
+      && (input.review.context_packet_ref.title_card_id ?? null) === (input.contextPacketRef.title_card_id ?? null)
+      && this.sameFunctionalRef(input.review.provenance_ref, input.contextPacketRef)
+      && (input.review.provenance_ref.title_card_id ?? null) === (input.contextPacketRef.title_card_id ?? null)
+      && input.review.execution_mode === input.executionMode
+      && input.review.profile_id === expectedProfileId
+      && input.review.policy_version === input.input.policy_version
+      && input.review.output_schema_version === input.input.output_schema_version;
+    if (lineageAlreadyMatches) {
+      return { review: input.review, lineageStamped: false };
+    }
+    return {
+      review: {
+        ...input.review,
+        workflow_run_id: input.input.workflow_run_id,
+        node_attempt_id: input.input.node_attempt_id,
+        review_id: expectedReviewId,
+        context_packet_ref: input.contextPacketRef,
+        execution_mode: input.executionMode,
+        profile_id: expectedProfileId,
+        provenance_ref: input.contextPacketRef,
+        warning_codes: this.uniqueStrings([
+          ...input.review.warning_codes,
+          'SEMANTIC_REVIEW_RUNTIME_LINEAGE_STAMPED',
+        ]),
+        policy_version: input.input.policy_version,
+        output_schema_version: input.input.output_schema_version,
+      },
+      lineageStamped: true,
+    };
+  }
+
+  private normalizeProviderHumanConfirmationSemanticReviewRouting(input: {
+    executionMode: TopicSelectionWorkflowHarnessHumanConfirmNeedExecutionMode;
+    review: HumanConfirmationSemanticReview;
+  }): { review: HumanConfirmationSemanticReview; reasonCodesCleared: boolean } {
+    if (
+      input.executionMode !== 'provider_llm'
+      || input.review.status !== 'pass'
+      || input.review.risk_coverage !== 'complete'
+      || input.review.required_check_coverage !== 'complete'
+      || input.review.scope_violations.length > 0
+      || input.review.blocker_codes.length > 0
+      || input.review.review_reason_codes.length === 0
+    ) {
+      return { review: input.review, reasonCodesCleared: false };
+    }
+    return {
+      review: {
+        ...input.review,
+        warning_codes: this.uniqueStrings([
+          ...input.review.warning_codes,
+          'SEMANTIC_REVIEW_PASS_REASON_CODES_IGNORED',
+        ]),
+        review_reason_codes: [],
+      },
+      reasonCodesCleared: true,
+    };
+  }
+
   private deterministicHumanConfirmationSemanticReview(
     input: TopicSelectionWorkflowHarnessHumanConfirmNeedInput,
     contextPacket: HumanConfirmationSemanticReviewContextPacket,
@@ -4666,6 +4765,23 @@ export class TopicSelectionWorkflowHarnessService {
     error_code: string | null;
     error_message: string | null;
   } {
+    const coverageBlockers = this.uniqueStrings([
+      ...(review.risk_coverage !== 'complete' ? ['MISSING_ACCEPTED_RISK_COVERAGE'] : []),
+      ...(review.required_check_coverage !== 'complete' ? ['MISSING_REQUIRED_CHECK_COVERAGE'] : []),
+      ...(review.scope_violations.length > 0 ? ['SEMANTIC_REVIEW_SCOPE_VIOLATION'] : []),
+    ]);
+    if (coverageBlockers.length > 0) {
+      return {
+        status: 'blocked',
+        blocker_codes: this.uniqueStrings([
+          ...coverageBlockers,
+          ...review.blocker_codes,
+        ]),
+        review_reason_codes: review.review_reason_codes,
+        error_code: 'GATE_CONSTRAINT_FAILED',
+        error_message: 'Human confirmation semantic review coverage gate blocked materialization.',
+      };
+    }
     if (review.status === 'blocked' || review.blocker_codes.length > 0) {
       return {
         status: 'blocked',

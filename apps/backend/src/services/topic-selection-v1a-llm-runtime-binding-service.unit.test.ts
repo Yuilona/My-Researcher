@@ -161,6 +161,8 @@ function humanReviewContextPacket(): HumanConfirmationSemanticReviewContextPacke
     method_family_gap_codes: ['METHOD_FAMILY_COVERAGE_GAP'],
     unresolved_challenge_refs: [ref('evidence_unit', 'challenge_001')],
     recheck_hint_refs: [ref('searchplan_recheck_request', 'recheck_001')],
+    policy_version: 'v1',
+    output_schema_version: 'v1',
     confirmation_input: {
       accepted_risk_refs: [acceptedRiskRef],
       required_check_results: [

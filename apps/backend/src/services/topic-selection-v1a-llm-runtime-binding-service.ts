@@ -30,6 +30,7 @@ import type {
   TopicSelectionCompressionFactInventory,
 } from './topic-selection-compression-runtime-service.js';
 import {
+  TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
 } from './topic-selection-model-profile-registry-service.js';
 import {
@@ -708,6 +709,23 @@ export class TopicSelectionV1aLlmRuntimeBindingService {
     ]);
   }
 
+  private humanConfirmationOutputLineage(
+    input: BuildTopicSelectionV1aHumanConfirmationRuntimeBindingInput,
+  ): Record<string, unknown> {
+    const contextPacketRef = input.context_packet_ref;
+    return {
+      workflow_run_id: input.workflow_run_id,
+      node_attempt_id: input.node_attempt_id,
+      review_id: `${input.node_attempt_id}_semantic_review`,
+      context_packet_ref: contextPacketRef,
+      execution_mode: input.execution_mode,
+      profile_id: input.profile_id ?? TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
+      provenance_ref: contextPacketRef,
+      policy_version: input.context_packet.policy_version,
+      output_schema_version: input.context_packet.output_schema_version,
+    };
+  }
+
   private humanConfirmationSemanticReviewMessages(
     input: BuildTopicSelectionV1aHumanConfirmationRuntimeBindingInput,
   ): RuntimeMessage[] {
@@ -717,6 +735,9 @@ export class TopicSelectionV1aLlmRuntimeBindingService {
         content: [
           `Produce ${TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION} only.`,
           'Review alignment between validate adjudication, support-packet checks, residual risks, and confirmation input.',
+          'Copy output_lineage fields exactly into the matching top-level output fields.',
+          'Use review_reason_codes only when status is warning and manual review is required; leave it empty for pass.',
+          'A pass requires complete risk_coverage, complete required_check_coverage, and no scope_violations.',
           'When compressed_human_confirmation_context is provided, treat it as advisory ref-backed context only.',
           'Do not re-adjudicate candidate value, infer new evidence roles, create new risk refs, mutate upstream content, or run debate.',
         ].join('\n'),
@@ -726,11 +747,13 @@ export class TopicSelectionV1aLlmRuntimeBindingService {
         content: stableStringify(
           input.compressed_context
             ? {
+                output_lineage: this.humanConfirmationOutputLineage(input),
                 context_packet_ref: input.context_packet_ref,
                 context_packet_hash: input.context_packet.context_packet_hash,
                 compressed_human_confirmation_context: input.compressed_context,
               }
             : {
+                output_lineage: this.humanConfirmationOutputLineage(input),
                 context_packet_ref: input.context_packet_ref,
                 context_packet: input.context_packet,
               },
