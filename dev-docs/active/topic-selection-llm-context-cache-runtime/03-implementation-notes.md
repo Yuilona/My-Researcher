@@ -1203,3 +1203,256 @@
   - Provider-required-live v1b evidence remains slot-level through `TopicSelectionProviderCanaryService -> AgentOrchestrator -> BackendLlmGateway`.
   - Deterministic full-chain authority evidence remains `pnpm topic-selection:v1b-harness-e2e`.
   - Negative/loopback coverage remains deterministic runtime-stress/service coverage.
+
+## 2026-06-01 - D28 v1c Runtime Landing Alignment Started
+- Accepted D28-A scope:
+  - current v1c runtime landing targets N2 bounded micro-debate and N6 downstream feedback normalization;
+  - N3 gate diagnostic adjunct and N4 delegated promotion decision remain provider-canary-only in this phase;
+  - resource sampling remains a later explicit runtime-promotion phase and is not part of the v1c closure scope.
+- Accepted D28-B responsibility boundary:
+  - shared runtime is the unified context/cache/compression/memory/token/reuse/audit execution layer;
+  - runtime owns `ContextPolicyProfile` resolution, memory policy enforcement, memory manifest/hash construction, context packet cache lookup semantics, prompt packet cache, token-budget preflight, compression orchestration/reporting/quality gates, response-reuse guards, provider telemetry separation, and runtime audit/provenance;
+  - v1c node adapters/admission services own semantic context compilation, source-ref and hash binding, required fact inventories, fixed prompt rendering, output admission, and authority-boundary handoff to deterministic services;
+  - WorkflowHarness owns orchestration, legal handoffs, fixtures, replay/stress/drift cases, evidence summaries, and assertions that runtime/admission/deterministic gates behaved correctly;
+  - WorkflowHarness must not own prompt rendering, cache keys, compression preserved facts, memory selection, provider calls, response reuse decisions, or authority admission formulas.
+- Boundary note:
+  - context memory can enter runtime context only through profile-approved families/use labels and remains warning/risk/recheck/constraint input, never standalone authority;
+  - cache, compression, memory manifests, prompt artifacts, provider telemetry, and runtime audit artifacts are acceleration/provenance/diagnostic evidence only and cannot bypass N2 advisory admission, N3 deterministic promotion gate, or N6 deterministic recheck side-effect boundaries.
+
+## 2026-06-01 - D28-C v1c N2 Bounded Micro-Debate Shape Locked
+- D28-C locks bounded micro-debate as the canonical T-112 v1c N2 runtime path.
+  - The existing single `promotion_support_generation.llm_draft` path remains compatibility/transition support and does not define v1c runtime closure.
+  - Fixed role slots are `n2_bounded_micro_debate.promotion_supporter_draft`, `n2_bounded_micro_debate.reviewer_critic_review`, `n2_bounded_micro_debate.promotion_supporter_repair`, and `n2_bounded_micro_debate.synthesizer_final`.
+- All four role slots must pass through the shared runtime layer.
+  - Runtime handles context memory, context/prompt cache, token-budget, compression, response-reuse guard, provider telemetry separation, and audit/provenance for each role.
+  - Node adapter/admission owns the role sequence, prior-role artifact binding, fixed prompt rendering, role output schema/admission, allowed refs, forbidden authority fields, and final advisory handoff.
+- Intermediate role outputs are diagnostic/support artifacts only.
+  - `promotion_supporter_draft`, `reviewer_critic_review`, and `promotion_supporter_repair` may feed later role prompt identity as dynamic material refs/hashes.
+  - Only `synthesizer_final` may enter the N2 advisory support/dossier output consumed by N3.
+  - N3 may validate the admitted final structured semantic layer, but must not treat intermediate role artifacts as gate authority.
+- Exact response reuse boundary:
+  - Codex/mock exact role-output reuse is allowed only with non-provider provenance, operator approval or explicit local approved-reuse setting, exact prompt packet hash, profile hash, prior-role hash, and full schema/admission rerun.
+  - `provider_llm` role outputs must be live provider calls; prompt-cache hits may reuse prompt artifacts/quality reports only and cannot satisfy provider response output.
+
+## 2026-06-01 - D28-C1 v1c N2 Context Memory And Compression Policy Locked
+- N2 base context packet policy:
+  - v1c N2 adapters compile one frozen base context packet from the N1 `PromotionInputSnapshotHandoff`;
+  - runtime may add only profile-approved memory manifests and must not re-read mutable v1b/package state to repair or enrich context;
+  - base context must preserve promotion input snapshot ref/hash, topic package ref/hash, topic question/contract identity, answerability plan, selected evidence refs, claim ceiling, contribution summary, evaluation plan summary, accepted risk refs, blocker refs, recheck refs, memory suggestion refs, and source-health warning facts.
+- N2 role dynamic material policy:
+  - critic reads the supporter draft ref/hash;
+  - repair reads critic findings ref/hash;
+  - final reads supporter draft, critic review, and repair refs/hashes;
+  - dynamic material is rendered only through fixed prompt compilers and cannot override templates, output contracts, authority boundaries, cache/reuse policy, compression policy, or provider-required-live semantics.
+- N2 compression policy:
+  - compression is a robustness mechanism and cannot prune semantic obligations;
+  - quality gate blocks if compressed context drops claim ceiling, selected evidence refs, evidence support map, topic question/contract identity, answerability plan, contribution summary, evaluation plan, accepted risks, blockers, recheck obligations, critic findings, critic resolution map, readiness coverage items, allowed-ref manifest, or source-health warnings;
+  - a blocked compression artifact remains non-authority diagnostic evidence and cannot become an admissible prompt/cache hit.
+- N2 context memory policy:
+  - allowed memory inputs are accepted/residual risk, blocker, source-health warning, recheck hint, memory suggestion, and decision-memory context;
+  - memory can only enrich advisory support context and cannot become standalone promotion authority, override N1 frozen facts, or satisfy N3 promotion readiness.
+
+## 2026-06-01 - D28-D v1c N6 Feedback Normalization Boundary Locked
+- D28-D splits N6 into runtime normalization and deterministic side-effect admission.
+  - The runtime slot may produce only `TopicSelectionV1cDownstreamFeedbackCandidate@v1`.
+  - The candidate is not feedback authority and cannot create a recheck request by itself.
+  - The deterministic N6 service remains the only owner of downstream feedback persistence and recheck work creation.
+- N6 runtime responsibilities:
+  - compile source feedback context and profile-approved memory manifests;
+  - run prompt packet cache, token-budget preflight, compression, response-reuse guard, provider telemetry separation, and audit/provenance through the shared runtime;
+  - treat cache/compression/reuse success as provenance only, not as a side-effect trigger.
+- N6 admission responsibilities:
+  - verify active `PaperProjectBridge` handoff identity and source hashes;
+  - verify downstream source kind/ref, source feedback refs allowlist, feedback signal, severity, required action for recheck-producing signals, forbidden mutation fields, and bridge/promotion/package ref drift;
+  - verify prompt packet hash, profile hash, runtime invocation context hash, source hashes, and normalized candidate hash before calling `TopicSelectionV1cDownstreamFeedbackRecheckService.recordDownstreamTopicFeedback`.
+- N6 compression preserved facts:
+  - bridge ref/hash, source promotion decision ref, commitment profile ref, promotion input snapshot ref, downstream source ref, source feedback refs, feedback signal, required action, affected ref or loopback target hint, severity, no-upstream-mutation boundary, and allowed-ref manifest.
+- Side-effect boundary:
+  - malformed, stale, drifted, or improperly reused normalized candidates create no feedback and no recheck;
+  - Codex/mock exact reuse requires non-provider provenance, approval or explicit local approved-reuse setting, exact prompt/profile/source hash match, and full admission rerun;
+  - `provider_llm` cannot use historical response reuse;
+  - `recheck_opened` records typed recheck work and resume hints only, and does not trigger N1-N5 automatically.
+- Harness alignment:
+  - this follows the existing v1c harness principle: WorkflowHarness verifies legal handoff, record-only N6 ingress, no upstream auto-loop, no duplicate side effects, and deterministic service ownership; it must not own normalization prompts, cache keys, compression preserved facts, admission formulas, or recheck creation logic.
+
+## 2026-06-01 - D28-G v1c Runtime Service Placement Locked
+- N2 bounded debate runtime placement:
+  - add `TopicSelectionV1cN2BoundedDebateRuntimeService` as production-shaped code for the four role invocations;
+  - the service owns shared-runtime invocation assembly for role slots and emits runtime-verified role artifacts;
+  - it must not write N3 gate authority or promotion decisions.
+- N2 bounded debate admission placement:
+  - add `TopicSelectionV1cN2BoundedDebateAdmissionService` or a tightly scoped helper under the v1c promotion-support boundary;
+  - admission validates role order, prior-role hashes, allowed refs, forbidden authority fields, final semantic layer, critic finding resolution map, and runtime/provenance identity;
+  - only the admitted final artifact may produce N2 support/dossier input consumed by N3.
+- N6 feedback normalization runtime placement:
+  - add `TopicSelectionV1cN6FeedbackNormalizationRuntimeService` as production-shaped code for normalized candidate generation;
+  - the service owns shared-runtime invocation assembly and emits runtime-verified normalized candidate artifacts;
+  - it must not persist downstream feedback or create recheck work.
+- N6 feedback normalization admission placement:
+  - add `TopicSelectionV1cN6FeedbackNormalizationAdmissionService`;
+  - admission validates bridge/source/reuse/compression/provenance/hash binding and then calls the existing `TopicSelectionV1cDownstreamFeedbackRecheckService` as the deterministic side-effect owner.
+- Harness/script placement:
+  - v1c WorkflowHarness and `.ai/scripts/topic-selection-v1c-*` runners should call these services and collect evidence;
+  - scripts may remain L5 evidence wrappers but should not remain the main implementation of provider/Codex prompts, cache keys, compression policy, admission formulas, or recheck side effects.
+
+## 2026-06-01 - D28-H v1c Slot And Profile Naming Locked
+- N2 invocation slot ids:
+  - `n2_bounded_micro_debate.promotion_supporter_draft`;
+  - `n2_bounded_micro_debate.reviewer_critic_review`;
+  - `n2_bounded_micro_debate.promotion_supporter_repair`;
+  - `n2_bounded_micro_debate.synthesizer_final`.
+- N2 context profile ids:
+  - `topic-selection.v1c.n2.bounded-debate.supporter-draft.context-runtime@v1`;
+  - `topic-selection.v1c.n2.bounded-debate.reviewer-critic.context-runtime@v1`;
+  - `topic-selection.v1c.n2.bounded-debate.supporter-repair.context-runtime@v1`;
+  - `topic-selection.v1c.n2.bounded-debate.synthesizer-final.context-runtime@v1`.
+- N2 profile semantics:
+  - context family is `v1c_n2_bounded_promotion_support`;
+  - role isolation is represented through slot id, prompt variant, runtime invocation context hash, and dynamic material refs/hashes rather than separate context families;
+  - model profile id is `topic-selection.v1c.promotion-support.bounded-micro-debate.v1`;
+  - provider-canary profiles remain canary-only and are not the canonical runtime profile;
+  - all four N2 role context profiles use `support_only_semantic` because their outputs are advisory support, not deterministic authority candidates.
+- N6 slot/profile semantics:
+  - invocation slot id is `downstream_feedback_normalization`;
+  - context profile id is `topic-selection.v1c.n6.downstream-feedback-normalization.context-runtime@v1`;
+  - context family is the existing `v1c_n6_downstream_feedback_normalization`;
+  - model profile id is `topic-selection.v1c.downstream-feedback-normalization.v1`;
+  - context profile uses `candidate_for_deterministic_gate` because the normalized candidate must pass deterministic N6 admission before any feedback/recheck side effect.
+
+## 2026-06-01 - D28-I v1c Runtime Implementation Order Locked
+- D28-I locks N2 before N6.
+  - N2 bounded micro-debate is the highest-complexity v1c slot-level surface and should establish the registry/runtime/admission pattern first.
+  - N6 feedback normalization should reuse the same pattern after N2 stabilizes.
+- Step 1: registry/contracts first.
+  - Add `v1c_n2_bounded_promotion_support`, N2 four context profiles, N2 canonical model profile, and N6 runtime/model profiles.
+  - Add profile/schema tests for profile hash stability, slot mismatch blocking, context family binding, preserved facts, and post-cache gates.
+- Step 2: N2 runtime/admission L1.
+  - Implement `TopicSelectionV1cN2BoundedDebateRuntimeService` and `TopicSelectionV1cN2BoundedDebateAdmissionService`.
+  - Start with mocked/Codex-response inputs before provider wiring.
+  - Cover role order, prior-role hash drift, allowed refs, forbidden authority fields, final semantic layer, and critic resolution map.
+- Step 3: N2 L2/L3.
+  - Wire v1c harness through the N2 runtime/admission services.
+  - Add Prisma smoke for prompt packet index metadata-only behavior, exact replay, drift blocking, and no N3 authority bypass.
+- Step 4: N2 L4/L5.
+  - Add provider slot canaries proving all four provider roles still live-call on prompt-cache hits and cannot reuse provider responses.
+  - Add long-context/adversarial compression blockers for dropped risk, recheck, evidence, allowed-ref manifest, and critic-finding/resolution facts.
+- Step 5: N6 runtime/admission.
+  - Implement `TopicSelectionV1cN6FeedbackNormalizationRuntimeService` and `TopicSelectionV1cN6FeedbackNormalizationAdmissionService`.
+  - Focus verification on malformed, stale, drifted, or improperly reused candidates creating no feedback/recheck side effects.
+- Step 6: v1c runtime stress closure.
+  - Add `pnpm topic-selection:v1c-runtime-stress`.
+  - Combine N2 runtime smoke, N6 runtime smoke, prompt-index assertions, and no side-effect bypass checks.
+
+## 2026-06-01 - D28-J Minimum Landable First Slice Locked
+- D28-J locks the first implementation slice to registry/contracts foundation only.
+  - The goal is to establish stable v1c runtime identities before service or harness wiring.
+  - This slice should be independently reviewable and reversible without changing workflow behavior.
+- Included in the first slice:
+  - add `v1c_n2_bounded_promotion_support` to shared runtime context families;
+  - add N2 bounded micro-debate context profile id constants, slot id constants, and registry rows for all four role slots;
+  - add N2 canonical bounded micro-debate model profile `topic-selection.v1c.promotion-support.bounded-micro-debate.v1`;
+  - add N6 downstream feedback normalization context/model profiles as registry foundation only;
+  - add tests for N2/N6 profile resolution, profile hash stability, slot/profile mismatch blocking, context family binding, preserved fact coverage, provider-live response-reuse blocking, and post-cache/post-reuse gate coverage.
+- Excluded from the first slice:
+  - no `TopicSelectionV1cN2BoundedDebateRuntimeService`;
+  - no `TopicSelectionV1cN2BoundedDebateAdmissionService`;
+  - no `TopicSelectionV1cN6FeedbackNormalizationRuntimeService`;
+  - no `TopicSelectionV1cN6FeedbackNormalizationAdmissionService`;
+  - no WorkflowHarness, script, provider-canary, route, DB schema, or migration changes;
+  - no DB-backed context packet cache.
+- Verification floor for this slice:
+  - shared runtime schema tests;
+  - context policy profile registry unit tests;
+  - model profile registry unit tests;
+  - backend typecheck;
+  - `git diff --check`.
+
+## 2026-06-01 - D28-J Registry/Contracts First Slice Landed
+- Shared runtime contract update:
+  - added `v1c_n2_bounded_promotion_support` to `TOPIC_SELECTION_CONTEXT_FAMILIES`;
+  - added schema-test coverage proving context policy profiles and context packet cache keys accept the new v1c bounded promotion support family.
+- Context policy registry update:
+  - added N2 bounded micro-debate slot constants and context profile constants for supporter draft, reviewer critic, supporter repair, and synthesizer final;
+  - added N2 context profile rows with `support_only_semantic`, context family `v1c_n2_bounded_promotion_support`, provider-required-live reuse blocking, prompt/context cache gates, and compression preserved facts for N1 frozen promotion input, evidence, claim ceiling, risks, blockers, recheck obligations, allowed refs, source-health warnings, critic findings, critic resolution map, and readiness coverage;
+  - added N6 downstream feedback normalization slot/profile constants and a context profile row with `candidate_for_deterministic_gate`, context family `v1c_n6_downstream_feedback_normalization`, feedback normalization admission gates, recheck side-effect boundary gates, provider-required-live reuse blocking, and preserved facts for bridge/source/feedback/recheck boundaries.
+- Model profile registry update:
+  - added canonical N2 runtime model profile `topic-selection.v1c.promotion-support.bounded-micro-debate.v1`;
+  - added canonical N6 runtime model profile `topic-selection.v1c.downstream-feedback-normalization.v1`;
+  - kept v1c provider-canary profiles as canary-only profiles.
+- `.ai/llm-config` registry update:
+  - registered the same canonical N2/N6 model profile ids in `.ai/llm-config/registry/model_profiles.yaml`;
+  - did not change prompt templates or legacy Codex acceptance scripts in this slice.
+- Scope intentionally not changed:
+  - no `TopicSelectionV1cN2BoundedDebateRuntimeService`;
+  - no `TopicSelectionV1cN2BoundedDebateAdmissionService`;
+  - no `TopicSelectionV1cN6FeedbackNormalizationRuntimeService`;
+  - no `TopicSelectionV1cN6FeedbackNormalizationAdmissionService`;
+  - no harness/script/provider-canary/route/DB/migration changes;
+  - no DB-backed context packet cache.
+
+## 2026-06-02 - D28-I Step 2 N2 Runtime/Admission L1 Landed
+- Added `TopicSelectionV1cN2BoundedDebateRuntimeService`.
+  - The service builds a ref-backed `TopicSelectionV1cN2BoundedDebateContextPacket@v1` from a frozen `PromotionInputSnapshotHandoff`.
+  - It binds each role to the canonical N2 context profile, canonical N2 model profile, prompt template `topic-selection-v1c-promotion-support-bounded-micro-debate@1`, runtime invocation context hash, context packet hash, prompt packet hash, and redaction policy.
+  - It routes role generation through `TopicSelectionAgentOrchestratorService` and therefore uses the shared prompt packet runtime/cache, token-budget preflight, compression hooks, response-reuse guard, provider telemetry separation, and runtime audit surface.
+  - It emits runtime-verified role artifacts with structured output refs/hashes, runtime audit refs/hashes, source hashes, prompt identity, context profile identity, and prior-role artifact hashes.
+- Added `TopicSelectionV1cN2BoundedDebateAdmissionService`.
+  - Admission requires exactly the four canonical roles in order:
+    - `n2_bounded_micro_debate.promotion_supporter_draft`;
+    - `n2_bounded_micro_debate.reviewer_critic_review`;
+    - `n2_bounded_micro_debate.promotion_supporter_repair`;
+    - `n2_bounded_micro_debate.synthesizer_final`.
+  - Admission validates runtime provenance class, profile identity, prompt packet hash, runtime invocation context hash, audit identity, source hashes, normalized payload hash, prior-role artifact hashes, allowed refs, and forbidden authority/downstream fields.
+  - Final admission validates `synthesizer_final` has an N3-readable semantic layer covering claim ceiling alignment, contribution summary, evaluation plan, evidence support map, accepted risk acknowledgements, recheck obligation summary, critic finding resolution map, and readiness coverage items.
+  - Final admission also verifies every critic finding is resolved and that accepted risk refs and recheck refs from the frozen handoff are not dropped.
+  - Successful admission returns a non-authority `TopicSelectionPromotionDecisionSupportLlmDraft` projection from the final output for the future N2 support/dossier integration slice.
+- Added focused L1 unit coverage.
+  - Happy path: four Codex-assisted role outputs produce runtime-verified artifacts and only the final synthesizer output is admitted into the support draft projection.
+  - Blockers: non-canonical role order, prior-role hash drift, forbidden authority fields, out-of-bounds refs, incomplete final semantic layer, and dropped accepted-risk/recheck refs.
+- Scope intentionally not changed in this L1 slice:
+  - no WorkflowHarness wiring;
+  - no Prisma smoke or prompt-index persistence assertions beyond the existing runtime path;
+  - no provider canary changes;
+  - no N3 promotion gate invocation from the new final artifact;
+  - no N6 feedback-normalization runtime/admission;
+  - no route, DB schema, migration, or DB-backed context packet cache changes.
+
+## 2026-06-02 - D28-I Step 3 N2 Harness/Prisma Smoke Landed
+- Added a service-level bridge from admitted N2 bounded runtime output into existing v1c support persistence.
+  - `TopicSelectionV1cPromotionGateService.createPromotionDecisionSupportFromVerifiedRuntimeDraft` accepts only a service-internal verified-runtime draft envelope.
+  - The HTTP/controller input path remains unchanged; external route callers cannot submit this envelope through the route contract as a new authority path.
+  - The method persists N2 support/dossier as `llm_draft` advisory material but does not create a promotion gate check.
+  - N3 remains explicit through `createPromotionGateCheckFromSupport`, so N2 cannot set gate disposition, authorize promotion, create human decisions, create bridges, or open rechecks.
+- Wired `.ai/scripts/topic-selection-v1c-harness-acceptance.mjs` through the N2 bounded runtime/admission services.
+  - The harness now runs all four N2 slots through `TopicSelectionV1cN2BoundedDebateRuntimeService`.
+  - It admits only the synthesizer-final output through `TopicSelectionV1cN2BoundedDebateAdmissionService`.
+  - It feeds the admitted `TopicSelectionPromotionDecisionSupportLlmDraft` into `TopicSelectionV1cPromotionGateService` before explicitly invoking N3.
+  - Added a support-only/no-N3-bypass scenario proving N2 support persistence alone creates no gate, human decision, bridge, downstream feedback, or recheck side effect.
+- Added `pnpm topic-selection:v1c-n2-runtime-smoke`.
+  - The smoke uses Prisma-backed `TopicSelectionControlPlaneService`, `TopicSelectionPromptPacketCacheService`, and `PrismaTopicSelectionV1cPromotionGateRepository`.
+  - It verifies four prompt-index rows for the four N2 bounded role slots and asserts the prompt packet index model stores metadata/refs/hashes only, not prompt payloads or provider responses.
+  - It verifies replay by reusing the admitted runtime draft for support persistence and re-invoking the N3 gate check, with stable support/gate ids and stable prompt-index row count for the admitted prompt hashes.
+  - It verifies drift by tampering the final role artifact prompt packet hash and expecting `N2_BOUNDED_DEBATE_ARTIFACT_PROMPT_DRIFT`.
+  - It verifies no N3 bypass by checking no `TopicSelectionPromotionGateCheck` exists before the explicit N3 call.
+- Scope still deferred:
+  - no provider slot canary changes;
+  - no long-context/adversarial compression additions for v1c N2;
+  - no N6 downstream feedback normalization runtime/admission;
+  - no DB-backed context packet cache.
+
+## 2026-06-02 - D28-I Step 3 Review Hardening Landed
+- Hardened the N2 bounded-runtime admission boundary.
+  - `TopicSelectionV1cN2BoundedDebateAdmissionService` now receives the runtime service as an expected-identity builder and recomputes expected identity internally from the frozen handoff, role artifact metadata, prior role artifacts, execution/run mode, and structured output hash.
+  - Role artifacts now carry `workflow_run_id`, `node_attempt_id`, and `policy_version`, so admission no longer needs caller-supplied expected identity material.
+  - Successful admission returns a sealed admission identity plus `admission_identity_hash` covering the final prompt packet hash, runtime audit ref/hash, final structured-output hash, role artifact hashes, prompt packet hashes, source hashes, prior-role hashes, and support-only boundary.
+- Hardened the service bridge into `TopicSelectionV1cPromotionGateService`.
+  - `createPromotionDecisionSupportFromVerifiedRuntimeDraft` now requires provenance, audit snapshot, admission identity, and admission identity hash.
+  - Runtime draft validation rejects missing or drifted audit/provenance/identity before N2 support persistence.
+  - The support run key now includes the admitted runtime identity hash, preventing a different admitted runtime final from silently reusing stale support for the same promotion input snapshot.
+  - The support control-plane snapshot, workflow telemetry, and support artifact payload now include the runtime admission identity/hash for audit.
+- Corrected provider/non-provider evidence semantics.
+  - Codex-assisted bounded-runtime support no longer falls back to default OpenAI provider/model fields in the N2 support workflow run.
+  - `normalizeN2PromotionSupport` now takes explicit `provider_involved` evidence from the caller instead of inferring provider involvement from `support_generation_mode=llm_draft`.
+- Strengthened replay/cache smoke coverage.
+  - Harness replay now reuses the exact admitted runtime envelope instead of re-running fresh N2 runtime artifacts; this matches the new identity-bound replay semantics.
+  - Prisma smoke now replays the stable first N2 slot and asserts prompt-cache read-through by verifying the redacted prompt artifact ref and prompt quality report ref are reused without adding prompt-index rows.

@@ -768,6 +768,63 @@
 | `git diff --check` | passed | No whitespace errors after the provider harness compatibility exit. |
 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed. |
 
+## 2026-06-01 - D28-J v1c Registry/Contracts First Slice Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/shared exec node --test --loader ts-node/esm src/research-lifecycle/topic-selection-llm-runtime-contracts.schema.test.ts` | passed | Shared runtime schema tests passed: 15/15. Added coverage for `v1c_n2_bounded_promotion_support` as a context profile and context packet cache key family. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-context-policy-profile-registry-service.unit.test.ts` | passed | Context policy profile registry tests passed: 5/5. New coverage resolves all four N2 bounded-debate profiles plus N6 downstream feedback normalization, verifies family binding, preserved facts, provider response reuse blocking, post-cache/post-reuse gates, profile hash separation, and slot mismatch fail-closed behavior. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts` | passed | Model profile registry tests passed: 5/5. New coverage resolves canonical N2/N6 runtime model profiles for Codex/provider modes while leaving provider-canary eligibility restricted. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | `.ai/llm-config` registries remained structurally valid after adding canonical v1c N2/N6 model profile ids. |
+| `pnpm --filter @paper-engineering-assistant/backend typecheck` | passed | Backend TypeScript compile passed after Prisma client generation. |
+| `pnpm --filter @paper-engineering-assistant/shared typecheck` | passed | Shared package TypeScript compile passed after adding the v1c bounded promotion context family. |
+| `git diff --check` | passed | No whitespace errors after the registry/contracts first-slice changes. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after updating the T-112 docs and v1c matrix. |
+
+## 2026-06-02 - D28-I Step 2 N2 Runtime/Admission L1 Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-v1c-n2-bounded-debate-runtime-service.unit.test.ts` | passed | N2 bounded debate L1 tests passed: 6/6. Covered runtime-verified four-role Codex-assisted generation, final-only admission, role-order blocking, prior-role hash drift blocking, forbidden authority field blocking, out-of-bounds ref blocking, incomplete final semantic-layer blocking, and dropped accepted-risk/recheck ref blocking. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-context-policy-profile-registry-service.unit.test.ts` | passed | Context policy profile registry tests remained green: 5/5. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts` | passed | Model profile registry tests remained green: 5/5. |
+| `pnpm --filter @paper-engineering-assistant/shared exec node --test --loader ts-node/esm src/research-lifecycle/topic-selection-llm-runtime-contracts.schema.test.ts` | passed | Shared runtime schema tests remained green: 15/15. |
+| `pnpm --filter @paper-engineering-assistant/backend typecheck` | passed | Backend TypeScript compile passed after Prisma client generation. |
+| `pnpm --filter @paper-engineering-assistant/shared typecheck` | passed | Shared package TypeScript compile passed. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | `.ai/llm-config` registries remained structurally valid. |
+| `git diff --check` | passed | No whitespace errors after the N2 L1 runtime/admission slice. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after the N2 L1 slice. |
+
+## 2026-06-02 - D28-I Step 3 N2 Harness/Prisma Smoke Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-v1c-promotion-gate-service.unit.test.ts` | passed | Promotion gate tests passed: 15/15. New coverage proves verified runtime drafts create only N2 support/dossier, replay to the same support id, and do not create an N3 gate until `createPromotionGateCheckFromSupport` is called. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-v1c-n2-bounded-debate-runtime-service.unit.test.ts` | passed | N2 bounded debate runtime/admission tests remained green: 6/6. |
+| `pnpm topic-selection:v1c-harness-acceptance` | passed | v1c harness acceptance passed with 17 rows and 29 node-trace entries. N2 now runs through bounded runtime/admission before support persistence, and includes `N2-10 support_only_no_n3_bypass`. Artifact dir: `.ai/.tmp/topic-selection-v1c-acceptance/v1c-harness-2026-06-01T22-06-19-741Z`. |
+| `pnpm topic-selection:v1c-n2-runtime-smoke` | failed, then fixed | Initial smoke exposed an over-strong replay assertion: re-running all four N2 roles creates new prior-role artifacts, so later prompt packet hashes can legitimately differ. The smoke was corrected to replay the admitted support/gate path instead of forcing role re-generation hash equality. |
+| `pnpm topic-selection:v1c-n2-runtime-smoke` | failed, then fixed | Second run exposed fixture mismatch: the default fixture carried recheck refs, so N3 correctly returned `recheck_required` while the smoke expected `ready_for_human_decision`. The smoke fixture was aligned with the ready harness path by clearing `recheck_request_refs`. |
+| `pnpm topic-selection:v1c-n2-runtime-smoke` | passed | Prisma-backed N2 runtime smoke passed. It created 4 prompt-index rows for the four N2 bounded slots, verified prompt-index metadata-only fields, replayed support/gate ids stably, blocked final prompt-packet drift with `N2_BOUNDED_DEBATE_ARTIFACT_PROMPT_DRIFT`, and proved no N3 gate exists before the explicit N3 call. Artifact dir: `.ai/.tmp/topic-selection-v1c-n2-runtime-smoke/v1c-n2-runtime-smoke-2026-06-01T22-07-28-375Z`. |
+| `pnpm --filter @paper-engineering-assistant/backend typecheck` | passed | Backend TypeScript compile passed after Prisma client generation. |
+| `pnpm --filter @paper-engineering-assistant/shared typecheck` | passed | Shared package TypeScript compile passed. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | `.ai/llm-config` registries remained structurally valid. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed. |
+| `node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package.json ok')"` | passed | Package JSON remains valid after adding `topic-selection:v1c-n2-runtime-smoke`. |
+| `git diff --check` | passed | No whitespace errors after the N2 harness/Prisma smoke slice. |
+
+## 2026-06-02 - D28-I Step 3 Review Hardening Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-v1c-n2-bounded-debate-runtime-service.unit.test.ts` | passed | N2 bounded debate runtime/admission tests passed: 6/6. Admission now recomputes expected runtime identity through the runtime service and returns a sealed admission identity/hash. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-v1c-promotion-gate-service.unit.test.ts` | passed | Promotion gate tests passed: 17/17. New coverage rejects drifted audit/provenance identity and proves support run keys are bound to admitted runtime identity instead of silently reusing stale support. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-v1c-harness-adapter.unit.test.ts` | passed | Harness adapter tests passed: 4/4. `provider_involved` is now explicit evidence rather than inferred from `support_generation_mode=llm_draft`. |
+| `pnpm topic-selection:v1c-n2-runtime-smoke` | passed | Prisma-backed N2 smoke passed. It verifies four prompt-index rows, support/gate replay, no-N3-bypass, final prompt drift blocking, and stable first-slot prompt-cache read-through via reused redacted-prompt and prompt-quality artifact refs. Artifact dir: `.ai/.tmp/topic-selection-v1c-n2-runtime-smoke/v1c-n2-runtime-smoke-2026-06-01T22-28-27-573Z`. |
+| `pnpm topic-selection:v1c-harness-acceptance` | failed, then fixed | First hardening run failed because the old replay scenario regenerated fresh runtime artifacts, creating a new identity-bound support/gate and making the old gate stale. The harness replay was corrected to reuse the exact admitted runtime envelope. Failed artifact dir: `.ai/.tmp/topic-selection-v1c-acceptance/v1c-harness-2026-06-01T22-28-26-932Z`. |
+| `pnpm topic-selection:v1c-harness-acceptance` | passed | v1c harness acceptance passed with 17 rows and 29 node-trace entries after exact runtime-envelope replay. Artifact dir: `.ai/.tmp/topic-selection-v1c-acceptance/v1c-harness-2026-06-01T22-29-22-198Z`. |
+| `pnpm --filter @paper-engineering-assistant/backend typecheck` | passed | Backend TypeScript compile passed after Prisma client generation. |
+| `pnpm --filter @paper-engineering-assistant/shared typecheck` | passed | Shared package TypeScript compile passed. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | `.ai/llm-config` registries remained structurally valid. |
+| `node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package.json ok')"` | passed | Package JSON remains valid. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed. |
+| `git diff --check` | passed | No whitespace errors after the review hardening changes. |
+
 ## Required Before Implementation
 - Contract design reviewed against T-088/T-089 D-18. Done.
 - First slice selected and approved: shared contracts/runtime primitives followed by v1a N6 single-agent and debate slots. Done.
