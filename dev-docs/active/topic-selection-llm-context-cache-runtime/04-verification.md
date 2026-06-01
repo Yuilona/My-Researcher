@@ -654,6 +654,13 @@
 | `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main` | passed | Project governance sync completed after provider-slice documentation updates. |
 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed. |
 
+## 2026-06-01 - v1a Closure Audit Verification
+| Command | Result | Notes |
+|---|---|---|
+| `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-workflow-harness-service.unit.test.ts` | passed | Full v1a WorkflowHarness service unit file passed: 107/107. This rerun validates the current HEAD after narrowing focus back to v1a. |
+| `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-v1a-llm-runtime-binding-service.unit.test.ts` | passed | v1a runtime binding tests passed: 5/5. N5/N7/N8 prompt, token-budget, and compressed-context bindings remain intact. |
+| `node --check .ai/scripts/topic-selection-v1a-harness-e2e.mjs && node --check .ai/scripts/topic-selection-v1a-runtime-stress.mjs` | passed | v1a harness and stress scripts remain syntactically valid. |
+
 ## 2026-06-01 - v1b N4 L3 Prisma-Backed Runtime Smoke
 | Command | Result | Notes |
 |---|---|---|

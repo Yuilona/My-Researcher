@@ -925,7 +925,7 @@
 - The new stress run found and fixed a real fixture drift:
   - N8 mocked review initially carried `policy_version=v1`, while HTTP harness invocation normalizes node scenario input to `topic-selection-v1a-workflow-route-policy-v1`.
   - The fixture now binds the route-policy version used by the invocation envelope, preserving the same lineage semantics as production harness execution.
-- V1A-GAP-04 is closed. Remaining v1a production-readiness work moves to N5 over-budget compression closure, followed by N7/N8 compression closure, N1-N4 producer replay/drift smoke, and provider slices.
+- V1A-GAP-04 is closed. The later v1a production-readiness slices completed N5/N7/N8 over-budget compression, N1-N4 producer replay/drift smoke, and provider slices; only the optional N9 terminal context handoff audit projection remains deferred and non-blocking for v1a closure.
 
 ## 2026-06-01 - v1a N5 Over-Budget Compression Closure
 - Added N5 evidence extraction compressed-context planning to `TopicSelectionV1aLlmRuntimeBindingService`.
@@ -944,10 +944,7 @@
 - Added N5 focused coverage.
   - Over-target N5 compression succeeds with one gateway call, a compression report artifact, a within-budget final audit, and normal materialization warnings.
   - Compressed-context-still-over-budget blocks with gateway call count `0`, a compression report artifact, blocked token gate audit, and no EvidenceMap authority.
-- Remaining D18 work:
-  - repeat the closure for N7 adjudication recommendation and N8 semantic review;
-  - add N1-N4 producer replay/drift smoke;
-  - add uneven provider slices after N7/N8 closure.
+- Subsequent D18 work completed later: N7/N8 compression closure, N1-N4 producer replay/drift smoke, and uneven provider slices.
 
 ## 2026-06-01 - v1a N7 Over-Budget Compression Closure
 - Added N7 adjudication compressed-context planning to `TopicSelectionV1aLlmRuntimeBindingService`.
@@ -968,10 +965,7 @@
   - Over-target N7 compression succeeds with one gateway call, a compression report artifact in the harness trace, a within-budget final audit, and normal adjudication warnings.
   - Compressed-context-still-over-budget blocks with gateway call count `0`, a compression report artifact, blocked token gate audit, and no adjudication authority.
   - Compression-quality-gate failure blocks with gateway call count `0`, a blocked compression report artifact, and no adjudication authority.
-- Remaining D18 work:
-  - repeat the closure for N8 semantic review;
-  - add N1-N4 producer replay/drift smoke;
-  - add uneven provider slices after N8 closure.
+- Subsequent D18 work completed later: N8 compression closure, N1-N4 producer replay/drift smoke, and uneven provider slices.
 
 ## 2026-06-01 - v1a N8 Over-Budget Compression Closure
 - Added N8 human-confirmation semantic-review compressed-context planning to `TopicSelectionV1aLlmRuntimeBindingService`.
@@ -992,9 +986,7 @@
   - Over-target N8 compression succeeds with one gateway call, a compression report artifact in the harness trace, a within-budget final audit, and normal human confirmation authority materialization.
   - Compressed-context-still-over-budget blocks with gateway call count `0`, a compression report artifact, blocked token gate audit, and no ValidatedNeed authority.
   - Compression-quality-gate failure blocks with gateway call count `0`, a blocked compression report artifact, and no ValidatedNeed authority.
-- Remaining D18 work:
-  - add N1-N4 producer replay/drift smoke;
-  - add uneven provider slices: DashScope N7/N8 and OpenAI N8.
+- Subsequent D18 work completed later: N1-N4 producer replay/drift smoke and uneven provider slices for DashScope N7/N8 plus OpenAI N8.
 
 ## 2026-06-01 - v1a N1-N4 Producer Replay/Drift Smoke
 - Added replay identity to deterministic v1a context producers N1-N4.
@@ -1010,9 +1002,7 @@
   - The assertion now compares functional ref identity by value through `sameFunctionalRef`, matching production storage semantics.
 - Added focused unit coverage.
   - The new N1-N4 producer replay unit test covers exact replay provenance, ref stability, same-attempt input-hash drift blocking, no authority refs on drift, and zero LLM gateway calls.
-- Remaining v1a work:
-  - add uneven provider slices: DashScope N7/N8 and OpenAI N8;
-  - optional N9 terminal context handoff audit projection.
+- Subsequent v1a provider-slice work completed later. Optional N9 terminal context handoff audit projection remains deferred and non-blocking.
 
 ## 2026-06-01 - v1a N8 Runtime Quality Findings Closure
 - Closed the implementation-readiness review findings from the N8 semantic-review runtime slice.
@@ -1023,9 +1013,7 @@
   - A provenance-drift mocked semantic review blocks before HumanConfirmedDecision/ValidatedNeed authority writes.
   - A malformed semantic review output routes to `require_human_review` and preserves `SEMANTIC_REVIEW_FAILED`.
   - The context packet hash test proves `created_at` is excluded from the stable hash while still present in the persisted packet.
-- Remaining v1a work:
-  - add uneven provider slices: DashScope N7/N8 and OpenAI N8;
-  - optional N9 terminal context handoff audit projection.
+- Subsequent v1a provider-slice work completed later. Optional N9 terminal context handoff audit projection remains deferred and non-blocking.
 
 ## 2026-06-01 - v1b N4 Runtime First Slice
 - Promoted the initial N4 research-slice option draft path.
@@ -1058,6 +1046,20 @@
 - Prompt binding now includes an explicit `output_lineage` block and instructs providers to copy lineage fields exactly, keep `review_reason_codes` empty for pass, and reserve reason codes for warning/manual-review cases.
 - The normalization is provider-only. Existing mocked/Codex lineage/provenance drift tests still block before `HumanConfirmedDecision` or `ValidatedNeed` authority writes.
 - OpenAI N8 passed after the same hardening, confirming the N8 provider slice is stable across OpenAI and DashScope through the shared `AgentOrchestrator -> BackendLlmGateway` path.
+
+## 2026-06-01 - v1a Closure Audit
+- Reviewed v1a N1-N9 against the T-112 runtime boundary after the provider slice was committed.
+- No blocking code findings were found in the v1a promoted runtime surface.
+- Node-level closure:
+  - N1-N4 are deterministic context producers. They do not require LLM runtime binding, but now have exact replay/input-hash drift blocking and zero-LLM replay smoke coverage.
+  - N5 evidence extraction uses `TopicSelectionV1aLlmRuntimeBindingService` for runtime token/compression identity; EvidenceMap authority remains owned by deterministic materialization.
+  - N6 candidate generation uses the v1a N6 runtime context-cache binding facade plus `AgentOrchestrator`; exact context-cache hits still run admission/routing/persistence gates.
+  - N7 adjudication uses shared runtime token/compression identity; residual-risk, method-gap, high-risk, duplicate, and route-policy gates remain deterministic.
+  - N8 semantic review is advisory only. Provider outputs are lineage-stamped from runtime context before authority materialization, and pass-status coverage/scope fields are still deterministically checked.
+  - N9 publish is deterministic. Exact replay and lineage drift are covered; optional terminal context handoff audit projection remains deferred and non-blocking.
+- Documentation drift fixed during the audit:
+  - earlier “Remaining v1a work” notes now point to later completed slices instead of implying provider slices are still open;
+  - v1a-specific acceptance items now distinguish completed v1a closure from still-open global v1b/v1c/resource-sampling coverage.
 
 ## 2026-06-01 - v1b N4 L3 Prisma-Backed Runtime Smoke
 - Added `n4_runtime_smoke` to `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` and exposed it as `pnpm topic-selection:v1b-n4-runtime-smoke`.

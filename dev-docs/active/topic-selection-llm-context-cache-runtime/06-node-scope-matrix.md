@@ -201,6 +201,17 @@ v1a runtime closure blockers:
 - N8 semantic review must remain advisory and cannot replace human confirmation authority.
 - Cross-run context cache hits are allowed only for exact semantic cache identity; consumers must not require current workflow ownership, but must validate refs/hashes/profile/context-family before use.
 
+### v1a Closure Audit Matrix
+
+| Node scope | Runtime/cache/compression status | Authority boundary | Closure evidence |
+|---|---|---|---|
+| N1-N4 context producers | deterministic only; no LLM runtime required; exact replay/input-hash drift covered | TopicSeed, resource snapshot, SearchPlan, and SearchRun writes remain deterministic | producer replay unit + Prisma replay smoke cover exact replay, drift block, and zero LLM calls |
+| N5 evidence extraction | runtime-bound prompt/token/compression through `TopicSelectionV1aLlmRuntimeBindingService` | EvidenceMap/EvidenceUnit writes remain owned by materialization service | over-target compression, compressed-still-over-budget, and materialization gate tests |
+| N6 candidate generation | single-agent/debate runtime-bound; exact context-cache hit/stale/drift covered | candidate admission/routing/persistence gates still run after cache hit | N6 runtime cache stress plus provider over-budget zero-call fixtures |
+| N7 adjudication | runtime-bound prompt/token/compression; provider response reuse blocked | residual-risk, method-gap, route, duplicate, and high-risk gates remain deterministic | N7 compression and provider DashScope slice evidence |
+| N8 human confirmation review | runtime-bound advisory semantic review; provider lineage stamped from runtime context | human confirmation service remains the only ValidatedNeed authority boundary | N8 compression, lineage/provenance drift, coverage/scope gate, DashScope/OpenAI provider evidence |
+| N9 publish | deterministic bridge; exact replay and lineage drift covered | v1b input bundle publish remains deterministic and idempotent | N9 publish replay/lineage drift unit and Prisma replay smoke; terminal audit projection deferred |
+
 ## v1b N7 Runtime First-Slice Candidate Rows
 These rows are the first post-v1a promotion target. D19-D23 are locked for planning. Runtime profiles may be implemented only with the D22 Layer 1/Layer 2 cases specified for the slice.
 

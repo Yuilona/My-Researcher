@@ -59,7 +59,9 @@
 - [x] v1a WorkflowHarness runtime policy stress verifies N1-N4 context producer lineage/source-health/hash-drift behavior, N9 publish replay/lineage drift boundaries, N6 exact context-cache hit/drift/stale behavior, provider-required call counts, deterministic gate artifacts after cache hit, N6 compression/re-render, and N5/N7/N8 token-budget audit decisions.
 - [x] v1a N5 EvidenceMap extraction over-target path records a quality-gated compression report, rerenders compressed context, reruns token gate through `AgentOrchestrator`, and preserves the deterministic materialization authority boundary.
 - [x] v1a N8 human-confirmation semantic review over-target path records a quality-gated compression report, rerenders compressed advisory context, reruns token gate through `AgentOrchestrator`, and preserves the human confirmation authority boundary.
-- [ ] Provider-backed invocations outside the promoted v1a N6 first slice perform token-budget preflight before calling OpenAI/DashScope/DeepSeek-compatible gateways.
+- [x] v1a provider-backed N5/N7/N8 invocations outside the original N6 first slice perform token-budget preflight before provider calls, route through `AgentOrchestrator -> BackendLlmGateway`, and preserve deterministic authority boundaries.
+- [x] v1a cache/replay hits do not create duplicate authority writes and do not skip deterministic gates for N1-N4 producers, N6 candidate generation, N7 adjudication, N8 confirmation, or N9 publish.
+- [ ] Global provider-backed invocations outside the promoted v1a surface perform token-budget preflight before calling OpenAI/DashScope/DeepSeek-compatible gateways.
 - [x] `provider_llm` execution in the promoted v1a N6 first slice never silently serves cached responses as live provider calls.
 - [x] Exact response reuse is allowed only for explicit replay/test/acceptance or operator-approved Codex-assisted reuse with `non_provider=true` in the `AgentOrchestrator` Codex path.
 - [ ] Context packet read-through cache reuses compiled packets only when exact key fields match.
@@ -69,6 +71,7 @@
 - [x] Live OpenAI/DashScope v1a N6 provider canaries record telemetry and prove provider-required scenarios still perform live provider calls.
 
 ## Current Focus
+- Current operator focus is v1a closure audit. v1b/v1c follow-up work is paused for this pass except where already recorded as prior completed context.
 - Current v1a production-readiness focus is closed for the promoted T-112 runtime slice: D18.2/D18.3/D18.4/D18.5/D18.6, N1-N4 producer replay/drift smoke, N5/N7/N8 over-budget compression, and uneven provider slices for DashScope N7/N8 plus OpenAI N8 are complete. N5/N7/N8 runtime binding now lives outside `WorkflowHarness`, v1a runtime stress has separate `baseline` and `mocked_n5_n8` context modes with prompt-index assertions for N5/N6/N7/N8, and N1-N4 deterministic context producers have DB-backed exact replay/input-hash drift coverage.
 - v1b N7 runtime first slice is closed for L1-L3 plus minimum adversarial quality coverage.
 - D24 v1b N6 chain alignment is closed for first-slice planning.
