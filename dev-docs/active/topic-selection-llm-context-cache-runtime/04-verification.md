@@ -677,6 +677,17 @@
 |---|---|---|
 | `T112_V1B_N4_PROVIDER_CANARY_LIVE=1 BACKEND_TEST_PRESERVE_REAL_ENV=1 pnpm --filter @paper-engineering-assistant/backend exec node --env-file=/Volumes/DataDisk/Project/My-Researcher/.env.local --test --loader ts-node/esm --test-name-pattern "provider canary live v1b N4" src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | 24 tests discovered after the v1a provider-slice commit split: 2 N4 live provider canaries passed and 22 nonmatching tests skipped by the test-name pattern. OpenAI completed in about 22.0 seconds; DashScope completed in about 159.8 seconds. Both used the configured `AgentOrchestrator -> BackendLlmGateway` path and preserved provider-required-live response non-reuse semantics. |
 
+## 2026-06-01 - v1c N2 Promotion Support LLM Draft Runtime Slice
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-v1c-promotion-gate-service.unit.test.ts` | passed | 14/14 promotion gate tests passed. LLM draft success now goes through `AgentOrchestrator`, resolves `topic-selection-promotion-decision-support.openai-balanced`, records runtime provenance, and leaves deterministic gate disposition authoritative. LLM draft failure still fails closed with no deterministic fallback persistence. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-context-policy-profile-registry-service.unit.test.ts src/services/topic-selection-model-profile-registry-service.unit.test.ts` | passed | 9/9 registry tests passed after adding the v1c N2 context profile and provider-only promotion support model profile. |
+| `pnpm --filter @paper-engineering-assistant/backend exec tsc --noEmit` | passed | Backend TypeScript compile passed after the v1c N2 runtime migration. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registry remains structurally valid after aligning the code registry with the existing promotion-decision-support prompt/profile entries. |
+| `git diff --check` | passed | No whitespace errors after the v1c N2 runtime/documentation patch set. |
+| `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main` | passed | Project governance sync completed after v1c N2 documentation updates. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after v1c N2 documentation updates. |
+
 ## Required Before Implementation
 - Contract design reviewed against T-088/T-089 D-18. Done.
 - First slice selected and approved: shared contracts/runtime primitives followed by v1a N6 single-agent and debate slots. Done.

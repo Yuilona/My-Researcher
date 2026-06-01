@@ -25,6 +25,7 @@ import { InMemoryTopicSelectionV1cPromotionGateRepository } from '../repositorie
 import { PrismaTopicSelectionV1cPromotionGateRepository } from '../repositories/prisma/prisma-topic-selection-v1c-promotion-gate-repository.js';
 import type {
   LlmCallTelemetry,
+  LlmStructuredOutputRequest,
 } from './llm-gateway.js';
 import {
   TopicSelectionV1cPromotionGateService,
@@ -454,13 +455,17 @@ test('LLM draft success stores draft prose while deterministic gate remains auth
     provider_side_cache_read_tokens: null,
     provider_side_cache_write_tokens: null,
   };
+  const gatewayCalls: LlmStructuredOutputRequest[] = [];
   const { service } = makeSubject({
     llmGateway: {
-      createStructuredOutput: async () => ({
-        parsed: draft,
-        raw: { ok: true },
-        telemetry,
-      }),
+      createStructuredOutput: async (request: LlmStructuredOutputRequest) => {
+        gatewayCalls.push(request);
+        return {
+          parsed: draft,
+          raw: { ok: true },
+          telemetry,
+        };
+      },
     },
   });
 
@@ -472,6 +477,12 @@ test('LLM draft success stores draft prose while deterministic gate remains auth
   assert.equal(result.promotion_decision_support.summary, draft.summary);
   assert.deepEqual(result.promotion_decision_support.llm_draft_payload, draft);
   assert.equal(result.promotion_gate_check.disposition, 'ready_for_human_decision');
+  assert.equal(gatewayCalls.length, 1);
+  assert.equal(gatewayCalls[0]?.model.profileId, 'topic-selection-promotion-decision-support');
+  assert.equal(gatewayCalls[0]?.prompt.promptTemplateId, 'topic-selection-promotion-decision-support');
+  assert.equal(gatewayCalls[0]?.schemaName, 'TopicSelectionPromotionDecisionSupportLlmDraft');
+  assert.equal(gatewayCalls[0]?.executionContext.metadata?.profile_id, 'topic-selection-promotion-decision-support');
+  assert.equal(gatewayCalls[0]?.executionContext.metadata?.model_option_id, 'topic-selection-promotion-decision-support.openai-balanced');
 });
 
 test('LLM draft failure fails closed without deterministic fallback persistence', async () => {

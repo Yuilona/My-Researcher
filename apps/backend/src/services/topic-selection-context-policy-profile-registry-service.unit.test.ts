@@ -18,6 +18,8 @@ import {
   TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1B_N8_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1C_N2_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1C_N2_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
 } from './topic-selection-context-policy-profile-registry-service.js';
 
@@ -220,6 +222,27 @@ test('context policy profile registry validates and resolves v1a runtime profile
   );
   assert.equal(
     n8ValueAssessment.profile.compression_policy.preserved_fact_kinds.includes('feedback_recheck_hint'),
+    true,
+  );
+
+  const v1cPromotionSupport = service.resolveProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1C_N2_CONTEXT_RUNTIME_PROFILE_IDS.promotion_support_llm_draft,
+    invocation_slot_id: TOPIC_SELECTION_V1C_N2_INVOCATION_SLOT_IDS.promotion_support_llm_draft,
+  });
+  assert.equal(v1cPromotionSupport.profile.context_family, 'v1c_n2_promotion_support');
+  assert.equal(v1cPromotionSupport.profile.functional_template, 'candidate_for_deterministic_gate');
+  assert.equal(v1cPromotionSupport.profile.token_budget_policy.estimated_output_token_budget, 2048);
+  assert.equal(
+    v1cPromotionSupport.profile.cache_policy.post_cache_gates.includes('promotion_support_admission'),
+    true,
+  );
+  assert.equal(
+    v1cPromotionSupport.profile.compression_policy.preserved_fact_kinds.includes('promotion_input_snapshot'),
+    true,
+  );
+  assert.equal(
+    v1cPromotionSupport.profile.compression_policy.preserved_fact_kinds.includes('recheck_hint'),
     true,
   );
 });

@@ -123,6 +123,15 @@ export const TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS = {
   value_assessment_draft: 'n8_value_assessment_draft',
 } as const;
 
+export const TOPIC_SELECTION_V1C_N2_CONTEXT_RUNTIME_PROFILE_IDS = {
+  promotion_support_llm_draft:
+    'topic-selection.v1c.n2.promotion-support-llm-draft.context-runtime@v1',
+} as const;
+
+export const TOPIC_SELECTION_V1C_N2_INVOCATION_SLOT_IDS = {
+  promotion_support_llm_draft: 'promotion_support_generation.llm_draft',
+} as const;
+
 export type TopicSelectionContextPolicyProfileRegistryValidationIssueCode =
   | 'SCHEMA_VALIDATION_FAILED'
   | 'DUPLICATE_PROFILE_ID'
@@ -650,6 +659,43 @@ const DEFAULT_TOPIC_SELECTION_CONTEXT_POLICY_PROFILE_REGISTRY:
           'compression_structure_manifest',
           'deterministic_gate',
           'feedback_boundary',
+          'authority_boundary',
+        ],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1C_N2_CONTEXT_RUNTIME_PROFILE_IDS.promotion_support_llm_draft,
+        invocation_slot_id: TOPIC_SELECTION_V1C_N2_INVOCATION_SLOT_IDS.promotion_support_llm_draft,
+        functional_template: 'candidate_for_deterministic_gate',
+        context_family: 'v1c_n2_promotion_support',
+        estimated_input_token_target: 24000,
+        estimated_output_token_budget: 2048,
+        preserved_fact_kinds: [
+          ...COMMON_PRESERVED_FACT_KINDS,
+          'promotion_input_snapshot',
+          'topic_package',
+          'topic_question_contract',
+          'answerability_plan',
+          'research_slice',
+          'value_assessment',
+          'promotion_readiness',
+          'evidence_ref',
+          'accepted_risk',
+          'blocker',
+          'recheck_hint',
+          'memory_suggestion',
+          'source_health_warning',
+        ],
+        post_reuse_gates: [
+          'schema_validation',
+          'promotion_support_admission',
+          'deterministic_gate',
+          'authority_boundary',
+        ],
+        post_cache_gates: [
+          'schema_validation',
+          'promotion_support_admission',
+          'deterministic_gate',
           'authority_boundary',
         ],
       }),

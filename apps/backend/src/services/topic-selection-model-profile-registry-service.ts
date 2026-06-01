@@ -91,6 +91,12 @@ const PROVIDER_CANARY_RUN_MODE_ELIGIBILITY: TopicSelectionModelProfileRunModeEli
   provider_llm: ['acceptance'],
 };
 
+const PROVIDER_ONLY_RUN_MODE_ELIGIBILITY: TopicSelectionModelProfileRunModeEligibility = {
+  mocked_llm: [],
+  codex_assisted: [],
+  provider_llm: ['acceptance', 'product'],
+};
+
 const PROVIDER_REQUIRED_CAPABILITIES = [
   'structured_output',
   'json_schema',
@@ -104,6 +110,8 @@ export const TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID =
   'topic-selection.need-adjudication.single-agent.v1' as const;
 export const TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID =
   'topic-selection.confirmation-semantic-review.single-agent.v1' as const;
+export const TOPIC_SELECTION_V1C_PROMOTION_DECISION_SUPPORT_PROFILE_ID =
+  'topic-selection-promotion-decision-support' as const;
 export const TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID =
   'topic-selection.need-discovery.explorer.v1' as const;
 export const TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID =
@@ -673,6 +681,21 @@ const DEFAULT_TOPIC_SELECTION_MODEL_PROFILE_REGISTRY: TopicSelectionModelProfile
       run_mode_eligibility: SUPPORT_PROFILE_RUN_MODE_ELIGIBILITY,
       output_contract: 'N8DebateAdmissionReviewSupport@v1',
       model_options: [],
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1C_PROMOTION_DECISION_SUPPORT_PROFILE_ID,
+      profile_function: 'v1c_promotion_decision_support_drafting',
+      role_family: 'single_agent',
+      stage_family: 'v1c_promotion_support',
+      quality_objectives: [
+        'draft_reviewer_facing_support_without_gate_authority',
+        'preserve_promotion_input_snapshot_lineage',
+        'surface_risk_recheck_and_blocker_context_for_deterministic_gate',
+      ],
+      allowed_execution_modes: ['provider_llm'],
+      run_mode_eligibility: PROVIDER_ONLY_RUN_MODE_ELIGIBILITY,
+      output_contract: 'TopicSelectionPromotionDecisionSupportLlmDraft@v1',
+      model_options: providerOptions(TOPIC_SELECTION_V1C_PROMOTION_DECISION_SUPPORT_PROFILE_ID),
     }),
     profileBase({
       profile_id: TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n2_bounded_micro_debate,

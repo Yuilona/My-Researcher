@@ -13,6 +13,14 @@ import type {
   TopicSelectionTransitionResult,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-control-plane-contracts';
 import type {
+  TopicSelectionAgentInvocationAuditSnapshot,
+  TopicSelectionAgentInvocationProvenance,
+  TopicSelectionAgentInvocationTelemetrySummary,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-invocation-contracts';
+import {
+  TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-llm-runtime-contracts';
+import type {
   TopicSelectionArgumentReadinessMiniCheckRecord,
   TopicSelectionArgumentReadinessMiniCheckStatus,
   TopicSelectionPromotionDecisionSupportLlmDraft,
@@ -43,21 +51,29 @@ import type {
 } from '../repositories/topic-selection-v1c-promotion-gate.repository.js';
 import type {
   BackendLlmGateway,
-  LlmCallTelemetry,
   LlmModelRef,
-} from './llm-gateway.js';
-import {
-  DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
 } from './llm-gateway.js';
 import {
   sha256Text,
   stableStringify,
 } from './literature-content-processing-utils.js';
+import {
+  TopicSelectionAgentOrchestratorService,
+} from './topic-selection-agent-orchestrator-service.js';
+import {
+  TOPIC_SELECTION_V1C_N2_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1C_N2_INVOCATION_SLOT_IDS,
+  TopicSelectionContextPolicyProfileRegistryService,
+} from './topic-selection-context-policy-profile-registry-service.js';
+import {
+  TOPIC_SELECTION_V1C_PROMOTION_DECISION_SUPPORT_PROFILE_ID,
+  TopicSelectionModelProfileRegistryService,
+} from './topic-selection-model-profile-registry-service.js';
 
 const WORKFLOW_KEY = 'topic-selection.v1c-promotion-gate-support';
 const GATE_KEY = 'topic-selection.v1c-promotion-gate-check';
 const TRANSITION_KEY = 'v1c-promotion-input-to-gate-support';
-const WORKFLOW_PROFILE_KEY = 'topic-selection-promotion-decision-support';
+const WORKFLOW_PROFILE_KEY = TOPIC_SELECTION_V1C_PROMOTION_DECISION_SUPPORT_PROFILE_ID;
 const PROMPT_TEMPLATE_ID = 'topic-selection-promotion-decision-support';
 const DEFAULT_PROMPT_TEMPLATE_VERSION = '1';
 const DEFAULT_WORKFLOW_PROFILE_VERSION = '1';
@@ -113,6 +129,9 @@ export type TopicSelectionV1cPromotionGateServiceOptions = {
   repository: TopicSelectionV1cPromotionGateRepository;
   promotionInputService: TopicSelectionPromotionInputHandoffProvider;
   llmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'> | null;
+  agentOrchestrator?: TopicSelectionAgentOrchestratorService | null;
+  contextPolicyProfileRegistry?: TopicSelectionContextPolicyProfileRegistryService;
+  modelProfileRegistry?: TopicSelectionModelProfileRegistryService;
   idFactory?: IdFactory;
   now?: () => string;
 };
@@ -136,21 +155,33 @@ type GateEvaluation = {
 type LlmDraftResult = {
   draft: TopicSelectionPromotionDecisionSupportLlmDraft | null;
   raw: Record<string, unknown> | null;
-  telemetry: LlmCallTelemetry | null;
+  telemetry: TopicSelectionAgentInvocationTelemetrySummary | null;
+  provenance: TopicSelectionAgentInvocationProvenance | null;
+  auditSnapshot: TopicSelectionAgentInvocationAuditSnapshot | null;
   fallbackWarning: TopicSelectionGateIssue | null;
 };
 
 export class TopicSelectionV1cPromotionGateService {
   private readonly repository: TopicSelectionV1cPromotionGateRepository;
   private readonly promotionInputService: TopicSelectionPromotionInputHandoffProvider;
-  private readonly llmGateway: Pick<BackendLlmGateway, 'createStructuredOutput'> | null;
+  private readonly agentOrchestrator: TopicSelectionAgentOrchestratorService | null;
+  private readonly contextPolicyProfileRegistry: TopicSelectionContextPolicyProfileRegistryService;
   private readonly idFactory: IdFactory;
   private readonly now: () => string;
 
   constructor(options: TopicSelectionV1cPromotionGateServiceOptions) {
     this.repository = options.repository;
     this.promotionInputService = options.promotionInputService;
-    this.llmGateway = options.llmGateway ?? null;
+    const modelProfileRegistry = options.modelProfileRegistry ?? new TopicSelectionModelProfileRegistryService();
+    this.contextPolicyProfileRegistry =
+      options.contextPolicyProfileRegistry ?? new TopicSelectionContextPolicyProfileRegistryService();
+    this.agentOrchestrator = options.agentOrchestrator
+      ?? (options.llmGateway
+        ? new TopicSelectionAgentOrchestratorService({
+            llmGateway: options.llmGateway,
+            modelProfileRegistry,
+          })
+        : null);
     this.idFactory = options.idFactory ?? ((prefix) => `${prefix}_${crypto.randomUUID()}`);
     this.now = options.now ?? (() => new Date().toISOString());
   }
@@ -183,20 +214,22 @@ export class TopicSelectionV1cPromotionGateService {
 
     const createdBy = input.created_by ?? 'system';
     const now = this.now();
-    const llmDraft = mode === 'llm_draft'
-      ? await this.createLlmDraft({ handoff, model, promptTemplateVersion, supportRunKey })
-      : {
-          draft: null,
-          raw: null,
-          telemetry: null,
-          fallbackWarning: null,
-        };
     const supportId = this.idFactory('promotion_decision_support');
     const dossierId = this.idFactory('promotion_dossier');
     const inputSnapshotId = this.idFactory('input_snapshot');
     const workflowRunId = this.idFactory('workflow_run');
     const supportArtifactId = this.idFactory('artifact_ref');
     const dossierArtifactId = this.idFactory('artifact_ref');
+    const llmDraft = mode === 'llm_draft'
+      ? await this.createLlmDraft({ handoff, model, promptTemplateVersion, supportRunKey, workflowRunId })
+      : {
+          draft: null,
+          raw: null,
+          telemetry: null,
+          provenance: null,
+          auditSnapshot: null,
+          fallbackWarning: null,
+        };
     const sourceRefs = this.compileSourceRefs(handoff);
     const supportArtifactRef = this.ref('artifact_ref', supportArtifactId, handoff.snapshot.title_card_id, null);
     const dossierArtifactRef = this.ref('artifact_ref', dossierArtifactId, handoff.snapshot.title_card_id, null);
@@ -493,29 +526,46 @@ export class TopicSelectionV1cPromotionGateService {
     model: LlmModelRef;
     promptTemplateVersion: string;
     supportRunKey: string;
+    workflowRunId: string;
   }): Promise<LlmDraftResult> {
-    if (!this.llmGateway) {
+    if (!this.agentOrchestrator) {
       throw new AppError(
         409,
         'GATE_CONSTRAINT_FAILED',
-        'LLM draft mode requires an explicitly configured LLM gateway; default deterministic fallback is disabled.',
+        'LLM draft mode requires an explicitly configured LLM runtime; default deterministic fallback is disabled.',
       );
     }
     try {
-      const response = await this.llmGateway.createStructuredOutput<TopicSelectionPromotionDecisionSupportLlmDraft>({
-        executionContext: {
-          feature: 'topic-selection',
-          operation: 'v1c-promotion-decision-support',
-          traceId: input.supportRunKey,
-          metadata: {
-            promotion_input_snapshot_id: input.handoff.promotion_input_snapshot_id,
-          },
-        },
-        model: input.model,
+      const runtimeProfile = this.contextPolicyProfileRegistry.resolveProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1C_N2_CONTEXT_RUNTIME_PROFILE_IDS.promotion_support_llm_draft,
+        invocation_slot_id:
+          TOPIC_SELECTION_V1C_N2_INVOCATION_SLOT_IDS.promotion_support_llm_draft,
+      });
+      const runtimeInvocationContextHash = this.promotionSupportRuntimeInvocationContextHash({
+        handoff: input.handoff,
+        supportRunKey: input.supportRunKey,
+      });
+      const response = await this.agentOrchestrator.invokeStructuredOutput<TopicSelectionPromotionDecisionSupportLlmDraft>({
+        workspace_id: input.handoff.snapshot.workspace_id ?? null,
+        title_card_id: input.handoff.snapshot.title_card_id,
+        node_id: 'topic-selection.v1c.generate-promotion-support.v1',
+        workflow_run_id: input.workflowRunId,
+        node_attempt_id: `node_attempt_${input.supportRunKey}`,
+        invocation_attempt_id: `${input.supportRunKey}.promotion_support_generation.llm_draft`,
+        execution_mode: 'provider_llm',
+        executor_kind: 'single_agent',
+        run_mode: 'acceptance',
+        profile_id: WORKFLOW_PROFILE_KEY,
+        model_option_id: this.promotionSupportModelOptionId(input.model),
+        output_contract: 'TopicSelectionPromotionDecisionSupportLlmDraft@v1',
         prompt: {
           promptTemplateId: PROMPT_TEMPLATE_ID,
           version: input.promptTemplateVersion,
         },
+        prompt_variant_key: TOPIC_SELECTION_V1C_N2_INVOCATION_SLOT_IDS.promotion_support_llm_draft,
+        schema_name: 'TopicSelectionPromotionDecisionSupportLlmDraft',
+        schema: topicSelectionPromotionDecisionSupportLlmDraftSchema as unknown as Record<string, unknown>,
         messages: [
           {
             role: 'system',
@@ -532,21 +582,41 @@ export class TopicSelectionV1cPromotionGateService {
             }),
           },
         ],
-        schemaName: 'TopicSelectionPromotionDecisionSupportLlmDraft',
-        schema: topicSelectionPromotionDecisionSupportLlmDraftSchema as unknown as Record<string, unknown>,
-        normalizedParams: DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
-        policy: {
-          timeoutMs: 60_000,
-          maxRetries: 1,
+        input_refs: this.compileSourceRefs(input.handoff),
+        runtime_token_budget: {
+          context_policy_profile: runtimeProfile.profile,
+          context_policy_profile_hash: runtimeProfile.profile_hash,
+          runtime_invocation_context_hash: runtimeInvocationContextHash,
+          context_payloads: [input.handoff],
         },
+        created_by: 'system',
       });
+      if (response.status !== 'succeeded' || !response.structured_output) {
+        throw new AppError(
+          502,
+          'INTERNAL_ERROR',
+          'LLM draft generation failed; default deterministic fallback is disabled.',
+          {
+            failure_code: 'LLM_INVOCATION_FAILED',
+            invocation_error_code: response.error_code ?? null,
+            support_run_key: input.supportRunKey,
+            blocker_codes: response.blocker_codes,
+            warning_codes: response.warning_codes,
+          },
+        );
+      }
       return {
-        draft: response.parsed,
-        raw: response.raw,
-        telemetry: response.telemetry,
+        draft: response.structured_output,
+        raw: null,
+        telemetry: response.provenance.telemetry,
+        provenance: response.provenance,
+        auditSnapshot: response.audit_snapshot,
         fallbackWarning: null,
       };
     } catch (error) {
+      if (error instanceof AppError && error.statusCode === 502) {
+        throw error;
+      }
       throw new AppError(
         502,
         'INTERNAL_ERROR',
@@ -558,6 +628,59 @@ export class TopicSelectionV1cPromotionGateService {
         },
       );
     }
+  }
+
+  private promotionSupportRuntimeInvocationContextHash(input: {
+    handoff: TopicSelectionPromotionInputSnapshotHandoff;
+    supportRunKey: string;
+  }): string {
+    return sha256Text(stableStringify({
+      schema_version: TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
+      invocation_slot_id: TOPIC_SELECTION_V1C_N2_INVOCATION_SLOT_IDS.promotion_support_llm_draft,
+      scenario_context: {
+        identity_policy: 'semantic_identity',
+        scenario_id: 'v1c_promotion_support_generation',
+        scenario_case_id: 'llm_draft',
+        semantic_scenario_key: sha256Text(stableStringify({
+          support_run_key: input.supportRunKey,
+          promotion_input_snapshot_id: input.handoff.promotion_input_snapshot_id,
+          snapshot_hashes: input.handoff.snapshot_hashes,
+        })),
+      },
+      loop_context: {
+        loop_kind: 'initial',
+        loop_stage: 'v1c_n2_promotion_support',
+        current_round_index: 1,
+        remaining_round_budget: null,
+        loopback_source_node_id: null,
+        repair_origin_ref: null,
+        repair_origin_hash: null,
+      },
+      debate_context: {
+        debate_loop_id: null,
+        debate_policy_id: null,
+        round_index: null,
+        role: null,
+        stage: null,
+        agent_instance_id: null,
+        parent_invocation_attempt_ids_hash: null,
+        dynamic_material_refs_hash: null,
+      },
+    }));
+  }
+
+  private promotionSupportModelOptionId(model: LlmModelRef): string {
+    if (model.providerId === 'openai') {
+      return `${WORKFLOW_PROFILE_KEY}.openai-balanced`;
+    }
+    if (model.providerId === 'dashscope') {
+      return `${WORKFLOW_PROFILE_KEY}.dashscope-thinking-budget`;
+    }
+    throw new AppError(
+      400,
+      'INVALID_PAYLOAD',
+      `Unsupported v1c N2 promotion-support provider: ${model.providerId}.`,
+    );
   }
 
   private buildMiniCheck(input: {
@@ -853,15 +976,25 @@ export class TopicSelectionV1cPromotionGateService {
       workflow_profile_version: input.workflowProfileVersion,
       input_snapshot_id: input.inputSnapshotId,
       status: 'succeeded',
-      provider_id: input.mode === 'llm_draft' ? input.model.providerId : null,
-      model_id: input.mode === 'llm_draft' ? input.model.modelId : null,
-      prompt_template_id: input.mode === 'llm_draft' ? PROMPT_TEMPLATE_ID : null,
-      prompt_template_version: input.mode === 'llm_draft' ? input.promptTemplateVersion : null,
+      provider_id: input.mode === 'llm_draft'
+        ? input.llmDraft.provenance?.provider_id ?? input.model.providerId
+        : null,
+      model_id: input.mode === 'llm_draft'
+        ? input.llmDraft.provenance?.model_id ?? input.model.modelId
+        : null,
+      prompt_template_id: input.mode === 'llm_draft'
+        ? input.llmDraft.provenance?.prompt_template_id ?? PROMPT_TEMPLATE_ID
+        : null,
+      prompt_template_version: input.mode === 'llm_draft'
+        ? input.llmDraft.provenance?.prompt_template_version ?? input.promptTemplateVersion
+        : null,
       started_at: input.now,
       finished_at: input.now,
       telemetry: {
         deterministic_gate_authoritative: false,
         llm_draft_telemetry: input.llmDraft.telemetry,
+        llm_runtime_provenance: input.llmDraft.provenance,
+        llm_runtime_audit: input.llmDraft.auditSnapshot,
       },
       output_summary: {
         support_status: input.support.support_status,
@@ -873,7 +1006,8 @@ export class TopicSelectionV1cPromotionGateService {
     };
     const supportArtifactPayload = {
       support: input.support,
-      llm_draft_raw: input.llmDraft.raw,
+      llm_draft_raw: null,
+      llm_runtime_provenance: input.llmDraft.provenance,
       deterministic_gate_authoritative: false,
     };
     const dossierArtifactPayload = {

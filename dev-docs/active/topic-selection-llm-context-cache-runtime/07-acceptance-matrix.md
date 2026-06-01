@@ -258,6 +258,7 @@
 | v1b N7 compression preservation | risk/gap/recheck, failed-trial, N8 feedback, selected-candidate, and accepted-risk facts survive compression or the report blocks |
 | v1b N7 N7->N8 handoff | support artifacts are preserved as refs/hashes and remain non-authority in the handoff |
 | v1b N7 N7->N6 loopback context | failed-trial synthesis and regeneration hints are preserved as refs/hashes and remain non-authority repair context for N6 |
+| v1c N2 llm_draft runtime | promotion support LLM draft runs through shared runtime instead of direct provider gateway |
 | v1c N2 | promotion support compression cannot bypass deterministic promotion gate |
 | v1c feedback normalization | malformed reused packet cannot create downstream recheck |
 

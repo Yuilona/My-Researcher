@@ -46,7 +46,7 @@ For v1a specifically, `WorkflowHarness` should remain a flow controller and veri
 ## Runtime Integration Pattern
 All LLM-like paths use the same runtime kernel through an adapter:
 - `AgentOrchestrator` paths call the runtime for profile resolution, key building, token preflight, cache/reuse policy, compression validation, and provenance before invoking provider/Codex/mock behavior.
-- Direct `BackendLlmGateway` callers, including resource sampling and v1c promotion support `llm_draft`, must move behind a runtime provider wrapper before provider execution.
+- Direct `BackendLlmGateway` callers must move behind a runtime provider wrapper before provider execution. The v1c promotion support `llm_draft` path has been migrated; resource sampling and remaining v1c provider/canary slots still need promotion to runtime-backed adapters.
 - External artifact admission paths, including v1b semantic artifacts and v1c Codex acceptance outputs, call runtime admission validation for schema, hashes, provenance, reuse policy, and post-reuse gates without triggering provider execution.
 - Provider canaries call the runtime with `provider_required_live`, which forces live provider execution and treats cached responses as miss/block only.
 

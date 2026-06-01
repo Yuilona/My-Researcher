@@ -597,6 +597,12 @@
   - L4 local and live provider/executor canary is implemented for OpenAI and DashScope over `AgentOrchestrator -> BackendLlmGateway`; live N4 provider canaries are explicit-gated by `T112_V1B_N4_PROVIDER_CANARY_LIVE=1` and provider keys;
   - L5 long-context/adversarial coverage blocks dropped N4 preserved facts and forbidden persisted payloads before compressed context can become prompt input;
   - N4 first-slice runtime closure evidence is complete for local/dev, local provider canary, live provider canary, and L5 adversarial compression.
+- P3.1 v1c N2 promotion support `llm_draft` runtime migration:
+  - first v1c slice is limited to `promotion_support_generation.llm_draft`; bounded micro-debate roles, N3/N4 canaries, and N6 feedback normalization remain separate follow-up slots;
+  - direct `BackendLlmGateway` is removed from the v1c N2 LLM draft path in favor of `TopicSelectionAgentOrchestratorService` with `v1c_n2_promotion_support` context profile and `topic-selection-promotion-decision-support` model profile;
+  - prompt/cache identity includes promotion input snapshot hashes, support run key, prompt variant key, output contract, runtime invocation context hash, model option id, redaction policy, and context profile hash;
+  - provider response reuse remains blocked; provider telemetry is stored as runtime telemetry/provenance, while raw provider response payload is not persisted in the support artifact;
+  - deterministic N3 promotion gate remains authoritative; LLM draft output can only populate reviewer-facing support prose before the deterministic gate check.
 
 ### Shared Rules
 - Every promoted v1b LLM-like slot MUST pass through the shared runtime boundary for token-budget preflight, prompt packet identity/cache, compression report validation, runtime audit, provider telemetry separation, and response-reuse provenance.

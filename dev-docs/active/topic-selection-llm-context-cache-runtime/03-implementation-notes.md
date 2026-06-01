@@ -1091,3 +1091,19 @@
   - DashScope completed within the 300-second test timeout.
   - The same provider-required-live and response non-reuse assertions passed.
 - N4 first-slice runtime closure now has L1/L2 implementation, L3 Prisma-backed smoke, L4 local and live provider evidence, and L5 long-context/adversarial compression coverage.
+
+## 2026-06-01 - v1c N2 Promotion Support LLM Draft Runtime Slice
+- Started Phase 3 with the existing v1c N2 `promotion_support_generation.llm_draft` path.
+  - Scope is only the current single LLM draft path in `TopicSelectionV1cPromotionGateService`.
+  - Bounded micro-debate role slots, N3/N4 provider canaries, and N6 downstream feedback normalization remain follow-up v1c slots.
+- Replaced direct `BackendLlmGateway` execution with `TopicSelectionAgentOrchestratorService`.
+  - `llm_draft` now uses the shared runtime for prompt packet identity, token-budget preflight, model profile resolution, provider telemetry, response non-reuse, and invocation audit snapshot creation.
+  - Added `topic-selection.v1c.n2.promotion-support-llm-draft.context-runtime@v1` with context family `v1c_n2_promotion_support`.
+  - Added `topic-selection-promotion-decision-support` to the model profile registry with provider-only OpenAI/DashScope options.
+- Preserved authority boundaries.
+  - `TopicSelectionPromotionDecisionSupportLlmDraft@v1` remains reviewer-facing support prose only.
+  - Deterministic N3 promotion gate evaluation remains the authority for disposition, loopback hints, and promotion readiness.
+  - Provider response reuse remains blocked; raw provider response payload is not persisted in the support artifact.
+- Runtime provenance is stored in the existing v1c support control-plane telemetry.
+  - Telemetry now includes `llm_runtime_provenance` and `llm_runtime_audit`.
+  - Provider telemetry remains separated from business support fields.
