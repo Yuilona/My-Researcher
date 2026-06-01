@@ -13,6 +13,9 @@ const RUN_ID = normalizeOptionalString(process.env.TOPIC_SELECTION_V1A_RUNTIME_S
   ?? `t112-v1a-runtime-stress-${Date.now()}`;
 const ITERATIONS = positiveInt(process.env.TOPIC_SELECTION_V1A_RUNTIME_STRESS_ITERATIONS, 2);
 const MODES = parseModes(process.env.TOPIC_SELECTION_V1A_RUNTIME_STRESS_MODES ?? 'single_agent');
+const CONTEXT_MODES = parseContextModes(
+  process.env.TOPIC_SELECTION_V1A_RUNTIME_STRESS_CONTEXT_MODES ?? 'baseline',
+);
 const CHILD_TIMEOUT_MS = positiveInt(process.env.TOPIC_SELECTION_V1A_RUNTIME_STRESS_CHILD_TIMEOUT_MS, 600000);
 const RESOURCE_SAMPLE_SET_ID = normalizeOptionalString(process.env.TOPIC_SELECTION_REAL_RESOURCE_SAMPLE_SET_ID)
   ?? 'resource_sample_set_t112_prod_balanced_20260530';
@@ -25,6 +28,8 @@ const N6_SLOT_IDS = new Set([
   'arbiter.issue_framing',
   'arbiter.final_synthesis',
 ]);
+const N5_SLOT_ID = 'evidence_extraction';
+const N8_SLOT_ID = 'confirmation_semantic_review';
 
 function normalizeOptionalString(value) {
   const normalized = value?.trim();
@@ -45,6 +50,20 @@ function parseModes(raw) {
   for (const mode of normalized) {
     if (mode !== 'single_agent' && mode !== 'multi_agent_debate') {
       throw new Error(`Unsupported v1a runtime stress mode: ${mode}`);
+    }
+  }
+  return normalized;
+}
+
+function parseContextModes(raw) {
+  const modes = String(raw ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const normalized = modes.length > 0 ? modes : ['baseline'];
+  for (const mode of normalized) {
+    if (mode !== 'baseline' && mode !== 'mocked_n5_n8') {
+      throw new Error(`Unsupported v1a runtime stress context mode: ${mode}`);
     }
   }
   return normalized;
@@ -78,7 +97,9 @@ async function promptPacketIndexSnapshot(prisma, since = null) {
   const n6Rows = rows.filter((row) => N6_SLOT_IDS.has(row.invocationSlotId));
   return {
     total_count: rows.length,
+    n5_count: rows.filter((row) => row.invocationSlotId === N5_SLOT_ID).length,
     n6_count: n6Rows.length,
+    n8_count: rows.filter((row) => row.invocationSlotId === N8_SLOT_ID).length,
     compressed_count: rows.filter((row) => row.compressionReportHash).length,
     by_invocation_slot_id: groupBy(rows, 'invocationSlotId'),
     by_quality_decision: groupBy(rows, 'qualityDecision'),
@@ -100,6 +121,10 @@ async function promptPacketIndexSnapshot(prisma, since = null) {
 function expectedPromptSlotMinimums(childRuns) {
   const minimums = { adjudication_recommendation: childRuns.length };
   for (const childRun of childRuns) {
+    if (childRun.context_mode === 'mocked_n5_n8') {
+      minimums[N5_SLOT_ID] = (minimums[N5_SLOT_ID] ?? 0) + 1;
+      minimums[N8_SLOT_ID] = (minimums[N8_SLOT_ID] ?? 0) + 1;
+    }
     if (childRun.mode === 'multi_agent_debate') {
       for (const slotId of [
         'explorer.round_1_discovery',
@@ -135,9 +160,12 @@ function childEnvFor(input) {
     TOPIC_SELECTION_V1A_HARNESS_REPLAY_SMOKE: '1',
     TOPIC_SELECTION_V1A_HARNESS_RUN_ID: input.childRunId,
     TOPIC_SELECTION_V1A_HARNESS_AGENT_EXECUTION_MODE: 'mocked_llm',
-    TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_EXECUTION_MODE: 'none',
+    TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_EXECUTION_MODE:
+      input.contextMode === 'mocked_n5_n8' ? 'mocked_llm' : 'none',
     TOPIC_SELECTION_V1A_HARNESS_GENERATE_EXECUTION_MODE: 'mocked_llm',
     TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_EXECUTION_MODE: 'mocked_llm',
+    TOPIC_SELECTION_V1A_HARNESS_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE:
+      input.contextMode === 'mocked_n5_n8' ? 'mocked_llm' : 'deterministic_parser',
   };
   for (const key of [
     'TOPIC_SELECTION_V1A_HARNESS_GENERATE_MODEL_OPTION_ID',
@@ -149,6 +177,7 @@ function childEnvFor(input) {
     'TOPIC_SELECTION_V1A_HARNESS_DEBATE_DEEP_CRITIC_MODEL_OPTION_ID',
     'TOPIC_SELECTION_V1A_HARNESS_DEBATE_ISSUE_FRAME_MODEL_OPTION_ID',
     'TOPIC_SELECTION_V1A_HARNESS_DEBATE_FINAL_MODEL_OPTION_ID',
+    'TOPIC_SELECTION_V1A_HARNESS_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_MODEL_OPTION_ID',
   ]) {
     delete env[key];
   }
@@ -227,6 +256,7 @@ async function runHarnessChild(input) {
     `${input.childRunId} deterministic runtime stress must not invoke external harness gateway`,
   );
   const generateNode = summary.nodes?.generate_need_candidate ?? {};
+  const humanConfirmNode = summary.nodes?.human_confirm_need ?? {};
   const persistedCandidateCount = generateNode.persisted_candidate_refs?.length ?? 0;
   assert.ok(persistedCandidateCount > 0, `${input.childRunId} did not persist NeedCandidate refs.`);
   if (input.mode === 'multi_agent_debate') {
@@ -238,9 +268,27 @@ async function runHarnessChild(input) {
   } else {
     assert.equal(generateNode.debate_status, null, `${input.childRunId} should not run debate mode.`);
   }
+  if (input.contextMode === 'mocked_n5_n8') {
+    assert.equal(
+      summary.harness_evidence_extraction_execution_mode,
+      'mocked_llm',
+      `${input.childRunId} evidence extraction execution mode`,
+    );
+    assert.equal(
+      summary.harness_human_confirmation_semantic_review_execution_mode,
+      'mocked_llm',
+      `${input.childRunId} human confirmation semantic review execution mode`,
+    );
+    assert.equal(
+      humanConfirmNode.node_status,
+      'ready',
+      `${input.childRunId} human-confirm-need status`,
+    );
+  }
   return {
     child_run_id: input.childRunId,
     mode: input.mode,
+    context_mode: input.contextMode,
     status: summary.status,
     scenario_type: summary.scenario_type,
     artifact_dir: summary.artifact_dir,
@@ -269,6 +317,10 @@ async function runHarnessChild(input) {
       persisted_candidate_ref_count: persistedCandidateCount,
       routing_decision: generateNode.routing_decision,
     },
+    human_confirm_need: {
+      status: humanConfirmNode.node_status ?? null,
+      route_outcome: humanConfirmNode.route_outcome ?? null,
+    },
     logs: {
       stdout_path: stdoutPath,
       stderr_path: stderrPath,
@@ -283,10 +335,12 @@ async function main() {
   try {
     const before = await promptPacketIndexSnapshot(prisma);
     const childRuns = [];
-    for (const mode of MODES) {
-      for (let index = 1; index <= ITERATIONS; index += 1) {
-        const childRunId = `${RUN_ID}-${mode}-${String(index).padStart(2, '0')}`;
-        childRuns.push(await runHarnessChild({ mode, childRunId }));
+    for (const contextMode of CONTEXT_MODES) {
+      for (const mode of MODES) {
+        for (let index = 1; index <= ITERATIONS; index += 1) {
+          const childRunId = `${RUN_ID}-${contextMode}-${mode}-${String(index).padStart(2, '0')}`;
+          childRuns.push(await runHarnessChild({ contextMode, mode, childRunId }));
+        }
       }
     }
     const after = await promptPacketIndexSnapshot(prisma);
@@ -315,6 +369,7 @@ async function main() {
       finished_at: new Date().toISOString(),
       iterations_per_mode: ITERATIONS,
       modes: MODES,
+      context_modes: CONTEXT_MODES,
       resource_sample_set_id: RESOURCE_SAMPLE_SET_ID,
       child_run_count: childRuns.length,
       child_runs: childRuns,
@@ -333,6 +388,8 @@ async function main() {
       scenario_id: 'topic-selection.v1a.runtime-stress.prisma.v1',
       run_id: RUN_ID,
       artifact_dir: ARTIFACT_DIR,
+      modes: MODES,
+      context_modes: CONTEXT_MODES,
       error: error instanceof Error
         ? { name: error.name, message: error.message, stack: error.stack }
         : { message: String(error) },

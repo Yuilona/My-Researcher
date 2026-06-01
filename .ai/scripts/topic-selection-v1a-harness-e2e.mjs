@@ -34,13 +34,17 @@ import { TopicSelectionNeedDiscoveryContextCompilerService } from '../../apps/ba
 import { TopicSelectionNeedValidationService } from '../../apps/backend/src/services/topic-selection-need-validation-service.ts';
 import { TopicSelectionPersistNeedCandidateBatchService } from '../../apps/backend/src/services/topic-selection-persist-need-candidate-batch-service.ts';
 import { TopicSelectionSearchResourceService } from '../../apps/backend/src/services/topic-selection-search-resource-service.ts';
-import { TopicSelectionWorkflowHarnessService } from '../../apps/backend/src/services/topic-selection-workflow-harness-service.ts';
+import {
+  TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_RUNTIME_CONTEXT_REF_PLACEHOLDER,
+  TopicSelectionWorkflowHarnessService,
+} from '../../apps/backend/src/services/topic-selection-workflow-harness-service.ts';
 import {
   TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_CONTEXT_PACKET_SCHEMA_VERSION,
   TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_DRAFT_SCHEMA_VERSION,
 } from '../../packages/shared/src/research-lifecycle/topic-selection-evidence-map-contracts.ts';
 import {
   TOPIC_SELECTION_HUMAN_CONFIRMATION_INPUT_SCHEMA_VERSION,
+  TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION,
   TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION,
 } from '../../packages/shared/src/research-lifecycle/topic-selection-need-validation-contracts.ts';
 import {
@@ -104,10 +108,16 @@ const NEED_ADJUDICATION_MODEL_OPTION_ID = needAdjudicationModelOptionId();
 const NEED_ADJUDICATION_NEGATIVE_PROBE = normalizeNeedAdjudicationNegativeProbe(
   process.env.TOPIC_SELECTION_V1A_HARNESS_ADJUDICATION_NEGATIVE_PROBE,
 );
+const HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE = normalizeHumanConfirmationExecutionMode(
+  process.env.TOPIC_SELECTION_V1A_HARNESS_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE,
+  'deterministic_parser',
+);
+const HUMAN_CONFIRMATION_SEMANTIC_REVIEW_MODEL_OPTION_ID = humanConfirmationSemanticReviewModelOptionId();
 const RUN_REPLAY_SMOKE = process.env.TOPIC_SELECTION_V1A_HARNESS_REPLAY_SMOKE === '1';
 const HARNESS_USES_PROVIDER = EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE === 'provider_llm'
   || GENERATE_NEED_CANDIDATE_EXECUTION_MODE === 'provider_llm'
   || NEED_ADJUDICATION_EXECUTION_MODE === 'provider_llm'
+  || HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE === 'provider_llm'
   || debateExecutionPlanUsesProvider(DEBATE_EXECUTION_PLAN);
 const RUN_ID = process.env.TOPIC_SELECTION_V1A_HARNESS_RUN_ID
   ?? process.env.TOPIC_SELECTION_REAL_RUN_ID
@@ -206,6 +216,17 @@ function normalizeEvidenceExtractionExecutionMode(value, fallback) {
   throw new Error(`Unsupported v1a harness evidence extraction execution mode: ${value}`);
 }
 
+function normalizeHumanConfirmationExecutionMode(value, fallback) {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return fallback;
+  }
+  if (['deterministic_parser', 'mocked_llm', 'provider_llm'].includes(normalized)) {
+    return normalized;
+  }
+  throw new Error(`Unsupported v1a harness human confirmation semantic review execution mode: ${value}`);
+}
+
 function normalizeGenerateExecutorKind(value, fallback) {
   const normalized = value?.trim();
   if (!normalized) {
@@ -293,6 +314,14 @@ function evidenceMapExtractionModelOptionId() {
     TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
     EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE,
     'TOPIC_SELECTION_V1A_HARNESS_EVIDENCE_EXTRACTION_MODEL_OPTION_ID',
+  );
+}
+
+function humanConfirmationSemanticReviewModelOptionId() {
+  return providerModelOptionIdFor(
+    TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
+    HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE,
+    'TOPIC_SELECTION_V1A_HARNESS_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_MODEL_OPTION_ID',
   );
 }
 
@@ -817,6 +846,7 @@ function makeHarnessLlmGateway() {
       EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE,
       GENERATE_NEED_CANDIDATE_EXECUTION_MODE,
       NEED_ADJUDICATION_EXECUTION_MODE,
+      HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE,
     ].includes('provider_llm')
     || debateNeedsProvider
   ) {
@@ -2370,13 +2400,47 @@ function humanConfirmationInput(supportPacket) {
   };
 }
 
+function humanConfirmationSemanticReviewFixture(input) {
+  const runtimeContextRef = ref(
+    'artifact_ref',
+    TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_RUNTIME_CONTEXT_REF_PLACEHOLDER,
+    input.titleCardId,
+  );
+  return {
+    schema_version: TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION,
+    workflow_run_id: input.workflowRunId,
+    node_attempt_id: input.nodeAttemptId,
+    review_id: `${input.nodeAttemptId}_semantic_review`,
+    context_packet_ref: runtimeContextRef,
+    execution_mode: HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE,
+    profile_id: TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
+    status: 'pass',
+    alignment_codes: ['validate_alignment_clear'],
+    risk_coverage: 'complete',
+    required_check_coverage: 'complete',
+    scope_violations: [],
+    rationale_summary:
+      'Mocked semantic review confirms the human confirmation input covers required checks and accepted risks.',
+    provenance_ref: runtimeContextRef,
+    warning_codes: [],
+    blocker_codes: [],
+    review_reason_codes: [],
+    policy_version: input.policyVersion,
+    output_schema_version: input.outputSchemaVersion,
+  };
+}
+
 async function runHumanConfirmNeed(app, input) {
+  const workflowRunId = `workflow_run_human_confirm_need_${RUN_ID}`;
+  const nodeAttemptId = `node_attempt_human_confirm_need_${RUN_ID}`;
+  const policyVersion = TOPIC_SELECTION_V1A_WORKFLOW_HARNESS_POLICY_VERSION;
+  const outputSchemaVersion = 'v1';
   const harnessInput = {
     scenario_id: SCENARIO_ID,
     scenario_case_id: `v1a-harness-human-confirm-need-${RUN_ID}`,
     title_card_id: input.titleCardId,
-    workflow_run_id: `workflow_run_human_confirm_need_${RUN_ID}`,
-    node_attempt_id: `node_attempt_human_confirm_need_${RUN_ID}`,
+    workflow_run_id: workflowRunId,
+    node_attempt_id: nodeAttemptId,
     adjudication_result_ref: input.validateResult.node_result.adjudication_result_ref,
     need_candidate_ref: ref(
       'need_candidate',
@@ -2391,11 +2455,29 @@ async function runHumanConfirmNeed(app, input) {
     ),
     reserved_validated_need_ref: input.validateResult.node_result.reserved_validated_need_ref,
     confirmation_input: humanConfirmationInput(input.supportPacket),
-    execution_mode: 'deterministic_parser',
-    execution_spec: null,
+    execution_mode: HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE,
+    execution_spec: singleAgentExecutionSpec(
+      HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE,
+      HUMAN_CONFIRMATION_SEMANTIC_REVIEW_MODEL_OPTION_ID,
+    ),
+    run_mode: HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE === 'provider_llm' ? 'product' : 'acceptance',
+    executor_kind: 'single_agent',
     profile_id: TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
-    policy_version: 'v1',
-    output_schema_version: 'v1',
+    model_option_id: HUMAN_CONFIRMATION_SEMANTIC_REVIEW_MODEL_OPTION_ID,
+    mocked_output: HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE === 'mocked_llm'
+      ? {
+          fixture_id: `fixture_human_confirmation_semantic_review_${RUN_ID}`,
+          output: humanConfirmationSemanticReviewFixture({
+            titleCardId: input.titleCardId,
+            workflowRunId,
+            nodeAttemptId,
+            policyVersion,
+            outputSchemaVersion,
+          }),
+        }
+      : null,
+    policy_version: policyVersion,
+    output_schema_version: outputSchemaVersion,
     expectations: {
       status: 'ready',
       route_outcome: 'advance_to_publish_v1b_input_bundle',
@@ -2479,7 +2561,23 @@ async function runPublishV1bInputBundle(app, runtime, input) {
 }
 
 async function replayAuthorityCounts(prisma, titleCardId) {
+  const searchPlanRows = await prisma.topicSelectionSearchPlan.findMany({
+    where: { titleCardId },
+    select: { id: true },
+  });
+  const searchPlanIds = searchPlanRows.map((row) => row.id);
   const [
+    topicSeedCount,
+    literatureResourcePoolSnapshotCount,
+    searchPlanCount,
+    coverageRowIntentCount,
+    searchRunCount,
+    coverageExecutionObservationCount,
+    coverageEvidenceBindingCount,
+    coverageAssessmentCount,
+    coverageRiskAcceptanceCount,
+    evidenceMapCount,
+    evidenceUnitCount,
     needCandidateCount,
     readinessAssessmentCount,
     supportPacketCount,
@@ -2487,8 +2585,22 @@ async function replayAuthorityCounts(prisma, titleCardId) {
     humanDecisionCount,
     validatedNeedCount,
     v1bInputBundleCount,
+    inputSnapshotCount,
+    readinessGateResultCount,
+    chainTransitionAttemptCount,
     artifactRefCount,
   ] = await Promise.all([
+    prisma.topicSelectionTopicSeed.count({ where: { titleCardId } }),
+    prisma.topicSelectionLiteratureResourcePoolSnapshot.count({ where: { titleCardId } }),
+    prisma.topicSelectionSearchPlan.count({ where: { titleCardId } }),
+    prisma.topicSelectionCoverageRowIntent.count({ where: { titleCardId } }),
+    prisma.topicSelectionSearchRun.count({ where: { titleCardId } }),
+    prisma.topicSelectionCoverageExecutionObservation.count({ where: { searchPlanId: { in: searchPlanIds } } }),
+    prisma.topicSelectionCoverageEvidenceBinding.count({ where: { searchPlanId: { in: searchPlanIds } } }),
+    prisma.topicSelectionCoverageAssessment.count({ where: { searchPlanId: { in: searchPlanIds } } }),
+    prisma.topicSelectionCoverageRiskAcceptance.count({ where: { searchPlanId: { in: searchPlanIds } } }),
+    prisma.topicSelectionEvidenceMap.count({ where: { titleCardId } }),
+    prisma.topicSelectionEvidenceUnit.count({ where: { titleCardId } }),
     prisma.topicSelectionNeedCandidate.count({ where: { titleCardId } }),
     prisma.topicSelectionNeedCandidateReadinessAssessment.count({ where: { titleCardId } }),
     prisma.topicSelectionValidationDecisionSupportPacket.count({ where: { titleCardId } }),
@@ -2496,9 +2608,23 @@ async function replayAuthorityCounts(prisma, titleCardId) {
     prisma.topicSelectionHumanConfirmedDecision.count({ where: { titleCardId } }),
     prisma.topicSelectionValidatedNeed.count({ where: { titleCardId } }),
     prisma.topicSelectionV1aToV1bInputBundle.count({ where: { titleCardId } }),
+    prisma.topicSelectionInputSnapshot.count({ where: { titleCardId } }),
+    prisma.topicSelectionReadinessGateResult.count({ where: { titleCardId } }),
+    prisma.topicSelectionChainTransitionAttempt.count({ where: { titleCardId } }),
     prisma.topicSelectionArtifactRef.count({ where: { titleCardId } }),
   ]);
   return {
+    topic_seed_count: topicSeedCount,
+    literature_resource_pool_snapshot_count: literatureResourcePoolSnapshotCount,
+    search_plan_count: searchPlanCount,
+    coverage_row_intent_count: coverageRowIntentCount,
+    search_run_count: searchRunCount,
+    coverage_execution_observation_count: coverageExecutionObservationCount,
+    coverage_evidence_binding_count: coverageEvidenceBindingCount,
+    coverage_assessment_count: coverageAssessmentCount,
+    coverage_risk_acceptance_count: coverageRiskAcceptanceCount,
+    evidence_map_count: evidenceMapCount,
+    evidence_unit_count: evidenceUnitCount,
     need_candidate_count: needCandidateCount,
     readiness_assessment_count: readinessAssessmentCount,
     validation_support_packet_count: supportPacketCount,
@@ -2506,6 +2632,9 @@ async function replayAuthorityCounts(prisma, titleCardId) {
     human_decision_count: humanDecisionCount,
     validated_need_count: validatedNeedCount,
     v1b_input_bundle_count: v1bInputBundleCount,
+    input_snapshot_count: inputSnapshotCount,
+    readiness_gate_result_count: readinessGateResultCount,
+    chain_transition_attempt_count: chainTransitionAttemptCount,
     artifact_ref_count: artifactRefCount,
   };
 }
@@ -2562,9 +2691,10 @@ function sameStringSet(left, right) {
 }
 
 function compactReplayResult(label, result, original) {
+  const originalResult = original.result ?? original;
   if (label === 'generate_need_candidate') {
     const replayRefs = result.adapter_result.persist_need_candidate_batch_result?.persisted_candidate_refs ?? [];
-    const originalRefs = original.result.adapter_result.persist_need_candidate_batch_result?.persisted_candidate_refs ?? [];
+    const originalRefs = originalResult.adapter_result.persist_need_candidate_batch_result?.persisted_candidate_refs ?? [];
     assertReplayProvenance(label, result.adapter_result.replay_provenance);
     assert.equal(sameRefSet(replayRefs, originalRefs), true, `${label} replay candidate refs drifted.`);
     return {
@@ -2575,33 +2705,84 @@ function compactReplayResult(label, result, original) {
     };
   }
   assertReplayProvenance(label, result.node_result.replay_provenance);
+  if (label === 'create_topic_seed') {
+    assert.equal(
+      sameRefs(result.node_result.topic_seed_ref, originalResult.node_result.topic_seed_ref),
+      true,
+      `${label} replay topic_seed_ref drifted.`,
+    );
+  }
+  if (label === 'snapshot_literature_resource_pool') {
+    assert.equal(
+      sameRefs(
+        result.node_result.literature_resource_pool_snapshot_ref,
+        originalResult.node_result.literature_resource_pool_snapshot_ref,
+      ),
+      true,
+      `${label} replay literature_resource_pool_snapshot_ref drifted.`,
+    );
+    assert.equal(
+      result.node_result.snapshot_hash,
+      originalResult.node_result.snapshot_hash,
+      `${label} replay snapshot_hash drifted.`,
+    );
+  }
+  if (label === 'create_search_plan') {
+    assert.equal(
+      sameRefs(result.node_result.search_plan_ref, originalResult.node_result.search_plan_ref),
+      true,
+      `${label} replay search_plan_ref drifted.`,
+    );
+    assert.equal(
+      sameRefSet(result.node_result.coverage_row_intent_refs, originalResult.node_result.coverage_row_intent_refs),
+      true,
+      `${label} replay coverage_row_intent_refs drifted.`,
+    );
+  }
+  if (label === 'record_search_run') {
+    assert.equal(
+      sameRefs(result.node_result.search_run_ref, originalResult.node_result.search_run_ref),
+      true,
+      `${label} replay search_run_ref drifted.`,
+    );
+    assert.equal(
+      sameRefSet(result.node_result.evidence_binding_refs, originalResult.node_result.evidence_binding_refs),
+      true,
+      `${label} replay evidence_binding_refs drifted.`,
+    );
+    assert.equal(
+      sameRefSet(result.node_result.coverage_assessment_refs, originalResult.node_result.coverage_assessment_refs),
+      true,
+      `${label} replay coverage_assessment_refs drifted.`,
+    );
+  }
   if (label === 'validate_need_adjudication') {
     assert.equal(
-      sameRefs(result.node_result.adjudication_result_ref, original.result.node_result.adjudication_result_ref),
+      sameRefs(result.node_result.adjudication_result_ref, originalResult.node_result.adjudication_result_ref),
       true,
       `${label} replay adjudication_result_ref drifted.`,
     );
     assert.equal(
-      sameRefs(result.node_result.reserved_validated_need_ref, original.result.node_result.reserved_validated_need_ref),
+      sameRefs(result.node_result.reserved_validated_need_ref, originalResult.node_result.reserved_validated_need_ref),
       true,
       `${label} replay reserved_validated_need_ref drifted.`,
     );
   }
   if (label === 'human_confirm_need') {
     assert.equal(
-      sameRefs(result.node_result.validated_need_ref, original.result.node_result.validated_need_ref),
+      sameRefs(result.node_result.validated_need_ref, originalResult.node_result.validated_need_ref),
       true,
       `${label} replay validated_need_ref drifted.`,
     );
     assert.equal(
-      sameRefs(result.node_result.human_decision_ref, original.result.node_result.human_decision_ref),
+      sameRefs(result.node_result.human_decision_ref, originalResult.node_result.human_decision_ref),
       true,
       `${label} replay human_decision_ref drifted.`,
     );
   }
   if (label === 'publish_v1b_input_bundle') {
     assert.equal(
-      sameRefs(result.node_result.v1b_input_bundle_ref, original.result.node_result.v1b_input_bundle_ref),
+      sameRefs(result.node_result.v1b_input_bundle_ref, originalResult.node_result.v1b_input_bundle_ref),
       true,
       `${label} replay v1b_input_bundle_ref drifted.`,
     );
@@ -2659,22 +2840,49 @@ async function expectReplayInputHashMismatch(label, run) {
   };
 }
 
-async function runN6ToN9ReplaySmoke(input) {
+async function runN1ToN9ReplaySmoke(input) {
   const {
     app,
-    runtime,
     prisma,
     harnessLlmGateway,
     titleCardId,
+    topicSeed,
+    snapshot,
+    searchPlan,
+    searchRun,
     generateNeedCandidate,
     validateNeed,
     humanConfirmNeed,
     publishV1bInputBundle,
   } = input;
 
-  currentStage = 'harness n6-n9 exact replay smoke';
+  currentStage = 'harness n1-n4 n6-n9 exact replay smoke';
   const exactCountsBefore = await replayAuthorityCounts(prisma, titleCardId);
   const exactLlmCallsBefore = harnessLlmGateway.callCount;
+  const createTopicSeedReplay = await invokeV1aHarnessScenario(
+    app,
+    'topic-selection.v1a.create-topic-seed.v1',
+    topicSeed.harnessInput,
+    'harness replay create-topic-seed',
+  );
+  const snapshotReplay = await invokeV1aHarnessScenario(
+    app,
+    'topic-selection.v1a.snapshot-literature-resource-pool.v1',
+    snapshot.harnessInput,
+    'harness replay snapshot-literature-resource-pool',
+  );
+  const searchPlanReplay = await invokeV1aHarnessScenario(
+    app,
+    'topic-selection.v1a.create-search-plan.v1',
+    searchPlan.harnessInput,
+    'harness replay create-search-plan',
+  );
+  const searchRunReplay = await invokeV1aHarnessScenario(
+    app,
+    'topic-selection.v1a.record-search-run.v1',
+    searchRun.harnessInput,
+    'harness replay record-search-run',
+  );
   const generateReplay = await invokeV1aHarnessScenario(
     app,
     'topic-selection.v1a.generate-need-candidate.v1',
@@ -2701,17 +2909,103 @@ async function runN6ToN9ReplaySmoke(input) {
   );
   const exactCountsAfter = await replayAuthorityCounts(prisma, titleCardId);
   const exactLlmCallsAfter = harnessLlmGateway.callCount;
-  assertNoCountDrift('N6-N9 exact replay', exactCountsBefore, exactCountsAfter);
+  assertNoCountDrift('N1-N4/N6-N9 exact replay', exactCountsBefore, exactCountsAfter);
   assert.equal(
     exactLlmCallsAfter,
     exactLlmCallsBefore,
-    'N6-N9 exact replay invoked the harness LLM gateway.',
+    'N1-N4/N6-N9 exact replay invoked the harness LLM gateway.',
   );
 
-  currentStage = 'harness n6-n9 replay drift smoke';
+  currentStage = 'harness n1-n4 n6-n9 replay drift smoke';
   const driftAuthorityCountsBefore = authorityOnlyCounts(await replayAuthorityCounts(prisma, titleCardId));
   const driftLlmCallsBefore = harnessLlmGateway.callCount;
+  const searchPlanDriftBlueprint = searchPlan.harnessInput.blueprint
+    ? {
+        ...searchPlan.harnessInput.blueprint,
+        output_schema_version: 'v1-replay-drift',
+      }
+    : null;
+  const searchRunDriftBundle = searchRun.harnessInput.bundle
+    ? {
+        ...searchRun.harnessInput.bundle,
+        output_schema_version: 'v1-replay-drift',
+      }
+    : null;
   const drift = {
+    create_topic_seed: await expectReplayInputHashMismatch('create_topic_seed', () =>
+      invokeV1aHarnessScenario(
+        app,
+        'topic-selection.v1a.create-topic-seed.v1',
+        {
+          ...topicSeed.harnessInput,
+          output_schema_version: 'v1-replay-drift',
+          expectations: {
+            status: 'blocked',
+            error_code: 'VERSION_CONFLICT',
+          },
+        },
+        'harness drift create-topic-seed',
+        null,
+        { assertScenario: false },
+      )
+    ),
+    snapshot_literature_resource_pool: await expectReplayInputHashMismatch('snapshot_literature_resource_pool', () =>
+      invokeV1aHarnessScenario(
+        app,
+        'topic-selection.v1a.snapshot-literature-resource-pool.v1',
+        {
+          ...snapshot.harnessInput,
+          output_schema_version: 'v1-replay-drift',
+          expectations: {
+            status: 'blocked',
+            error_code: 'VERSION_CONFLICT',
+            blocker_codes: ['REPLAY_INPUT_HASH_MISMATCH'],
+          },
+        },
+        'harness drift snapshot-literature-resource-pool',
+        null,
+        { assertScenario: false },
+      )
+    ),
+    create_search_plan: await expectReplayInputHashMismatch('create_search_plan', () =>
+      invokeV1aHarnessScenario(
+        app,
+        'topic-selection.v1a.create-search-plan.v1',
+        {
+          ...searchPlan.harnessInput,
+          blueprint: searchPlanDriftBlueprint,
+          expectations: {
+            status: 'blocked',
+            error_code: 'VERSION_CONFLICT',
+            blocker_codes: ['REPLAY_INPUT_HASH_MISMATCH'],
+          },
+        },
+        'harness drift create-search-plan',
+        null,
+        { assertScenario: false },
+      )
+    ),
+    record_search_run: await expectReplayInputHashMismatch('record_search_run', () =>
+      invokeV1aHarnessScenario(
+        app,
+        'topic-selection.v1a.record-search-run.v1',
+        {
+          ...searchRun.harnessInput,
+          bundle: searchRunDriftBundle,
+          expectations: {
+            status: 'blocked',
+            error_code: 'VERSION_CONFLICT',
+            blocker_codes: ['REPLAY_INPUT_HASH_MISMATCH'],
+            consumable_for_evidence_map: false,
+            downstream_handoff_present: false,
+            loopback_signal_present: false,
+          },
+        },
+        'harness drift record-search-run',
+        null,
+        { assertScenario: false },
+      )
+    ),
     generate_need_candidate: await expectReplayInputHashMismatch('generate_need_candidate', () =>
       invokeV1aHarnessScenario(
         app,
@@ -2767,25 +3061,33 @@ async function runN6ToN9ReplaySmoke(input) {
   };
   const driftCountsAfter = await replayAuthorityCounts(prisma, titleCardId);
   assertNoCountDrift(
-    'N6-N9 replay input-hash drift',
+    'N1-N4/N6-N9 replay input-hash drift',
     driftAuthorityCountsBefore,
     authorityOnlyCounts(driftCountsAfter),
   );
   assert.equal(
     harnessLlmGateway.callCount,
     driftLlmCallsBefore,
-    'N6-N9 replay input-hash drift invoked the harness LLM gateway.',
+    'N1-N4/N6-N9 replay input-hash drift invoked the harness LLM gateway.',
   );
 
   return {
     status: 'passed',
-    replay_scope: 'N6-N9',
+    replay_scope: 'N1-N4,N6-N9',
     exact_replay: {
       db_counts_before: exactCountsBefore,
       db_counts_after: exactCountsAfter,
       llm_call_count_before: exactLlmCallsBefore,
       llm_call_count_after: exactLlmCallsAfter,
       nodes: {
+        create_topic_seed: compactReplayResult('create_topic_seed', createTopicSeedReplay, topicSeed),
+        snapshot_literature_resource_pool: compactReplayResult(
+          'snapshot_literature_resource_pool',
+          snapshotReplay,
+          snapshot,
+        ),
+        create_search_plan: compactReplayResult('create_search_plan', searchPlanReplay, searchPlan),
+        record_search_run: compactReplayResult('record_search_run', searchRunReplay, searchRun),
         generate_need_candidate: compactReplayResult('generate_need_candidate', generateReplay, generateNeedCandidate),
         validate_need_adjudication: compactReplayResult('validate_need_adjudication', validateReplay, validateNeed),
         human_confirm_need: compactReplayResult('human_confirm_need', humanReplay, humanConfirmNeed),
@@ -2869,7 +3171,7 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
   });
 
   currentStage = 'harness create-topic-seed';
-  const topicSeed = await invokeV1aHarnessScenario(app, 'topic-selection.v1a.create-topic-seed.v1', {
+  const createTopicSeedInput = {
     scenario_id: SCENARIO_ID,
     scenario_case_id: `v1a-harness-create-topic-seed-${RUN_ID}`,
     title_card_id: titleCardId,
@@ -2886,21 +3188,23 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
       seed_version: 'v1',
     },
     created_by: 'system',
-  }, 'harness create-topic-seed', {
+  };
+  const topicSeedResult = await invokeV1aHarnessScenario(app, 'topic-selection.v1a.create-topic-seed.v1', createTopicSeedInput, 'harness create-topic-seed', {
     route_decision: 'invoke_next',
     route_signal: 'topic_seed_created',
     route_target_node_id: 'topic-selection.v1a.snapshot-literature-resource-pool.v1',
   });
-  assertScenarioPassed(topicSeed, 'create-topic-seed');
+  const topicSeed = { result: topicSeedResult, harnessInput: createTopicSeedInput };
+  assertScenarioPassed(topicSeed.result, 'create-topic-seed');
 
   currentStage = 'harness snapshot-literature-resource-pool';
-  const snapshot = await invokeV1aHarnessScenario(app, 'topic-selection.v1a.snapshot-literature-resource-pool.v1', {
+  const snapshotLiteratureResourcePoolInput = {
     scenario_id: SCENARIO_ID,
     scenario_case_id: `v1a-harness-snapshot-literature-resource-pool-${RUN_ID}`,
     title_card_id: titleCardId,
     workflow_run_id: `workflow_run_snapshot_literature_resource_pool_${RUN_ID}`,
     node_attempt_id: `node_attempt_snapshot_literature_resource_pool_${RUN_ID}`,
-    topic_seed_ref: topicSeed.node_result.topic_seed_ref,
+    topic_seed_ref: topicSeed.result.node_result.topic_seed_ref,
     source_scope: 'title_card_evidence_basket',
     resource_sample_set_provenance_ref: resourceSampleSetRef,
     policy_version: 'v1',
@@ -2910,23 +3214,31 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
       included_literature_count: selectedResources.length,
     },
     created_by: 'system',
-  }, 'harness snapshot-literature-resource-pool', {
-    route_decision: 'invoke_next',
-    route_signal: 'literature_resource_pool_snapshot_created',
-    route_target_node_id: 'topic-selection.v1a.create-search-plan.v1',
-  });
-  assertScenarioPassed(snapshot, 'snapshot-literature-resource-pool');
+  };
+  const snapshotResult = await invokeV1aHarnessScenario(
+    app,
+    'topic-selection.v1a.snapshot-literature-resource-pool.v1',
+    snapshotLiteratureResourcePoolInput,
+    'harness snapshot-literature-resource-pool',
+    {
+      route_decision: 'invoke_next',
+      route_signal: 'literature_resource_pool_snapshot_created',
+      route_target_node_id: 'topic-selection.v1a.create-search-plan.v1',
+    },
+  );
+  const snapshot = { result: snapshotResult, harnessInput: snapshotLiteratureResourcePoolInput };
+  assertScenarioPassed(snapshot.result, 'snapshot-literature-resource-pool');
 
   currentStage = 'harness create-search-plan';
   const blueprint = buildSearchPlanBlueprint({
     titleCardId,
     selectedResources,
     resourceSampleSetRef,
-    topicSeedRef: topicSeed.node_result.topic_seed_ref,
-    literatureSnapshotRef: snapshot.node_result.literature_resource_pool_snapshot_ref,
-    snapshotHash: snapshot.node_result.snapshot_hash,
+    topicSeedRef: topicSeed.result.node_result.topic_seed_ref,
+    literatureSnapshotRef: snapshot.result.node_result.literature_resource_pool_snapshot_ref,
+    snapshotHash: snapshot.result.node_result.snapshot_hash,
   });
-  const searchPlan = await invokeV1aHarnessScenario(app, 'topic-selection.v1a.create-search-plan.v1', {
+  const createSearchPlanInput = {
     scenario_id: SCENARIO_ID,
     scenario_case_id: `v1a-harness-create-search-plan-${RUN_ID}`,
     title_card_id: titleCardId,
@@ -2939,24 +3251,26 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
       plan_version: 'v1',
     },
     created_by: 'system',
-  }, 'harness create-search-plan', {
+  };
+  const searchPlanResult = await invokeV1aHarnessScenario(app, 'topic-selection.v1a.create-search-plan.v1', createSearchPlanInput, 'harness create-search-plan', {
     route_decision: 'invoke_next',
     route_signal: 'search_plan_created',
     route_target_node_id: 'topic-selection.v1a.record-search-run.v1',
   });
-  assertScenarioPassed(searchPlan, 'create-search-plan');
+  const searchPlan = { result: searchPlanResult, harnessInput: createSearchPlanInput };
+  assertScenarioPassed(searchPlan.result, 'create-search-plan');
 
   currentStage = 'harness record-search-run';
   const searchRunBundle = buildSearchRunBundle({
     titleCardId,
     selectedResources,
-    searchPlanRef: searchPlan.node_result.search_plan_ref,
-    coverageRowIntents: searchPlan.node_result.coverage_row_intents,
-    coverageRowIntentRefs: searchPlan.node_result.coverage_row_intent_refs,
-    literatureSnapshotRef: snapshot.node_result.literature_resource_pool_snapshot_ref,
-    snapshotHash: snapshot.node_result.snapshot_hash,
+    searchPlanRef: searchPlan.result.node_result.search_plan_ref,
+    coverageRowIntents: searchPlan.result.node_result.coverage_row_intents,
+    coverageRowIntentRefs: searchPlan.result.node_result.coverage_row_intent_refs,
+    literatureSnapshotRef: snapshot.result.node_result.literature_resource_pool_snapshot_ref,
+    snapshotHash: snapshot.result.node_result.snapshot_hash,
   });
-  const searchRun = await invokeV1aHarnessScenario(app, 'topic-selection.v1a.record-search-run.v1', {
+  const recordSearchRunInput = {
     scenario_id: SCENARIO_ID,
     scenario_case_id: `v1a-harness-record-search-run-${RUN_ID}`,
     title_card_id: titleCardId,
@@ -2969,13 +3283,15 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
       downstream_handoff_present: true,
     },
     created_by: 'system',
-  }, 'harness record-search-run', {
+  };
+  const searchRunResult = await invokeV1aHarnessScenario(app, 'topic-selection.v1a.record-search-run.v1', recordSearchRunInput, 'harness record-search-run', {
     route_decision: 'invoke_next',
     route_signal: 'search_run_consumable',
     route_target_node_id: 'topic-selection.v1a.build-evidence-map.v1',
   });
-  assertScenarioPassed(searchRun, 'record-search-run');
-  if (!sameStringSet(searchRun.node_result.downstream_handoff?.method_family_targets, blueprint.method_family_targets)) {
+  const searchRun = { result: searchRunResult, harnessInput: recordSearchRunInput };
+  assertScenarioPassed(searchRun.result, 'record-search-run');
+  if (!sameStringSet(searchRun.result.node_result.downstream_handoff?.method_family_targets, blueprint.method_family_targets)) {
     throw new Error('record-search-run handoff did not preserve SearchPlan method_family_targets.');
   }
 
@@ -2991,8 +3307,8 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
   const evidenceMapDraft = buildEvidenceMapExtractionDraft({
     titleCardId,
     selectedResources,
-    coverageRowIntents: searchPlan.node_result.coverage_row_intents,
-    searchRunHandoff: searchRun.node_result.downstream_handoff,
+    coverageRowIntents: searchPlan.result.node_result.coverage_row_intents,
+    searchRunHandoff: searchRun.result.node_result.downstream_handoff,
     searchPlanBlueprint: blueprint,
     evidenceMapMaterializer: runtime.evidenceMapMaterializer,
     producerKind: evidenceMapProducerKind,
@@ -3002,7 +3318,7 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
     : buildEvidenceMapExtractionContextPacket({
         titleCardId,
         selectedResources,
-        searchRunHandoff: searchRun.node_result.downstream_handoff,
+        searchRunHandoff: searchRun.result.node_result.downstream_handoff,
         evidenceMapMaterializer: runtime.evidenceMapMaterializer,
         executionMode: EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE,
         workflowRunId: evidenceMapWorkflowRunId,
@@ -3014,7 +3330,7 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
     title_card_id: titleCardId,
     workflow_run_id: evidenceMapWorkflowRunId,
     node_attempt_id: evidenceMapNodeAttemptId,
-    search_run_handoff: searchRun.node_result.downstream_handoff,
+    search_run_handoff: searchRun.result.node_result.downstream_handoff,
     extraction_draft: EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE === 'none' ? evidenceMapDraft : null,
     extraction_context_packet: evidenceMapExtractionContext,
     execution_mode: EVIDENCE_MAP_EXTRACTION_EXECUTION_MODE,
@@ -3087,11 +3403,11 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
     resourceSampleSetId: resourceSample.sample_set.resource_sample_set_id,
     evidenceMapRecords: evidenceMap.node_result.evidence_map_records,
     evidenceMapHandoff: evidenceMap.node_result.downstream_handoff,
-    searchRunHandoff: searchRun.node_result.downstream_handoff,
+    searchRunHandoff: searchRun.result.node_result.downstream_handoff,
     searchPlanBlueprint: blueprint,
-    searchRunRef: searchRun.node_result.search_run_ref,
-    searchPlanRef: searchPlan.node_result.search_plan_ref,
-    literatureSnapshotRef: snapshot.node_result.literature_resource_pool_snapshot_ref,
+    searchRunRef: searchRun.result.node_result.search_run_ref,
+    searchPlanRef: searchPlan.result.node_result.search_plan_ref,
+    literatureSnapshotRef: snapshot.result.node_result.literature_resource_pool_snapshot_ref,
   });
 
   const validationInputs = await prepareValidationInputs(
@@ -3115,20 +3431,20 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
   if (NEED_ADJUDICATION_NEGATIVE_PROBE) {
     return {
       title_card_id: titleCardId,
-      topic_seed_id: topicSeed.node_result.topic_seed_ref.ref_id,
-      literature_resource_pool_snapshot_id: snapshot.node_result.literature_resource_pool_snapshot_ref.ref_id,
-      search_plan_id: searchPlan.node_result.search_plan_ref.ref_id,
-      search_run_id: searchRun.node_result.search_run_ref.ref_id,
+      topic_seed_id: topicSeed.result.node_result.topic_seed_ref.ref_id,
+      literature_resource_pool_snapshot_id: snapshot.result.node_result.literature_resource_pool_snapshot_ref.ref_id,
+      search_plan_id: searchPlan.result.node_result.search_plan_ref.ref_id,
+      search_run_id: searchRun.result.node_result.search_run_ref.ref_id,
       evidence_map_id: evidenceMap.node_result.evidence_map_ref.ref_id,
       need_candidate_id: candidate.need_candidate_id,
       validated_need_id: null,
       v1b_input_bundle_id: null,
       replay_smoke: null,
       nodes: {
-        create_topic_seed: compactNode(topicSeed),
-        snapshot_literature_resource_pool: compactNode(snapshot),
-        create_search_plan: compactNode(searchPlan),
-        record_search_run: compactNode(searchRun),
+        create_topic_seed: compactNode(topicSeed.result),
+        snapshot_literature_resource_pool: compactNode(snapshot.result),
+        create_search_plan: compactNode(searchPlan.result),
+        record_search_run: compactNode(searchRun.result),
         build_evidence_map: compactNode(evidenceMap),
         generate_need_candidate: compactGenerateNode(generateNeedCandidate),
         validate_need_adjudication: compactNode(validateNeed.result),
@@ -3136,10 +3452,10 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
         publish_v1b_input_bundle: null,
       },
       full_results: {
-        create_topic_seed: topicSeed,
-        snapshot_literature_resource_pool: snapshot,
-        create_search_plan: searchPlan,
-        record_search_run: searchRun,
+        create_topic_seed: topicSeed.result,
+        snapshot_literature_resource_pool: snapshot.result,
+        create_search_plan: searchPlan.result,
+        record_search_run: searchRun.result,
         build_evidence_map: evidenceMap,
         generate_need_candidate: generateNeedCandidate.result,
         validate_need_adjudication: validateNeed.result,
@@ -3165,12 +3481,15 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
   });
 
   const replaySmoke = RUN_REPLAY_SMOKE
-    ? await runN6ToN9ReplaySmoke({
+    ? await runN1ToN9ReplaySmoke({
       app,
-      runtime,
       prisma,
       harnessLlmGateway,
       titleCardId,
+      topicSeed,
+      snapshot,
+      searchPlan,
+      searchRun,
       generateNeedCandidate,
       validateNeed,
       humanConfirmNeed,
@@ -3180,20 +3499,20 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
 
   return {
     title_card_id: titleCardId,
-    topic_seed_id: topicSeed.node_result.topic_seed_ref.ref_id,
-    literature_resource_pool_snapshot_id: snapshot.node_result.literature_resource_pool_snapshot_ref.ref_id,
-    search_plan_id: searchPlan.node_result.search_plan_ref.ref_id,
-    search_run_id: searchRun.node_result.search_run_ref.ref_id,
+    topic_seed_id: topicSeed.result.node_result.topic_seed_ref.ref_id,
+    literature_resource_pool_snapshot_id: snapshot.result.node_result.literature_resource_pool_snapshot_ref.ref_id,
+    search_plan_id: searchPlan.result.node_result.search_plan_ref.ref_id,
+    search_run_id: searchRun.result.node_result.search_run_ref.ref_id,
     evidence_map_id: evidenceMap.node_result.evidence_map_ref.ref_id,
     need_candidate_id: candidate.need_candidate_id,
     validated_need_id: humanConfirmNeed.result.node_result.validated_need_ref.ref_id,
     v1b_input_bundle_id: publishV1bInputBundle.result.node_result.v1b_input_bundle_ref.ref_id,
     replay_smoke: replaySmoke,
     nodes: {
-      create_topic_seed: compactNode(topicSeed),
-      snapshot_literature_resource_pool: compactNode(snapshot),
-      create_search_plan: compactNode(searchPlan),
-      record_search_run: compactNode(searchRun),
+      create_topic_seed: compactNode(topicSeed.result),
+      snapshot_literature_resource_pool: compactNode(snapshot.result),
+      create_search_plan: compactNode(searchPlan.result),
+      record_search_run: compactNode(searchRun.result),
       build_evidence_map: compactNode(evidenceMap),
       generate_need_candidate: compactGenerateNode(generateNeedCandidate),
       validate_need_adjudication: compactNode(validateNeed.result),
@@ -3201,10 +3520,10 @@ async function runV1aHarness(app, runtime, prisma, harnessLlmGateway, selectedRe
       publish_v1b_input_bundle: compactNode(publishV1bInputBundle.result),
     },
     full_results: {
-      create_topic_seed: topicSeed,
-      snapshot_literature_resource_pool: snapshot,
-      create_search_plan: searchPlan,
-      record_search_run: searchRun,
+      create_topic_seed: topicSeed.result,
+      snapshot_literature_resource_pool: snapshot.result,
+      create_search_plan: searchPlan.result,
+      record_search_run: searchRun.result,
       build_evidence_map: evidenceMap,
       generate_need_candidate: generateNeedCandidate.result,
       validate_need_adjudication: validateNeed.result,
@@ -3315,6 +3634,13 @@ try {
       NEED_ADJUDICATION_MODEL_OPTION_ID,
     ),
     harness_adjudication_negative_probe: NEED_ADJUDICATION_NEGATIVE_PROBE,
+    harness_human_confirmation_semantic_review_execution_mode: HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE,
+    harness_human_confirmation_semantic_review_model_option_id:
+      HUMAN_CONFIRMATION_SEMANTIC_REVIEW_MODEL_OPTION_ID,
+    harness_human_confirmation_semantic_review_execution_spec: singleAgentExecutionSpec(
+      HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE,
+      HUMAN_CONFIRMATION_SEMANTIC_REVIEW_MODEL_OPTION_ID,
+    ),
     resource_sample_source: resourceSampleSource,
     resource_sample_set_id: resourceSample.sample_set.resource_sample_set_id,
     resource_sample_status: resourceSample.sample_set.status,
@@ -3381,6 +3707,13 @@ try {
       NEED_ADJUDICATION_MODEL_OPTION_ID,
     ),
     harness_adjudication_negative_probe: NEED_ADJUDICATION_NEGATIVE_PROBE,
+    harness_human_confirmation_semantic_review_execution_mode: HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE,
+    harness_human_confirmation_semantic_review_model_option_id:
+      HUMAN_CONFIRMATION_SEMANTIC_REVIEW_MODEL_OPTION_ID,
+    harness_human_confirmation_semantic_review_execution_spec: singleAgentExecutionSpec(
+      HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE,
+      HUMAN_CONFIRMATION_SEMANTIC_REVIEW_MODEL_OPTION_ID,
+    ),
     harness_llm_gateway: harnessLlmGateway?.snapshot?.() ?? null,
     error: sanitizeError(error),
   };

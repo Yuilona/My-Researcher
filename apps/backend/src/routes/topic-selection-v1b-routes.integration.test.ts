@@ -6,6 +6,7 @@ import { PrismaClient } from '@prisma/client';
 import type {
   TopicSelectionArtifactRefRecord,
   TopicSelectionFunctionalRef,
+  TopicSelectionTraceSnapshotRecord,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-control-plane-contracts';
 import type {
   TopicSelectionV1aToV1bInputBundleRecord,
@@ -302,6 +303,7 @@ type WorkflowHarnessHttpResult = {
   failure_class: string | null;
   authority_ref: TopicSelectionFunctionalRef | null;
   handoff_ref: TopicSelectionFunctionalRef | null;
+  trace_snapshot_ref: TopicSelectionFunctionalRef | null;
   transition_attempt_ref: TopicSelectionFunctionalRef | null;
   hashes: {
     authority_hash: string | null;
@@ -342,6 +344,19 @@ async function getWorkflowHarnessHandoff(
   assert.ok(artifactRef, 'Expected workflow harness handoff artifact ref.');
   const artifact = await getWorkflowHarnessArtifact(app, artifactRef);
   return artifact.payload as unknown as TopicSelectionV1bWorkflowHarnessHandoff;
+}
+
+async function getWorkflowHarnessTraceSnapshot(
+  app: FastifyInstance,
+  traceSnapshotRef: TopicSelectionFunctionalRef | null,
+): Promise<TopicSelectionTraceSnapshotRecord> {
+  assert.ok(traceSnapshotRef, 'Expected workflow harness trace snapshot ref.');
+  const response = await app.inject({
+    method: 'GET',
+    url: `/topic-selection/v1b/workflow-harness/trace-snapshots/${encodeURIComponent(traceSnapshotRef.ref_id)}`,
+  });
+  assertStatus(response, 200);
+  return response.json() as TopicSelectionTraceSnapshotRecord;
 }
 
 async function recordWorkflowHarnessArtifact(
@@ -662,6 +677,7 @@ async function v1bHarnessRequestFromHandoff<TPayload>(
   inputContract: string,
   snapshotKind: string,
   payloadPatch: Record<string, unknown>,
+  extraSourceRefs: TopicSelectionFunctionalRef[] = [],
 ): Promise<TopicSelectionV1bWorkflowHarnessRunRequest> {
   assert.ok(result.authority_ref && result.handoff_ref && result.hashes.handoff_hash);
   const handoff = await getWorkflowHarnessHandoff(app, result.handoff_ref);
@@ -673,7 +689,7 @@ async function v1bHarnessRequestFromHandoff<TPayload>(
   const frozenInput: TopicSelectionV1bWorkflowHarnessRunRequest['frozen_input'] = {
     input_contract: inputContract,
     snapshot_kind: snapshotKind,
-    source_refs: [result.authority_ref, result.handoff_ref, ...handoff.required_refs],
+    source_refs: uniqueRefs([result.authority_ref, result.handoff_ref, ...extraSourceRefs, ...handoff.required_refs]),
     payload: payload as unknown as Record<string, unknown>,
   };
   return {
@@ -836,6 +852,7 @@ async function v1bHarnessN8Request(
   n7Result: WorkflowHarnessHttpResult,
   suffix: string,
 ): Promise<TopicSelectionV1bWorkflowHarnessRunRequest> {
+  const projectionRef = await n7ToN8ProjectionRef(app, n7Result);
   return v1bHarnessRequestFromHandoff<TopicSelectionV1bN8HarnessFrozenInputPayload>(
     app,
     n7Result,
@@ -846,7 +863,18 @@ async function v1bHarnessN8Request(
     'N7ToN8Handoff@v1',
     'topic_question_contract',
     { n7_handoff_hash: n7Result.hashes.handoff_hash },
+    [projectionRef],
   );
+}
+
+async function n7ToN8ProjectionRef(
+  app: FastifyInstance,
+  n7Result: WorkflowHarnessHttpResult,
+): Promise<TopicSelectionFunctionalRef> {
+  const trace = await getWorkflowHarnessTraceSnapshot(app, n7Result.trace_snapshot_ref);
+  const projectionRef = trace.payload.runtime_context_projection_ref as TopicSelectionFunctionalRef | null | undefined;
+  assert.equal(projectionRef?.ref_type, 'artifact_ref');
+  return projectionRef!;
 }
 
 function v1bHarnessN8ValueDraft(

@@ -7,14 +7,21 @@ import type {
 } from './llm-gateway.js';
 import {
   type TopicSelectionV1bTopicQuestionCandidateSetDraftPayload,
+  type TopicSelectionV1bTopicValueAssessmentDraftPayload,
   topicSelectionV1bTopicQuestionCandidateSetDraftPayloadSchema,
+  topicSelectionV1bTopicValueAssessmentDraftPayloadSchema,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-workflow-harness-contracts';
+import {
+  TOPIC_SELECTION_VALUE_DIMENSIONS,
+  TOPIC_SELECTION_VALUE_GATE_KEYS,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-value-assessment-contracts';
 import { BackendLlmGateway } from './llm-gateway.js';
 import { InMemoryTopicSelectionControlPlaneRepository } from '../repositories/in-memory-topic-selection-control-plane-repository.js';
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
 import {
   TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID,
 } from './topic-selection-model-profile-registry-service.js';
 import {
   TopicSelectionProviderCanaryService,
@@ -29,15 +36,23 @@ class StubProviderCanaryGateway {
     request: LlmStructuredOutputRequest,
   ): Promise<LlmStructuredOutputResponse<T>> {
     this.calls.push(request);
-    const output = request.schemaName === 'topic_selection_v1b_n6_provider_canary_draft'
-      ? v1bN6CanaryOutput()
-      : v1aCanaryOutput(request);
+    const output = providerCanaryOutput(request);
     return {
       parsed: output as T,
       raw: { output },
       telemetry: telemetry(request),
     };
   }
+}
+
+function providerCanaryOutput(request: LlmStructuredOutputRequest) {
+  if (request.schemaName === 'topic_selection_v1b_n6_provider_canary_draft') {
+    return v1bN6CanaryOutput();
+  }
+  if (request.schemaName === 'topic_selection_v1b_n8_provider_canary_draft') {
+    return v1bN8CanaryOutput();
+  }
+  return v1aCanaryOutput(request);
 }
 
 function v1aCanaryOutput(request: LlmStructuredOutputRequest): TopicSelectionProviderCanaryCandidateDraftBatch {
@@ -150,6 +165,65 @@ function v1bN6CanaryOutput(): TopicSelectionV1bTopicQuestionCandidateSetDraftPay
   };
 }
 
+function v1bN8CanaryOutput(): TopicSelectionV1bTopicValueAssessmentDraftPayload {
+  const contractRef = functionalRef('topic_question_contract', 'provider_canary_contract_001');
+  const evidenceRef = functionalRef('evidence_unit', 'provider_canary_evidence_001');
+  return {
+    readiness_status: 'ready_with_accepted_risk',
+    strongest_claim_if_success:
+      'The shared runtime can keep N8 provider-required calls live while preserving prompt-cache provenance.',
+    fallback_claim_if_success: 'The canary validates N8 provider transport and runtime provenance only.',
+    hard_gates: TOPIC_SELECTION_VALUE_GATE_KEYS.map((gateKey) => ({
+      gate_key: gateKey,
+      verdict: gateKey === 'answerability_sanity' ? 'pass_with_risk' : 'pass',
+      severity: gateKey === 'answerability_sanity' ? 'warning' : 'info',
+      overridable_with_risk: gateKey === 'answerability_sanity',
+      rationale: `${gateKey} is satisfied for the synthetic non-authority N8 provider canary.`,
+      refs: [contractRef],
+    })),
+    dimension_scores: TOPIC_SELECTION_VALUE_DIMENSIONS.map((dimensionKey) => ({
+      dimension_key: dimensionKey,
+      score: dimensionKey === 'reviewer_risk' ? 72 : 80,
+      rationale: `${dimensionKey} is adequate for a synthetic provider/runtime canary.`,
+      evidence_refs: [evidenceRef],
+      uncertainty: 'medium',
+    })),
+    risk_penalty: {
+      residual_risk: 'provider output quality may drift and remains non-authority',
+    },
+    reviewer_objections: ['Synthetic provider canary output is not business authority.'],
+    ceiling_case: 'The canary can show provider-live runtime semantics, not topic value.',
+    base_case: 'The canary validates prompt cache and provider telemetry separation for N8.',
+    floor_case: 'The canary still blocks unsafe over-budget provider execution.',
+    recommended_disposition: 'advance_to_package',
+    total_score: 76,
+    value_summary:
+      'The synthetic N8 canary is value-positive only as runtime evidence for prompt-cache/provider semantics.',
+    confidence: 0.78,
+    accepted_risk_refs: [],
+    blocker_refs: [],
+    risk_notes: ['Provider response reuse must remain null for this canary.'],
+    reasoning_memo: {
+      recommendation: 'advance_to_package',
+      value_thesis: 'The N8 provider canary is useful because it verifies provider-live behavior at the value-draft slot.',
+      significance: 'It gives workflow agents evidence that prompt packet reuse does not become response reuse.',
+      originality: 'The canary targets N8 value-draft runtime provenance rather than generic provider transport.',
+      claim_leverage: 'The claim is bounded to runtime semantics and auditability.',
+      reviewer_risks: ['Synthetic output does not prove topic quality.'],
+      effort_to_value: 'The canary has high diagnostic value for low implementation effort.',
+      strategic_fit: 'It supports reviewer-aligned workflow robustness checks.',
+      negative_memory_check: 'No negative memory is allowed to become standalone evidence.',
+      evidence_backed_rationale: 'Prompt hashes, cache metadata, and provider telemetry are ref-backed runtime evidence.',
+      top_objections: ['Provider output may require normalization in full workflow runs.'],
+      uncertainty: 'Medium uncertainty remains for live provider schema drift.',
+      disposition_bridge: 'Use this only as non-authority provider/runtime evidence.',
+      requires_critic_review: false,
+      critic_triggers: [],
+      cited_refs: [contractRef, evidenceRef],
+    },
+  };
+}
+
 function telemetry(request: LlmStructuredOutputRequest): LlmCallTelemetry {
   return {
     provider_id: request.model.providerId,
@@ -201,6 +275,33 @@ function expectedV1bN6ModelOptionId(providerId: TopicSelectionProviderCanaryProv
     ? 'openai-balanced'
     : 'dashscope-thinking-budget';
   return `${TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID}.${suffix}`;
+}
+
+function expectedV1bN8ModelOptionId(providerId: TopicSelectionProviderCanaryProviderId): string {
+  const suffix = providerId === 'openai'
+    ? 'openai-balanced'
+    : 'dashscope-thinking-budget';
+  return `${TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID}.${suffix}`;
+}
+
+function assertV1bN8PromptCacheLiveRequiredResult(
+  result: Awaited<ReturnType<TopicSelectionProviderCanaryService['runV1bN8PromptCacheLiveRequiredCanary']>>,
+  providerId: TopicSelectionProviderCanaryProviderId,
+) {
+  assert.equal(result.provider_id, providerId);
+  assert.equal(result.model_option_id, expectedV1bN8ModelOptionId(providerId));
+  assert.equal(result.provider_required_live, true);
+  assert.equal(result.first_status, 'succeeded');
+  assert.equal(result.second_status, 'succeeded');
+  assert.equal(result.provider_call_count, 2);
+  assert.equal(result.first_prompt_packet_hash, result.second_prompt_packet_hash);
+  assert.equal(result.prompt_artifact_ref_reused, true);
+  assert.equal(result.prompt_quality_report_ref_reused, true);
+  assert.deepEqual(result.provider_response_cache_statuses, ['not_applicable', 'not_applicable']);
+  assert.deepEqual(result.response_reuse_refs, [null, null]);
+  assert.equal(result.telemetry.length, 2);
+  assert.equal(result.telemetry[0]?.provider_id, providerId);
+  assert.equal(result.telemetry[1]?.provider_id, providerId);
 }
 
 async function assertPromptCacheLiveRequiredCanary(providerId: TopicSelectionProviderCanaryProviderId) {
@@ -258,6 +359,26 @@ async function assertV1bN6PromptCacheLiveRequiredCanary(providerId: TopicSelecti
   assert.deepEqual(result.provider_response_cache_statuses, ['not_applicable', 'not_applicable']);
   assert.deepEqual(result.response_reuse_refs, [null, null]);
   assert.equal(result.telemetry.length, 2);
+  assert.equal(result.telemetry[1]!.provider_side_cache_hit, true);
+}
+
+async function assertV1bN8PromptCacheLiveRequiredCanary(providerId: TopicSelectionProviderCanaryProviderId) {
+  const gateway = new StubProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runV1bN8PromptCacheLiveRequiredCanary({
+    provider_id: providerId,
+  });
+
+  assertV1bN8PromptCacheLiveRequiredResult(result, providerId);
+  assert.equal(gateway.calls.length, 2);
+  assert.equal(gateway.calls[0]!.model.providerId, providerId);
+  assert.equal(gateway.calls[0]!.model.profileId, TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID);
+  assert.equal(gateway.calls[0]!.prompt.promptTemplateId, 'topic-selection-v1b-n8-provider-canary-live-required');
+  assert.equal(gateway.calls[0]!.schemaName, 'topic_selection_v1b_n8_provider_canary_draft');
+  assert.ok(gateway.calls[0]!.schemaName.length <= 64);
+  assert.deepEqual(gateway.calls[0]!.schema, topicSelectionV1bTopicValueAssessmentDraftPayloadSchema);
+  assert.equal(gateway.calls[1]!.model.providerId, providerId);
   assert.equal(result.telemetry[1]!.provider_side_cache_hit, true);
 }
 
@@ -349,6 +470,50 @@ test('provider canary blocks over-budget v1b N6 DashScope fixtures before gatewa
   assert.deepEqual(result.blocker_codes, ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION']);
 });
 
+test('provider canary proves v1b N8 OpenAI prompt cache hits still require live provider calls', async () => {
+  await assertV1bN8PromptCacheLiveRequiredCanary('openai');
+});
+
+test('provider canary proves v1b N8 DashScope prompt cache hits still require live provider calls', async () => {
+  await assertV1bN8PromptCacheLiveRequiredCanary('dashscope');
+});
+
+test('provider canary blocks over-budget v1b N8 OpenAI fixtures before gateway calls', async () => {
+  const gateway = new StubProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runV1bN8OverBudgetZeroCallCanary({
+    provider_id: 'openai',
+  });
+
+  assert.equal(result.provider_id, 'openai');
+  assert.equal(result.model_option_id, expectedV1bN8ModelOptionId('openai'));
+  assert.equal(result.provider_call_count, 0);
+  assert.equal(gateway.calls.length, 0);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION');
+  assert.equal(result.token_budget_gate_decision, 'blocked_over_budget');
+  assert.deepEqual(result.blocker_codes, ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION']);
+});
+
+test('provider canary blocks over-budget v1b N8 DashScope fixtures before gateway calls', async () => {
+  const gateway = new StubProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runV1bN8OverBudgetZeroCallCanary({
+    provider_id: 'dashscope',
+  });
+
+  assert.equal(result.provider_id, 'dashscope');
+  assert.equal(result.model_option_id, expectedV1bN8ModelOptionId('dashscope'));
+  assert.equal(result.provider_call_count, 0);
+  assert.equal(gateway.calls.length, 0);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION');
+  assert.equal(result.token_budget_gate_decision, 'blocked_over_budget');
+  assert.deepEqual(result.blocker_codes, ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION']);
+});
+
 function shouldRunLiveCanary(providerId: TopicSelectionProviderCanaryProviderId): boolean {
   if (
     process.env.T112_PROVIDER_CANARY_LIVE !== '1'
@@ -364,6 +529,18 @@ function shouldRunLiveCanary(providerId: TopicSelectionProviderCanaryProviderId)
 function shouldRunLiveV1bN6Canary(providerId: TopicSelectionProviderCanaryProviderId): boolean {
   if (
     process.env.T112_V1B_N6_PROVIDER_CANARY_LIVE !== '1'
+    || process.env.BACKEND_TEST_PRESERVE_REAL_ENV !== '1'
+  ) {
+    return false;
+  }
+  return providerId === 'openai'
+    ? Boolean(process.env.OPENAI_API_KEY?.trim())
+    : Boolean(process.env.DASHSCOPE_API_KEY?.trim());
+}
+
+function shouldRunLiveV1bN8Canary(providerId: TopicSelectionProviderCanaryProviderId): boolean {
+  if (
+    process.env.T112_V1B_N8_PROVIDER_CANARY_LIVE !== '1'
     || process.env.BACKEND_TEST_PRESERVE_REAL_ENV !== '1'
   ) {
     return false;
@@ -480,5 +657,53 @@ test(
     assert.equal(result.provider_call_count, 2);
     assert.equal(result.model_option_id, expectedV1bN6ModelOptionId('dashscope'));
     assert.equal(result.telemetry[0]?.provider_id, 'dashscope');
+  },
+);
+
+test(
+  'provider canary live v1b N8 OpenAI invocation uses the configured provider gateway',
+  {
+    skip: shouldRunLiveV1bN8Canary('openai')
+      ? false
+      : 'set T112_V1B_N8_PROVIDER_CANARY_LIVE=1, BACKEND_TEST_PRESERVE_REAL_ENV=1, and OPENAI_API_KEY to run',
+    timeout: 300_000,
+  },
+  async () => {
+    const service = makeCanaryService({
+      llmGateway: new BackendLlmGateway({
+        defaultTimeoutMs: 300_000,
+        defaultMaxRetries: 0,
+      }),
+    });
+
+    const result = await service.runV1bN8PromptCacheLiveRequiredCanary({
+      provider_id: 'openai',
+    });
+
+    assertV1bN8PromptCacheLiveRequiredResult(result, 'openai');
+  },
+);
+
+test(
+  'provider canary live v1b N8 DashScope invocation uses the configured provider gateway',
+  {
+    skip: shouldRunLiveV1bN8Canary('dashscope')
+      ? false
+      : 'set T112_V1B_N8_PROVIDER_CANARY_LIVE=1, BACKEND_TEST_PRESERVE_REAL_ENV=1, and DASHSCOPE_API_KEY to run',
+    timeout: 300_000,
+  },
+  async () => {
+    const service = makeCanaryService({
+      llmGateway: new BackendLlmGateway({
+        defaultTimeoutMs: 300_000,
+        defaultMaxRetries: 0,
+      }),
+    });
+
+    const result = await service.runV1bN8PromptCacheLiveRequiredCanary({
+      provider_id: 'dashscope',
+    });
+
+    assertV1bN8PromptCacheLiveRequiredResult(result, 'dashscope');
   },
 );

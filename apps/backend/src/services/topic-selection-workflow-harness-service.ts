@@ -53,7 +53,6 @@ import {
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-need-validation-contracts';
 import { AppError } from '../errors/app-error.js';
 import type {
-  TopicSelectionAgentRuntimeTokenBudgetInput,
   TopicSelectionAgentRunMode,
   TopicSelectionCodexAssistedAgentOutput,
   TopicSelectionExecutorKind,
@@ -68,6 +67,14 @@ import {
 import {
   TopicSelectionV1aN6RuntimeContextCacheBindingService,
 } from './topic-selection-v1a-n6-runtime-context-cache-binding-service.js';
+import {
+  type TopicSelectionV1aEvidenceExtractionCompressionPlan,
+  type TopicSelectionV1aHumanConfirmationCompressionPlan,
+  type TopicSelectionV1aLlmRuntimeInvocationBinding,
+  type TopicSelectionV1aLlmRuntimeTokenBudgetOverrides,
+  type TopicSelectionV1aNeedAdjudicationCompressionPlan,
+  TopicSelectionV1aLlmRuntimeBindingService,
+} from './topic-selection-v1a-llm-runtime-binding-service.js';
 import { TopicSelectionNeedDiscoveryArtifactBoundaryService } from './topic-selection-need-discovery-artifact-boundary-service.js';
 import {
   type TopicSelectionGenerateNeedCandidateOrchestratorAdapterResult,
@@ -165,18 +172,8 @@ import {
   TopicSelectionModelProfileRegistryService,
 } from './topic-selection-model-profile-registry-service.js';
 import {
-  TOPIC_SELECTION_V1A_N5_CONTEXT_RUNTIME_PROFILE_IDS,
-  TOPIC_SELECTION_V1A_N5_INVOCATION_SLOT_IDS,
-  TOPIC_SELECTION_V1A_N7_CONTEXT_RUNTIME_PROFILE_IDS,
-  TOPIC_SELECTION_V1A_N7_INVOCATION_SLOT_IDS,
-  TOPIC_SELECTION_V1A_N8_CONTEXT_RUNTIME_PROFILE_IDS,
-  TOPIC_SELECTION_V1A_N8_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
 } from './topic-selection-context-policy-profile-registry-service.js';
-import {
-  TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
-  type TopicSelectionRuntimeLoopKind,
-} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-llm-runtime-contracts';
 import { TopicSelectionContextPacketCacheService } from './topic-selection-context-packet-cache-service.js';
 import type { TopicSelectionNeedValidationService } from './topic-selection-need-validation-service.js';
 import type { TopicSelectionSearchResourceService } from './topic-selection-search-resource-service.js';
@@ -184,6 +181,11 @@ import {
   sha256Text,
   stableStringify,
 } from './literature-content-processing-utils.js';
+import { TopicSelectionTokenBudgetGateService } from './topic-selection-token-budget-gate-service.js';
+import {
+  TopicSelectionCompressionRuntimeService,
+  type TopicSelectionCompressionReportRuntimeResult,
+} from './topic-selection-compression-runtime-service.js';
 
 const CREATE_TOPIC_SEED_NODE_ID = 'topic-selection.v1a.create-topic-seed.v1' as const;
 const SNAPSHOT_LITERATURE_RESOURCE_POOL_NODE_ID =
@@ -206,6 +208,8 @@ const NEED_ADJUDICATION_TRACE_PAYLOAD_SCHEMA = 'WorkflowHarnessValidateNeedAdjud
 const HUMAN_CONFIRM_NEED_TRACE_PAYLOAD_SCHEMA = 'WorkflowHarnessHumanConfirmNeedScenarioTrace@v1';
 const PUBLISH_V1B_INPUT_BUNDLE_TRACE_PAYLOAD_SCHEMA = 'WorkflowHarnessPublishV1bInputBundleScenarioTrace@v1';
 const V1C_CONSUMPTION_TRACE_PAYLOAD_SCHEMA = 'WorkflowHarnessV1cConsumptionScenarioTrace@v1';
+export const TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_RUNTIME_CONTEXT_REF_PLACEHOLDER =
+  '__runtime_context_packet_ref__';
 const NORMALIZED_LITERATURE_RESOURCE_POOL_SOURCE_SCOPE = 'title_card_evidence_basket' as const;
 const UNSUPPORTED_SOURCE_SCOPE_FOR_NORMALIZED_V1A = 'UNSUPPORTED_SOURCE_SCOPE_FOR_NORMALIZED_V1A';
 const SEARCH_RUN_LOCATOR_PROVENANCE_REF_TYPES = new Set([
@@ -248,6 +252,15 @@ const NEED_ADJUDICATION_HIGH_RISK_DECISIONS = new Set<TopicSelectionNeedAdjudica
   'merge',
   'park',
 ]);
+
+type TopicSelectionWorkflowHarnessReplayProvenance = {
+  replayed: true;
+  source_workflow_run_id: string;
+  source_node_attempt_id: string;
+  source_trace_artifact_ref: TopicSelectionFunctionalRef;
+  input_hash: string;
+};
+
 const NEED_ADJUDICATION_LOW_RISK_MODEL_DECISIONS = new Set<TopicSelectionNeedAdjudicationDecision>([
   'validate',
   'request_searchplan_recheck',
@@ -323,6 +336,7 @@ export type TopicSelectionWorkflowHarnessCreateTopicSeedNodeResult = {
   blocker_codes: string[];
   error_code: string | null;
   error_message: string | null;
+  replay_provenance: TopicSelectionWorkflowHarnessReplayProvenance | null;
 };
 
 export type TopicSelectionWorkflowHarnessCreateTopicSeedTraceSnapshot = {
@@ -333,8 +347,11 @@ export type TopicSelectionWorkflowHarnessCreateTopicSeedTraceSnapshot = {
   node_id: typeof CREATE_TOPIC_SEED_NODE_ID;
   workflow_run_id: string;
   node_attempt_id: string;
+  input_hash: string;
   scenario_status: 'passed' | 'failed';
   node_status: 'succeeded' | 'blocked';
+  node_input: TopicSelectionWorkflowHarnessCreateTopicSeedNodeInput;
+  node_result: TopicSelectionWorkflowHarnessCreateTopicSeedNodeResult;
   authority_refs: TopicSelectionFunctionalRef[];
   audit_refs: TopicSelectionFunctionalRef[];
   artifact_refs: TopicSelectionFunctionalRef[];
@@ -405,6 +422,7 @@ export type TopicSelectionWorkflowHarnessCreateSearchPlanNodeResult = {
   blocker_codes: string[];
   error_code: string | null;
   error_message: string | null;
+  replay_provenance: TopicSelectionWorkflowHarnessReplayProvenance | null;
 };
 
 export type TopicSelectionWorkflowHarnessCreateSearchPlanTraceSnapshot = {
@@ -415,6 +433,7 @@ export type TopicSelectionWorkflowHarnessCreateSearchPlanTraceSnapshot = {
   node_id: typeof CREATE_SEARCH_PLAN_NODE_ID;
   workflow_run_id: string;
   node_attempt_id: string;
+  input_hash: string;
   scenario_status: 'passed' | 'failed';
   node_status: 'succeeded' | 'blocked';
   node_input: TopicSelectionWorkflowHarnessCreateSearchPlanNodeInput;
@@ -517,6 +536,7 @@ export type TopicSelectionWorkflowHarnessRecordSearchRunNodeResult = {
   blocker_codes: string[];
   error_code: string | null;
   error_message: string | null;
+  replay_provenance: TopicSelectionWorkflowHarnessReplayProvenance | null;
 };
 
 export type TopicSelectionWorkflowHarnessRecordSearchRunTraceSnapshot = {
@@ -527,6 +547,7 @@ export type TopicSelectionWorkflowHarnessRecordSearchRunTraceSnapshot = {
   node_id: typeof RECORD_SEARCH_RUN_NODE_ID;
   workflow_run_id: string;
   node_attempt_id: string;
+  input_hash: string;
   scenario_status: 'passed' | 'failed';
   node_status: 'succeeded' | 'blocked';
   node_input: TopicSelectionWorkflowHarnessRecordSearchRunNodeInput;
@@ -605,6 +626,7 @@ export type TopicSelectionWorkflowHarnessBuildEvidenceMapInput = {
   mocked_output?: TopicSelectionMockedAgentOutput<TopicSelectionEvidenceMapExtractionDraft> | null;
   codex_response?: TopicSelectionCodexAssistedAgentOutput<TopicSelectionEvidenceMapExtractionDraft> | null;
   model_option_id?: string | null;
+  runtime_token_budget_overrides?: TopicSelectionV1aLlmRuntimeTokenBudgetOverrides | null;
   revision_of_attempt_ref?: TopicSelectionFunctionalRef | null;
   review_package_ref?: TopicSelectionFunctionalRef | null;
   operator_reuse_approval_ref?: TopicSelectionFunctionalRef | null;
@@ -618,6 +640,7 @@ export type TopicSelectionWorkflowHarnessBuildEvidenceMapNodeResult = {
   status: 'succeeded' | 'blocked' | 'review_required';
   agent_invocation_audit_ref: TopicSelectionFunctionalRef | null;
   agent_invocation_status: 'not_invoked' | 'succeeded' | 'blocked';
+  context_compression_report_ref: TopicSelectionFunctionalRef | null;
   materialization_report: TopicSelectionEvidenceMapMaterializationReport;
   review_package: TopicSelectionEvidenceMapExtractionReviewPackage | null;
   evidence_map_records: TopicSelectionEvidenceMapCreateRecords | null;
@@ -631,6 +654,7 @@ export type TopicSelectionWorkflowHarnessBuildEvidenceMapNodeResult = {
   blocker_codes: string[];
   error_code: string | null;
   error_message: string | null;
+  replay_provenance: TopicSelectionWorkflowHarnessReplayProvenance | null;
 };
 
 export type TopicSelectionWorkflowHarnessBuildEvidenceMapTraceSnapshot = {
@@ -712,6 +736,7 @@ export type TopicSelectionWorkflowHarnessValidateNeedAdjudicationInput = {
   mocked_output?: TopicSelectionMockedAgentOutput<TopicSelectionNeedAdjudicationRecommendationPacket> | null;
   codex_response?: TopicSelectionCodexAssistedAgentOutput<TopicSelectionNeedAdjudicationRecommendationPacket> | null;
   model_option_id?: string | null;
+  runtime_token_budget_overrides?: TopicSelectionV1aLlmRuntimeTokenBudgetOverrides | null;
   diagnostic_prompt_appendix?: string | null;
   adjudication_actor?: TopicSelectionActorRef | null;
   fixture_human_decision?: boolean;
@@ -813,6 +838,7 @@ export type TopicSelectionWorkflowHarnessHumanConfirmNeedInput = {
   executor_kind?: TopicSelectionExecutorKind;
   profile_id?: string | null;
   model_option_id?: string | null;
+  runtime_token_budget_overrides?: TopicSelectionV1aLlmRuntimeTokenBudgetOverrides | null;
   mocked_output?: TopicSelectionMockedAgentOutput<HumanConfirmationSemanticReview> | null;
   codex_response?: TopicSelectionCodexAssistedAgentOutput<HumanConfirmationSemanticReview> | null;
   policy_version: string;
@@ -962,6 +988,7 @@ type TopicSelectionEvidenceMapExtractionResolution = {
   draft: TopicSelectionEvidenceMapExtractionDraft | null;
   agent_invocation_audit_ref: TopicSelectionFunctionalRef | null;
   agent_invocation_status: 'not_invoked' | 'succeeded' | 'blocked';
+  context_compression_report_ref: TopicSelectionFunctionalRef | null;
   warning_codes: string[];
   blocker_codes: string[];
   error_code: string | null;
@@ -1032,6 +1059,7 @@ export type TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolNodeResul
   blocker_codes: string[];
   error_code: string | null;
   error_message: string | null;
+  replay_provenance: TopicSelectionWorkflowHarnessReplayProvenance | null;
 };
 
 export type TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolTraceSnapshot = {
@@ -1042,6 +1070,7 @@ export type TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolTraceSnap
   node_id: typeof SNAPSHOT_LITERATURE_RESOURCE_POOL_NODE_ID;
   workflow_run_id: string;
   node_attempt_id: string;
+  input_hash: string;
   scenario_status: 'passed' | 'failed';
   node_status: 'succeeded' | 'blocked';
   node_input: TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolNodeInput;
@@ -1239,6 +1268,9 @@ export class TopicSelectionWorkflowHarnessService {
   private readonly contextPolicyProfileRegistry: TopicSelectionContextPolicyProfileRegistryService;
   private readonly modelProfileRegistry: TopicSelectionModelProfileRegistryService;
   private readonly v1aN6RuntimeContextCacheBindings: TopicSelectionV1aN6RuntimeContextCacheBindingService;
+  private readonly v1aLlmRuntimeBindings: TopicSelectionV1aLlmRuntimeBindingService;
+  private readonly tokenBudgetGate: TopicSelectionTokenBudgetGateService;
+  private readonly compressionRuntime: TopicSelectionCompressionRuntimeService;
 
   constructor(
     private readonly dependencies: {
@@ -1247,8 +1279,11 @@ export class TopicSelectionWorkflowHarnessService {
       artifactBoundary: TopicSelectionNeedDiscoveryArtifactBoundaryService;
       contextPacketCache?: TopicSelectionContextPacketCacheService | null;
       v1aN6RuntimeContextCacheBindings?: TopicSelectionV1aN6RuntimeContextCacheBindingService;
+      v1aLlmRuntimeBindings?: TopicSelectionV1aLlmRuntimeBindingService;
       contextPolicyProfileRegistry?: TopicSelectionContextPolicyProfileRegistryService;
       modelProfileRegistry?: TopicSelectionModelProfileRegistryService;
+      tokenBudgetGate?: TopicSelectionTokenBudgetGateService;
+      compressionRuntime?: TopicSelectionCompressionRuntimeService;
       controlPlane?: TopicSelectionControlPlaneService;
       searchResources?: TopicSelectionSearchResourceService;
       evidenceMaps?: TopicSelectionEvidenceMapService;
@@ -1272,6 +1307,12 @@ export class TopicSelectionWorkflowHarnessService {
         contextPolicyProfileRegistry: this.contextPolicyProfileRegistry,
         modelProfileRegistry: this.modelProfileRegistry,
       });
+    this.v1aLlmRuntimeBindings = dependencies.v1aLlmRuntimeBindings
+      ?? new TopicSelectionV1aLlmRuntimeBindingService({
+        contextPolicyProfileRegistry: this.contextPolicyProfileRegistry,
+      });
+    this.tokenBudgetGate = dependencies.tokenBudgetGate ?? new TopicSelectionTokenBudgetGateService();
+    this.compressionRuntime = dependencies.compressionRuntime ?? new TopicSelectionCompressionRuntimeService();
   }
 
   async invokeNode(
@@ -1793,6 +1834,14 @@ export class TopicSelectionWorkflowHarnessService {
     const controlPlane = this.requiredControlPlane();
     const searchResources = this.requiredSearchResources();
     const nodeInput = this.createTopicSeedNodeInput(input);
+    const inputHash = this.hash({
+      node_id: CREATE_TOPIC_SEED_NODE_ID,
+      node_input: nodeInput,
+    });
+    const replay = await this.findCreateTopicSeedReplay(input, nodeInput, inputHash);
+    if (replay) {
+      return replay;
+    }
     let topicSeed: TopicSelectionTopicSeedRecord | null = null;
     let appError: AppError | null = null;
 
@@ -1828,11 +1877,14 @@ export class TopicSelectionWorkflowHarnessService {
       blocker_codes: appError ? [appError.errorCode] : [],
       error_code: appError?.errorCode ?? null,
       error_message: appError?.message ?? null,
+      replay_provenance: null,
     };
     const assertions = this.evaluateCreateTopicSeedAssertions(input, nodeResult);
     const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
     const traceSnapshot = this.createTopicSeedTraceSnapshot({
       input,
+      nodeInput,
+      inputHash,
       nodeResult,
       assertions,
       scenarioStatus,
@@ -1876,6 +1928,14 @@ export class TopicSelectionWorkflowHarnessService {
     const controlPlane = this.requiredControlPlane();
     const searchResources = this.requiredSearchResources();
     const nodeInput = this.snapshotLiteratureResourcePoolNodeInput(input);
+    const inputHash = this.hash({
+      node_id: SNAPSHOT_LITERATURE_RESOURCE_POOL_NODE_ID,
+      node_input: nodeInput,
+    });
+    const replay = await this.findSnapshotLiteratureResourcePoolReplay(input, nodeInput, inputHash);
+    if (replay) {
+      return replay;
+    }
     let snapshot: TopicSelectionLiteratureResourcePoolSnapshotRecord | null = null;
     let blockedSourceHealthSummary: TopicSelectionSourceHealthSummary | null = null;
     let blockedAuditRefs: TopicSelectionFunctionalRef[] = [];
@@ -1949,12 +2009,14 @@ export class TopicSelectionWorkflowHarnessService {
       blocker_codes: snapshot ? [] : blockerCodes,
       error_code: snapshot ? null : errorCode,
       error_message: snapshot ? null : errorMessage,
+      replay_provenance: null,
     };
     const assertions = this.evaluateSnapshotLiteratureResourcePoolAssertions(input, nodeResult);
     const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
     const traceSnapshot = this.createSnapshotLiteratureResourcePoolTraceSnapshot({
       input,
       nodeInput,
+      inputHash,
       nodeResult,
       assertions,
       scenarioStatus,
@@ -2002,6 +2064,14 @@ export class TopicSelectionWorkflowHarnessService {
     const controlPlane = this.requiredControlPlane();
     const searchResources = this.requiredSearchResources();
     const nodeInput = this.createSearchPlanNodeInput(input);
+    const inputHash = this.hash({
+      node_id: CREATE_SEARCH_PLAN_NODE_ID,
+      node_input: nodeInput,
+    });
+    const replay = await this.findCreateSearchPlanReplay(input, nodeInput, inputHash);
+    if (replay) {
+      return replay;
+    }
     const validation = await this.validateCreateSearchPlanBlueprint(input);
     let searchPlan: TopicSelectionSearchPlanRecord | null = null;
     let coverageRowIntents: TopicSelectionCoverageRowIntentRecord[] = [];
@@ -2065,12 +2135,14 @@ export class TopicSelectionWorkflowHarnessService {
       blocker_codes: searchPlan ? [] : blockerCodes,
       error_code: searchPlan ? null : errorCode,
       error_message: searchPlan ? null : errorMessage,
+      replay_provenance: null,
     };
     const assertions = this.evaluateCreateSearchPlanAssertions(input, nodeResult);
     const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
     const traceSnapshot = this.createSearchPlanTraceSnapshot({
       input,
       nodeInput,
+      inputHash,
       nodeResult,
       assertions,
       scenarioStatus,
@@ -2119,6 +2191,14 @@ export class TopicSelectionWorkflowHarnessService {
     const controlPlane = this.requiredControlPlane();
     const searchResources = this.requiredSearchResources();
     const nodeInput = this.recordSearchRunNodeInput(input);
+    const inputHash = this.hash({
+      node_id: RECORD_SEARCH_RUN_NODE_ID,
+      node_input: nodeInput,
+    });
+    const replay = await this.findRecordSearchRunReplay(input, nodeInput, inputHash);
+    if (replay) {
+      return replay;
+    }
     const validation = this.validateRecordSearchRunBundle(input);
     let searchRun: TopicSelectionSearchRunRecord | null = null;
     let observations: TopicSelectionCoverageExecutionObservationRecord[] = [];
@@ -2205,12 +2285,14 @@ export class TopicSelectionWorkflowHarnessService {
       blocker_codes: searchRun ? [] : blockerCodes,
       error_code: searchRun ? null : errorCode,
       error_message: searchRun ? null : errorMessage,
+      replay_provenance: null,
     };
     const assertions = this.evaluateRecordSearchRunAssertions(input, nodeResult);
     const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
     const traceSnapshot = this.createRecordSearchRunTraceSnapshot({
       input,
       nodeInput,
+      inputHash,
       nodeResult,
       assertions,
       scenarioStatus,
@@ -2362,6 +2444,7 @@ export class TopicSelectionWorkflowHarnessService {
       materializationReportRef,
       reviewPackageArtifactRef,
       extraction.agent_invocation_audit_ref,
+      extraction.context_compression_report_ref,
     ]);
     const blockerCodes = this.uniqueStrings([
       ...materialization.report.blocker_codes,
@@ -2376,6 +2459,7 @@ export class TopicSelectionWorkflowHarnessService {
           : 'blocked',
       agent_invocation_audit_ref: extraction.agent_invocation_audit_ref,
       agent_invocation_status: extraction.agent_invocation_status,
+      context_compression_report_ref: extraction.context_compression_report_ref,
       materialization_report: materialization.report,
       review_package: reviewPackage,
       evidence_map_records: evidenceMapRecords,
@@ -2392,6 +2476,7 @@ export class TopicSelectionWorkflowHarnessService {
       blocker_codes: blockerCodes,
       error_code: appError?.errorCode ?? extraction.error_code ?? (blockerCodes[0] ?? null),
       error_message: appError?.message ?? null,
+      replay_provenance: null,
     };
     const assertions = this.evaluateBuildEvidenceMapAssertions(input, nodeResult);
     const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
@@ -2457,6 +2542,7 @@ export class TopicSelectionWorkflowHarnessService {
     let recommendationPacket: TopicSelectionNeedAdjudicationRecommendationPacket | null = null;
     let recommendationPacketRef: TopicSelectionFunctionalRef | null = null;
     let agentInvocationAuditRef: TopicSelectionFunctionalRef | null = null;
+    let contextCompressionReportRef: TopicSelectionFunctionalRef | null = null;
     let nodeResult: TopicSelectionValidateNeedAdjudicationNodeResult | null = null;
 
     try {
@@ -2503,6 +2589,7 @@ export class TopicSelectionWorkflowHarnessService {
         recommendationPacket = recommendation.packet;
         recommendationPacketRef = recommendation.packet_ref;
         agentInvocationAuditRef = recommendation.agent_invocation_audit_ref;
+        contextCompressionReportRef = recommendation.context_compression_report_ref;
         const gate = this.validateNeedAdjudicationRecommendationGate(input, candidate, supportPacket, recommendationPacket);
         if (gate.status !== 'ready') {
           nodeResult = this.validateNeedAdjudicationBlockedResult(input, {
@@ -2520,7 +2607,10 @@ export class TopicSelectionWorkflowHarnessService {
             requiredActions: recommendationPacket.required_actions,
             acceptedRiskRefs: recommendationPacket.accepted_risk_refs,
             residualRiskRefs: recommendationPacket.residual_risk_refs,
-            warningCodes: this.validateNeedAdjudicationWarningCodes(readiness, supportPacket, recommendationPacket),
+            warningCodes: this.uniqueStrings([
+              ...this.validateNeedAdjudicationWarningCodes(readiness, supportPacket, recommendationPacket),
+              ...recommendation.warning_codes,
+            ]),
           });
         } else {
           const adjudication = await needValidation.adjudicateNeed({
@@ -2574,7 +2664,10 @@ export class TopicSelectionWorkflowHarnessService {
             final_decision: adjudicationResult.final_decision,
             required_actions: adjudicationResult.required_actions,
             blocker_codes: [],
-            warning_codes: this.validateNeedAdjudicationWarningCodes(readiness, supportPacket, recommendationPacket),
+            warning_codes: this.uniqueStrings([
+              ...this.validateNeedAdjudicationWarningCodes(readiness, supportPacket, recommendationPacket),
+              ...recommendation.warning_codes,
+            ]),
             review_reason_codes: [],
             accepted_risk_refs: adjudicationResult.accepted_risk_refs,
             residual_risk_refs: adjudicationResult.residual_risk_refs,
@@ -2593,6 +2686,14 @@ export class TopicSelectionWorkflowHarnessService {
     } catch (error) {
       if (!(error instanceof AppError)) {
         throw error;
+      }
+      const errorAgentAuditRef = error.details?.agent_invocation_audit_ref;
+      const errorCompressionReportRef = error.details?.context_compression_report_ref;
+      if (!agentInvocationAuditRef && this.isFunctionalRef(errorAgentAuditRef)) {
+        agentInvocationAuditRef = errorAgentAuditRef;
+      }
+      if (!contextCompressionReportRef && this.isFunctionalRef(errorCompressionReportRef)) {
+        contextCompressionReportRef = errorCompressionReportRef;
       }
       nodeResult = this.validateNeedAdjudicationBlockedResult(input, {
         candidate,
@@ -2621,6 +2722,7 @@ export class TopicSelectionWorkflowHarnessService {
     const artifactRefs = this.uniqueRefs([
       recommendationPacketRef,
       agentInvocationAuditRef,
+      contextCompressionReportRef,
     ]);
     const assertions = this.evaluateValidateNeedAdjudicationAssertions(input, result);
     const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
@@ -2695,6 +2797,8 @@ export class TopicSelectionWorkflowHarnessService {
     let semanticReview: HumanConfirmationSemanticReview | null = null;
     let semanticReviewRef: TopicSelectionFunctionalRef | null = null;
     let agentInvocationAuditRef: TopicSelectionFunctionalRef | null = null;
+    let contextCompressionReportRef: TopicSelectionFunctionalRef | null = null;
+    let semanticReviewRuntimeWarningCodes: string[] = [];
     let nodeResult: TopicSelectionHumanConfirmNeedNodeResult | null = null;
 
     try {
@@ -2734,6 +2838,8 @@ export class TopicSelectionWorkflowHarnessService {
         semanticReview = review.review;
         semanticReviewRef = review.review_ref;
         agentInvocationAuditRef = review.agent_invocation_audit_ref;
+        contextCompressionReportRef = review.context_compression_report_ref;
+        semanticReviewRuntimeWarningCodes = review.warning_codes;
         const semanticGate = this.humanConfirmationSemanticReviewGate(semanticReview);
         if (semanticGate.status !== 'ready') {
           nodeResult = this.humanConfirmNeedBlockedResult(input, {
@@ -2746,7 +2852,10 @@ export class TopicSelectionWorkflowHarnessService {
             routeOutcome: semanticGate.status === 'blocked' ? 'blocked' : 'require_human_review',
             blockerCodes: semanticGate.blocker_codes,
             reviewReasonCodes: semanticGate.review_reason_codes,
-            warningCodes: semanticReview.warning_codes,
+            warningCodes: this.uniqueStrings([
+              ...semanticReview.warning_codes,
+              ...semanticReviewRuntimeWarningCodes,
+            ]),
             errorCode: semanticGate.error_code,
             errorMessage: semanticGate.error_message,
           });
@@ -2790,7 +2899,10 @@ export class TopicSelectionWorkflowHarnessService {
           residual_risk_refs: confirmation.validated_need.residual_risk_refs,
           required_check_results_snapshot: input.confirmation_input.required_check_results,
           blocker_codes: [],
-          warning_codes: semanticReview?.warning_codes ?? [],
+          warning_codes: this.uniqueStrings([
+            ...(semanticReview?.warning_codes ?? []),
+            ...semanticReviewRuntimeWarningCodes,
+          ]),
           review_reason_codes: [],
           next_node_id: 'topic-selection.v1a.publish-v1b-input-bundle.v1',
           harness_trace_artifact_ref: null,
@@ -2803,6 +2915,14 @@ export class TopicSelectionWorkflowHarnessService {
       if (!(error instanceof AppError)) {
         throw error;
       }
+      const errorAgentAuditRef = error.details?.agent_invocation_audit_ref;
+      const errorCompressionReportRef = error.details?.context_compression_report_ref;
+      if (!agentInvocationAuditRef && this.isFunctionalRef(errorAgentAuditRef)) {
+        agentInvocationAuditRef = errorAgentAuditRef;
+      }
+      if (!contextCompressionReportRef && this.isFunctionalRef(errorCompressionReportRef)) {
+        contextCompressionReportRef = errorCompressionReportRef;
+      }
       nodeResult = this.humanConfirmNeedBlockedResult(input, {
         adjudication,
         candidate,
@@ -2812,6 +2932,8 @@ export class TopicSelectionWorkflowHarnessService {
         status: this.humanConfirmNeedStatusFromAppError(error),
         routeOutcome: this.humanConfirmNeedStatusFromAppError(error),
         blockerCodes: this.humanConfirmNeedBlockerCodesFromAppError(error),
+        warningCodes: this.warningCodesFromAppError(error),
+        reviewReasonCodes: this.reviewReasonCodesFromAppError(error),
         errorCode: error.errorCode,
         errorMessage: error.message,
       });
@@ -2833,6 +2955,7 @@ export class TopicSelectionWorkflowHarnessService {
       contextPacketRef,
       semanticReviewRef,
       agentInvocationAuditRef,
+      contextCompressionReportRef,
     ]);
     const assertions = this.evaluateHumanConfirmNeedAssertions(input, result);
     const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
@@ -3202,6 +3325,525 @@ export class TopicSelectionWorkflowHarnessService {
         assertions,
       },
       harness_trace_artifact: harnessTraceArtifact,
+    };
+  }
+
+  private replayProvenanceFromTrace(
+    trace: { workflow_run_id: string; node_attempt_id: string; input_hash: string },
+    traceArtifactRef: TopicSelectionFunctionalRef,
+  ): TopicSelectionWorkflowHarnessReplayProvenance {
+    return {
+      replayed: true,
+      source_workflow_run_id: trace.workflow_run_id,
+      source_node_attempt_id: trace.node_attempt_id,
+      source_trace_artifact_ref: traceArtifactRef,
+      input_hash: trace.input_hash,
+    };
+  }
+
+  private async findCreateTopicSeedReplay(
+    input: TopicSelectionWorkflowHarnessCreateTopicSeedInput,
+    nodeInput: TopicSelectionWorkflowHarnessCreateTopicSeedNodeInput,
+    inputHash: string,
+  ): Promise<TopicSelectionWorkflowHarnessCreateTopicSeedResult | null> {
+    const controlPlane = this.requiredControlPlane();
+    const artifacts = await controlPlane.listArtifactRefsByWorkflowRunId(input.workflow_run_id);
+    const traceArtifacts = artifacts
+      .filter((artifact) => artifact.artifact_kind === 'trace')
+      .filter((artifact) => {
+        const payload = artifact.payload as Partial<TopicSelectionWorkflowHarnessCreateTopicSeedTraceSnapshot> | null;
+        return payload?.payload_schema === TOPIC_SEED_TRACE_PAYLOAD_SCHEMA
+          && payload.node_id === CREATE_TOPIC_SEED_NODE_ID
+          && payload.node_attempt_id === input.node_attempt_id
+          && typeof payload.input_hash === 'string'
+          && payload.node_result;
+      })
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+    if (traceArtifacts.length === 0) {
+      return null;
+    }
+    const matching = traceArtifacts.find((artifact) => {
+      const payload = artifact.payload as Partial<TopicSelectionWorkflowHarnessCreateTopicSeedTraceSnapshot> | null;
+      return payload?.input_hash === inputHash;
+    });
+    const existing = matching ?? traceArtifacts[0]!;
+    const existingPayload = existing.payload as TopicSelectionWorkflowHarnessCreateTopicSeedTraceSnapshot;
+    const existingTraceRef = this.ref('artifact_ref', existing.artifact_ref_id, existing.title_card_id ?? input.title_card_id);
+    if (!matching) {
+      const nodeResult: TopicSelectionWorkflowHarnessCreateTopicSeedNodeResult = {
+        status: 'blocked',
+        topic_seed: null,
+        topic_seed_ref: null,
+        authority_refs: [],
+        audit_refs: [],
+        artifact_refs: [existingTraceRef],
+        warning_codes: [],
+        blocker_codes: ['REPLAY_INPUT_HASH_MISMATCH'],
+        error_code: 'VERSION_CONFLICT',
+        error_message: 'node_attempt_id replay input hash does not match the existing attempt.',
+        replay_provenance: null,
+      };
+      const assertions = this.evaluateCreateTopicSeedAssertions(input, nodeResult);
+      const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
+      const traceSnapshot = this.createTopicSeedTraceSnapshot({
+        input,
+        nodeInput,
+        inputHash,
+        nodeResult,
+        assertions,
+        scenarioStatus,
+      });
+      const traceArtifact = await controlPlane.recordArtifactRef({
+        workspace_id: input.workspace_id ?? null,
+        title_card_id: input.title_card_id,
+        artifact_kind: 'trace',
+        storage_kind: 'inline',
+        payload: traceSnapshot as unknown as Record<string, unknown>,
+        workflow_run_id: input.workflow_run_id,
+        created_by: input.created_by ?? 'system',
+      });
+      const traceArtifactRef = this.ref('artifact_ref', traceArtifact.artifact_ref_id, traceArtifact.title_card_id ?? input.title_card_id);
+      const resultWithTrace = {
+        ...nodeResult,
+        artifact_refs: this.uniqueRefs([existingTraceRef, traceArtifactRef]),
+      };
+      return {
+        schema_version: 'v1',
+        scenario_id: input.scenario_id,
+        scenario_case_id: input.scenario_case_id ?? null,
+        node_id: CREATE_TOPIC_SEED_NODE_ID,
+        workflow_run_id: input.workflow_run_id,
+        node_attempt_id: input.node_attempt_id,
+        scenario_status: scenarioStatus,
+        node_input: nodeInput,
+        node_result: resultWithTrace,
+        assertions,
+        harness_trace_snapshot: {
+          ...traceSnapshot,
+          node_result: resultWithTrace,
+          artifact_refs: resultWithTrace.artifact_refs,
+        },
+        harness_trace_artifact: traceArtifact,
+        harness_trace_artifact_ref: traceArtifactRef,
+      };
+    }
+
+    const nodeResult: TopicSelectionWorkflowHarnessCreateTopicSeedNodeResult = {
+      ...existingPayload.node_result,
+      artifact_refs: this.uniqueRefs([
+        ...(existingPayload.node_result.artifact_refs ?? []),
+        existingTraceRef,
+      ]),
+      replay_provenance: this.replayProvenanceFromTrace(existingPayload, existingTraceRef),
+    };
+    const assertions = this.evaluateCreateTopicSeedAssertions(input, nodeResult);
+    const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
+    return {
+      schema_version: 'v1',
+      scenario_id: input.scenario_id,
+      scenario_case_id: input.scenario_case_id ?? null,
+      node_id: CREATE_TOPIC_SEED_NODE_ID,
+      workflow_run_id: input.workflow_run_id,
+      node_attempt_id: input.node_attempt_id,
+      scenario_status: scenarioStatus,
+      node_input: existingPayload.node_input,
+      node_result: nodeResult,
+      assertions,
+      harness_trace_snapshot: {
+        ...existingPayload,
+        scenario_status: scenarioStatus,
+        node_result: nodeResult,
+        artifact_refs: nodeResult.artifact_refs,
+        assertions,
+      },
+      harness_trace_artifact: existing,
+      harness_trace_artifact_ref: existingTraceRef,
+    };
+  }
+
+  private async findSnapshotLiteratureResourcePoolReplay(
+    input: TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolInput,
+    nodeInput: TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolNodeInput,
+    inputHash: string,
+  ): Promise<TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolResult | null> {
+    const controlPlane = this.requiredControlPlane();
+    const artifacts = await controlPlane.listArtifactRefsByWorkflowRunId(input.workflow_run_id);
+    const traceArtifacts = artifacts
+      .filter((artifact) => artifact.artifact_kind === 'trace')
+      .filter((artifact) => {
+        const payload =
+          artifact.payload as Partial<TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolTraceSnapshot> | null;
+        return payload?.payload_schema === LITERATURE_RESOURCE_POOL_TRACE_PAYLOAD_SCHEMA
+          && payload.node_id === SNAPSHOT_LITERATURE_RESOURCE_POOL_NODE_ID
+          && payload.node_attempt_id === input.node_attempt_id
+          && typeof payload.input_hash === 'string'
+          && payload.node_result;
+      })
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+    if (traceArtifacts.length === 0) {
+      return null;
+    }
+    const matching = traceArtifacts.find((artifact) => {
+      const payload =
+        artifact.payload as Partial<TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolTraceSnapshot> | null;
+      return payload?.input_hash === inputHash;
+    });
+    const existing = matching ?? traceArtifacts[0]!;
+    const existingPayload = existing.payload as TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolTraceSnapshot;
+    const existingTraceRef = this.ref('artifact_ref', existing.artifact_ref_id, existing.title_card_id ?? input.title_card_id);
+
+    if (!matching) {
+      const nodeResult: TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolNodeResult = {
+        status: 'blocked',
+        literature_resource_pool_snapshot: null,
+        literature_resource_pool_snapshot_ref: null,
+        snapshot_version: null,
+        snapshot_hash: null,
+        source_scope: input.source_scope,
+        included_literature_refs: [],
+        content_source_refs: [],
+        source_health_summary: null,
+        downstream_handoff: null,
+        authority_refs: [],
+        audit_refs: [],
+        artifact_refs: [existingTraceRef],
+        warning_codes: [],
+        blocker_codes: ['REPLAY_INPUT_HASH_MISMATCH'],
+        error_code: 'VERSION_CONFLICT',
+        error_message: 'node_attempt_id replay input hash does not match the existing attempt.',
+        replay_provenance: null,
+      };
+      const assertions = this.evaluateSnapshotLiteratureResourcePoolAssertions(input, nodeResult);
+      const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
+      const traceSnapshot = this.createSnapshotLiteratureResourcePoolTraceSnapshot({
+        input,
+        nodeInput,
+        inputHash,
+        nodeResult,
+        assertions,
+        scenarioStatus,
+      });
+      const traceArtifact = await controlPlane.recordArtifactRef({
+        workspace_id: input.workspace_id ?? null,
+        title_card_id: input.title_card_id,
+        artifact_kind: 'trace',
+        storage_kind: 'inline',
+        payload: traceSnapshot as unknown as Record<string, unknown>,
+        workflow_run_id: input.workflow_run_id,
+        created_by: input.created_by ?? 'system',
+      });
+      const traceArtifactRef = this.ref('artifact_ref', traceArtifact.artifact_ref_id, traceArtifact.title_card_id ?? input.title_card_id);
+      const resultWithTrace = {
+        ...nodeResult,
+        artifact_refs: this.uniqueRefs([existingTraceRef, traceArtifactRef]),
+      };
+      return {
+        schema_version: 'v1',
+        scenario_id: input.scenario_id,
+        scenario_case_id: input.scenario_case_id ?? null,
+        node_id: SNAPSHOT_LITERATURE_RESOURCE_POOL_NODE_ID,
+        workflow_run_id: input.workflow_run_id,
+        node_attempt_id: input.node_attempt_id,
+        scenario_status: scenarioStatus,
+        node_input: nodeInput,
+        node_result: resultWithTrace,
+        assertions,
+        harness_trace_snapshot: {
+          ...traceSnapshot,
+          node_result: resultWithTrace,
+          artifact_refs: resultWithTrace.artifact_refs,
+        },
+        harness_trace_artifact: traceArtifact,
+        harness_trace_artifact_ref: traceArtifactRef,
+      };
+    }
+
+    const nodeResult: TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolNodeResult = {
+      ...existingPayload.node_result,
+      artifact_refs: this.uniqueRefs([
+        ...(existingPayload.node_result.artifact_refs ?? []),
+        existingTraceRef,
+      ]),
+      replay_provenance: this.replayProvenanceFromTrace(existingPayload, existingTraceRef),
+    };
+    const assertions = this.evaluateSnapshotLiteratureResourcePoolAssertions(input, nodeResult);
+    const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
+    return {
+      schema_version: 'v1',
+      scenario_id: input.scenario_id,
+      scenario_case_id: input.scenario_case_id ?? null,
+      node_id: SNAPSHOT_LITERATURE_RESOURCE_POOL_NODE_ID,
+      workflow_run_id: input.workflow_run_id,
+      node_attempt_id: input.node_attempt_id,
+      scenario_status: scenarioStatus,
+      node_input: existingPayload.node_input,
+      node_result: nodeResult,
+      assertions,
+      harness_trace_snapshot: {
+        ...existingPayload,
+        scenario_status: scenarioStatus,
+        node_result: nodeResult,
+        artifact_refs: nodeResult.artifact_refs,
+        assertions,
+      },
+      harness_trace_artifact: existing,
+      harness_trace_artifact_ref: existingTraceRef,
+    };
+  }
+
+  private async findCreateSearchPlanReplay(
+    input: TopicSelectionWorkflowHarnessCreateSearchPlanInput,
+    nodeInput: TopicSelectionWorkflowHarnessCreateSearchPlanNodeInput,
+    inputHash: string,
+  ): Promise<TopicSelectionWorkflowHarnessCreateSearchPlanResult | null> {
+    const controlPlane = this.requiredControlPlane();
+    const artifacts = await controlPlane.listArtifactRefsByWorkflowRunId(input.workflow_run_id);
+    const traceArtifacts = artifacts
+      .filter((artifact) => artifact.artifact_kind === 'trace')
+      .filter((artifact) => {
+        const payload = artifact.payload as Partial<TopicSelectionWorkflowHarnessCreateSearchPlanTraceSnapshot> | null;
+        return payload?.payload_schema === SEARCH_PLAN_TRACE_PAYLOAD_SCHEMA
+          && payload.node_id === CREATE_SEARCH_PLAN_NODE_ID
+          && payload.node_attempt_id === input.node_attempt_id
+          && typeof payload.input_hash === 'string'
+          && payload.node_result;
+      })
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+    if (traceArtifacts.length === 0) {
+      return null;
+    }
+    const matching = traceArtifacts.find((artifact) => {
+      const payload = artifact.payload as Partial<TopicSelectionWorkflowHarnessCreateSearchPlanTraceSnapshot> | null;
+      return payload?.input_hash === inputHash;
+    });
+    const existing = matching ?? traceArtifacts[0]!;
+    const existingPayload = existing.payload as TopicSelectionWorkflowHarnessCreateSearchPlanTraceSnapshot;
+    const existingTraceRef = this.ref('artifact_ref', existing.artifact_ref_id, existing.title_card_id ?? input.title_card_id);
+
+    if (!matching) {
+      const nodeResult: TopicSelectionWorkflowHarnessCreateSearchPlanNodeResult = {
+        status: 'blocked',
+        search_plan: null,
+        search_plan_ref: null,
+        coverage_row_intents: [],
+        coverage_row_intent_refs: [],
+        plan_version: null,
+        query_intents: input.blueprint?.query_intents ?? [],
+        must_check_constraints: input.blueprint?.must_check_constraints ?? [],
+        exclusion_rules: input.blueprint?.exclusion_rules ?? [],
+        authority_refs: [],
+        audit_refs: [],
+        artifact_refs: [existingTraceRef],
+        warning_codes: [],
+        blocker_codes: ['REPLAY_INPUT_HASH_MISMATCH'],
+        error_code: 'VERSION_CONFLICT',
+        error_message: 'node_attempt_id replay input hash does not match the existing attempt.',
+        replay_provenance: null,
+      };
+      const assertions = this.evaluateCreateSearchPlanAssertions(input, nodeResult);
+      const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
+      const traceSnapshot = this.createSearchPlanTraceSnapshot({
+        input,
+        nodeInput,
+        inputHash,
+        nodeResult,
+        assertions,
+        scenarioStatus,
+        resolvedSnapshotHash: null,
+      });
+      const traceArtifact = await controlPlane.recordArtifactRef({
+        workspace_id: input.workspace_id ?? null,
+        title_card_id: input.title_card_id,
+        artifact_kind: 'trace',
+        storage_kind: 'inline',
+        payload: traceSnapshot as unknown as Record<string, unknown>,
+        workflow_run_id: input.workflow_run_id,
+        created_by: input.created_by ?? 'system',
+      });
+      const traceArtifactRef = this.ref('artifact_ref', traceArtifact.artifact_ref_id, traceArtifact.title_card_id ?? input.title_card_id);
+      const resultWithTrace = {
+        ...nodeResult,
+        artifact_refs: this.uniqueRefs([existingTraceRef, traceArtifactRef]),
+      };
+      return {
+        schema_version: 'v1',
+        scenario_id: input.scenario_id,
+        scenario_case_id: input.scenario_case_id ?? null,
+        node_id: CREATE_SEARCH_PLAN_NODE_ID,
+        workflow_run_id: input.workflow_run_id,
+        node_attempt_id: input.node_attempt_id,
+        scenario_status: scenarioStatus,
+        node_input: nodeInput,
+        node_result: resultWithTrace,
+        assertions,
+        harness_trace_snapshot: {
+          ...traceSnapshot,
+          node_result: resultWithTrace,
+          artifact_refs: resultWithTrace.artifact_refs,
+        },
+        harness_trace_artifact: traceArtifact,
+        harness_trace_artifact_ref: traceArtifactRef,
+      };
+    }
+
+    const nodeResult: TopicSelectionWorkflowHarnessCreateSearchPlanNodeResult = {
+      ...existingPayload.node_result,
+      artifact_refs: this.uniqueRefs([
+        ...(existingPayload.node_result.artifact_refs ?? []),
+        existingTraceRef,
+      ]),
+      replay_provenance: this.replayProvenanceFromTrace(existingPayload, existingTraceRef),
+    };
+    const assertions = this.evaluateCreateSearchPlanAssertions(input, nodeResult);
+    const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
+    return {
+      schema_version: 'v1',
+      scenario_id: input.scenario_id,
+      scenario_case_id: input.scenario_case_id ?? null,
+      node_id: CREATE_SEARCH_PLAN_NODE_ID,
+      workflow_run_id: input.workflow_run_id,
+      node_attempt_id: input.node_attempt_id,
+      scenario_status: scenarioStatus,
+      node_input: existingPayload.node_input,
+      node_result: nodeResult,
+      assertions,
+      harness_trace_snapshot: {
+        ...existingPayload,
+        scenario_status: scenarioStatus,
+        node_result: nodeResult,
+        artifact_refs: nodeResult.artifact_refs,
+        assertions,
+      },
+      harness_trace_artifact: existing,
+      harness_trace_artifact_ref: existingTraceRef,
+    };
+  }
+
+  private async findRecordSearchRunReplay(
+    input: TopicSelectionWorkflowHarnessRecordSearchRunInput,
+    nodeInput: TopicSelectionWorkflowHarnessRecordSearchRunNodeInput,
+    inputHash: string,
+  ): Promise<TopicSelectionWorkflowHarnessRecordSearchRunResult | null> {
+    const controlPlane = this.requiredControlPlane();
+    const artifacts = await controlPlane.listArtifactRefsByWorkflowRunId(input.workflow_run_id);
+    const traceArtifacts = artifacts
+      .filter((artifact) => artifact.artifact_kind === 'trace')
+      .filter((artifact) => {
+        const payload = artifact.payload as Partial<TopicSelectionWorkflowHarnessRecordSearchRunTraceSnapshot> | null;
+        return payload?.payload_schema === SEARCH_RUN_TRACE_PAYLOAD_SCHEMA
+          && payload.node_id === RECORD_SEARCH_RUN_NODE_ID
+          && payload.node_attempt_id === input.node_attempt_id
+          && typeof payload.input_hash === 'string'
+          && payload.node_result;
+      })
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+    if (traceArtifacts.length === 0) {
+      return null;
+    }
+    const matching = traceArtifacts.find((artifact) => {
+      const payload = artifact.payload as Partial<TopicSelectionWorkflowHarnessRecordSearchRunTraceSnapshot> | null;
+      return payload?.input_hash === inputHash;
+    });
+    const existing = matching ?? traceArtifacts[0]!;
+    const existingPayload = existing.payload as TopicSelectionWorkflowHarnessRecordSearchRunTraceSnapshot;
+    const existingTraceRef = this.ref('artifact_ref', existing.artifact_ref_id, existing.title_card_id ?? input.title_card_id);
+
+    if (!matching) {
+      const nodeResult: TopicSelectionWorkflowHarnessRecordSearchRunNodeResult = {
+        status: 'blocked',
+        search_run: null,
+        search_run_ref: null,
+        consumable_for_evidence_map: false,
+        downstream_handoff: null,
+        loopback_signal: null,
+        result_accounting_summary: this.objectPayload(input.bundle?.result_accounting ?? {}),
+        evidence_binding_refs: [],
+        coverage_assessment_refs: [],
+        coverage_matrix_summary: null,
+        authority_refs: [],
+        audit_refs: [],
+        artifact_refs: [existingTraceRef],
+        warning_codes: [],
+        blocker_codes: ['REPLAY_INPUT_HASH_MISMATCH'],
+        error_code: 'VERSION_CONFLICT',
+        error_message: 'node_attempt_id replay input hash does not match the existing attempt.',
+        replay_provenance: null,
+      };
+      const assertions = this.evaluateRecordSearchRunAssertions(input, nodeResult);
+      const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
+      const traceSnapshot = this.createRecordSearchRunTraceSnapshot({
+        input,
+        nodeInput,
+        inputHash,
+        nodeResult,
+        assertions,
+        scenarioStatus,
+      });
+      const traceArtifact = await controlPlane.recordArtifactRef({
+        workspace_id: input.workspace_id ?? null,
+        title_card_id: input.title_card_id,
+        artifact_kind: 'trace',
+        storage_kind: 'inline',
+        payload: traceSnapshot as unknown as Record<string, unknown>,
+        workflow_run_id: input.workflow_run_id,
+        created_by: input.created_by ?? 'system',
+      });
+      const traceArtifactRef = this.ref('artifact_ref', traceArtifact.artifact_ref_id, traceArtifact.title_card_id ?? input.title_card_id);
+      const resultWithTrace = {
+        ...nodeResult,
+        artifact_refs: this.uniqueRefs([existingTraceRef, traceArtifactRef]),
+      };
+      return {
+        schema_version: 'v1',
+        scenario_id: input.scenario_id,
+        scenario_case_id: input.scenario_case_id ?? null,
+        node_id: RECORD_SEARCH_RUN_NODE_ID,
+        workflow_run_id: input.workflow_run_id,
+        node_attempt_id: input.node_attempt_id,
+        scenario_status: scenarioStatus,
+        node_input: nodeInput,
+        node_result: resultWithTrace,
+        assertions,
+        harness_trace_snapshot: {
+          ...traceSnapshot,
+          node_result: resultWithTrace,
+          artifact_refs: resultWithTrace.artifact_refs,
+        },
+        harness_trace_artifact: traceArtifact,
+        harness_trace_artifact_ref: traceArtifactRef,
+      };
+    }
+
+    const nodeResult: TopicSelectionWorkflowHarnessRecordSearchRunNodeResult = {
+      ...existingPayload.node_result,
+      artifact_refs: this.uniqueRefs([
+        ...(existingPayload.node_result.artifact_refs ?? []),
+        existingTraceRef,
+      ]),
+      replay_provenance: this.replayProvenanceFromTrace(existingPayload, existingTraceRef),
+    };
+    const assertions = this.evaluateRecordSearchRunAssertions(input, nodeResult);
+    const scenarioStatus = assertions.every((assertion) => assertion.passed) ? 'passed' : 'failed';
+    return {
+      schema_version: 'v1',
+      scenario_id: input.scenario_id,
+      scenario_case_id: input.scenario_case_id ?? null,
+      node_id: RECORD_SEARCH_RUN_NODE_ID,
+      workflow_run_id: input.workflow_run_id,
+      node_attempt_id: input.node_attempt_id,
+      scenario_status: scenarioStatus,
+      node_input: existingPayload.node_input,
+      node_result: nodeResult,
+      assertions,
+      harness_trace_snapshot: {
+        ...existingPayload,
+        scenario_status: scenarioStatus,
+        node_result: nodeResult,
+        artifact_refs: nodeResult.artifact_refs,
+        assertions,
+      },
+      harness_trace_artifact: existing,
+      harness_trace_artifact_ref: existingTraceRef,
     };
   }
 
@@ -3616,7 +4258,7 @@ export class TopicSelectionWorkflowHarnessService {
     packet: HumanConfirmationSemanticReviewContextPacket;
     packet_ref: TopicSelectionFunctionalRef;
   }> {
-    const packetBase = {
+    const packetHashPayload = {
       schema_version: TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_CONTEXT_PACKET_SCHEMA_VERSION,
       workflow_run_id: input.workflow_run_id,
       node_attempt_id: input.node_attempt_id,
@@ -3637,11 +4279,14 @@ export class TopicSelectionWorkflowHarnessService {
       confirmation_input: input.confirmation_input,
       policy_version: input.policy_version,
       output_schema_version: input.output_schema_version,
+    };
+    const packetBase = {
+      ...packetHashPayload,
       created_at: this.now(),
     };
     const packet: HumanConfirmationSemanticReviewContextPacket = {
       ...packetBase,
-      context_packet_hash: this.hash(packetBase),
+      context_packet_hash: this.hash(packetHashPayload),
     };
     const artifact = await this.requiredControlPlane().recordArtifactRef({
       workspace_id: input.workspace_id ?? null,
@@ -3669,14 +4314,48 @@ export class TopicSelectionWorkflowHarnessService {
     review: HumanConfirmationSemanticReview;
     review_ref: TopicSelectionFunctionalRef;
     agent_invocation_audit_ref: TopicSelectionFunctionalRef | null;
+    context_compression_report_ref: TopicSelectionFunctionalRef | null;
+    warning_codes: string[];
   }> {
     const executionMode = input.execution_mode ?? 'codex_assisted';
     let review: HumanConfirmationSemanticReview;
     let agentInvocationAuditRef: TopicSelectionFunctionalRef | null = null;
+    let contextCompressionReportRef: TopicSelectionFunctionalRef | null = null;
+    let runtimeWarningCodes: string[] = [];
     if (executionMode === 'deterministic_parser') {
       review = this.deterministicHumanConfirmationSemanticReview(input, contextPacket, contextPacketRef);
     } else {
       const agent = this.requiredHumanConfirmationSemanticReviewAgent();
+      const runtimeBinding = this.v1aLlmRuntimeBindings.buildHumanConfirmationBinding({
+        title_card_id: input.title_card_id,
+        workflow_run_id: input.workflow_run_id,
+        node_attempt_id: input.node_attempt_id,
+        scenario_id: input.scenario_id,
+        scenario_case_id: input.scenario_case_id ?? null,
+        execution_mode: executionMode,
+        profile_id: input.profile_id ?? TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
+        context_packet: contextPacket,
+        context_packet_ref: contextPacketRef,
+        runtime_token_budget_overrides: input.runtime_token_budget_overrides ?? null,
+      });
+      const compressionPrepared = await this.prepareHumanConfirmationRuntimeBinding({
+        input,
+        executionMode,
+        contextPacket,
+        contextPacketRef,
+        runtimeBinding,
+      });
+      if (compressionPrepared.errorCode) {
+        throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'Human confirmation semantic review context compression failed.', {
+          agent_error_code: compressionPrepared.errorCode,
+          blocker_codes: compressionPrepared.blockerCodes.length > 0
+            ? compressionPrepared.blockerCodes
+            : [compressionPrepared.errorCode],
+          warning_codes: compressionPrepared.warningCodes,
+          agent_invocation_audit_ref: null,
+          context_compression_report_ref: compressionPrepared.contextCompressionReportRef,
+        });
+      }
       const result = await agent.invokeStructuredOutput<HumanConfirmationSemanticReview>({
         workspace_id: input.workspace_id ?? null,
         title_card_id: input.title_card_id,
@@ -3690,39 +4369,38 @@ export class TopicSelectionWorkflowHarnessService {
         profile_id: input.profile_id ?? TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
         output_contract: TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION,
         model_option_id: input.model_option_id ?? null,
-        prompt: {
-          promptTemplateId: 'topic-selection-human-confirmation-semantic-review',
-          version: 'v1',
-        },
+        prompt: compressionPrepared.runtimeBinding.prompt,
+        prompt_variant_key: compressionPrepared.runtimeBinding.prompt_variant_key,
         schema_name: TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION,
         schema: humanConfirmationSemanticReviewSchema as unknown as Record<string, unknown>,
-        messages: this.humanConfirmationSemanticReviewMessages(contextPacket, contextPacketRef),
-        input_refs: [
-          contextPacket.adjudication_result_ref,
-          contextPacket.validation_support_packet_ref,
-          contextPacket.need_candidate_ref,
-          contextPacket.output_validated_need_ref,
-        ],
-        context_packet_refs: this.uniqueArtifactRefs([this.asArtifactRef(contextPacketRef)]),
-        context_packet_hashes: [contextPacket.context_packet_hash],
-        runtime_token_budget: this.runtimeTokenBudgetForSlot({
-          contextPolicyProfileId:
-            TOPIC_SELECTION_V1A_N8_CONTEXT_RUNTIME_PROFILE_IDS.confirmation_semantic_review,
-          invocationSlotId:
-            TOPIC_SELECTION_V1A_N8_INVOCATION_SLOT_IDS.confirmation_semantic_review,
-          scenarioId: input.scenario_id,
-          scenarioCaseId: input.scenario_case_id ?? null,
-          contextPayloads: [contextPacket],
-        }),
-        mocked_output: input.mocked_output ?? null,
+        messages: compressionPrepared.runtimeBinding.messages,
+        input_refs: compressionPrepared.runtimeBinding.input_refs,
+        context_packet_refs: compressionPrepared.runtimeBinding.context_packet_refs,
+        context_packet_hashes: compressionPrepared.runtimeBinding.context_packet_hashes,
+        runtime_token_budget: compressionPrepared.runtimeBinding.runtime_token_budget,
+        mocked_output: this.humanConfirmationMockedOutputForContext(input.mocked_output ?? null, contextPacketRef),
         codex_response: input.codex_response ?? null,
         created_by: input.created_by ?? 'system',
       });
       agentInvocationAuditRef = result.audit_artifact_ref ?? null;
+      contextCompressionReportRef = compressionPrepared.contextCompressionReportRef;
+      runtimeWarningCodes = this.uniqueStrings([
+        ...result.warning_codes,
+        ...compressionPrepared.warningCodes,
+      ]);
       if (result.status !== 'succeeded' || !result.structured_output) {
+        const semanticReviewFailureReasons = result.error_code?.startsWith('TOKEN_BUDGET')
+          ? []
+          : ['SEMANTIC_REVIEW_FAILED'];
         throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'Human confirmation semantic review failed.', {
-          blocker_codes: ['SEMANTIC_REVIEW_FAILED'],
-          review_reason_codes: ['SEMANTIC_REVIEW_FAILED'],
+          agent_error_code: result.error_code ?? 'SEMANTIC_REVIEW_FAILED',
+          blocker_codes: result.blocker_codes.length > 0
+            ? result.blocker_codes
+            : ['SEMANTIC_REVIEW_FAILED'],
+          warning_codes: runtimeWarningCodes,
+          review_reason_codes: semanticReviewFailureReasons,
+          agent_invocation_audit_ref: result.audit_artifact_ref ?? null,
+          context_compression_report_ref: contextCompressionReportRef,
         });
       }
       review = result.structured_output;
@@ -3744,6 +4422,201 @@ export class TopicSelectionWorkflowHarnessService {
       review,
       review_ref: this.ref('artifact_ref', artifact.artifact_ref_id, artifact.title_card_id ?? input.title_card_id),
       agent_invocation_audit_ref: agentInvocationAuditRef,
+      context_compression_report_ref: contextCompressionReportRef,
+      warning_codes: runtimeWarningCodes,
+    };
+  }
+
+  private async prepareHumanConfirmationRuntimeBinding(input: {
+    input: TopicSelectionWorkflowHarnessHumanConfirmNeedInput;
+    executionMode: TopicSelectionAgentExecutionMode;
+    contextPacket: HumanConfirmationSemanticReviewContextPacket;
+    contextPacketRef: TopicSelectionFunctionalRef;
+    runtimeBinding: TopicSelectionV1aLlmRuntimeInvocationBinding;
+  }): Promise<{
+    runtimeBinding: TopicSelectionV1aLlmRuntimeInvocationBinding;
+    contextCompressionReportRef: TopicSelectionFunctionalRef | null;
+    warningCodes: string[];
+    blockerCodes: string[];
+    errorCode: string | null;
+  }> {
+    const overrides = input.input.runtime_token_budget_overrides ?? null;
+    const preflight = this.tokenBudgetGate.evaluate({
+      context_policy_profile: input.runtimeBinding.runtime_token_budget.context_policy_profile,
+      messages: input.runtimeBinding.messages,
+      context_payloads: input.runtimeBinding.runtime_token_budget.context_payloads ?? [],
+      schema: humanConfirmationSemanticReviewSchema as unknown as Record<string, unknown>,
+      extra_payloads: input.runtimeBinding.runtime_token_budget.extra_payloads ?? [],
+      compression_already_applied: overrides?.compression_already_applied ?? false,
+      estimated_input_tokens_override: overrides?.estimated_input_tokens_override,
+      schema_overhead_tokens_override: overrides?.schema_overhead_tokens_override,
+    });
+    if (
+      preflight.result.decision !== 'requires_compression'
+      || overrides?.compression_already_applied === true
+    ) {
+      return {
+        runtimeBinding: input.runtimeBinding,
+        contextCompressionReportRef: null,
+        warningCodes: [],
+        blockerCodes: [],
+        errorCode: null,
+      };
+    }
+
+    const compressionPlan = this.v1aLlmRuntimeBindings.buildHumanConfirmationCompressionPlan({
+      title_card_id: input.input.title_card_id,
+      workflow_run_id: input.input.workflow_run_id,
+      node_attempt_id: input.input.node_attempt_id,
+      scenario_id: input.input.scenario_id,
+      scenario_case_id: input.input.scenario_case_id ?? null,
+      execution_mode: input.executionMode,
+      profile_id: input.input.profile_id ?? TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
+      context_packet: input.contextPacket,
+      context_packet_ref: input.contextPacketRef,
+      runtime_token_budget_overrides: overrides,
+    });
+    const compression = await this.recordHumanConfirmationCompressionReport({
+      input: input.input,
+      runtimeBinding: input.runtimeBinding,
+      compressionPlan,
+      estimatedInputTokensBefore: preflight.result.estimated_input_tokens,
+      estimatedInputTokensAfter: overrides?.estimated_input_tokens_after_compression_override,
+    });
+    const compressionIdentity = {
+      compression_report_ref: compression.artifactRef,
+      compression_report_hash: compression.artifactHash,
+      compressed_context_hash: compression.result.report.compressed_context_hash,
+      compression_already_applied: true,
+    };
+    const compressionWarningCodes = this.uniqueStrings([
+      ...preflight.result.warning_codes,
+      ...compression.result.warning_codes,
+      'COMPRESSION_REPORT_RECORDED',
+    ]);
+    const baseBindingInput = {
+      title_card_id: input.input.title_card_id,
+      workflow_run_id: input.input.workflow_run_id,
+      node_attempt_id: input.input.node_attempt_id,
+      scenario_id: input.input.scenario_id,
+      scenario_case_id: input.input.scenario_case_id ?? null,
+      execution_mode: input.executionMode,
+      profile_id: input.input.profile_id ?? TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID,
+      context_packet: input.contextPacket,
+      context_packet_ref: input.contextPacketRef,
+    };
+    if (compression.result.quality_gate_result === 'blocked') {
+      return {
+        runtimeBinding: this.v1aLlmRuntimeBindings.buildHumanConfirmationBinding({
+          ...baseBindingInput,
+          runtime_token_budget_overrides: {
+            ...overrides,
+            estimated_input_tokens_after_compression_override:
+              preflight.result.estimated_input_tokens,
+          },
+          runtime_compression: compressionIdentity,
+        }),
+        contextCompressionReportRef: compression.artifactRef,
+        warningCodes: compressionWarningCodes,
+        blockerCodes: this.uniqueStrings([
+          'COMPRESSION_QUALITY_GATE_BLOCKED',
+          ...compression.result.blocker_codes,
+        ]),
+        errorCode: 'COMPRESSION_QUALITY_GATE_BLOCKED',
+      };
+    }
+
+    return {
+      runtimeBinding: this.v1aLlmRuntimeBindings.buildHumanConfirmationBinding({
+        ...baseBindingInput,
+        compressed_context: compressionPlan.compressed_context,
+        runtime_token_budget_overrides: overrides,
+        runtime_compression: compressionIdentity,
+      }),
+      contextCompressionReportRef: compression.artifactRef,
+      warningCodes: compressionWarningCodes,
+      blockerCodes: [],
+      errorCode: null,
+    };
+  }
+
+  private async recordHumanConfirmationCompressionReport(input: {
+    input: TopicSelectionWorkflowHarnessHumanConfirmNeedInput;
+    runtimeBinding: TopicSelectionV1aLlmRuntimeInvocationBinding;
+    compressionPlan: TopicSelectionV1aHumanConfirmationCompressionPlan;
+    estimatedInputTokensBefore: number | null;
+    estimatedInputTokensAfter?: number | null;
+  }): Promise<{
+    artifactRef: TopicSelectionFunctionalRef;
+    artifactHash: string;
+    result: TopicSelectionCompressionReportRuntimeResult;
+  }> {
+    const result = this.compressionRuntime.createReport({
+      context_policy_profile: input.runtimeBinding.runtime_token_budget.context_policy_profile,
+      context_policy_profile_hash: input.runtimeBinding.runtime_token_budget.context_policy_profile_hash,
+      compression_report_ref: input.compressionPlan.compression_report_ref,
+      source_refs: input.compressionPlan.source_refs,
+      input_context: input.compressionPlan.input_context,
+      compressed_context: input.compressionPlan.compressed_context,
+      summary: input.compressionPlan.summary,
+      compression_executor_kind: 'deterministic_structural',
+      required_preserved_facts: input.compressionPlan.fact_inventory,
+      compressed_preserved_facts: input.compressionPlan.fact_inventory,
+      redaction_policy: input.runtimeBinding.runtime_token_budget.context_policy_profile.redaction_policy,
+      estimated_input_tokens_before_override: input.estimatedInputTokensBefore,
+      estimated_input_tokens_after_override: input.estimatedInputTokensAfter,
+    });
+    const payload = {
+      schema_version: 'v1',
+      node_id: HUMAN_CONFIRM_NEED_NODE_ID,
+      artifact_key: 'context_compression_report',
+      payload_schema: 'TopicSelectionCompressionReportEnvelope@v1',
+      redaction_policy: input.runtimeBinding.runtime_token_budget.context_policy_profile.redaction_policy,
+      report: result.report,
+      compressed_context: input.compressionPlan.compressed_context,
+    };
+    const artifact = await this.requiredControlPlane().recordArtifactRef({
+      workspace_id: input.input.workspace_id ?? null,
+      title_card_id: input.input.title_card_id,
+      artifact_kind: 'diagnostic',
+      storage_kind: 'inline',
+      payload,
+      workflow_run_id: input.input.workflow_run_id,
+      created_by: input.input.created_by ?? 'system',
+    });
+    return {
+      artifactRef: this.ref(
+        'artifact_ref',
+        artifact.artifact_ref_id,
+        artifact.title_card_id ?? input.input.title_card_id,
+      ),
+      artifactHash: artifact.checksum ?? this.hash(payload),
+      result,
+    };
+  }
+
+  private humanConfirmationMockedOutputForContext(
+    mockedOutput: TopicSelectionMockedAgentOutput<HumanConfirmationSemanticReview> | null,
+    contextPacketRef: TopicSelectionFunctionalRef,
+  ): TopicSelectionMockedAgentOutput<HumanConfirmationSemanticReview> | null {
+    if (!mockedOutput) {
+      return null;
+    }
+    const output = mockedOutput.output;
+    const shouldHydrateContextRef = output.context_packet_ref.ref_type === 'artifact_ref'
+      && output.context_packet_ref.ref_id === TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_RUNTIME_CONTEXT_REF_PLACEHOLDER;
+    const shouldHydrateProvenanceRef = output.provenance_ref.ref_type === 'artifact_ref'
+      && output.provenance_ref.ref_id === TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_RUNTIME_CONTEXT_REF_PLACEHOLDER;
+    if (!shouldHydrateContextRef && !shouldHydrateProvenanceRef) {
+      return mockedOutput;
+    }
+    return {
+      ...mockedOutput,
+      output: {
+        ...output,
+        context_packet_ref: shouldHydrateContextRef ? contextPacketRef : output.context_packet_ref,
+        provenance_ref: shouldHydrateProvenanceRef ? contextPacketRef : output.provenance_ref,
+      },
     };
   }
 
@@ -3820,29 +4693,6 @@ export class TopicSelectionWorkflowHarnessService {
     };
   }
 
-  private humanConfirmationSemanticReviewMessages(
-    contextPacket: HumanConfirmationSemanticReviewContextPacket,
-    contextPacketRef: TopicSelectionFunctionalRef,
-  ): Array<{ role: 'system' | 'user'; content: string }> {
-    return [
-      {
-        role: 'system',
-        content: [
-          'Produce HumanConfirmationSemanticReview@v1 only.',
-          'Review alignment between validate adjudication, support-packet checks, residual risks, and confirmation input.',
-          'Do not re-adjudicate candidate value, infer new evidence roles, create new risk refs, mutate upstream content, or run debate.',
-        ].join('\n'),
-      },
-      {
-        role: 'user',
-        content: stableStringify({
-          context_packet_ref: contextPacketRef,
-          context_packet: contextPacket,
-        }),
-      },
-    ];
-  }
-
   private assertHumanConfirmationSemanticReviewLineage(
     input: TopicSelectionWorkflowHarnessHumanConfirmNeedInput,
     contextPacketRef: TopicSelectionFunctionalRef,
@@ -3855,6 +4705,8 @@ export class TopicSelectionWorkflowHarnessService {
       && review.node_attempt_id === input.node_attempt_id
       && this.sameFunctionalRef(review.context_packet_ref, contextPacketRef)
       && (review.context_packet_ref.title_card_id ?? null) === (contextPacketRef.title_card_id ?? null)
+      && this.sameFunctionalRef(review.provenance_ref, contextPacketRef)
+      && (review.provenance_ref.title_card_id ?? null) === (contextPacketRef.title_card_id ?? null)
       && review.execution_mode === executionMode
       && review.profile_id === expectedProfileId
       && review.policy_version === input.policy_version
@@ -3862,6 +4714,28 @@ export class TopicSelectionWorkflowHarnessService {
     if (!lineageMatches) {
       throw new AppError(409, 'VERSION_CONFLICT', 'Human confirmation semantic review lineage mismatch.', {
         blocker_codes: ['SEMANTIC_REVIEW_LINEAGE_MISMATCH'],
+        expected: {
+          schema_version: TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION,
+          workflow_run_id: input.workflow_run_id,
+          node_attempt_id: input.node_attempt_id,
+          context_packet_ref: contextPacketRef,
+          provenance_ref: contextPacketRef,
+          execution_mode: executionMode,
+          profile_id: expectedProfileId,
+          policy_version: input.policy_version,
+          output_schema_version: input.output_schema_version,
+        },
+        actual: {
+          schema_version: review.schema_version,
+          workflow_run_id: review.workflow_run_id,
+          node_attempt_id: review.node_attempt_id,
+          context_packet_ref: review.context_packet_ref,
+          provenance_ref: review.provenance_ref,
+          execution_mode: review.execution_mode,
+          profile_id: review.profile_id,
+          policy_version: review.policy_version,
+          output_schema_version: review.output_schema_version,
+        },
       });
     }
   }
@@ -4584,8 +5458,45 @@ export class TopicSelectionWorkflowHarnessService {
     packet: TopicSelectionNeedAdjudicationRecommendationPacket;
     packet_ref: TopicSelectionFunctionalRef;
     agent_invocation_audit_ref: TopicSelectionFunctionalRef | null;
+    context_compression_report_ref: TopicSelectionFunctionalRef | null;
+    warning_codes: string[];
   }> {
     const agent = this.requiredNeedAdjudicationAgent();
+    const runtimeBinding = this.v1aLlmRuntimeBindings.buildNeedAdjudicationBinding({
+      title_card_id: input.title_card_id,
+      workflow_run_id: input.workflow_run_id,
+      node_attempt_id: input.node_attempt_id,
+      scenario_id: input.scenario_id,
+      scenario_case_id: input.scenario_case_id ?? null,
+      execution_mode: input.execution_mode,
+      profile_id: nodeInput.profile_id,
+      policy_version: input.policy_version,
+      output_schema_version: input.output_schema_version,
+      diagnostic_prompt_appendix: input.diagnostic_prompt_appendix ?? null,
+      candidate,
+      readiness,
+      support_packet: supportPacket,
+      runtime_token_budget_overrides: input.runtime_token_budget_overrides ?? null,
+    });
+    const compressionPrepared = await this.prepareNeedAdjudicationRuntimeBinding({
+      input,
+      nodeInput,
+      candidate,
+      readiness,
+      supportPacket,
+      runtimeBinding,
+    });
+    if (compressionPrepared.errorCode) {
+      throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'Need adjudication context compression failed.', {
+        agent_error_code: compressionPrepared.errorCode,
+        blocker_codes: compressionPrepared.blockerCodes.length > 0
+          ? compressionPrepared.blockerCodes
+          : [compressionPrepared.errorCode],
+        warning_codes: compressionPrepared.warningCodes,
+        agent_invocation_audit_ref: null,
+        context_compression_report_ref: compressionPrepared.contextCompressionReportRef,
+      });
+    }
     const result = await agent.invokeStructuredOutput<TopicSelectionNeedAdjudicationRecommendationPacket>({
       workspace_id: input.workspace_id ?? null,
       title_card_id: input.title_card_id,
@@ -4599,45 +5510,15 @@ export class TopicSelectionWorkflowHarnessService {
       profile_id: nodeInput.profile_id,
       output_contract: TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION,
       model_option_id: input.model_option_id ?? null,
-      prompt: {
-        promptTemplateId: 'topic-selection-need-adjudication',
-        version: 'v1',
-      },
+      prompt: compressionPrepared.runtimeBinding.prompt,
+      prompt_variant_key: compressionPrepared.runtimeBinding.prompt_variant_key,
       schema_name: TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION,
       schema: topicSelectionNeedAdjudicationRecommendationPacketSchema as unknown as Record<string, unknown>,
-      messages: this.needAdjudicationMessages(input, candidate, readiness, supportPacket),
-      input_refs: this.needAdjudicationInputRefs(candidate, readiness, supportPacket),
-      context_packet_refs: [],
-      context_packet_hashes: [
-        this.hash({
-          candidate_ref: this.ref(
-            'need_candidate',
-            candidate.need_candidate_id,
-            candidate.title_card_id,
-            candidate.candidate_version,
-          ),
-          readiness_ref: this.ref(
-            'need_candidate_readiness',
-            readiness.readiness_assessment_id,
-            readiness.title_card_id,
-          ),
-          validation_support_packet_ref: this.ref(
-            'validation_decision_support_packet',
-            supportPacket.validation_support_packet_id,
-            supportPacket.title_card_id,
-          ),
-        }),
-      ],
-      runtime_token_budget: this.runtimeTokenBudgetForSlot({
-        contextPolicyProfileId:
-          TOPIC_SELECTION_V1A_N7_CONTEXT_RUNTIME_PROFILE_IDS.adjudication_recommendation,
-        invocationSlotId:
-          TOPIC_SELECTION_V1A_N7_INVOCATION_SLOT_IDS.adjudication_recommendation,
-        scenarioId: input.scenario_id,
-        scenarioCaseId: input.scenario_case_id ?? null,
-        contextPayloads: [supportPacket],
-        extraPayloads: [candidate, readiness],
-      }),
+      messages: compressionPrepared.runtimeBinding.messages,
+      input_refs: compressionPrepared.runtimeBinding.input_refs,
+      context_packet_refs: compressionPrepared.runtimeBinding.context_packet_refs,
+      context_packet_hashes: compressionPrepared.runtimeBinding.context_packet_hashes,
+      runtime_token_budget: compressionPrepared.runtimeBinding.runtime_token_budget,
       mocked_output: input.mocked_output ?? null,
       codex_response: input.codex_response ?? null,
       created_by: input.created_by ?? 'system',
@@ -4645,6 +5526,15 @@ export class TopicSelectionWorkflowHarnessService {
     if (result.status !== 'succeeded' || !result.structured_output) {
       throw new AppError(409, 'GATE_CONSTRAINT_FAILED', 'Need adjudication recommendation failed.', {
         agent_error_code: result.error_code ?? 'MALFORMED_ADJUDICATION_OUTPUT',
+        blocker_codes: result.blocker_codes.length > 0
+          ? result.blocker_codes
+          : [result.error_code ?? 'MALFORMED_ADJUDICATION_OUTPUT'],
+        warning_codes: this.uniqueStrings([
+          ...result.warning_codes,
+          ...compressionPrepared.warningCodes,
+        ]),
+        agent_invocation_audit_ref: result.audit_artifact_ref ?? null,
+        context_compression_report_ref: compressionPrepared.contextCompressionReportRef,
       });
     }
     const packet = result.structured_output;
@@ -4665,6 +5555,188 @@ export class TopicSelectionWorkflowHarnessService {
       packet,
       packet_ref: this.ref('artifact_ref', artifact.artifact_ref_id, artifact.title_card_id ?? input.title_card_id),
       agent_invocation_audit_ref: result.audit_artifact_ref ?? null,
+      context_compression_report_ref: compressionPrepared.contextCompressionReportRef,
+      warning_codes: this.uniqueStrings([
+        ...result.warning_codes,
+        ...compressionPrepared.warningCodes,
+      ]),
+    };
+  }
+
+  private async prepareNeedAdjudicationRuntimeBinding(input: {
+    input: TopicSelectionWorkflowHarnessValidateNeedAdjudicationInput;
+    nodeInput: TopicSelectionWorkflowHarnessValidateNeedAdjudicationNodeInput;
+    candidate: TopicSelectionNeedCandidateRecord;
+    readiness: TopicSelectionNeedCandidateReadinessAssessmentRecord;
+    supportPacket: TopicSelectionValidationDecisionSupportPacketRecord;
+    runtimeBinding: TopicSelectionV1aLlmRuntimeInvocationBinding;
+  }): Promise<{
+    runtimeBinding: TopicSelectionV1aLlmRuntimeInvocationBinding;
+    contextCompressionReportRef: TopicSelectionFunctionalRef | null;
+    warningCodes: string[];
+    blockerCodes: string[];
+    errorCode: string | null;
+  }> {
+    const overrides = input.input.runtime_token_budget_overrides ?? null;
+    const preflight = this.tokenBudgetGate.evaluate({
+      context_policy_profile: input.runtimeBinding.runtime_token_budget.context_policy_profile,
+      messages: input.runtimeBinding.messages,
+      context_payloads: input.runtimeBinding.runtime_token_budget.context_payloads ?? [],
+      schema: topicSelectionNeedAdjudicationRecommendationPacketSchema as unknown as Record<string, unknown>,
+      extra_payloads: input.runtimeBinding.runtime_token_budget.extra_payloads ?? [],
+      compression_already_applied: overrides?.compression_already_applied ?? false,
+      estimated_input_tokens_override: overrides?.estimated_input_tokens_override,
+      schema_overhead_tokens_override: overrides?.schema_overhead_tokens_override,
+    });
+    if (
+      preflight.result.decision !== 'requires_compression'
+      || overrides?.compression_already_applied === true
+    ) {
+      return {
+        runtimeBinding: input.runtimeBinding,
+        contextCompressionReportRef: null,
+        warningCodes: [],
+        blockerCodes: [],
+        errorCode: null,
+      };
+    }
+
+    const compressionPlan = this.v1aLlmRuntimeBindings.buildNeedAdjudicationCompressionPlan({
+      title_card_id: input.input.title_card_id,
+      workflow_run_id: input.input.workflow_run_id,
+      node_attempt_id: input.input.node_attempt_id,
+      scenario_id: input.input.scenario_id,
+      scenario_case_id: input.input.scenario_case_id ?? null,
+      execution_mode: input.input.execution_mode,
+      profile_id: input.nodeInput.profile_id,
+      policy_version: input.input.policy_version,
+      output_schema_version: input.input.output_schema_version,
+      diagnostic_prompt_appendix: input.input.diagnostic_prompt_appendix ?? null,
+      candidate: input.candidate,
+      readiness: input.readiness,
+      support_packet: input.supportPacket,
+      runtime_token_budget_overrides: overrides,
+    });
+    const compression = await this.recordNeedAdjudicationCompressionReport({
+      input: input.input,
+      runtimeBinding: input.runtimeBinding,
+      compressionPlan,
+      estimatedInputTokensBefore: preflight.result.estimated_input_tokens,
+      estimatedInputTokensAfter: overrides?.estimated_input_tokens_after_compression_override,
+    });
+    const compressionIdentity = {
+      compression_report_ref: compression.artifactRef,
+      compression_report_hash: compression.artifactHash,
+      compressed_context_hash: compression.result.report.compressed_context_hash,
+      compression_already_applied: true,
+    };
+    const compressionWarningCodes = this.uniqueStrings([
+      ...preflight.result.warning_codes,
+      ...compression.result.warning_codes,
+      'COMPRESSION_REPORT_RECORDED',
+    ]);
+    const baseBindingInput = {
+      title_card_id: input.input.title_card_id,
+      workflow_run_id: input.input.workflow_run_id,
+      node_attempt_id: input.input.node_attempt_id,
+      scenario_id: input.input.scenario_id,
+      scenario_case_id: input.input.scenario_case_id ?? null,
+      execution_mode: input.input.execution_mode,
+      profile_id: input.nodeInput.profile_id,
+      policy_version: input.input.policy_version,
+      output_schema_version: input.input.output_schema_version,
+      diagnostic_prompt_appendix: input.input.diagnostic_prompt_appendix ?? null,
+      candidate: input.candidate,
+      readiness: input.readiness,
+      support_packet: input.supportPacket,
+    };
+    if (compression.result.quality_gate_result === 'blocked') {
+      return {
+        runtimeBinding: this.v1aLlmRuntimeBindings.buildNeedAdjudicationBinding({
+          ...baseBindingInput,
+          runtime_token_budget_overrides: {
+            ...overrides,
+            estimated_input_tokens_after_compression_override:
+              preflight.result.estimated_input_tokens,
+          },
+          runtime_compression: compressionIdentity,
+        }),
+        contextCompressionReportRef: compression.artifactRef,
+        warningCodes: compressionWarningCodes,
+        blockerCodes: this.uniqueStrings([
+          'COMPRESSION_QUALITY_GATE_BLOCKED',
+          ...compression.result.blocker_codes,
+        ]),
+        errorCode: 'COMPRESSION_QUALITY_GATE_BLOCKED',
+      };
+    }
+
+    return {
+      runtimeBinding: this.v1aLlmRuntimeBindings.buildNeedAdjudicationBinding({
+        ...baseBindingInput,
+        compressed_context: compressionPlan.compressed_context,
+        runtime_token_budget_overrides: overrides,
+        runtime_compression: compressionIdentity,
+      }),
+      contextCompressionReportRef: compression.artifactRef,
+      warningCodes: compressionWarningCodes,
+      blockerCodes: [],
+      errorCode: null,
+    };
+  }
+
+  private async recordNeedAdjudicationCompressionReport(input: {
+    input: TopicSelectionWorkflowHarnessValidateNeedAdjudicationInput;
+    runtimeBinding: TopicSelectionV1aLlmRuntimeInvocationBinding;
+    compressionPlan: TopicSelectionV1aNeedAdjudicationCompressionPlan;
+    estimatedInputTokensBefore: number | null;
+    estimatedInputTokensAfter?: number | null;
+  }): Promise<{
+    artifactRef: TopicSelectionFunctionalRef;
+    artifactHash: string;
+    result: TopicSelectionCompressionReportRuntimeResult;
+  }> {
+    const result = this.compressionRuntime.createReport({
+      context_policy_profile: input.runtimeBinding.runtime_token_budget.context_policy_profile,
+      context_policy_profile_hash: input.runtimeBinding.runtime_token_budget.context_policy_profile_hash,
+      compression_report_ref: input.compressionPlan.compression_report_ref,
+      source_refs: input.compressionPlan.source_refs,
+      input_context: input.compressionPlan.input_context,
+      compressed_context: input.compressionPlan.compressed_context,
+      summary: input.compressionPlan.summary,
+      compression_executor_kind: 'deterministic_structural',
+      required_preserved_facts: input.compressionPlan.fact_inventory,
+      compressed_preserved_facts: input.compressionPlan.fact_inventory,
+      redaction_policy: input.runtimeBinding.runtime_token_budget.context_policy_profile.redaction_policy,
+      estimated_input_tokens_before_override: input.estimatedInputTokensBefore,
+      estimated_input_tokens_after_override: input.estimatedInputTokensAfter,
+    });
+    const payload = {
+      schema_version: 'v1',
+      node_id: VALIDATE_NEED_ADJUDICATION_NODE_ID,
+      artifact_key: 'context_compression_report',
+      payload_schema: 'TopicSelectionCompressionReportEnvelope@v1',
+      redaction_policy: input.runtimeBinding.runtime_token_budget.context_policy_profile.redaction_policy,
+      report: result.report,
+      compressed_context: input.compressionPlan.compressed_context,
+    };
+    const artifact = await this.requiredControlPlane().recordArtifactRef({
+      workspace_id: input.input.workspace_id ?? null,
+      title_card_id: input.input.title_card_id,
+      artifact_kind: 'diagnostic',
+      storage_kind: 'inline',
+      payload,
+      workflow_run_id: input.input.workflow_run_id,
+      created_by: input.input.created_by ?? 'system',
+    });
+    return {
+      artifactRef: this.ref(
+        'artifact_ref',
+        artifact.artifact_ref_id,
+        artifact.title_card_id ?? input.input.title_card_id,
+      ),
+      artifactHash: artifact.checksum ?? this.hash(payload),
+      result,
     };
   }
 
@@ -4824,88 +5896,6 @@ export class TopicSelectionWorkflowHarnessService {
     );
   }
 
-  private needAdjudicationMessages(
-    input: TopicSelectionWorkflowHarnessValidateNeedAdjudicationInput,
-    candidate: TopicSelectionNeedCandidateRecord,
-    readiness: TopicSelectionNeedCandidateReadinessAssessmentRecord,
-    supportPacket: TopicSelectionValidationDecisionSupportPacketRecord,
-  ): Array<{ role: 'system' | 'user'; content: string }> {
-    return [
-      {
-        role: 'system',
-        content: [
-          'Produce TopicSelectionNeedAdjudicationRecommendationPacket@v1 only.',
-          'Do not include route_outcome, next_node_id, DB status fields, authority ids to create, hidden reasoning, or workflow commands.',
-          'Use the validation support packet as frozen truth; do not invent evidence, risks, merge targets, or recheck refs.',
-          'If residual_risk_refs or METHOD_FAMILY_COVERAGE_GAP are present, validate must carry those risks in residual_risk_refs or accepted_risk_refs and include required_actions for follow-up.',
-          'Do not return clean validate by dropping support-packet residual risks or coverage warnings.',
-          ...(input.diagnostic_prompt_appendix?.trim() ? [input.diagnostic_prompt_appendix.trim()] : []),
-        ].join('\n'),
-      },
-      {
-        role: 'user',
-        content: stableStringify({
-          node: {
-            workflow_run_id: input.workflow_run_id,
-            node_attempt_id: input.node_attempt_id,
-            execution_mode: input.execution_mode,
-            profile_id: input.profile_id ?? TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID,
-            policy_version: input.policy_version,
-            output_schema_version: input.output_schema_version,
-          },
-          candidate: {
-            need_candidate_ref: this.ref('need_candidate', candidate.need_candidate_id, candidate.title_card_id, candidate.candidate_version),
-            candidate_need: candidate.candidate_need,
-            unmet_need_statement: candidate.unmet_need_statement,
-            mechanism_type: candidate.mechanism_type,
-            prior_art_status: candidate.prior_art_status,
-            gap_codes: candidate.gap_codes,
-          },
-          readiness: {
-            readiness_assessment_ref: this.ref('need_candidate_readiness', readiness.readiness_assessment_id, readiness.title_card_id),
-            recommendation: readiness.recommendation,
-            blocker_codes: readiness.blockers.map((blocker) => blocker.code),
-            warning_codes: readiness.warnings.map((warning) => warning.code),
-          },
-          support_packet: {
-            validation_support_packet_ref: this.ref(
-              'validation_decision_support_packet',
-              supportPacket.validation_support_packet_id,
-              supportPacket.title_card_id,
-            ),
-            required_human_checks: supportPacket.required_human_checks,
-            open_gap_codes: supportPacket.open_gap_codes,
-            residual_risk_refs: supportPacket.residual_risk_refs,
-            evidence_role_bundle: supportPacket.evidence_role_bundle,
-            conflict_refs: supportPacket.conflict_refs,
-          },
-        }),
-      },
-    ];
-  }
-
-  private needAdjudicationInputRefs(
-    candidate: TopicSelectionNeedCandidateRecord,
-    readiness: TopicSelectionNeedCandidateReadinessAssessmentRecord,
-    supportPacket: TopicSelectionValidationDecisionSupportPacketRecord,
-  ): TopicSelectionFunctionalRef[] {
-    return this.uniqueRefs([
-      this.ref('need_candidate', candidate.need_candidate_id, candidate.title_card_id, candidate.candidate_version),
-      this.ref('need_candidate_readiness', readiness.readiness_assessment_id, readiness.title_card_id),
-      this.ref('validation_decision_support_packet', supportPacket.validation_support_packet_id, supportPacket.title_card_id),
-      supportPacket.evidence_map_ref,
-      supportPacket.search_run_ref,
-      supportPacket.search_plan_ref,
-      supportPacket.literature_snapshot_ref,
-      ...supportPacket.evidence_role_bundle.support_unit_refs,
-      ...supportPacket.evidence_role_bundle.challenge_unit_refs,
-      ...supportPacket.evidence_role_bundle.baseline_unit_refs,
-      ...supportPacket.evidence_role_bundle.context_unit_refs,
-      ...supportPacket.conflict_refs,
-      ...supportPacket.residual_risk_refs,
-    ]);
-  }
-
   private validateNeedAdjudicationNodeInput(
     input: TopicSelectionWorkflowHarnessValidateNeedAdjudicationInput,
   ): TopicSelectionWorkflowHarnessValidateNeedAdjudicationNodeInput {
@@ -4943,6 +5933,7 @@ export class TopicSelectionWorkflowHarnessService {
       diagnostic_prompt_appendix: input.diagnostic_prompt_appendix ?? null,
       adjudication_actor: input.adjudication_actor ?? null,
       fixture_human_decision: input.fixture_human_decision ?? false,
+      runtime_token_budget_overrides: input.runtime_token_budget_overrides ?? null,
       mocked_output_hash: input.mocked_output ? this.hash(input.mocked_output) : null,
       codex_response_hash: input.codex_response ? this.hash(input.codex_response) : null,
       created_by: input.created_by ?? 'system',
@@ -5417,12 +6408,34 @@ export class TopicSelectionWorkflowHarnessService {
         draft: input.extraction_draft ?? null,
         agent_invocation_audit_ref: null,
         agent_invocation_status: 'not_invoked',
+        context_compression_report_ref: null,
         warning_codes: [],
         blocker_codes: [],
         error_code: null,
       };
     }
     const agent = this.requiredEvidenceMapExtractionAgent();
+    const runtimeBinding = this.v1aLlmRuntimeBindings.buildEvidenceExtractionBinding({
+      title_card_id: input.title_card_id,
+      workflow_run_id: input.workflow_run_id,
+      node_attempt_id: input.node_attempt_id,
+      scenario_id: input.scenario_id,
+      scenario_case_id: input.scenario_case_id ?? null,
+      execution_mode: input.execution_mode,
+      profile_id: nodeInput.profile_id,
+      policy_version: input.policy_version,
+      output_schema_version: input.output_schema_version,
+      node_input: nodeInput,
+      search_run_handoff: input.search_run_handoff!,
+      extraction_context_packet: input.extraction_context_packet!,
+      extraction_context_packet_ref: input.extraction_context_packet_ref ?? null,
+      runtime_token_budget_overrides: input.runtime_token_budget_overrides ?? null,
+    });
+    const compressionPrepared = await this.prepareEvidenceMapExtractionRuntimeBinding({
+      input,
+      nodeInput,
+      runtimeBinding,
+    });
     const result = await agent.invokeStructuredOutput<TopicSelectionEvidenceMapExtractionDraft>({
       workspace_id: input.workspace_id ?? null,
       title_card_id: input.title_card_id,
@@ -5436,28 +6449,15 @@ export class TopicSelectionWorkflowHarnessService {
       profile_id: nodeInput.profile_id,
       output_contract: 'TopicSelectionEvidenceMapExtractionDraft@v1',
       model_option_id: input.model_option_id ?? null,
-      prompt: {
-        promptTemplateId: 'topic-selection-evidence-map-extraction',
-        version: 'v1',
-      },
+      prompt: compressionPrepared.runtimeBinding.prompt,
+      prompt_variant_key: compressionPrepared.runtimeBinding.prompt_variant_key,
       schema_name: 'TopicSelectionEvidenceMapExtractionDraft@v1',
       schema: topicSelectionEvidenceMapExtractionDraftSchema as unknown as Record<string, unknown>,
-      messages: this.evidenceMapExtractionMessages(input, nodeInput),
-      input_refs: this.evidenceMapExtractionInputRefs(input),
-      context_packet_refs: this.uniqueArtifactRefs([
-        this.asArtifactRef(input.extraction_context_packet_ref ?? null),
-      ]),
-      context_packet_hashes: [
-        this.hash(input.extraction_context_packet),
-      ],
-      runtime_token_budget: this.runtimeTokenBudgetForSlot({
-        contextPolicyProfileId:
-          TOPIC_SELECTION_V1A_N5_CONTEXT_RUNTIME_PROFILE_IDS.evidence_extraction,
-        invocationSlotId: TOPIC_SELECTION_V1A_N5_INVOCATION_SLOT_IDS.evidence_extraction,
-        scenarioId: input.scenario_id,
-        scenarioCaseId: input.scenario_case_id ?? null,
-        contextPayloads: [input.extraction_context_packet],
-      }),
+      messages: compressionPrepared.runtimeBinding.messages,
+      input_refs: compressionPrepared.runtimeBinding.input_refs,
+      context_packet_refs: compressionPrepared.runtimeBinding.context_packet_refs,
+      context_packet_hashes: compressionPrepared.runtimeBinding.context_packet_hashes,
+      runtime_token_budget: compressionPrepared.runtimeBinding.runtime_token_budget,
       mocked_output: input.mocked_output ?? null,
       codex_response: input.codex_response ?? null,
       created_by: input.created_by ?? 'system',
@@ -5466,58 +6466,201 @@ export class TopicSelectionWorkflowHarnessService {
       draft: result.status === 'succeeded' ? result.structured_output : null,
       agent_invocation_audit_ref: result.audit_artifact_ref ?? null,
       agent_invocation_status: result.status === 'succeeded' ? 'succeeded' : 'blocked',
-      warning_codes: result.warning_codes,
-      blocker_codes: result.blocker_codes,
-      error_code: result.error_code ?? null,
+      context_compression_report_ref: compressionPrepared.contextCompressionReportRef,
+      warning_codes: this.uniqueStrings([
+        ...result.warning_codes,
+        ...compressionPrepared.warningCodes,
+      ]),
+      blocker_codes: this.uniqueStrings([
+        ...result.blocker_codes,
+        ...compressionPrepared.blockerCodes,
+      ]),
+      error_code: compressionPrepared.errorCode ?? result.error_code ?? null,
     };
   }
 
-  private evidenceMapExtractionMessages(
-    input: TopicSelectionWorkflowHarnessBuildEvidenceMapInput,
-    nodeInput: TopicSelectionBuildEvidenceMapNodeInput,
-  ): Array<{ role: 'system' | 'user'; content: string }> {
-    return [
-      {
-        role: 'system',
-        content: [
-          'Produce TopicSelectionEvidenceMapExtractionDraft@v1 only.',
-          'Use source-grounded EvidenceUnits and never include hidden reasoning or raw provider logs.',
-          'Create at least one draft_unit for every literature_record in search_run_handoff.evidence_map_input_refs; missing source-candidate coverage blocks materialization.',
-          'If an EvidenceUnit cites coverage_row_intent_ref, evidence_role must match search_run_handoff.coverage_role_expectations.',
-          'Do not write authority records; the deterministic materialization gate owns persistence.',
-        ].join('\n'),
-      },
-      {
-        role: 'user',
-        content: stableStringify({
-          node_input: {
-            workflow_run_id: nodeInput.workflow_run_id,
-            node_attempt_id: nodeInput.node_attempt_id,
-            profile_id: nodeInput.profile_id,
-            execution_mode: nodeInput.execution_mode,
-            policy_version: nodeInput.policy_version,
-            output_schema_version: nodeInput.output_schema_version,
+  private async prepareEvidenceMapExtractionRuntimeBinding(input: {
+    input: TopicSelectionWorkflowHarnessBuildEvidenceMapInput;
+    nodeInput: TopicSelectionBuildEvidenceMapNodeInput;
+    runtimeBinding: TopicSelectionV1aLlmRuntimeInvocationBinding;
+  }): Promise<{
+    runtimeBinding: TopicSelectionV1aLlmRuntimeInvocationBinding;
+    contextCompressionReportRef: TopicSelectionFunctionalRef | null;
+    warningCodes: string[];
+    blockerCodes: string[];
+    errorCode: string | null;
+  }> {
+    const overrides = input.input.runtime_token_budget_overrides ?? null;
+    const preflight = this.tokenBudgetGate.evaluate({
+      context_policy_profile: input.runtimeBinding.runtime_token_budget.context_policy_profile,
+      messages: input.runtimeBinding.messages,
+      context_payloads: input.runtimeBinding.runtime_token_budget.context_payloads ?? [],
+      schema: topicSelectionEvidenceMapExtractionDraftSchema as unknown as Record<string, unknown>,
+      extra_payloads: input.runtimeBinding.runtime_token_budget.extra_payloads ?? [],
+      compression_already_applied: overrides?.compression_already_applied ?? false,
+      estimated_input_tokens_override: overrides?.estimated_input_tokens_override,
+      schema_overhead_tokens_override: overrides?.schema_overhead_tokens_override,
+    });
+    if (
+      preflight.result.decision !== 'requires_compression'
+      || overrides?.compression_already_applied === true
+    ) {
+      return {
+        runtimeBinding: input.runtimeBinding,
+        contextCompressionReportRef: null,
+        warningCodes: [],
+        blockerCodes: [],
+        errorCode: null,
+      };
+    }
+
+    const compressionPlan = this.v1aLlmRuntimeBindings.buildEvidenceExtractionCompressionPlan({
+      title_card_id: input.input.title_card_id,
+      workflow_run_id: input.input.workflow_run_id,
+      node_attempt_id: input.input.node_attempt_id,
+      scenario_id: input.input.scenario_id,
+      scenario_case_id: input.input.scenario_case_id ?? null,
+      execution_mode: input.input.execution_mode as TopicSelectionAgentExecutionMode,
+      profile_id: input.nodeInput.profile_id,
+      policy_version: input.input.policy_version,
+      output_schema_version: input.input.output_schema_version,
+      node_input: input.nodeInput,
+      search_run_handoff: input.input.search_run_handoff!,
+      extraction_context_packet: input.input.extraction_context_packet!,
+      extraction_context_packet_ref: input.input.extraction_context_packet_ref ?? null,
+      runtime_token_budget_overrides: overrides,
+    });
+    const compression = await this.recordEvidenceMapExtractionCompressionReport({
+      input: input.input,
+      runtimeBinding: input.runtimeBinding,
+      compressionPlan,
+      estimatedInputTokensBefore: preflight.result.estimated_input_tokens,
+      estimatedInputTokensAfter:
+        overrides?.estimated_input_tokens_after_compression_override,
+    });
+    const compressionIdentity = {
+      compression_report_ref: compression.artifactRef,
+      compression_report_hash: compression.artifactHash,
+      compressed_context_hash: compression.result.report.compressed_context_hash,
+      compression_already_applied: true,
+    };
+    const compressionWarningCodes = this.uniqueStrings([
+      ...preflight.result.warning_codes,
+      ...compression.result.warning_codes,
+      'COMPRESSION_REPORT_RECORDED',
+    ]);
+    if (compression.result.quality_gate_result === 'blocked') {
+      return {
+        runtimeBinding: this.v1aLlmRuntimeBindings.buildEvidenceExtractionBinding({
+          title_card_id: input.input.title_card_id,
+          workflow_run_id: input.input.workflow_run_id,
+          node_attempt_id: input.input.node_attempt_id,
+          scenario_id: input.input.scenario_id,
+          scenario_case_id: input.input.scenario_case_id ?? null,
+          execution_mode: input.input.execution_mode as TopicSelectionAgentExecutionMode,
+          profile_id: input.nodeInput.profile_id,
+          policy_version: input.input.policy_version,
+          output_schema_version: input.input.output_schema_version,
+          node_input: input.nodeInput,
+          search_run_handoff: input.input.search_run_handoff!,
+          extraction_context_packet: input.input.extraction_context_packet!,
+          extraction_context_packet_ref: input.input.extraction_context_packet_ref ?? null,
+          runtime_token_budget_overrides: {
+            ...overrides,
+            estimated_input_tokens_after_compression_override:
+              preflight.result.estimated_input_tokens,
           },
-          search_run_handoff: input.search_run_handoff,
-          extraction_context_packet: input.extraction_context_packet,
+          runtime_compression: compressionIdentity,
         }),
-      },
-    ];
+        contextCompressionReportRef: compression.artifactRef,
+        warningCodes: compressionWarningCodes,
+        blockerCodes: this.uniqueStrings([
+          'COMPRESSION_QUALITY_GATE_BLOCKED',
+          ...compression.result.blocker_codes,
+        ]),
+        errorCode: 'COMPRESSION_QUALITY_GATE_BLOCKED',
+      };
+    }
+
+    return {
+      runtimeBinding: this.v1aLlmRuntimeBindings.buildEvidenceExtractionBinding({
+        title_card_id: input.input.title_card_id,
+        workflow_run_id: input.input.workflow_run_id,
+        node_attempt_id: input.input.node_attempt_id,
+        scenario_id: input.input.scenario_id,
+        scenario_case_id: input.input.scenario_case_id ?? null,
+        execution_mode: input.input.execution_mode as TopicSelectionAgentExecutionMode,
+        profile_id: input.nodeInput.profile_id,
+        policy_version: input.input.policy_version,
+        output_schema_version: input.input.output_schema_version,
+        node_input: input.nodeInput,
+        search_run_handoff: input.input.search_run_handoff!,
+        extraction_context_packet: input.input.extraction_context_packet!,
+        extraction_context_packet_ref: input.input.extraction_context_packet_ref ?? null,
+        compressed_context: compressionPlan.compressed_context,
+        runtime_token_budget_overrides: overrides,
+        runtime_compression: compressionIdentity,
+      }),
+      contextCompressionReportRef: compression.artifactRef,
+      warningCodes: compressionWarningCodes,
+      blockerCodes: [],
+      errorCode: null,
+    };
   }
 
-  private evidenceMapExtractionInputRefs(
-    input: TopicSelectionWorkflowHarnessBuildEvidenceMapInput,
-  ): TopicSelectionFunctionalRef[] {
-    const handoff = input.search_run_handoff;
-    return this.uniqueRefs([
-      handoff?.search_run_ref,
-      handoff?.search_plan_ref,
-      handoff?.literature_resource_pool_snapshot_ref,
-      ...(handoff?.coverage_row_intent_refs ?? []),
-      ...(handoff?.evidence_map_input_refs ?? []),
-      ...(handoff?.coverage_binding_refs ?? []),
-      ...(handoff?.coverage_assessment_refs ?? []),
-    ]);
+  private async recordEvidenceMapExtractionCompressionReport(input: {
+    input: TopicSelectionWorkflowHarnessBuildEvidenceMapInput;
+    runtimeBinding: TopicSelectionV1aLlmRuntimeInvocationBinding;
+    compressionPlan: TopicSelectionV1aEvidenceExtractionCompressionPlan;
+    estimatedInputTokensBefore: number | null;
+    estimatedInputTokensAfter?: number | null;
+  }): Promise<{
+    artifactRef: TopicSelectionFunctionalRef;
+    artifactHash: string;
+    result: TopicSelectionCompressionReportRuntimeResult;
+  }> {
+    const result = this.compressionRuntime.createReport({
+      context_policy_profile: input.runtimeBinding.runtime_token_budget.context_policy_profile,
+      context_policy_profile_hash: input.runtimeBinding.runtime_token_budget.context_policy_profile_hash,
+      compression_report_ref: input.compressionPlan.compression_report_ref,
+      source_refs: input.compressionPlan.source_refs,
+      input_context: input.compressionPlan.input_context,
+      compressed_context: input.compressionPlan.compressed_context,
+      summary: input.compressionPlan.summary,
+      compression_executor_kind: 'deterministic_structural',
+      required_preserved_facts: input.compressionPlan.fact_inventory,
+      compressed_preserved_facts: input.compressionPlan.fact_inventory,
+      redaction_policy: input.runtimeBinding.runtime_token_budget.context_policy_profile.redaction_policy,
+      estimated_input_tokens_before_override: input.estimatedInputTokensBefore,
+      estimated_input_tokens_after_override: input.estimatedInputTokensAfter,
+    });
+    const payload = {
+      schema_version: 'v1',
+      node_id: BUILD_EVIDENCE_MAP_NODE_ID,
+      artifact_key: 'context_compression_report',
+      payload_schema: 'TopicSelectionCompressionReportEnvelope@v1',
+      redaction_policy: input.runtimeBinding.runtime_token_budget.context_policy_profile.redaction_policy,
+      report: result.report,
+      compressed_context: input.compressionPlan.compressed_context,
+    };
+    const artifact = await this.requiredControlPlane().recordArtifactRef({
+      workspace_id: input.input.workspace_id ?? null,
+      title_card_id: input.input.title_card_id,
+      artifact_kind: 'diagnostic',
+      storage_kind: 'inline',
+      payload,
+      workflow_run_id: input.input.workflow_run_id,
+      created_by: input.input.created_by ?? 'system',
+    });
+    return {
+      artifactRef: this.ref(
+        'artifact_ref',
+        artifact.artifact_ref_id,
+        artifact.title_card_id ?? input.input.title_card_id,
+      ),
+      artifactHash: artifact.checksum ?? this.hash(payload),
+      result,
+    };
   }
 
   private evidenceMapReviewPackage(input: {
@@ -5891,6 +7034,8 @@ export class TopicSelectionWorkflowHarnessService {
 
   private createTopicSeedTraceSnapshot(input: {
     input: TopicSelectionWorkflowHarnessCreateTopicSeedInput;
+    nodeInput: TopicSelectionWorkflowHarnessCreateTopicSeedNodeInput;
+    inputHash: string;
     nodeResult: TopicSelectionWorkflowHarnessCreateTopicSeedNodeResult;
     assertions: TopicSelectionWorkflowHarnessAssertion[];
     scenarioStatus: 'passed' | 'failed';
@@ -5903,8 +7048,11 @@ export class TopicSelectionWorkflowHarnessService {
       node_id: CREATE_TOPIC_SEED_NODE_ID,
       workflow_run_id: input.input.workflow_run_id,
       node_attempt_id: input.input.node_attempt_id,
+      input_hash: input.inputHash,
       scenario_status: input.scenarioStatus,
       node_status: input.nodeResult.status,
+      node_input: input.nodeInput,
+      node_result: input.nodeResult,
       authority_refs: input.nodeResult.authority_refs,
       audit_refs: input.nodeResult.audit_refs,
       artifact_refs: input.nodeResult.artifact_refs,
@@ -6074,6 +7222,7 @@ export class TopicSelectionWorkflowHarnessService {
   private createSnapshotLiteratureResourcePoolTraceSnapshot(input: {
     input: TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolInput;
     nodeInput: TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolNodeInput;
+    inputHash: string;
     nodeResult: TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolNodeResult;
     assertions: TopicSelectionWorkflowHarnessAssertion[];
     scenarioStatus: 'passed' | 'failed';
@@ -6086,6 +7235,7 @@ export class TopicSelectionWorkflowHarnessService {
       node_id: SNAPSHOT_LITERATURE_RESOURCE_POOL_NODE_ID,
       workflow_run_id: input.input.workflow_run_id,
       node_attempt_id: input.input.node_attempt_id,
+      input_hash: input.inputHash,
       scenario_status: input.scenarioStatus,
       node_status: input.nodeResult.status,
       node_input: input.nodeInput,
@@ -6479,6 +7629,7 @@ export class TopicSelectionWorkflowHarnessService {
   private createSearchPlanTraceSnapshot(input: {
     input: TopicSelectionWorkflowHarnessCreateSearchPlanInput;
     nodeInput: TopicSelectionWorkflowHarnessCreateSearchPlanNodeInput;
+    inputHash: string;
     nodeResult: TopicSelectionWorkflowHarnessCreateSearchPlanNodeResult;
     assertions: TopicSelectionWorkflowHarnessAssertion[];
     scenarioStatus: 'passed' | 'failed';
@@ -6492,6 +7643,7 @@ export class TopicSelectionWorkflowHarnessService {
       node_id: CREATE_SEARCH_PLAN_NODE_ID,
       workflow_run_id: input.input.workflow_run_id,
       node_attempt_id: input.input.node_attempt_id,
+      input_hash: input.inputHash,
       scenario_status: input.scenarioStatus,
       node_status: input.nodeResult.status,
       node_input: input.nodeInput,
@@ -6873,7 +8025,10 @@ export class TopicSelectionWorkflowHarnessService {
     if (nodeResult.status === 'succeeded') {
       assertions.push(this.assertion(
         'authority_ref_created',
-        Boolean(nodeResult.search_run_ref && nodeResult.authority_refs.includes(nodeResult.search_run_ref)),
+        Boolean(
+          nodeResult.search_run_ref
+            && nodeResult.authority_refs.some((ref) => this.sameFunctionalRef(ref, nodeResult.search_run_ref!)),
+        ),
         'Successful SearchRun scenario must expose a SearchRun authority ref.',
         'search_run_ref',
         nodeResult.search_run_ref,
@@ -6964,6 +8119,7 @@ export class TopicSelectionWorkflowHarnessService {
   private createRecordSearchRunTraceSnapshot(input: {
     input: TopicSelectionWorkflowHarnessRecordSearchRunInput;
     nodeInput: TopicSelectionWorkflowHarnessRecordSearchRunNodeInput;
+    inputHash: string;
     nodeResult: TopicSelectionWorkflowHarnessRecordSearchRunNodeResult;
     assertions: TopicSelectionWorkflowHarnessAssertion[];
     scenarioStatus: 'passed' | 'failed';
@@ -6976,6 +8132,7 @@ export class TopicSelectionWorkflowHarnessService {
       node_id: RECORD_SEARCH_RUN_NODE_ID,
       workflow_run_id: input.input.workflow_run_id,
       node_attempt_id: input.input.node_attempt_id,
+      input_hash: input.inputHash,
       scenario_status: input.scenarioStatus,
       node_status: input.nodeResult.status,
       node_input: input.nodeInput,
@@ -7532,6 +8689,24 @@ export class TopicSelectionWorkflowHarnessService {
     return [error.errorCode];
   }
 
+  private warningCodesFromAppError(error: AppError): string[] {
+    const warningCodes = error.details?.warning_codes;
+    if (!Array.isArray(warningCodes)) {
+      return [];
+    }
+    return this.uniqueStrings(warningCodes.filter((code): code is string => typeof code === 'string' && code.trim().length > 0));
+  }
+
+  private reviewReasonCodesFromAppError(error: AppError): string[] {
+    const reviewReasonCodes = error.details?.review_reason_codes;
+    if (!Array.isArray(reviewReasonCodes)) {
+      return [];
+    }
+    return this.uniqueStrings(
+      reviewReasonCodes.filter((code): code is string => typeof code === 'string' && code.trim().length > 0),
+    );
+  }
+
   private sourceHealthSummaryFromAppError(error: AppError): TopicSelectionSourceHealthSummary | null {
     const sourceHealthSummary = error.details?.source_health_summary;
     if (!sourceHealthSummary || typeof sourceHealthSummary !== 'object') {
@@ -7651,102 +8826,6 @@ export class TopicSelectionWorkflowHarnessService {
       return this.dependencies.evidenceMapExtractionAgent;
     }
     throw new AppError(500, 'INTERNAL_ERROR', 'WorkflowHarness human-confirm-need requires humanConfirmationSemanticReviewAgent dependency.');
-  }
-
-  private runtimeInvocationContextHash(input: {
-    invocationSlotId: string;
-    scenarioId?: string | null;
-    scenarioCaseId?: string | null;
-    loopKind?: TopicSelectionRuntimeLoopKind;
-    loopStage?: string | null;
-    currentRoundIndex?: number | null;
-    remainingRoundBudget?: number | null;
-    loopbackSourceNodeId?: string | null;
-    repairOriginRef?: TopicSelectionFunctionalRef | null;
-    repairOriginHash?: string | null;
-  }): string {
-    const semanticScenarioKey = this.semanticScenarioKey(input.scenarioId ?? null, input.scenarioCaseId ?? null);
-    return this.hash({
-      schema_version: TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
-      invocation_slot_id: input.invocationSlotId,
-      scenario_context: semanticScenarioKey
-        ? {
-          identity_policy: 'semantic_identity',
-          scenario_id: input.scenarioId ?? null,
-          scenario_case_id: input.scenarioCaseId ?? null,
-          semantic_scenario_key: semanticScenarioKey,
-        }
-        : {
-          identity_policy: 'not_semantic',
-          scenario_id: null,
-          scenario_case_id: null,
-          semantic_scenario_key: null,
-        },
-      loop_context: {
-        loop_kind: input.loopKind ?? 'not_applicable',
-        loop_stage: input.loopStage ?? null,
-        current_round_index: input.currentRoundIndex ?? null,
-        remaining_round_budget: input.remainingRoundBudget ?? null,
-        loopback_source_node_id: input.loopbackSourceNodeId ?? null,
-        repair_origin_ref: input.repairOriginRef ?? null,
-        repair_origin_hash: input.repairOriginHash ?? null,
-      },
-      debate_context: {
-        debate_loop_id: null,
-        debate_policy_id: null,
-        round_index: null,
-        role: null,
-        stage: null,
-        agent_instance_id: null,
-        parent_invocation_attempt_ids_hash: null,
-        dynamic_material_refs_hash: null,
-      },
-    });
-  }
-
-  private semanticScenarioKey(
-    scenarioId: string | null,
-    scenarioCaseId: string | null,
-  ): string | null {
-    const normalizedScenarioId = scenarioId?.trim() || null;
-    const normalizedScenarioCaseId = scenarioCaseId?.trim() || null;
-    const semanticMarker = [normalizedScenarioId, normalizedScenarioCaseId]
-      .some((value) => value?.includes('semantic-runtime-identity') || value?.startsWith('semantic:'));
-    if (!semanticMarker) {
-      return null;
-    }
-    return this.hash({
-      scenario_id: normalizedScenarioId,
-      scenario_case_id: normalizedScenarioCaseId,
-    });
-  }
-
-  private runtimeTokenBudgetForSlot(input: {
-    contextPolicyProfileId: string;
-    invocationSlotId: string;
-    scenarioId?: string | null;
-    scenarioCaseId?: string | null;
-    runtimeInvocationContextHash?: string | null;
-    contextPayloads?: unknown[];
-    extraPayloads?: unknown[];
-  }): TopicSelectionAgentRuntimeTokenBudgetInput {
-    const resolvedProfile = this.contextPolicyProfileRegistry.resolveProfile({
-      context_policy_profile_id: input.contextPolicyProfileId,
-      invocation_slot_id: input.invocationSlotId,
-    });
-    return {
-      context_policy_profile: resolvedProfile.profile,
-      context_policy_profile_hash: resolvedProfile.profile_hash,
-      runtime_invocation_context_hash: input.runtimeInvocationContextHash
-        ?? this.runtimeInvocationContextHash({
-          invocationSlotId: input.invocationSlotId,
-          scenarioId: input.scenarioId ?? null,
-          scenarioCaseId: input.scenarioCaseId ?? null,
-          loopKind: 'not_applicable',
-        }),
-      context_payloads: input.contextPayloads ?? [],
-      extra_payloads: input.extraPayloads ?? [],
-    };
   }
 
   private assertCreateTopicSeedScenarioInput(input: TopicSelectionWorkflowHarnessCreateTopicSeedInput): void {
@@ -7981,6 +9060,10 @@ export class TopicSelectionWorkflowHarnessService {
     return {
       node_id: HUMAN_CONFIRM_NEED_NODE_ID,
       node_input: nodeInput,
+      run_mode: input.run_mode ?? 'acceptance',
+      executor_kind: input.executor_kind ?? 'single_agent',
+      model_option_id: input.model_option_id ?? null,
+      runtime_token_budget_overrides: input.runtime_token_budget_overrides ?? null,
       mocked_output_hash: input.mocked_output ? this.hash(input.mocked_output) : null,
       codex_response_hash: input.codex_response ? this.hash(input.codex_response) : null,
     };
@@ -8232,10 +9315,6 @@ export class TopicSelectionWorkflowHarnessService {
     return this.uniqueRefs(refs).filter((ref): ref is TopicSelectionArtifactFunctionalRef =>
       ref.ref_type === 'artifact_ref',
     );
-  }
-
-  private asArtifactRef(ref: TopicSelectionFunctionalRef | null): TopicSelectionArtifactFunctionalRef | null {
-    return ref?.ref_type === 'artifact_ref' ? ref as TopicSelectionArtifactFunctionalRef : null;
   }
 
   private hash(value: unknown): string {

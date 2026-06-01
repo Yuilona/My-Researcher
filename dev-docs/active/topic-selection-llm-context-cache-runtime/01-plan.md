@@ -549,6 +549,12 @@
   - `legacy_unverified` N6 drafts now block before deterministic gates, and `fixture_replay` remains limited to non-product fixture paths;
   - N6 frozen payload/context/handoff lineage validation now runs before draft artifact resolution/admission;
   - next work is P2.1b regeneration/triage promotion.
+- P2.1b implementation status:
+  - `regeneration_after_n7_loopback` is implemented through L1/L2 with ref-backed N7 failed-trial projection identity and drift blockers;
+  - `n6_loopback_triage` is implemented through L1/L2 as an optional support-only runtime/admission slot bound to the failed N6 draft hash, failed draft prompt identity, failed draft source-hash bundle, runtime audit, and `v1b_n6_loopback_triage_context`;
+  - product mode blocks fixture loopback triage, and `legacy_unverified` triage cannot enter promoted admission;
+  - `regeneration_after_n6_gate_failure` is implemented through L1/L2 with ref-backed N6 gate-failure retry projection identity, failed draft identity, blocked-candidate context, reason/hint hashes, and drift blockers;
+  - P2.1b is closed at L1/L2. P2.2 v1b N8 is the next implementation-readiness focus.
 
 ### Implementation Order
 - P2.1 v1b N6 initial topic-question candidate generation:
@@ -557,15 +563,29 @@
   - preserve frozen N5 lineage, selected slice/option identity, evidence/boundary/assumption refs, claim ceiling, source-health warnings, and risk/gap/recheck hints through prompt identity and compression gates;
   - verify exact replay, frozen input drift, prompt/cache key drift, provider non-reuse, no authority bypass, and promoted initial-path legacy exit.
 - P2.1b v1b N6 regeneration and triage:
-  - bind `regeneration_after_n7_loopback`, `regeneration_after_n6_gate_failure`, and `n6_loopback_triage` only after P2.1 L1/L2 pass;
-  - consume the N7 failed-trial loopback projection as ref-backed non-authority context;
+  - `regeneration_after_n7_loopback` is now bound after P2.1 L1/L2 pass;
+  - consume the N7 failed-trial loopback projection as ref-backed non-authority context with selected-slice lineage and N6 handoff hash checks;
   - preserve failed-trial blockers, exhausted candidate refs, regeneration hints, candidate-order facts, and source-health warnings through prompt identity and compression gates;
-  - verify N7 loopback drift, unknown failed-trial refs, orphan projection blocking, triage authority boundaries, and no authority bypass.
+  - verify N7 loopback drift, unknown failed-trial refs, orphan projection blocking, triage authority boundaries, and no authority bypass;
+  - `n6_loopback_triage` is now bound as optional support-only runtime context for N6 failed-draft routing; it can classify failure scope, dominant reason codes, affected refs, regeneration hints, debate escalation advice, and rollback-to-N5 advice, but cannot create candidates, select a slice, emit handoff authority, or create downstream recheck;
+  - `regeneration_after_n6_gate_failure` is now bound to `v1b_n6_gate_failure_retry_context`, preserving failed draft identity, blocked-candidate context, failure reason codes, regeneration hints, selected slice identity, and N5 handoff hash through prompt identity and compression gates;
+  - P2.1b L1/L2 is complete.
 - P2.2 v1b N8 topic value assessment:
-  - bind N8 value/risk assessment slots to the shared runtime;
-  - consume the N7-to-N8 topic-question-contract projection as ref-backed non-authority context;
-  - preserve value rationale, risk/gap facts, reviewer-facing uncertainty, support quality, and downstream recheck hints through prompt identity and compression gates;
-  - verify N7 projection drift, N8 feedback handoff back to N7, malformed support blocking, provider non-reuse, and no authority bypass.
+  - D25-A is locked: first slice promotes only `n8_value_assessment_draft`; it does not expand N9/N10/N11, does not change the N8 deterministic gate, does not runtime-ize N8->N7 feedback generation, and does not introduce multi-agent debate/provider canaries in the first slice;
+  - D25-A boundary: `n8_value_assessment_draft` remains `model_draft_for_gate`; runtime success produces a non-authority semantic artifact only, and N8 authority writes still require the existing deterministic value gate plus `N8ToN9Handoff@v1` persistence;
+  - D25-B is locked: N8 runtime MUST bind both the `N7ToN8Handoff@v1` authority lineage and exactly one `v1b_n7_to_n8_topic_question_contract_context` non-authority projection;
+  - D25-B identity: prompt/cache identity MUST include invocation slot id, prompt variant `n8_value_assessment_draft.initial_from_n7`, model/profile identity, context profile hash, redaction policy, frozen input hash, N7 handoff hash, N7->N8 projection hash, topic question hash, topic question contract hash, active candidate hash, answerability plan hash, trial ledger hash, selected research slice hash, candidate set hash, source hash bundle hash, output contract, and runtime modifiers hash;
+  - D25-B blockers: missing, duplicated, checksum-drifted, wrong-route, wrong-lineage, or source-hash-drifted N7->N8 projection blocks before draft generation/admission and before any authority/handoff write;
+  - D25-C is locked: N8 compression is a robustness mechanism, not content pruning. Compression MAY change expression density, but MUST preserve the fact set and structural shape required by the N8 workflow;
+  - D25-C required preservation: compression MUST preserve N7 handoff/projection lineage, topic question and contract refs/hashes, active candidate identity, answerability plan, trial ledger, value rationale, support-quality facts, reviewer-facing uncertainty, risk/gap/blocker facts, source-health warnings, and downstream feedback/recheck hints;
+  - D25-C blockers: missing required facts, missing required arrays/maps/refs/hashes, rewritten authority semantics, or compressed context that cannot be schema-validated blocks before draft generation/admission. A blocked compression artifact remains non-authority workflow evidence and cannot be cached as an admissible prompt input;
+  - D25-D is locked: N8 runtime output is advisory `model_draft_for_gate` only. Runtime/cache/compression/reuse success cannot create `topic_value_assessment`, `N8ToN9Handoff@v1`, `N8ToN7Feedback`, route decisions, trial-ledger updates, or candidate mutations;
+  - D25-D authority boundary: deterministic N8 gate pass is the only authority admission path for value assessment and N8->N9 handoff persistence; deterministic N8 gate reject creates no value authority and leaves N8->N7 feedback generation to deterministic harness logic;
+  - D25-E is locked: compression failure detection MUST live in runtime/admission code, not in `WorkflowHarness`-only assertions. Harness tests only construct adversarial cases and verify runtime blockers;
+  - D25-E shared runtime self-check: compression report schema, source refs/hashes, compressed context hash, forbidden payload classes, post-compression token budget, blocker/warning codes, and rejected-artifact cache exclusion MUST be validated before prompt packet creation;
+  - D25-E N8 adapter self-check: N8 MUST emit a required-structure manifest for lineage, refs/hashes, required paths, preserved fact groups, allowed authority fields, and route/gate semantics. The compressed context must validate against the manifest before draft generation or draft admission;
+  - D25-E harness boundary: `WorkflowHarness` MUST NOT implement a parallel production validity decision for compression. It may assert that missing trial ledger, ref/hash drift, dropped risk facts, schema-invalid compact context, or rejected compression artifacts are blocked by runtime/admission services;
+  - verify N7 projection drift, N8 feedback handoff back to N7, malformed support/compression blocking, runtime compression self-check blockers, provider non-reuse, deterministic feedback boundaries, and no authority bypass.
 - P2.3 v1b N4 research-slice option generation:
   - bind N4 option-generation slots after N6/N8 expose the main context-handoff shape;
   - use N4 outputs as upstream semantic context candidates, not as replacements for N7 deterministic authority gates;

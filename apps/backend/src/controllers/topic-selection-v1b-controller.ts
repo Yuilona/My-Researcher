@@ -100,6 +100,21 @@ export class TopicSelectionV1bController {
     }
   };
 
+  getWorkflowHarnessTraceSnapshot = async (
+    request: ParamsRequest<{ traceSnapshotId: string }>,
+    reply: FastifyReply,
+  ) => {
+    try {
+      const result = await this.controlPlane.getTraceSnapshot(request.params.traceSnapshotId);
+      if (!result) {
+        throw new AppError(404, 'NOT_FOUND', 'Workflow harness trace snapshot not found.');
+      }
+      return reply.send(result);
+    } catch (error) {
+      return handleError(reply, error);
+    }
+  };
+
   getDraftPackage = async (request: ParamsRequest<{ topicPackageId: string }>, reply: FastifyReply) => {
     try {
       const result = await this.topicPackage.getDraftPackage(request.params.topicPackageId);

@@ -17,7 +17,9 @@ import {
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-invocation-contracts';
 import {
   TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_NODE_POLICIES,
+  type TopicSelectionV1bN6GateFailureRetryContextProjection,
   type TopicSelectionV1bN6HarnessFrozenInputPayload,
+  type TopicSelectionV1bN7ToN6FailedTrialLoopbackContextProjection,
   type TopicSelectionV1bTopicQuestionCandidateSetDraftPayload,
   type TopicSelectionV1bWorkflowHarnessRunRequest,
   type TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef,
@@ -54,7 +56,30 @@ import type {
   TopicSelectionV1bN6DraftSlotId,
 } from './topic-selection-v1b-n6-draft-admission-service.js';
 
-export type TopicSelectionV1bN6DraftGenerationMode = 'initial_from_n5';
+export type TopicSelectionV1bN6DraftGenerationMode =
+  | 'initial_from_n5'
+  | 'regeneration_after_n7_loopback'
+  | 'regeneration_after_n6_gate_failure';
+
+type TopicSelectionV1bN6DraftRuntimeModeContext =
+  | {
+    kind: 'initial_from_n5';
+    n7_loopback_projection_ref: null;
+    n7_loopback_projection_hash: null;
+    n7_loopback_projection: null;
+  }
+  | {
+    kind: 'regeneration_after_n7_loopback';
+    n7_loopback_projection_ref: TopicSelectionFunctionalRef;
+    n7_loopback_projection_hash: string;
+    n7_loopback_projection: TopicSelectionV1bN7ToN6FailedTrialLoopbackContextProjection;
+  }
+  | {
+    kind: 'regeneration_after_n6_gate_failure';
+    n6_gate_failure_projection_ref: TopicSelectionFunctionalRef;
+    n6_gate_failure_projection_hash: string;
+    n6_gate_failure_projection: TopicSelectionV1bN6GateFailureRetryContextProjection;
+  };
 
 export type TopicSelectionV1bN6DraftRuntimeContextPacket = {
   schema_version: 'TopicSelectionV1bN6DraftRuntimeContextPacket@v1';
@@ -74,6 +99,7 @@ export type TopicSelectionV1bN6DraftRuntimeContextPacket = {
   source_refs: TopicSelectionFunctionalRef[];
   source_hashes: Record<string, string>;
   frozen_input_payload: TopicSelectionV1bN6HarnessFrozenInputPayload;
+  mode_context: TopicSelectionV1bN6DraftRuntimeModeContext;
 };
 
 export type GenerateTopicSelectionV1bN6RuntimeDraftInput = {
@@ -149,9 +175,10 @@ export class TopicSelectionV1bN6DraftRuntimeService {
     const frozenPayload = this.assertN6FrozenPayload(input.request);
     const binding = this.slotBinding(input.generation_mode);
     const runMode = input.run_mode ?? input.request.run_mode ?? this.defaultRunMode(input.execution_mode);
-    const sourceHashes = this.sourceHashes(input.request, frozenPayload);
+    const modeContext = await this.resolveModeContext(input.request, frozenPayload, input.generation_mode);
+    const sourceHashes = this.sourceHashes(input.request, frozenPayload, modeContext);
     const runtimeProfile = this.resolveRuntimeProfile(binding);
-    const runtimeInvocationContextHash = this.runtimeInvocationContextHash(binding, sourceHashes);
+    const runtimeInvocationContextHash = this.runtimeInvocationContextHash(binding, sourceHashes, modeContext);
     const contextPacket = this.buildContextPacket({
       request: input.request,
       frozenPayload,
@@ -159,6 +186,7 @@ export class TopicSelectionV1bN6DraftRuntimeService {
       runtimeProfile,
       runtimeInvocationContextHash,
       sourceHashes,
+      modeContext,
     });
     const contextPacketHash = this.hash(contextPacket);
     const contextArtifact = await this.controlPlane.recordArtifactRef({
@@ -238,7 +266,7 @@ export class TopicSelectionV1bN6DraftRuntimeService {
     };
   }
 
-  buildAdmissionExpectedIdentity(input: {
+  async buildAdmissionExpectedIdentity(input: {
     request: TopicSelectionV1bWorkflowHarnessRunRequest;
     frozenPayload: TopicSelectionV1bN6HarnessFrozenInputPayload;
     generationMode: TopicSelectionV1bN6DraftGenerationMode;
@@ -247,7 +275,7 @@ export class TopicSelectionV1bN6DraftRuntimeService {
     runMode: TopicSelectionAgentRunMode;
     profileId: string;
     modelOptionId: string | null;
-  }): TopicSelectionV1bN6DraftAdmissionExpectedIdentity {
+  }): Promise<TopicSelectionV1bN6DraftAdmissionExpectedIdentity> {
     const binding = this.slotBinding(input.generationMode);
     if (input.profileId !== binding.model_profile_id) {
       throw new AppError(400, 'INVALID_PAYLOAD', 'v1b N6 draft profile does not match runtime slot binding.');
@@ -255,9 +283,10 @@ export class TopicSelectionV1bN6DraftRuntimeService {
     if (input.modelOptionId) {
       throw new AppError(400, 'INVALID_PAYLOAD', 'v1b N6 draft first slice does not allow provider model options.');
     }
-    const sourceHashes = this.sourceHashes(input.request, input.frozenPayload);
+    const modeContext = await this.resolveModeContext(input.request, input.frozenPayload, input.generationMode);
+    const sourceHashes = this.sourceHashes(input.request, input.frozenPayload, modeContext);
     const runtimeProfile = this.resolveRuntimeProfile(binding);
-    const runtimeInvocationContextHash = this.runtimeInvocationContextHash(binding, sourceHashes);
+    const runtimeInvocationContextHash = this.runtimeInvocationContextHash(binding, sourceHashes, modeContext);
     const contextPacket = this.buildContextPacket({
       request: input.request,
       frozenPayload: input.frozenPayload,
@@ -265,6 +294,7 @@ export class TopicSelectionV1bN6DraftRuntimeService {
       runtimeProfile,
       runtimeInvocationContextHash,
       sourceHashes,
+      modeContext,
     });
     const modelProfile = this.resolveModelProfile(binding, input.executionMode, input.runMode);
     const promptPacket = this.promptPacketRuntime.buildPromptPacket({
@@ -382,6 +412,7 @@ export class TopicSelectionV1bN6DraftRuntimeService {
     runtimeProfile: TopicSelectionResolvedContextPolicyProfile;
     runtimeInvocationContextHash: string;
     sourceHashes: Record<string, string>;
+    modeContext: TopicSelectionV1bN6DraftRuntimeModeContext;
   }): TopicSelectionV1bN6DraftRuntimeContextPacket {
     return {
       schema_version: 'TopicSelectionV1bN6DraftRuntimeContextPacket@v1',
@@ -398,9 +429,10 @@ export class TopicSelectionV1bN6DraftRuntimeService {
       context_policy_profile_hash: input.runtimeProfile.profile_hash,
       redaction_policy: TOPIC_SELECTION_CONTEXT_RUNTIME_REDACTION_POLICY,
       non_authority: true,
-      source_refs: this.sourceRefs(input.request, input.frozenPayload),
+      source_refs: this.sourceRefs(input.request, input.frozenPayload, input.modeContext),
       source_hashes: input.sourceHashes,
       frozen_input_payload: input.frozenPayload,
+      mode_context: input.modeContext,
     };
   }
 
@@ -435,8 +467,9 @@ export class TopicSelectionV1bN6DraftRuntimeService {
   private sourceHashes(
     request: TopicSelectionV1bWorkflowHarnessRunRequest,
     payload: TopicSelectionV1bN6HarnessFrozenInputPayload,
+    modeContext: TopicSelectionV1bN6DraftRuntimeModeContext,
   ): Record<string, string> {
-    return {
+    const sourceHashes: Record<string, string> = {
       frozen_input_hash: request.frozen_input.frozen_input_hash ?? this.hash(request.frozen_input),
       n5_handoff_hash: payload.n5_handoff_hash,
       constraint_profile_hash: payload.constraint_profile_hash,
@@ -446,12 +479,58 @@ export class TopicSelectionV1bN6DraftRuntimeService {
       research_slice_option_set_hash: payload.research_slice_option_set_hash,
       selected_slice_option_hash: payload.selected_slice_option_hash,
     };
+    if (modeContext.kind === 'regeneration_after_n7_loopback') {
+      const projection = modeContext.n7_loopback_projection;
+      sourceHashes.n7_loopback_projection_hash = modeContext.n7_loopback_projection_hash;
+      sourceHashes.n7_loopback_n6_handoff_hash = projection.n6_handoff_hash;
+      sourceHashes.n7_loopback_candidate_set_hash = projection.topic_question_candidate_set_hash;
+      sourceHashes.n7_loopback_failed_trial_synthesis_hash = projection.failed_trial_synthesis_hash;
+      sourceHashes.n7_loopback_exhausted_candidate_hashes_hash = this.hash(projection.exhausted_candidate_hashes);
+      sourceHashes.n7_loopback_failure_reason_codes_hash = this.hash(projection.failure_reason_codes);
+      sourceHashes.n7_loopback_regeneration_hints_hash = this.hash(projection.n6_regeneration_hints);
+      if (projection.n8_feedback_hash) {
+        sourceHashes.n7_loopback_n8_feedback_hash = projection.n8_feedback_hash;
+      }
+    }
+    if (modeContext.kind === 'regeneration_after_n6_gate_failure') {
+      const projection = modeContext.n6_gate_failure_projection;
+      sourceHashes.n6_gate_failure_projection_hash = modeContext.n6_gate_failure_projection_hash;
+      sourceHashes.n6_gate_failure_failed_draft_hash = projection.failed_draft_hash;
+      sourceHashes.n6_gate_failure_failed_draft_prompt_packet_hash = projection.failed_draft_prompt_packet_hash;
+      sourceHashes.n6_gate_failure_failed_draft_source_hashes_hash = projection.failed_draft_source_hashes_hash;
+      sourceHashes.n6_gate_failure_blocked_candidate_context_hash = projection.blocked_candidate_context_hash;
+      sourceHashes.n6_gate_failure_reason_codes_hash = this.hash(projection.failure_reason_codes);
+      sourceHashes.n6_gate_failure_regeneration_hints_hash = this.hash(projection.regeneration_hints);
+      if (projection.triage_payload_hash) {
+        sourceHashes.n6_gate_failure_triage_payload_hash = projection.triage_payload_hash;
+      }
+    }
+    return sourceHashes;
   }
 
   private sourceRefs(
     request: TopicSelectionV1bWorkflowHarnessRunRequest,
     payload: TopicSelectionV1bN6HarnessFrozenInputPayload,
+    modeContext?: TopicSelectionV1bN6DraftRuntimeModeContext,
   ): TopicSelectionFunctionalRef[] {
+    const loopbackRefs = modeContext?.kind === 'regeneration_after_n7_loopback'
+      ? [
+        modeContext.n7_loopback_projection_ref,
+        ...modeContext.n7_loopback_projection.source_refs,
+        modeContext.n7_loopback_projection.topic_question_candidate_set_ref,
+        modeContext.n7_loopback_projection.failed_trial_synthesis_ref,
+        ...modeContext.n7_loopback_projection.exhausted_candidate_refs,
+      ]
+      : [];
+    const gateFailureRefs = modeContext?.kind === 'regeneration_after_n6_gate_failure'
+      ? [
+        modeContext.n6_gate_failure_projection_ref,
+        ...modeContext.n6_gate_failure_projection.source_refs,
+        ...modeContext.n6_gate_failure_projection.support_refs,
+        modeContext.n6_gate_failure_projection.failed_draft_ref,
+        modeContext.n6_gate_failure_projection.triage_artifact_ref,
+      ]
+      : [];
     return this.uniqueRefs([
       ...request.frozen_input.source_refs,
       payload.constraint_profile_ref,
@@ -460,12 +539,15 @@ export class TopicSelectionV1bN6DraftRuntimeService {
       payload.research_slice_selection_ref,
       payload.research_slice_option_set_ref,
       payload.selected_slice_option_ref,
+      ...loopbackRefs,
+      ...gateFailureRefs,
     ]);
   }
 
   private runtimeInvocationContextHash(
     binding: N6RuntimeSlotBinding,
     sourceHashes: Record<string, string>,
+    modeContext: TopicSelectionV1bN6DraftRuntimeModeContext,
   ): string {
     return this.hash({
       schema_version: TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
@@ -476,15 +558,35 @@ export class TopicSelectionV1bN6DraftRuntimeService {
         scenario_case_id: binding.generation_mode,
         semantic_scenario_key: this.hash(sourceHashes),
       },
-      loop_context: {
-        loop_kind: 'initial',
-        loop_stage: 'n6_initial_from_n5',
-        current_round_index: 1,
-        remaining_round_budget: null,
-        loopback_source_node_id: null,
-        repair_origin_ref: null,
-        repair_origin_hash: null,
-      },
+      loop_context: modeContext.kind === 'regeneration_after_n7_loopback'
+        ? {
+          loop_kind: 'repair_from_node',
+          loop_stage: 'n6_regeneration_after_n7_loopback',
+          current_round_index: 1,
+          remaining_round_budget: null,
+          loopback_source_node_id: 'topic-selection.v1b.materialize-topic-question-contract.v1',
+          repair_origin_ref: modeContext.n7_loopback_projection_ref,
+          repair_origin_hash: modeContext.n7_loopback_projection_hash,
+        }
+        : modeContext.kind === 'regeneration_after_n6_gate_failure'
+          ? {
+            loop_kind: 'repair_from_node',
+            loop_stage: 'n6_regeneration_after_n6_gate_failure',
+            current_round_index: 2,
+            remaining_round_budget: null,
+            loopback_source_node_id: NODE_ID,
+            repair_origin_ref: modeContext.n6_gate_failure_projection_ref,
+            repair_origin_hash: modeContext.n6_gate_failure_projection_hash,
+          }
+        : {
+          loop_kind: 'initial',
+          loop_stage: 'n6_initial_from_n5',
+          current_round_index: 1,
+          remaining_round_budget: null,
+          loopback_source_node_id: null,
+          repair_origin_ref: null,
+          repair_origin_hash: null,
+        },
       debate_context: {
         debate_loop_id: null,
         debate_policy_id: null,
@@ -547,6 +649,349 @@ export class TopicSelectionV1bN6DraftRuntimeService {
       prompt_variant_key: `n6_question_candidate_draft.${generationMode}`,
       schema: topicSelectionV1bTopicQuestionCandidateSetDraftPayloadSchema as unknown as Record<string, unknown>,
     };
+  }
+
+  private async resolveModeContext(
+    request: TopicSelectionV1bWorkflowHarnessRunRequest,
+    frozenPayload: TopicSelectionV1bN6HarnessFrozenInputPayload,
+    generationMode: TopicSelectionV1bN6DraftGenerationMode,
+  ): Promise<TopicSelectionV1bN6DraftRuntimeModeContext> {
+    const n7Projection = await this.resolveN7LoopbackProjection(request, frozenPayload);
+    const n6GateFailureProjection = await this.resolveN6GateFailureProjection(request, frozenPayload);
+    if (generationMode === 'initial_from_n5') {
+      if (n7Projection || n6GateFailureProjection) {
+        throw new AppError(
+          400,
+          'INVALID_PAYLOAD',
+          'N6 initial_from_n5 runtime draft must not consume loopback or retry projection context.',
+        );
+      }
+      return {
+        kind: 'initial_from_n5',
+        n7_loopback_projection: null,
+        n7_loopback_projection_hash: null,
+        n7_loopback_projection_ref: null,
+      };
+    }
+    if (generationMode === 'regeneration_after_n7_loopback') {
+      if (!n7Projection || n6GateFailureProjection) {
+        throw new AppError(
+          400,
+          'INVALID_PAYLOAD',
+          'N6 regeneration_after_n7_loopback runtime draft requires an N7 failed-trial loopback projection source artifact, exactly one, and no N6 gate-failure retry projection.',
+        );
+      }
+      return {
+        kind: 'regeneration_after_n7_loopback',
+        n7_loopback_projection: n7Projection.payload,
+        n7_loopback_projection_hash: n7Projection.hash,
+        n7_loopback_projection_ref: n7Projection.ref,
+      };
+    }
+    if (!n6GateFailureProjection || n7Projection) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'N6 regeneration_after_n6_gate_failure runtime draft requires exactly one N6 gate-failure retry projection and no N7 failed-trial loopback projection.',
+      );
+    }
+    return {
+      kind: 'regeneration_after_n6_gate_failure',
+      n6_gate_failure_projection: n6GateFailureProjection.payload,
+      n6_gate_failure_projection_hash: n6GateFailureProjection.hash,
+      n6_gate_failure_projection_ref: n6GateFailureProjection.ref,
+    };
+  }
+
+  private async resolveN7LoopbackProjection(
+    request: TopicSelectionV1bWorkflowHarnessRunRequest,
+    frozenPayload: TopicSelectionV1bN6HarnessFrozenInputPayload,
+  ): Promise<{
+    ref: TopicSelectionFunctionalRef;
+    hash: string;
+    payload: TopicSelectionV1bN7ToN6FailedTrialLoopbackContextProjection;
+  } | null> {
+    let resolved: {
+      ref: TopicSelectionFunctionalRef;
+      hash: string;
+      payload: TopicSelectionV1bN7ToN6FailedTrialLoopbackContextProjection;
+    } | null = null;
+    for (const sourceRef of request.frozen_input.source_refs) {
+      if (sourceRef.ref_type !== 'artifact_ref') {
+        continue;
+      }
+      const artifact = await this.controlPlane.getArtifactRef(sourceRef.ref_id);
+      if (
+        !this.isRecord(artifact?.payload)
+        || artifact.payload.projection_kind !== 'v1b_n7_to_n6_failed_trial_loopback_context'
+      ) {
+        continue;
+      }
+      if (resolved) {
+        throw new AppError(400, 'INVALID_PAYLOAD', 'N6 regeneration accepts exactly one N7 loopback projection artifact.');
+      }
+      const projectionHash = this.hash(artifact.payload);
+      if (!artifact.checksum || artifact.checksum !== projectionHash) {
+        throw new AppError(400, 'INVALID_PAYLOAD', 'N7 loopback projection checksum is missing or drifted.');
+      }
+      const projection = this.n7LoopbackProjectionPayload(artifact.payload);
+      this.assertN7LoopbackProjectionPolicy(projection, frozenPayload);
+      resolved = {
+        ref: sourceRef,
+        hash: projectionHash,
+        payload: projection,
+      };
+    }
+    return resolved;
+  }
+
+  private async resolveN6GateFailureProjection(
+    request: TopicSelectionV1bWorkflowHarnessRunRequest,
+    frozenPayload: TopicSelectionV1bN6HarnessFrozenInputPayload,
+  ): Promise<{
+    ref: TopicSelectionFunctionalRef;
+    hash: string;
+    payload: TopicSelectionV1bN6GateFailureRetryContextProjection;
+  } | null> {
+    let resolved: {
+      ref: TopicSelectionFunctionalRef;
+      hash: string;
+      payload: TopicSelectionV1bN6GateFailureRetryContextProjection;
+    } | null = null;
+    for (const sourceRef of request.frozen_input.source_refs) {
+      if (sourceRef.ref_type !== 'artifact_ref') {
+        continue;
+      }
+      const artifact = await this.controlPlane.getArtifactRef(sourceRef.ref_id);
+      if (
+        !this.isRecord(artifact?.payload)
+        || artifact.payload.projection_kind !== 'v1b_n6_gate_failure_retry_context'
+      ) {
+        continue;
+      }
+      if (resolved) {
+        throw new AppError(400, 'INVALID_PAYLOAD', 'N6 regeneration accepts exactly one N6 gate-failure retry projection artifact.');
+      }
+      const projectionHash = this.hash(artifact.payload);
+      if (!artifact.checksum || artifact.checksum !== projectionHash) {
+        throw new AppError(400, 'INVALID_PAYLOAD', 'N6 gate-failure retry projection checksum is missing or drifted.');
+      }
+      const projection = this.n6GateFailureProjectionPayload(artifact.payload);
+      this.assertN6GateFailureProjectionPolicy(projection, frozenPayload);
+      resolved = {
+        ref: sourceRef,
+        hash: projectionHash,
+        payload: projection,
+      };
+    }
+    return resolved;
+  }
+
+  private assertN6GateFailureProjectionPolicy(
+    projection: TopicSelectionV1bN6GateFailureRetryContextProjection,
+    frozenPayload: TopicSelectionV1bN6HarnessFrozenInputPayload,
+  ): void {
+    if (
+      projection.non_authority !== true
+      || projection.context_authority !== 'non_authority_runtime_context'
+      || projection.route_decision !== 'loopback'
+      || projection.loopback_target_code !== 'n6_regenerate_candidates'
+    ) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'N6 gate-failure retry projection must remain non-authority regeneration context.');
+    }
+    const hasTriageRef = projection.triage_artifact_ref !== null;
+    if (
+      !this.hasExactHashKeys(projection.source_hashes, [
+        'frozen_input_hash',
+        'n5_handoff_hash',
+        'selected_research_slice_hash',
+        'failed_draft_hash',
+        'failed_draft_prompt_packet_hash',
+        'failed_draft_source_hashes_hash',
+        'blocked_candidate_context_hash',
+        'failure_reason_codes_hash',
+        'regeneration_hints_hash',
+      ], hasTriageRef ? ['triage_payload_hash'] : [])
+      || !this.hasExactHashKeys(projection.support_hashes, [
+        'failed_draft_hash',
+        'failed_draft_prompt_packet_hash',
+        'failed_draft_source_hashes_hash',
+        'blocked_candidate_context_hash',
+      ], hasTriageRef ? ['triage_artifact_hash', 'triage_payload_hash'] : [])
+    ) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'N6 gate-failure retry projection hash maps contain non-hash or unexpected keys.');
+    }
+    if (
+      !this.sameRefObject(projection.selected_research_slice_ref, frozenPayload.research_slice_ref)
+      || projection.selected_research_slice_hash !== frozenPayload.research_slice_hash
+      || projection.n5_handoff_hash !== frozenPayload.n5_handoff_hash
+      || projection.source_hashes.selected_research_slice_hash !== frozenPayload.research_slice_hash
+      || projection.source_hashes.n5_handoff_hash !== frozenPayload.n5_handoff_hash
+      || projection.source_hashes.failed_draft_hash !== projection.failed_draft_hash
+      || projection.source_hashes.failed_draft_prompt_packet_hash !== projection.failed_draft_prompt_packet_hash
+      || projection.source_hashes.failed_draft_source_hashes_hash !== projection.failed_draft_source_hashes_hash
+      || projection.source_hashes.blocked_candidate_context_hash !== projection.blocked_candidate_context_hash
+      || projection.source_hashes.failure_reason_codes_hash !== this.hash(projection.failure_reason_codes)
+      || projection.source_hashes.regeneration_hints_hash !== this.hash(projection.regeneration_hints)
+      || projection.support_hashes.failed_draft_hash !== projection.failed_draft_hash
+      || projection.support_hashes.failed_draft_prompt_packet_hash !== projection.failed_draft_prompt_packet_hash
+      || projection.support_hashes.failed_draft_source_hashes_hash !== projection.failed_draft_source_hashes_hash
+      || projection.support_hashes.blocked_candidate_context_hash !== projection.blocked_candidate_context_hash
+      || this.hash(projection.blocked_candidate_context) !== projection.blocked_candidate_context_hash
+    ) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'N6 gate-failure retry projection source hashes drift from frozen N6 lineage.');
+    }
+    const sourceRefKeys = new Set(projection.source_refs.map((sourceRef) => this.refKey(sourceRef)));
+    if (
+      !sourceRefKeys.has(this.refKey(frozenPayload.research_slice_ref))
+      || !sourceRefKeys.has(this.refKey(frozenPayload.research_slice_selection_ref))
+      || !sourceRefKeys.has(this.refKey(projection.failed_draft_ref))
+    ) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'N6 gate-failure retry projection does not preserve required N6 lineage refs.');
+    }
+    if (projection.blocked_candidate_context.length === 0 || projection.failure_reason_codes.length === 0) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'N6 gate-failure retry projection must preserve blocked candidate context and failure reasons.');
+    }
+    const hasTriageHash = projection.triage_artifact_hash !== null || projection.triage_payload_hash !== null;
+    if (hasTriageRef !== hasTriageHash || (hasTriageRef && (!projection.triage_artifact_hash || !projection.triage_payload_hash))) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'N6 gate-failure retry projection triage identity is incomplete.');
+    }
+    if (projection.triage_artifact_ref) {
+      if (!sourceRefKeys.has(this.refKey(projection.triage_artifact_ref))) {
+        throw new AppError(400, 'INVALID_PAYLOAD', 'N6 gate-failure retry projection does not preserve required triage lineage refs.');
+      }
+      if (
+        projection.source_hashes.triage_payload_hash !== projection.triage_payload_hash
+        || projection.support_hashes.triage_artifact_hash !== projection.triage_artifact_hash
+        || projection.support_hashes.triage_payload_hash !== projection.triage_payload_hash
+      ) {
+        throw new AppError(400, 'INVALID_PAYLOAD', 'N6 gate-failure retry projection triage hashes drift.');
+      }
+    } else if (
+      projection.source_hashes.triage_payload_hash !== undefined
+      || projection.support_hashes.triage_artifact_hash !== undefined
+      || projection.support_hashes.triage_payload_hash !== undefined
+    ) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'N6 gate-failure retry projection triage hashes drift.');
+    }
+  }
+
+  private assertN7LoopbackProjectionPolicy(
+    projection: TopicSelectionV1bN7ToN6FailedTrialLoopbackContextProjection,
+    frozenPayload: TopicSelectionV1bN6HarnessFrozenInputPayload,
+  ): void {
+    if (
+      projection.non_authority !== true
+      || projection.context_authority !== 'non_authority_runtime_context'
+      || projection.route_decision !== 'loopback'
+      || projection.loopback_target_code !== 'n7_loopback_to_n6'
+    ) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'N7 loopback projection must remain non-authority loopback context.');
+    }
+    if (!projection.source_refs.some((sourceRef) =>
+      this.sameRefObject(sourceRef, frozenPayload.research_slice_ref)
+      || this.sameRefObject(sourceRef, frozenPayload.research_slice_selection_ref))) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'N7 loopback projection does not belong to the current frozen N6 ResearchSlice lineage.',
+      );
+    }
+    if (
+      projection.source_hashes.failed_trial_synthesis_hash !== projection.failed_trial_synthesis_hash
+      || projection.source_hashes.topic_question_candidate_set_hash !== projection.topic_question_candidate_set_hash
+      || projection.source_hashes.n6_handoff_hash !== projection.n6_handoff_hash
+      || projection.source_hashes.selected_research_slice_hash !== frozenPayload.research_slice_hash
+    ) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'N7 loopback projection source hashes drift from projection payload.');
+    }
+    if (
+      projection.exhausted_candidate_refs.length === 0
+      || projection.exhausted_candidate_refs.length !== projection.exhausted_candidate_hashes.length
+      || projection.failure_reason_codes.length === 0
+      || projection.n6_regeneration_hints.length === 0
+    ) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'N7 loopback projection must preserve exhausted candidates, failure reasons, and regeneration hints.');
+    }
+    const sourceRefKeys = new Set(projection.source_refs.map((sourceRef) => this.refKey(sourceRef)));
+    const unknownExhaustedRef = projection.exhausted_candidate_refs.find((candidateRef) =>
+      !sourceRefKeys.has(this.refKey(candidateRef)));
+    if (unknownExhaustedRef) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'N7 loopback projection contains an unknown exhausted candidate ref.');
+    }
+  }
+
+  private n6GateFailureProjectionPayload(
+    value: Record<string, unknown>,
+  ): TopicSelectionV1bN6GateFailureRetryContextProjection {
+    if (
+      value.schema_version !== 'TopicSelectionV1bN6RuntimeContextProjection@v1'
+      || value.projection_kind !== 'v1b_n6_gate_failure_retry_context'
+      || value.node_id !== NODE_ID
+      || value.route_decision !== 'loopback'
+      || value.loopback_target_code !== 'n6_regenerate_candidates'
+      || value.non_authority !== true
+      || value.context_cache_scope !== 'process_local_runtime_only'
+      || value.context_authority !== 'non_authority_runtime_context'
+      || !this.isFunctionalRefArray(value.source_refs)
+      || !this.isRecord(value.source_hashes)
+      || !this.isFunctionalRefArray(value.support_refs)
+      || !this.isRecord(value.support_hashes)
+      || !this.isStringArray(value.preserved_fact_kinds)
+      || !this.isFunctionalRefValue(value.selected_research_slice_ref)
+      || !this.isHash(value.selected_research_slice_hash)
+      || !this.isHash(value.n5_handoff_hash)
+      || !this.isFunctionalRefValue(value.failed_draft_ref)
+      || !this.isHash(value.failed_draft_hash)
+      || !this.isHash(value.failed_draft_prompt_packet_hash)
+      || !this.isHash(value.failed_draft_source_hashes_hash)
+      || !Array.isArray(value.blocked_candidate_context)
+      || !value.blocked_candidate_context.every((item) => this.isRecord(item))
+      || !this.isHash(value.blocked_candidate_context_hash)
+      || !this.isStringArray(value.failure_reason_codes)
+      || !this.isStringArray(value.regeneration_hints)
+      || !this.isNullableFunctionalRefValue(value.triage_artifact_ref)
+      || !this.isNullableHash(value.triage_artifact_hash)
+      || !this.isNullableHash(value.triage_payload_hash)
+    ) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'N6 gate-failure retry projection payload is malformed.');
+    }
+    return value as unknown as TopicSelectionV1bN6GateFailureRetryContextProjection;
+  }
+
+  private n7LoopbackProjectionPayload(
+    value: Record<string, unknown>,
+  ): TopicSelectionV1bN7ToN6FailedTrialLoopbackContextProjection {
+    if (
+      value.schema_version !== 'TopicSelectionV1bN7RuntimeContextProjection@v1'
+      || value.projection_kind !== 'v1b_n7_to_n6_failed_trial_loopback_context'
+      || value.node_id !== 'topic-selection.v1b.materialize-topic-question-contract.v1'
+      || value.route_decision !== 'loopback'
+      || value.non_authority !== true
+      || value.context_cache_scope !== 'process_local_runtime_only'
+      || value.context_authority !== 'non_authority_runtime_context'
+      || value.loopback_target_code !== 'n7_loopback_to_n6'
+      || !this.isFunctionalRefArray(value.source_refs)
+      || !this.isRecord(value.source_hashes)
+      || !this.isFunctionalRefArray(value.support_refs)
+      || !this.isRecord(value.support_hashes)
+      || !this.isStringArray(value.preserved_fact_kinds)
+      || !this.isFunctionalRefValue(value.topic_question_candidate_set_ref)
+      || !this.isHash(value.topic_question_candidate_set_hash)
+      || !this.isHash(value.n6_handoff_hash)
+      || !this.isNullableFunctionalRefValue(value.n8_feedback_ref)
+      || !this.isNullableHash(value.n8_feedback_hash)
+      || !this.isFunctionalRefValue(value.failed_trial_synthesis_ref)
+      || !this.isHash(value.failed_trial_synthesis_hash)
+      || !this.isFunctionalRefArray(value.exhausted_candidate_refs)
+      || !this.isHashArray(value.exhausted_candidate_hashes)
+      || !this.isStringArray(value.failure_reason_codes)
+      || !this.isStringArray(value.n6_regeneration_hints)
+      || typeof value.synthesis_summary !== 'string'
+    ) {
+      throw new AppError(400, 'INVALID_PAYLOAD', 'N7 loopback projection payload is malformed.');
+    }
+    return value as unknown as TopicSelectionV1bN7ToN6FailedTrialLoopbackContextProjection;
   }
 
   private slotPolicy() {
@@ -633,5 +1078,71 @@ export class TopicSelectionV1bN6DraftRuntimeService {
 
   private hash(value: unknown): string {
     return sha256Text(stableStringify(value));
+  }
+
+  private sameRefObject(left: TopicSelectionFunctionalRef, right: TopicSelectionFunctionalRef): boolean {
+    return left.ref_type === right.ref_type
+      && left.ref_id === right.ref_id
+      && (left.version_id ?? null) === (right.version_id ?? null)
+      && (left.title_card_id ?? null) === (right.title_card_id ?? null);
+  }
+
+  private refKey(ref: TopicSelectionFunctionalRef): string {
+    return stableStringify({
+      ref_type: ref.ref_type,
+      ref_id: ref.ref_id,
+      version_id: ref.version_id ?? null,
+      title_card_id: ref.title_card_id ?? null,
+    });
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  private isHash(value: unknown): value is string {
+    return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+  }
+
+  private isNullableHash(value: unknown): value is string | null {
+    return value === null || this.isHash(value);
+  }
+
+  private hasExactHashKeys(
+    value: Record<string, unknown>,
+    requiredKeys: string[],
+    optionalKeys: string[] = [],
+  ): value is Record<string, string> {
+    const allowedKeys = new Set([...requiredKeys, ...optionalKeys]);
+    const actualKeys = Object.keys(value);
+    if (actualKeys.some((key) => !allowedKeys.has(key) || !this.isHash(value[key]))) {
+      return false;
+    }
+    return requiredKeys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+      && optionalKeys.every((key) => !Object.prototype.hasOwnProperty.call(value, key) || this.isHash(value[key]));
+  }
+
+  private isStringArray(value: unknown): value is string[] {
+    return Array.isArray(value) && value.every((item) => typeof item === 'string');
+  }
+
+  private isHashArray(value: unknown): value is string[] {
+    return Array.isArray(value) && value.every((item) => this.isHash(item));
+  }
+
+  private isFunctionalRefValue(value: unknown): value is TopicSelectionFunctionalRef {
+    return this.isRecord(value)
+      && typeof value.ref_type === 'string'
+      && typeof value.ref_id === 'string'
+      && (value.title_card_id === null || typeof value.title_card_id === 'string' || value.title_card_id === undefined)
+      && (value.version_id === null || typeof value.version_id === 'string' || value.version_id === undefined);
+  }
+
+  private isNullableFunctionalRefValue(value: unknown): value is TopicSelectionFunctionalRef | null {
+    return value === null || this.isFunctionalRefValue(value);
+  }
+
+  private isFunctionalRefArray(value: unknown): value is TopicSelectionFunctionalRef[] {
+    return Array.isArray(value) && value.every((item) => this.isFunctionalRefValue(item));
   }
 }

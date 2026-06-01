@@ -134,6 +134,7 @@ const workflowHarnessRunBody = {
   body: topicSelectionV1bWorkflowHarnessRunRequestSchema,
 };
 const workflowHarnessArtifactParams = paramsSchema({ artifactRefId: stringId });
+const workflowHarnessTraceSnapshotParams = paramsSchema({ traceSnapshotId: stringId });
 const workflowHarnessArtifactBody = bodySchema(['artifact_kind'], {
   workspace_id: nullableStringId,
   title_card_id: nullableStringId,
@@ -167,6 +168,11 @@ export async function registerTopicSelectionV1bRoutes(
     '/topic-selection/v1b/workflow-harness/artifacts/:artifactRefId',
     { schema: workflowHarnessArtifactParams },
     controller.getWorkflowHarnessArtifact,
+  );
+  fastify.get<{ Params: { traceSnapshotId: string } }>(
+    '/topic-selection/v1b/workflow-harness/trace-snapshots/:traceSnapshotId',
+    { schema: workflowHarnessTraceSnapshotParams },
+    controller.getWorkflowHarnessTraceSnapshot,
   );
   // T-087 Phase 3.1 — reviewer workbench v1b read-only projections.
   fastify.get(

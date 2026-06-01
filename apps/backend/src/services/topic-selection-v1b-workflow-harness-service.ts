@@ -102,7 +102,9 @@ import {
   TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_SEMANTIC_EXECUTION_MODES,
   TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_SEMANTIC_SLOT_IDS,
   TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_TRACE_PAYLOAD_SCHEMA_VERSION,
+  TOPIC_SELECTION_V1B_N6_RUNTIME_CONTEXT_PROJECTION_SCHEMA_VERSION,
   TOPIC_SELECTION_V1B_N7_RUNTIME_CONTEXT_PROJECTION_SCHEMA_VERSION,
+  type TopicSelectionV1bN6GateFailureRetryContextProjection,
   type TopicSelectionV1bN1HarnessFrozenInputPayload,
   type TopicSelectionV1bN2HarnessFrozenInputPayload,
   type TopicSelectionV1bN3HarnessFrozenInputPayload,
@@ -111,6 +113,7 @@ import {
   type TopicSelectionV1bN5ToN6HandoffPayload,
   type TopicSelectionV1bN6HarnessFrozenInputPayload,
   type TopicSelectionV1bN6LoopbackTriageSupportPayload,
+  type TopicSelectionV1bN6RuntimeContextProjection,
   type TopicSelectionV1bN6ToN7HandoffPayload,
   type TopicSelectionV1bN7HarnessFrozenInputPayload,
   type TopicSelectionV1bN7HarnessFeedbackFrozenInputPayload,
@@ -168,13 +171,24 @@ import {
 } from './topic-selection-model-profile-registry-service.js';
 import {
   TopicSelectionV1bN6DraftAdmissionService,
+  type TopicSelectionV1bN6DraftAdmissionExpectedIdentity,
 } from './topic-selection-v1b-n6-draft-admission-service.js';
-import { TopicSelectionV1bN6DraftRuntimeService } from './topic-selection-v1b-n6-draft-runtime-service.js';
+import {
+  TopicSelectionV1bN6DraftRuntimeService,
+  type TopicSelectionV1bN6DraftGenerationMode,
+} from './topic-selection-v1b-n6-draft-runtime-service.js';
+import { TopicSelectionV1bN6LoopbackTriageAdmissionService } from './topic-selection-v1b-n6-loopback-triage-admission-service.js';
+import { TopicSelectionV1bN6LoopbackTriageRuntimeService } from './topic-selection-v1b-n6-loopback-triage-runtime-service.js';
 import {
   TopicSelectionV1bN7SupportAdmissionService,
   type TopicSelectionV1bN7SupportSlotId,
 } from './topic-selection-v1b-n7-support-admission-service.js';
 import { TopicSelectionV1bN7SupportRuntimeService } from './topic-selection-v1b-n7-support-runtime-service.js';
+import {
+  TopicSelectionV1bN8ValueAssessmentAdmissionService,
+  type TopicSelectionV1bN8ValueAssessmentAdmissionExpectedIdentity,
+} from './topic-selection-v1b-n8-value-assessment-admission-service.js';
+import { TopicSelectionV1bN8ValueAssessmentRuntimeService } from './topic-selection-v1b-n8-value-assessment-runtime-service.js';
 import {
   sha256Text,
   stableStringify,
@@ -279,7 +293,7 @@ type RunnerPersistInput = {
     build: (input: {
       handoffRef: TopicSelectionFunctionalRef | null;
       inputSnapshotId: string;
-    }) => TopicSelectionV1bN7RuntimeContextProjection;
+    }) => TopicSelectionV1bN6RuntimeContextProjection | TopicSelectionV1bN7RuntimeContextProjection;
   };
   loopbackTargetCode?: string | null;
   routeTargetNodeId?: TopicSelectionV1bWorkflowHarnessNodeId | null;
@@ -472,8 +486,12 @@ export class TopicSelectionV1bWorkflowHarnessService {
   private readonly modelProfileRegistry: TopicSelectionModelProfileRegistryService;
   private readonly n6DraftAdmission = new TopicSelectionV1bN6DraftAdmissionService();
   private readonly n6DraftRuntime: TopicSelectionV1bN6DraftRuntimeService;
+  private readonly n6LoopbackTriageAdmission = new TopicSelectionV1bN6LoopbackTriageAdmissionService();
+  private readonly n6LoopbackTriageRuntime: TopicSelectionV1bN6LoopbackTriageRuntimeService;
   private readonly n7SupportAdmission = new TopicSelectionV1bN7SupportAdmissionService();
   private readonly n7SupportRuntime: TopicSelectionV1bN7SupportRuntimeService;
+  private readonly n8ValueAssessmentAdmission = new TopicSelectionV1bN8ValueAssessmentAdmissionService();
+  private readonly n8ValueAssessmentRuntime: TopicSelectionV1bN8ValueAssessmentRuntimeService;
   private readonly runnerDependencies: HarnessRunnerDependencies;
 
   constructor(
@@ -491,7 +509,13 @@ export class TopicSelectionV1bWorkflowHarnessService {
     this.n6DraftRuntime = new TopicSelectionV1bN6DraftRuntimeService(controlPlane, {
       modelProfileRegistry: this.modelProfileRegistry,
     });
+    this.n6LoopbackTriageRuntime = new TopicSelectionV1bN6LoopbackTriageRuntimeService(controlPlane, {
+      modelProfileRegistry: this.modelProfileRegistry,
+    });
     this.n7SupportRuntime = new TopicSelectionV1bN7SupportRuntimeService(controlPlane, {
+      modelProfileRegistry: this.modelProfileRegistry,
+    });
+    this.n8ValueAssessmentRuntime = new TopicSelectionV1bN8ValueAssessmentRuntimeService(controlPlane, {
       modelProfileRegistry: this.modelProfileRegistry,
     });
     this.runnerDependencies = options.runnerDependencies ?? {};
@@ -2938,6 +2962,8 @@ export class TopicSelectionV1bWorkflowHarnessService {
         const loopbackPlan = await this.resolveN6LoopbackPlan(input, {
           blockedCandidateContexts: validation.blockedCandidateContexts ?? [],
           defaultAffectedRef: payload.value.research_slice_ref,
+          draftArtifact: draftResolution.semanticArtifact,
+          draftHash: draftResolution.draftHash,
           frozenPayload: payload.value,
         });
         if (!loopbackPlan.ok) {
@@ -2977,6 +3003,18 @@ export class TopicSelectionV1bWorkflowHarnessService {
             triage_payload_hash: loopbackPlan.value.triagePayloadHash,
             upstream_rollback: loopbackPlan.value.upstreamRollback,
           },
+          runtimeContextProjection: loopbackPlan.value.loopbackTargetCode === 'n6_regenerate_candidates'
+            ? {
+              build: () => this.buildN6GateFailureRetryContextProjection({
+                request: input,
+                frozenPayload: payload.value,
+                blockedCandidateContexts: validation.blockedCandidateContexts ?? [],
+                loopbackPlan: loopbackPlan.value,
+                draftArtifact: draftResolution.semanticArtifact,
+                draftHash: draftResolution.draftHash,
+              }),
+            }
+            : undefined,
           transitionKey: 'topic-selection.v1b.harness.n6-topic-question-candidates',
           warnings: [
             ...(validation.warnings ?? []),
@@ -4980,7 +5018,7 @@ export class TopicSelectionV1bWorkflowHarnessService {
         message: lineageBlocker.message,
       });
     }
-    const draftResolution = await this.resolveN8DraftPayload(input);
+    const draftResolution = await this.resolveN8DraftPayload(input, payload.value);
     if (!draftResolution.ok) {
       return this.persistBlockedResult(input, hashContext, {
         blockerCode: draftResolution.code,
@@ -5972,8 +6010,102 @@ export class TopicSelectionV1bWorkflowHarnessService {
       && this.nullableRefsEqual(payload.candidate_grouping_ref, handoffPayload.candidate_grouping_ref);
   }
 
+  private async verifyN8RuntimeVerifiedDraftAuditArtifact(
+    input: TopicSelectionV1bWorkflowHarnessRunRequest,
+    artifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef,
+  ): Promise<{ ok: true } | { ok: false; code: string; message: string }> {
+    if (
+      !artifact.runtime_audit_ref
+      || artifact.runtime_audit_ref.ref_type !== 'artifact_ref'
+      || !this.refsEqual(artifact.provenance_ref, artifact.runtime_audit_ref)
+    ) {
+      return this.n8RuntimeAuditDrift('N8 runtime value draft provenance must point to its audit artifact_ref.');
+    }
+    const auditArtifact = await this.controlPlane.getArtifactRef(artifact.runtime_audit_ref.ref_id);
+    if (
+      !auditArtifact
+      || auditArtifact.artifact_kind !== 'diagnostic'
+      || auditArtifact.checksum !== artifact.runtime_audit_hash
+      || auditArtifact.workflow_run_id !== input.workflow_run_id
+    ) {
+      return this.n8RuntimeAuditDrift('N8 runtime value draft audit artifact is missing or checksum-drifted.');
+    }
+    const auditPayload = auditArtifact.payload;
+    if (!this.isRecord(auditPayload) || !this.isRecord(auditPayload.provenance)) {
+      return this.n8RuntimeAuditDrift('N8 runtime value draft audit payload is not a valid invocation audit snapshot.');
+    }
+    const provenance = auditPayload.provenance;
+    const expectedSourceKind = artifact.execution_mode === 'mocked_llm' ? 'mock_fixture' : 'codex_response';
+    if (
+      auditPayload.node_id !== input.node_id
+      || auditPayload.workflow_run_id !== input.workflow_run_id
+      || auditPayload.node_attempt_id !== input.node_attempt_id
+      || auditPayload.status !== 'succeeded'
+      || provenance.workflow_run_id !== input.workflow_run_id
+      || provenance.node_id !== input.node_id
+      || provenance.node_attempt_id !== input.node_attempt_id
+      || provenance.execution_mode !== artifact.execution_mode
+      || provenance.source_kind !== expectedSourceKind
+      || provenance.non_provider !== true
+      || provenance.run_mode !== artifact.run_mode
+      || provenance.profile_id !== artifact.profile_id
+      || provenance.model_option_id !== artifact.model_option_id
+      || provenance.output_contract !== artifact.output_contract
+      || provenance.prompt_packet_hash !== artifact.prompt_packet_hash
+      || provenance.structured_output_hash !== artifact.structured_output_hash
+      || provenance.cache_status !== 'not_applicable'
+      || provenance.response_reuse_ref !== null
+      || provenance.telemetry !== null
+    ) {
+      return this.n8RuntimeAuditDrift('N8 runtime value draft audit provenance does not match the draft artifact identity.');
+    }
+    return { ok: true };
+  }
+
+  private n8RuntimeAuditDrift(message: string): { ok: false; code: string; message: string } {
+    return {
+      ok: false,
+      code: 'N8_DRAFT_ARTIFACT_RUNTIME_CONTEXT_DRIFT',
+      message,
+    };
+  }
+
+  private async resolveN8ValueAssessmentAdmissionExpectedIdentity(input: {
+    input: TopicSelectionV1bWorkflowHarnessRunRequest;
+    payload: TopicSelectionV1bN8HarnessFrozenInputPayload;
+    draftHash: string;
+    semanticArtifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef;
+    admissionExecutionMode: Extract<TopicSelectionAgentExecutionMode, 'codex_assisted' | 'mocked_llm'>;
+  }): Promise<{
+    ok: true;
+    value: TopicSelectionV1bN8ValueAssessmentAdmissionExpectedIdentity;
+  } | { ok: false; code: string; message: string }> {
+    try {
+      const value = await this.n8ValueAssessmentRuntime.buildAdmissionExpectedIdentity({
+        request: input.input,
+        frozenPayload: input.payload,
+        normalizedPayloadHash: input.draftHash,
+        executionMode: input.admissionExecutionMode,
+        runMode: input.input.run_mode ?? input.semanticArtifact.run_mode,
+        profileId: input.semanticArtifact.profile_id,
+        modelOptionId: input.semanticArtifact.model_option_id,
+      });
+      return { ok: true, value };
+    } catch (error) {
+      if (error instanceof AppError) {
+        return {
+          ok: false,
+          code: 'N8_DRAFT_ARTIFACT_RUNTIME_CONTEXT_DRIFT',
+          message: error.message,
+        };
+      }
+      throw error;
+    }
+  }
+
   private async resolveN8DraftPayload(
     input: TopicSelectionV1bWorkflowHarnessRunRequest,
+    payload: TopicSelectionV1bN8HarnessFrozenInputPayload,
   ): Promise<{ ok: true; value: N8DraftResolution } | { ok: false; code: string; message: string }> {
     const semanticArtifact = (input.semantic_artifacts ?? []).find((artifact) =>
       artifact.slot_id === 'n8_value_assessment_draft'
@@ -6025,6 +6157,48 @@ export class TopicSelectionV1bWorkflowHarnessService {
         ok: false,
         code: 'N8_FROZEN_VALUE_DRAFT_ARTIFACT_HASH_MISMATCH',
         message: 'N8 TopicValueAssessmentDraft payload hash does not match semantic artifact provenance.',
+      };
+    }
+    if (
+      semanticArtifact.runtime_provenance_class === 'runtime_verified'
+      && semanticArtifact.execution_mode !== 'codex_assisted'
+      && semanticArtifact.execution_mode !== 'mocked_llm'
+    ) {
+      return {
+        ok: false,
+        code: 'N8_DRAFT_ARTIFACT_PROVENANCE_CLASS_INVALID',
+        message: 'runtime_verified v1b N8 value draft artifacts must be generated by the N8 value runtime.',
+      };
+    }
+    if (semanticArtifact.runtime_provenance_class === 'runtime_verified') {
+      const auditVerification = await this.verifyN8RuntimeVerifiedDraftAuditArtifact(input, semanticArtifact);
+      if (!auditVerification.ok) {
+        return auditVerification;
+      }
+    }
+    const admissionExecutionMode = semanticArtifact.execution_mode === 'mocked_llm'
+      ? 'mocked_llm'
+      : 'codex_assisted';
+    const expectedIdentity = await this.resolveN8ValueAssessmentAdmissionExpectedIdentity({
+      input,
+      payload,
+      draftHash,
+      semanticArtifact,
+      admissionExecutionMode,
+    });
+    if (!expectedIdentity.ok) {
+      return expectedIdentity;
+    }
+    const admission = this.n8ValueAssessmentAdmission.admit({
+      artifact: semanticArtifact,
+      expected: expectedIdentity.value,
+      allow_fixture_replay: input.run_mode !== 'product',
+    });
+    if (!admission.admitted) {
+      return {
+        ok: false,
+        code: admission.blocker.code,
+        message: admission.blocker.message,
       };
     }
     return {
@@ -7679,6 +7853,7 @@ export class TopicSelectionV1bWorkflowHarnessService {
       n6_handoff_hash: input.frozenPayload.n6_handoff_hash,
       topic_question_candidate_set_hash: input.frozenPayload.topic_question_candidate_set_hash,
       failed_trial_synthesis_hash: synthesis.payloadHash,
+      selected_research_slice_hash: input.frozenPayload.selected_research_slice_hash,
     };
     if (input.frozenPayload.input_mode === 'feedback_from_n8') {
       sourceHashes.n8_feedback_hash = input.frozenPayload.n8_feedback_hash;
@@ -7697,6 +7872,7 @@ export class TopicSelectionV1bWorkflowHarnessService {
       source_refs: this.uniqueRefs([
         ...input.request.frozen_input.source_refs,
         input.candidateSetRef,
+        input.frozenPayload.selected_research_slice_ref,
         input.frozenPayload.input_mode === 'feedback_from_n8' ? input.frozenPayload.n8_feedback_ref : null,
         synthesis.artifact.normalized_output_ref,
         ...synthesis.payload.exhausted_candidate_refs,
@@ -7728,6 +7904,96 @@ export class TopicSelectionV1bWorkflowHarnessService {
       failure_reason_codes: synthesis.payload.failure_reason_codes,
       n6_regeneration_hints: synthesis.payload.n6_regeneration_hints,
       synthesis_summary: synthesis.payload.synthesis_summary,
+    };
+  }
+
+  private buildN6GateFailureRetryContextProjection(input: {
+    request: TopicSelectionV1bWorkflowHarnessRunRequest;
+    frozenPayload: TopicSelectionV1bN6HarnessFrozenInputPayload;
+    blockedCandidateContexts: Record<string, unknown>[];
+    loopbackPlan: N6LoopbackPlan;
+    draftArtifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef;
+    draftHash: string;
+  }): TopicSelectionV1bN6GateFailureRetryContextProjection {
+    if (!input.draftArtifact.normalized_output_ref) {
+      throw new AppError(500, 'INTERNAL_ERROR', 'N6 gate-failure retry projection requires a failed draft output ref.');
+    }
+    const blockedCandidateContextHash = this.hash(input.blockedCandidateContexts);
+    const failedDraftSourceHashesHash = this.hash(input.draftArtifact.source_hashes);
+    const triageArtifactRef = input.loopbackPlan.triageArtifact?.normalized_output_ref ?? null;
+    const triageArtifactHash = input.loopbackPlan.triageArtifact?.normalized_output_hash ?? null;
+    const sourceHashes: Record<string, string> = {
+      frozen_input_hash: input.request.frozen_input.frozen_input_hash ?? this.hash(input.request.frozen_input),
+      n5_handoff_hash: input.frozenPayload.n5_handoff_hash,
+      selected_research_slice_hash: input.frozenPayload.research_slice_hash,
+      failed_draft_hash: input.draftHash,
+      failed_draft_prompt_packet_hash: input.draftArtifact.prompt_packet_hash,
+      failed_draft_source_hashes_hash: failedDraftSourceHashesHash,
+      blocked_candidate_context_hash: blockedCandidateContextHash,
+      failure_reason_codes_hash: this.hash(input.loopbackPlan.reasonCodes),
+      regeneration_hints_hash: this.hash(input.loopbackPlan.regenerationHints),
+    };
+    if (input.loopbackPlan.triagePayloadHash) {
+      sourceHashes.triage_payload_hash = input.loopbackPlan.triagePayloadHash;
+    }
+    return {
+      schema_version: TOPIC_SELECTION_V1B_N6_RUNTIME_CONTEXT_PROJECTION_SCHEMA_VERSION,
+      projection_kind: 'v1b_n6_gate_failure_retry_context',
+      node_id: 'topic-selection.v1b.generate-topic-question-candidates.v1',
+      workflow_run_id: input.request.workflow_run_id,
+      node_attempt_id: input.request.node_attempt_id,
+      route_decision: 'loopback',
+      loopback_target_code: 'n6_regenerate_candidates',
+      non_authority: true,
+      context_cache_scope: 'process_local_runtime_only',
+      context_authority: 'non_authority_runtime_context',
+      source_refs: this.uniqueRefs([
+        ...input.request.frozen_input.source_refs,
+        input.frozenPayload.research_slice_ref,
+        input.frozenPayload.research_slice_selection_ref,
+        input.frozenPayload.research_slice_option_set_ref,
+        input.frozenPayload.selected_slice_option_ref,
+        input.draftArtifact.normalized_output_ref,
+        triageArtifactRef,
+        ...input.loopbackPlan.affectedRefs,
+      ]),
+      source_hashes: sourceHashes,
+      support_refs: this.uniqueRefs([
+        input.draftArtifact.normalized_output_ref,
+        triageArtifactRef,
+      ]),
+      support_hashes: {
+        failed_draft_hash: input.draftHash,
+        failed_draft_prompt_packet_hash: input.draftArtifact.prompt_packet_hash,
+        failed_draft_source_hashes_hash: failedDraftSourceHashesHash,
+        blocked_candidate_context_hash: blockedCandidateContextHash,
+        ...(triageArtifactHash ? { triage_artifact_hash: triageArtifactHash } : {}),
+        ...(input.loopbackPlan.triagePayloadHash ? { triage_payload_hash: input.loopbackPlan.triagePayloadHash } : {}),
+      },
+      preserved_fact_kinds: [
+        'failed_draft_identity',
+        'blocked_candidate_context',
+        'failure_reason_code',
+        'regeneration_hint',
+        'selected_slice_identity',
+        'n5_handoff',
+        'loopback_target',
+        'risk_gap_recheck_hints',
+      ],
+      selected_research_slice_ref: input.frozenPayload.research_slice_ref,
+      selected_research_slice_hash: input.frozenPayload.research_slice_hash,
+      n5_handoff_hash: input.frozenPayload.n5_handoff_hash,
+      failed_draft_ref: input.draftArtifact.normalized_output_ref,
+      failed_draft_hash: input.draftHash,
+      failed_draft_prompt_packet_hash: input.draftArtifact.prompt_packet_hash,
+      failed_draft_source_hashes_hash: failedDraftSourceHashesHash,
+      blocked_candidate_context: input.blockedCandidateContexts,
+      blocked_candidate_context_hash: blockedCandidateContextHash,
+      failure_reason_codes: input.loopbackPlan.reasonCodes,
+      regeneration_hints: input.loopbackPlan.regenerationHints,
+      triage_artifact_ref: triageArtifactRef,
+      triage_artifact_hash: triageArtifactHash,
+      triage_payload_hash: input.loopbackPlan.triagePayloadHash,
     };
   }
 
@@ -9013,18 +9279,24 @@ export class TopicSelectionV1bWorkflowHarnessService {
     const admissionExecutionMode = semanticArtifact.execution_mode === 'mocked_llm'
       ? 'mocked_llm'
       : 'codex_assisted';
+    const generationMode = await this.resolveN6DraftGenerationMode(input, semanticArtifact);
+    if (!generationMode.ok) {
+      return generationMode;
+    }
+    const expectedIdentity = await this.resolveN6DraftAdmissionExpectedIdentity({
+      input,
+      payload,
+      draftHash,
+      semanticArtifact,
+      admissionExecutionMode,
+      generationMode: generationMode.value,
+    });
+    if (!expectedIdentity.ok) {
+      return expectedIdentity;
+    }
     const admission = this.n6DraftAdmission.admit({
       artifact: semanticArtifact,
-      expected: this.n6DraftRuntime.buildAdmissionExpectedIdentity({
-        request: input,
-        frozenPayload: payload,
-        generationMode: 'initial_from_n5',
-        normalizedPayloadHash: draftHash,
-        executionMode: admissionExecutionMode,
-        runMode: semanticArtifact.run_mode,
-        profileId: semanticArtifact.profile_id,
-        modelOptionId: semanticArtifact.model_option_id,
-      }),
+      expected: expectedIdentity.value,
       allow_fixture_replay: input.run_mode !== 'product',
     });
     if (!admission.admitted) {
@@ -9047,15 +9319,170 @@ export class TopicSelectionV1bWorkflowHarnessService {
     };
   }
 
+  private async resolveN6DraftAdmissionExpectedIdentity(input: {
+    input: TopicSelectionV1bWorkflowHarnessRunRequest;
+    payload: TopicSelectionV1bN6HarnessFrozenInputPayload;
+    draftHash: string;
+    semanticArtifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef;
+    admissionExecutionMode: Extract<TopicSelectionAgentExecutionMode, 'codex_assisted' | 'mocked_llm'>;
+    generationMode: TopicSelectionV1bN6DraftGenerationMode;
+  }): Promise<{
+    ok: true;
+    value: TopicSelectionV1bN6DraftAdmissionExpectedIdentity;
+  } | { ok: false; code: string; message: string }> {
+    try {
+      const value = await this.n6DraftRuntime.buildAdmissionExpectedIdentity({
+        request: input.input,
+        frozenPayload: input.payload,
+        generationMode: input.generationMode,
+        normalizedPayloadHash: input.draftHash,
+        executionMode: input.admissionExecutionMode,
+        runMode: input.semanticArtifact.run_mode,
+        profileId: input.semanticArtifact.profile_id,
+        modelOptionId: input.semanticArtifact.model_option_id,
+      });
+      return { ok: true, value };
+    } catch (error) {
+      if (error instanceof AppError) {
+        return {
+          ok: false,
+          code: 'N6_DRAFT_ARTIFACT_RUNTIME_CONTEXT_DRIFT',
+          message: error.message,
+        };
+      }
+      throw error;
+    }
+  }
+
+  private async resolveN6DraftGenerationMode(
+    input: TopicSelectionV1bWorkflowHarnessRunRequest,
+    artifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef,
+  ): Promise<{ ok: true; value: TopicSelectionV1bN6DraftGenerationMode } | {
+    ok: false;
+    code: string;
+    message: string;
+  }> {
+    const carriesN7LoopbackProjection = await this.n6InputCarriesN7LoopbackProjection(input);
+    if (!carriesN7LoopbackProjection.ok) {
+      return carriesN7LoopbackProjection;
+    }
+    const carriesN6GateFailureProjection = await this.n6InputCarriesN6GateFailureProjection(input);
+    if (!carriesN6GateFailureProjection.ok) {
+      return carriesN6GateFailureProjection;
+    }
+    if (artifact.prompt_variant_key === 'n6_question_candidate_draft.regeneration_after_n7_loopback') {
+      if (!carriesN7LoopbackProjection.value || carriesN6GateFailureProjection.value) {
+        return {
+          ok: false,
+          code: 'N6_N7_LOOPBACK_PROJECTION_REQUIRED',
+          message: 'N6 regeneration_after_n7_loopback requires exactly one N7 failed-trial loopback projection source artifact and no N6 gate-failure retry projection.',
+        };
+      }
+      return { ok: true, value: 'regeneration_after_n7_loopback' };
+    }
+    if (artifact.prompt_variant_key === 'n6_question_candidate_draft.regeneration_after_n6_gate_failure') {
+      if (!carriesN6GateFailureProjection.value || carriesN7LoopbackProjection.value) {
+        return {
+          ok: false,
+          code: 'N6_GATE_FAILURE_RETRY_PROJECTION_REQUIRED',
+          message: 'N6 regeneration_after_n6_gate_failure requires exactly one N6 gate-failure retry projection source artifact and no N7 failed-trial loopback projection.',
+        };
+      }
+      return { ok: true, value: 'regeneration_after_n6_gate_failure' };
+    }
+    if (carriesN7LoopbackProjection.value || carriesN6GateFailureProjection.value) {
+      return {
+        ok: false,
+        code: 'N6_DRAFT_ARTIFACT_PROMPT_IDENTITY_DRIFT',
+        message: 'N6 input carries loopback/retry projection context, but the draft prompt identity does not match that projection mode.',
+      };
+    }
+    return { ok: true, value: 'initial_from_n5' };
+  }
+
+  private async n6InputCarriesN7LoopbackProjection(
+    input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  ): Promise<{ ok: true; value: boolean } | { ok: false; code: string; message: string }> {
+    let projectionCount = 0;
+    for (const sourceRef of input.frozen_input.source_refs) {
+      if (sourceRef.ref_type !== 'artifact_ref') {
+        continue;
+      }
+      const artifact = await this.controlPlane.getArtifactRef(sourceRef.ref_id);
+      if (
+        !this.isRecord(artifact?.payload)
+        || artifact.payload.projection_kind !== 'v1b_n7_to_n6_failed_trial_loopback_context'
+      ) {
+        continue;
+      }
+      projectionCount += 1;
+      if (!artifact.checksum || artifact.checksum !== this.hash(artifact.payload)) {
+        return {
+          ok: false,
+          code: 'N6_N7_LOOPBACK_PROJECTION_HASH_MISMATCH',
+          message: 'N6 N7 loopback projection source artifact checksum is missing or drifted.',
+        };
+      }
+    }
+    if (projectionCount > 1) {
+      return {
+        ok: false,
+        code: 'N6_N7_LOOPBACK_PROJECTION_AMBIGUOUS',
+        message: 'N6 regeneration accepts exactly one N7 failed-trial loopback projection source artifact.',
+      };
+    }
+    return { ok: true, value: projectionCount === 1 };
+  }
+
+  private async n6InputCarriesN6GateFailureProjection(
+    input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  ): Promise<{ ok: true; value: boolean } | { ok: false; code: string; message: string }> {
+    let projectionCount = 0;
+    for (const sourceRef of input.frozen_input.source_refs) {
+      if (sourceRef.ref_type !== 'artifact_ref') {
+        continue;
+      }
+      const artifact = await this.controlPlane.getArtifactRef(sourceRef.ref_id);
+      if (
+        !this.isRecord(artifact?.payload)
+        || artifact.payload.projection_kind !== 'v1b_n6_gate_failure_retry_context'
+      ) {
+        continue;
+      }
+      projectionCount += 1;
+      if (!artifact.checksum || artifact.checksum !== this.hash(artifact.payload)) {
+        return {
+          ok: false,
+          code: 'N6_GATE_FAILURE_RETRY_PROJECTION_HASH_MISMATCH',
+          message: 'N6 gate-failure retry projection source artifact checksum is missing or drifted.',
+        };
+      }
+    }
+    if (projectionCount > 1) {
+      return {
+        ok: false,
+        code: 'N6_GATE_FAILURE_RETRY_PROJECTION_AMBIGUOUS',
+        message: 'N6 regeneration accepts exactly one N6 gate-failure retry projection source artifact.',
+      };
+    }
+    return { ok: true, value: projectionCount === 1 };
+  }
+
   private async resolveN6LoopbackPlan(
     input: TopicSelectionV1bWorkflowHarnessRunRequest,
     context: {
       blockedCandidateContexts: Record<string, unknown>[];
       defaultAffectedRef: TopicSelectionFunctionalRef;
+      draftArtifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef;
+      draftHash: string;
       frozenPayload: TopicSelectionV1bN6HarnessFrozenInputPayload;
     },
   ): Promise<{ ok: true; value: N6LoopbackPlan } | { ok: false; code: string; message: string }> {
-    const triage = await this.resolveN6LoopbackTriage(input);
+    const triage = await this.resolveN6LoopbackTriage(input, {
+      draftArtifact: context.draftArtifact,
+      draftHash: context.draftHash,
+      frozenPayload: context.frozenPayload,
+    });
     if (!triage.ok) {
       return triage;
     }
@@ -9102,6 +9529,11 @@ export class TopicSelectionV1bWorkflowHarnessService {
 
   private async resolveN6LoopbackTriage(
     input: TopicSelectionV1bWorkflowHarnessRunRequest,
+    context: {
+      draftArtifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef;
+      draftHash: string;
+      frozenPayload: TopicSelectionV1bN6HarnessFrozenInputPayload;
+    },
   ): Promise<{ ok: true; value: N6LoopbackTriageResolution } | { ok: false; code: string; message: string }> {
     const artifact = (input.semantic_artifacts ?? []).find((item) => item.slot_id === 'n6_loopback_triage');
     if (!artifact) {
@@ -9153,6 +9585,50 @@ export class TopicSelectionV1bWorkflowHarnessService {
         ok: false,
         code: 'N6_LOOPBACK_TRIAGE_ARTIFACT_HASH_MISMATCH',
         message: 'N6 loopback triage payload hash does not match frozen provenance.',
+      };
+    }
+    if (artifact.runtime_provenance_class === 'runtime_verified') {
+      const auditVerification = await this.verifyN6RuntimeVerifiedLoopbackTriageAuditArtifact(input, artifact);
+      if (!auditVerification.ok) {
+        return auditVerification;
+      }
+    }
+    const admissionExecutionMode = artifact.execution_mode === 'mocked_llm'
+      ? 'mocked_llm'
+      : 'codex_assisted';
+    let expectedIdentity;
+    try {
+      expectedIdentity = this.n6LoopbackTriageRuntime.buildAdmissionExpectedIdentity({
+        request: input,
+        frozenPayload: context.frozenPayload,
+        failedDraftArtifact: context.draftArtifact,
+        failedDraftHash: context.draftHash,
+        normalizedPayloadHash: payloadHash,
+        executionMode: admissionExecutionMode,
+        runMode: artifact.run_mode,
+        profileId: artifact.profile_id,
+        modelOptionId: artifact.model_option_id,
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return {
+          ok: false,
+          code: 'N6_LOOPBACK_TRIAGE_ARTIFACT_RUNTIME_CONTEXT_DRIFT',
+          message: error.message,
+        };
+      }
+      throw error;
+    }
+    const admission = this.n6LoopbackTriageAdmission.admit({
+      artifact,
+      expected: expectedIdentity,
+      allow_fixture_replay: input.run_mode !== 'product',
+    });
+    if (!admission.admitted) {
+      return {
+        ok: false,
+        code: admission.blocker.code,
+        message: admission.blocker.message,
       };
     }
     return {
@@ -9222,6 +9698,76 @@ export class TopicSelectionV1bWorkflowHarnessService {
       };
     }
     return null;
+  }
+
+  private async verifyN6RuntimeVerifiedLoopbackTriageAuditArtifact(
+    input: TopicSelectionV1bWorkflowHarnessRunRequest,
+    artifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef,
+  ): Promise<{ ok: true } | { ok: false; code: string; message: string }> {
+    if (
+      !artifact.runtime_audit_ref
+      || artifact.runtime_audit_ref.ref_type !== 'artifact_ref'
+      || !this.refsEqual(artifact.provenance_ref, artifact.runtime_audit_ref)
+    ) {
+      return this.n6LoopbackTriageRuntimeAuditDrift(
+        'N6 loopback triage runtime provenance must point to its audit artifact_ref.',
+      );
+    }
+    const auditArtifact = await this.controlPlane.getArtifactRef(artifact.runtime_audit_ref.ref_id);
+    if (
+      !auditArtifact
+      || auditArtifact.artifact_kind !== 'diagnostic'
+      || auditArtifact.checksum !== artifact.runtime_audit_hash
+      || auditArtifact.workflow_run_id !== input.workflow_run_id
+    ) {
+      return this.n6LoopbackTriageRuntimeAuditDrift(
+        'N6 loopback triage runtime audit artifact is missing or checksum-drifted.',
+      );
+    }
+    const auditPayload = auditArtifact.payload;
+    if (!this.isRecord(auditPayload) || !this.isRecord(auditPayload.provenance)) {
+      return this.n6LoopbackTriageRuntimeAuditDrift(
+        'N6 loopback triage runtime audit payload is not a valid invocation audit snapshot.',
+      );
+    }
+    const provenance = auditPayload.provenance;
+    const expectedSourceKind = artifact.execution_mode === 'mocked_llm' ? 'mock_fixture' : 'codex_response';
+    if (
+      auditPayload.node_id !== input.node_id
+      || auditPayload.workflow_run_id !== input.workflow_run_id
+      || auditPayload.node_attempt_id !== input.node_attempt_id
+      || auditPayload.status !== 'succeeded'
+      || provenance.workflow_run_id !== input.workflow_run_id
+      || provenance.node_id !== input.node_id
+      || provenance.node_attempt_id !== input.node_attempt_id
+      || provenance.execution_mode !== artifact.execution_mode
+      || provenance.source_kind !== expectedSourceKind
+      || provenance.non_provider !== true
+      || provenance.run_mode !== artifact.run_mode
+      || provenance.profile_id !== artifact.profile_id
+      || provenance.model_option_id !== artifact.model_option_id
+      || provenance.output_contract !== artifact.output_contract
+      || provenance.prompt_packet_hash !== artifact.prompt_packet_hash
+      || provenance.structured_output_hash !== artifact.structured_output_hash
+      || provenance.cache_status !== 'not_applicable'
+      || provenance.response_reuse_ref !== null
+      || provenance.telemetry !== null
+    ) {
+      return this.n6LoopbackTriageRuntimeAuditDrift(
+        'N6 loopback triage runtime audit provenance does not match the support artifact identity.',
+      );
+    }
+    return { ok: true };
+  }
+
+  private n6LoopbackTriageRuntimeAuditDrift(
+    message: string,
+  ): { ok: false; code: string; message: string } {
+    return {
+      ok: false,
+      code: 'N6_LOOPBACK_TRIAGE_ARTIFACT_RUNTIME_CONTEXT_DRIFT',
+      message,
+    };
   }
 
   private n6LoopbackTriageAffectedRefsBlocker(

@@ -16,6 +16,7 @@ import {
   type TopicSelectionV1bN6HarnessFrozenInputPayload,
   type TopicSelectionV1bN6LoopbackTriageSupportPayload,
   type TopicSelectionV1bN7HarnessFrozenInputPayload,
+  type TopicSelectionV1bN7ToN6FailedTrialLoopbackContextProjection,
   type TopicSelectionV1bCandidateGroupingSupportPayload,
   type TopicSelectionV1bN8DebateAdmissionReviewSupportPayload,
   type TopicSelectionV1bN8FailedTrialSynthesisSupportPayload,
@@ -78,7 +79,11 @@ import { InMemoryTopicSelectionV1bTopicPackageRepository } from '../repositories
 import { AppError } from '../errors/app-error.js';
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
 import { TopicSelectionV1bWorkflowHarnessService } from './topic-selection-v1b-workflow-harness-service.js';
-import { TopicSelectionV1bN6DraftRuntimeService } from './topic-selection-v1b-n6-draft-runtime-service.js';
+import {
+  TopicSelectionV1bN6DraftRuntimeService,
+  type TopicSelectionV1bN6DraftGenerationMode,
+} from './topic-selection-v1b-n6-draft-runtime-service.js';
+import { TopicSelectionV1bN6LoopbackTriageRuntimeService } from './topic-selection-v1b-n6-loopback-triage-runtime-service.js';
 import {
   TopicSelectionV1bN7SupportRuntimeService,
   type TopicSelectionV1bN7RuntimeSupportPayload,
@@ -86,6 +91,7 @@ import {
 import type {
   TopicSelectionV1bN7SupportSlotId,
 } from './topic-selection-v1b-n7-support-admission-service.js';
+import { TopicSelectionV1bN8ValueAssessmentRuntimeService } from './topic-selection-v1b-n8-value-assessment-runtime-service.js';
 import {
   sha256Text,
   stableStringify,
@@ -958,11 +964,12 @@ async function generateN6RuntimeDraftArtifact(
   ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
   input: TopicSelectionV1bWorkflowHarnessRunRequest,
   draft: TopicSelectionV1bTopicQuestionCandidateSetDraftPayload,
+  generationMode: TopicSelectionV1bN6DraftGenerationMode = 'initial_from_n5',
 ): Promise<TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef> {
   const runtime = new TopicSelectionV1bN6DraftRuntimeService(ctx.controlPlane);
   const generated = await runtime.generateDraftArtifact({
     request: input,
-    generation_mode: 'initial_from_n5',
+    generation_mode: generationMode,
     execution_mode: 'codex_assisted',
     run_mode: input.run_mode ?? 'acceptance',
     codex_response: {
@@ -1097,6 +1104,33 @@ async function recordN6LoopbackTriageArtifact(
     output_contract: 'N6LoopbackTriageSupport@v1',
     profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.n6_loopback_triage_support,
   }, payload as unknown as Record<string, unknown>);
+}
+
+async function generateN6RuntimeLoopbackTriageArtifact(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  failedDraftArtifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef,
+  failedDraftHash: string,
+  payload: TopicSelectionV1bN6LoopbackTriageSupportPayload,
+): Promise<TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef> {
+  const runtime = new TopicSelectionV1bN6LoopbackTriageRuntimeService(ctx.controlPlane);
+  const generated = await runtime.generateSupportArtifact({
+    request: input,
+    failed_draft_artifact: failedDraftArtifact,
+    failed_draft_hash: failedDraftHash,
+    execution_mode: 'codex_assisted',
+    run_mode: input.run_mode ?? 'acceptance',
+    codex_response: {
+      output: payload,
+      operator_label: 'unit-test-runtime',
+    },
+    created_by: 'system',
+  });
+  assert.equal(generated.status, 'succeeded');
+  if (generated.status !== 'succeeded') {
+    throw new Error('Expected N6 loopback triage runtime support generation to succeed.');
+  }
+  return generated.semantic_artifact;
 }
 
 function n6LoopbackTriagePayload(
@@ -1299,11 +1333,81 @@ async function runReadyN7(ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>)
   return { n6, n7 };
 }
 
+async function runN7ExhaustionLoopbackFixture(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  suffix: string,
+) {
+  const { n5 } = await runReadyN5(ctx);
+  const n6Input = await n6Request(ctx, n5, {
+    workflow_run_id: `workflow_run_v1b_n6_${suffix}`,
+    node_attempt_id: `node_attempt_v1b_n6_${suffix}`,
+  });
+  const draft = await n6Draft(ctx, n6Input);
+  const second = {
+    ...draft.candidates[0]!,
+    candidate_key: `second_${suffix}_candidate`,
+    main_question: 'How can a second candidate preserve N7 exhaustion context for N6 regeneration?',
+    expected_claim: 'The second candidate lets N7 exhaust trials before N6 regenerates.',
+  };
+  const n6 = await ctx.service.invokeNode({
+    ...n6Input,
+    semantic_artifacts: [
+      await recordN6DraftArtifact(ctx, n6Input, {
+        ...draft,
+        recommended_candidate_keys: ['harness_candidate', second.candidate_key],
+        candidates: [draft.candidates[0]!, second],
+      }),
+    ],
+  });
+  const initialInput = await n7Request(ctx, n6, {
+    workflow_run_id: `workflow_run_v1b_n7_${suffix}_first`,
+    node_attempt_id: `node_attempt_v1b_n7_${suffix}_first`,
+  });
+  const first = await ctx.service.invokeNode(initialInput);
+  const secondTrial = await ctx.service.invokeNode(await n7FeedbackRequest(ctx, initialInput, first));
+  const exhaustedInput = await n7FeedbackRequest(ctx, initialInput, secondTrial);
+  const exhaustedCandidates = await ctx.topicQuestionRepository.listCandidatesByCandidateSetId(n6.authority_ref!.ref_id);
+  const synthesis: TopicSelectionV1bN8FailedTrialSynthesisSupportPayload = {
+    exhausted_candidate_refs: exhaustedCandidates.map((candidate) =>
+      ref('topic_question_candidate', candidate.topic_question_candidate_id, TITLE_CARD_ID)),
+    failure_reason_codes: ['value_not_supported'],
+    synthesis_summary: 'All current candidate trials failed value support and require N6 regeneration.',
+    n6_regeneration_hints: ['Regenerate with a narrower value-support claim and stronger evidence linkage.'],
+    affected_refs: [n6.authority_ref!],
+  };
+  const exhausted = await ctx.service.invokeNode({
+    ...exhaustedInput,
+    semantic_artifacts: [
+      await generateN7RuntimeSupportArtifact(
+        ctx,
+        exhaustedInput,
+        'n7_failed_trial_synthesis',
+        synthesis,
+      ),
+    ],
+  });
+  assert.equal(exhausted.gate_status, 'blocked');
+  assert.equal(exhausted.route_decision, 'loopback');
+  assert.equal(exhausted.error_code, 'N7_CANDIDATE_TRIALS_EXHAUSTED');
+  const projectionRef = await n7LoopbackProjectionRef(ctx, exhausted);
+  const projectionArtifact = await ctx.controlPlane.getArtifactRef(projectionRef.ref_id);
+  assert.ok(projectionArtifact);
+  return {
+    n5,
+    n6,
+    exhausted,
+    projectionRef,
+    projectionArtifact,
+    projection: projectionArtifact.payload as unknown as TopicSelectionV1bN7ToN6FailedTrialLoopbackContextProjection,
+  };
+}
+
 async function n8Request(
   ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
   n7Result: {
     authority_ref: TopicSelectionFunctionalRef | null;
     handoff_ref: TopicSelectionFunctionalRef | null;
+    trace_snapshot_ref?: TopicSelectionFunctionalRef | null;
     hashes: { authority_hash: string | null; handoff_hash: string | null };
   },
   overrides: Partial<TopicSelectionV1bWorkflowHarnessRunRequest> = {},
@@ -1320,6 +1424,7 @@ async function n8Request(
     ...(handoff.payload as Omit<TopicSelectionV1bN8HarnessFrozenInputPayload, 'n7_handoff_hash'>),
     n7_handoff_hash: n7Result.hashes.handoff_hash,
   };
+  const projectionRef = await n7ToN8ProjectionRef(ctx, n7Result);
   return request({
     workflow_run_id: 'workflow_run_v1b_n8',
     node_attempt_id: 'node_attempt_v1b_n8',
@@ -1331,11 +1436,26 @@ async function n8Request(
     frozen_input: {
       input_contract: 'N7ToN8Handoff@v1',
       snapshot_kind: 'topic_question_contract',
-      source_refs: [n7Result.authority_ref, n7Result.handoff_ref, ...handoff.required_refs],
+      source_refs: uniqueRefs([n7Result.authority_ref, n7Result.handoff_ref, projectionRef, ...handoff.required_refs]),
       payload: payload as unknown as Record<string, unknown>,
     },
     ...overrides,
   });
+}
+
+async function n7ToN8ProjectionRef(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  n7Result: { trace_snapshot_ref?: TopicSelectionFunctionalRef | null },
+): Promise<TopicSelectionFunctionalRef> {
+  if (!n7Result.trace_snapshot_ref) {
+    throw new Error('N8 fixture requires the N7 trace snapshot with runtime context projection.');
+  }
+  const trace = await ctx.controlPlane.getTraceSnapshot(n7Result.trace_snapshot_ref.ref_id);
+  const projectionRef = trace?.payload.runtime_context_projection_ref as TopicSelectionFunctionalRef | null | undefined;
+  if (!projectionRef || projectionRef.ref_type !== 'artifact_ref') {
+    throw new Error('N8 fixture requires the N7-to-N8 runtime context projection artifact.');
+  }
+  return projectionRef;
 }
 
 function n8ValueDraft(
@@ -1447,6 +1567,33 @@ async function recordN8ValueDraftArtifact(
     structured_output_hash: draftHash,
     provenance_ref: ref('artifact_ref', provenance.artifact_ref_id, TITLE_CARD_ID),
   });
+}
+
+async function generateN8RuntimeValueDraftArtifact(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  draft: TopicSelectionV1bTopicValueAssessmentDraftPayload,
+  options: {
+    runMode?: NonNullable<TopicSelectionV1bWorkflowHarnessRunRequest['run_mode']>;
+  } = {},
+): Promise<TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef> {
+  const runtime = new TopicSelectionV1bN8ValueAssessmentRuntimeService(ctx.controlPlane);
+  const runMode = options.runMode ?? input.run_mode ?? 'acceptance';
+  const generated = await runtime.generateDraftArtifact({
+    request: input,
+    execution_mode: 'codex_assisted',
+    run_mode: runMode,
+    codex_response: {
+      output: draft,
+      operator_label: 'unit-test-runtime',
+    },
+    created_by: 'system',
+  });
+  assert.equal(generated.status, 'succeeded');
+  if (generated.status !== 'succeeded') {
+    throw new Error('Expected N8 runtime value draft generation to succeed.');
+  }
+  return generated.semantic_artifact;
 }
 
 async function runReadyN8(
@@ -1725,6 +1872,60 @@ async function assertTraceLoopbackTargetCode(
   const policy = TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_NODE_POLICIES.find((item) => item.node_id === result.node_id);
   assert.ok((policy?.loopback_target_codes as readonly string[] | undefined)?.includes(expected));
   return trace;
+}
+
+async function n7LoopbackProjectionRef(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  result: TopicSelectionV1bWorkflowHarnessRunResult,
+): Promise<TopicSelectionFunctionalRef> {
+  const trace = await assertTraceLoopbackTargetCode(ctx, result, 'n7_loopback_to_n6');
+  const projectionRef = trace.payload.runtime_context_projection_ref as TopicSelectionFunctionalRef | null;
+  assert.equal(projectionRef?.ref_type, 'artifact_ref');
+  return projectionRef!;
+}
+
+async function n6GateFailureRetryProjectionRef(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  result: TopicSelectionV1bWorkflowHarnessRunResult,
+): Promise<TopicSelectionFunctionalRef> {
+  const trace = await assertTraceLoopbackTargetCode(ctx, result, 'n6_regenerate_candidates');
+  const projectionRef = trace.payload.runtime_context_projection_ref as TopicSelectionFunctionalRef | null;
+  assert.equal(projectionRef?.ref_type, 'artifact_ref');
+  return projectionRef!;
+}
+
+function n6InputWithN7LoopbackProjection(
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  projectionRef: TopicSelectionFunctionalRef,
+): TopicSelectionV1bWorkflowHarnessRunRequest {
+  const frozenInput = {
+    ...input.frozen_input,
+    source_refs: [...input.frozen_input.source_refs, projectionRef],
+  };
+  return {
+    ...input,
+    frozen_input: {
+      ...frozenInput,
+      frozen_input_hash: frozenInputHash(frozenInput),
+    },
+  };
+}
+
+function n6InputWithN6GateFailureProjection(
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  projectionRef: TopicSelectionFunctionalRef,
+): TopicSelectionV1bWorkflowHarnessRunRequest {
+  const frozenInput = {
+    ...input.frozen_input,
+    source_refs: [...input.frozen_input.source_refs, projectionRef],
+  };
+  return {
+    ...input,
+    frozen_input: {
+      ...frozenInput,
+      frozen_input_hash: frozenInputHash(frozenInput),
+    },
+  };
 }
 
 async function assertNoTraceArtifactForAttempt(
@@ -3272,6 +3473,133 @@ test('v1b workflow harness N6 blocks inconsistent loopback triage before routing
   assert.deepEqual(await artifactCtx.topicQuestionRepository.listCandidateSetsByTitleCardId(TITLE_CARD_ID), []);
 });
 
+test('v1b workflow harness N6 admits runtime-verified loopback triage in product mode', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n5 } = await runReadyN5(ctx);
+  const input = await n6Request(ctx, n5, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_triage',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_triage',
+  });
+  const failedDraft = await n6Draft(ctx, input);
+  failedDraft.candidates[0] = {
+    ...failedDraft.candidates[0]!,
+    answerability_verdict: 'not_answerable',
+    main_question: 'How can AI improve research?',
+  };
+  const draftArtifact = await generateN6RuntimeDraftArtifact(ctx, input, failedDraft);
+  const draftHash = sha256Text(stableStringify(failedDraft));
+  const triageArtifact = await generateN6RuntimeLoopbackTriageArtifact(
+    ctx,
+    input,
+    draftArtifact,
+    draftHash,
+    n6LoopbackTriagePayload(input, {
+      loopback_target_code: 'n6_debate_escalation',
+      debate_escalation: {
+        debate_level: 'mixed_cost_control',
+        recommended_profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_question_candidates_single_agent,
+        sticky: true,
+        rationale: 'Escalate the next candidate generation pass to runtime-supported debate before retrying N6.',
+      },
+      upstream_rollback: null,
+      rationale: 'Runtime triage classifies the failed draft as candidate-level contention rather than a bad slice.',
+    }),
+  );
+  assert.equal(triageArtifact.runtime_provenance_class, 'runtime_verified');
+  assert.equal(triageArtifact.prompt_variant_key, 'n6_loopback_triage');
+  assert.equal(triageArtifact.source_hashes.failed_draft_hash, draftHash);
+
+  const result = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [draftArtifact, triageArtifact],
+  });
+  assert.equal(result.gate_status, 'blocked');
+  assert.equal(result.route_decision, 'loopback');
+  assert.equal(result.authority_ref, null);
+  assert.equal(result.handoff_ref, null);
+  assert.ok(result.warnings.some((warning) => warning.code === 'N6_DEBATE_ESCALATION_RECOMMENDED'));
+  await assertTraceLoopbackTargetCode(
+    ctx,
+    result,
+    'n6_debate_escalation',
+    'topic-selection.v1b.generate-topic-question-candidates.v1',
+  );
+  assert.deepEqual(await ctx.topicQuestionRepository.listCandidateSetsByTitleCardId(TITLE_CARD_ID), []);
+});
+
+test('v1b workflow harness N6 runtime loopback triage drift and fixture product misuse block', async () => {
+  const driftCtx = await seedHarnessV1aBundle();
+  const { n5: driftN5 } = await runReadyN5(driftCtx);
+  const driftInput = await n6Request(driftCtx, driftN5, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_triage_drift',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_triage_drift',
+  });
+  const driftFailedDraft = await n6Draft(driftCtx, driftInput);
+  driftFailedDraft.candidates[0] = {
+    ...driftFailedDraft.candidates[0]!,
+    answerability_verdict: 'not_answerable',
+    main_question: 'How can AI improve research?',
+  };
+  const driftDraftArtifact = await generateN6RuntimeDraftArtifact(driftCtx, driftInput, driftFailedDraft);
+  const driftDraftHash = sha256Text(stableStringify(driftFailedDraft));
+  const driftTriageArtifact = await generateN6RuntimeLoopbackTriageArtifact(
+    driftCtx,
+    driftInput,
+    driftDraftArtifact,
+    driftDraftHash,
+    n6LoopbackTriagePayload(driftInput),
+  );
+  const driftResult = await driftCtx.service.invokeNode({
+    ...driftInput,
+    semantic_artifacts: [
+      driftDraftArtifact,
+      {
+        ...driftTriageArtifact,
+        source_hashes: {
+          ...driftTriageArtifact.source_hashes,
+          failed_draft_hash: '9'.repeat(64),
+        },
+      },
+    ],
+  });
+  assert.equal(driftResult.gate_status, 'blocked');
+  assert.equal(driftResult.route_decision, 'blocked');
+  assert.equal(driftResult.error_code, 'N6_LOOPBACK_TRIAGE_ARTIFACT_SOURCE_HASH_DRIFT');
+  assert.equal(driftResult.authority_ref, null);
+  assert.equal(driftResult.handoff_ref, null);
+
+  const fixtureCtx = await seedHarnessV1aBundle();
+  const { n5: fixtureN5 } = await runReadyN5(fixtureCtx);
+  const fixtureInput = await n6Request(fixtureCtx, fixtureN5, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_triage_fixture_misuse',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_triage_fixture_misuse',
+  });
+  const fixtureFailedDraft = await n6Draft(fixtureCtx, fixtureInput);
+  fixtureFailedDraft.candidates[0] = {
+    ...fixtureFailedDraft.candidates[0]!,
+    answerability_verdict: 'not_answerable',
+    main_question: 'How can AI improve research?',
+  };
+  const fixtureDraftArtifact = await generateN6RuntimeDraftArtifact(fixtureCtx, fixtureInput, fixtureFailedDraft);
+  const fixtureTriageArtifact = await recordN6LoopbackTriageArtifact(
+    fixtureCtx,
+    fixtureInput,
+    n6LoopbackTriagePayload(fixtureInput),
+  );
+  const fixtureResult = await fixtureCtx.service.invokeNode({
+    ...fixtureInput,
+    semantic_artifacts: [fixtureDraftArtifact, fixtureTriageArtifact],
+  });
+  assert.equal(fixtureResult.gate_status, 'blocked');
+  assert.equal(fixtureResult.route_decision, 'blocked');
+  assert.equal(fixtureResult.error_code, 'N6_LOOPBACK_TRIAGE_ARTIFACT_PROVENANCE_CLASS_INVALID');
+  assert.equal(fixtureResult.authority_ref, null);
+  assert.equal(fixtureResult.handoff_ref, null);
+});
+
 test('v1b workflow harness N6 carries warnings and detects replay drift', async () => {
   const ctx = await seedHarnessV1aBundle();
   const { n5 } = await runReadyN5(ctx);
@@ -4299,6 +4627,212 @@ test('v1b workflow harness N8 creates value assessment from frozen value draft a
   );
 });
 
+test('v1b workflow harness N8 admits runtime-verified Codex value draft in product mode', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n7 } = await runReadyN7(ctx);
+  const input = await n8Request(ctx, n7, {
+    workflow_run_id: 'workflow_run_v1b_n8_runtime_product',
+    node_attempt_id: 'node_attempt_v1b_n8_runtime_product',
+    execution_spec: {
+      execution_mode: 'codex_assisted',
+      model_option_id: null,
+    },
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_value_assessment_single_agent,
+    run_mode: 'product',
+  });
+  const draft = n8ValueDraft(input);
+  const semanticArtifact = await generateN8RuntimeValueDraftArtifact(ctx, input, draft);
+
+  assert.equal(semanticArtifact.runtime_provenance_class, 'runtime_verified');
+  assert.equal(semanticArtifact.prompt_variant_key, 'n8_value_assessment_draft.initial_from_n7');
+  assert.equal(
+    semanticArtifact.context_policy_profile_id,
+    'topic-selection.v1b.n8.topic-value-assessment.context-runtime@v1',
+  );
+  assert.match(semanticArtifact.source_hashes.n7_handoff_hash ?? '', /^[a-f0-9]{64}$/);
+  assert.match(semanticArtifact.source_hashes.n7_to_n8_projection_hash ?? '', /^[a-f0-9]{64}$/);
+
+  const result = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [semanticArtifact],
+  });
+  assert.equal(result.gate_status, 'admitted_with_warnings');
+  assert.equal(result.error_code, null);
+  assert.equal(result.authority_ref?.ref_type, 'topic_value_assessment');
+  assert.equal(result.handoff_ref?.ref_type, 'artifact_ref');
+});
+
+test('v1b workflow harness N8 blocks runtime value draft run-mode drift before authority write', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n7 } = await runReadyN7(ctx);
+  const input = await n8Request(ctx, n7, {
+    workflow_run_id: 'workflow_run_v1b_n8_runtime_run_mode_drift',
+    node_attempt_id: 'node_attempt_v1b_n8_runtime_run_mode_drift',
+    execution_spec: {
+      execution_mode: 'codex_assisted',
+      model_option_id: null,
+    },
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_value_assessment_single_agent,
+    run_mode: 'product',
+  });
+  const semanticArtifact = await generateN8RuntimeValueDraftArtifact(
+    ctx,
+    input,
+    n8ValueDraft(input),
+    { runMode: 'acceptance' },
+  );
+
+  const result = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [semanticArtifact],
+  });
+  assert.equal(result.gate_status, 'blocked');
+  assert.equal(result.error_code, 'RUNTIME_ADMISSION_ARTIFACT_MISMATCH');
+  assert.equal(result.authority_ref, null);
+  assert.equal(result.handoff_ref, null);
+});
+
+test('v1b workflow harness N8 blocks runtime value draft source drift before authority write', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n7 } = await runReadyN7(ctx);
+  const input = await n8Request(ctx, n7, {
+    workflow_run_id: 'workflow_run_v1b_n8_runtime_drift',
+    node_attempt_id: 'node_attempt_v1b_n8_runtime_drift',
+    execution_spec: {
+      execution_mode: 'codex_assisted',
+      model_option_id: null,
+    },
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_value_assessment_single_agent,
+    run_mode: 'product',
+  });
+  const draft = n8ValueDraft(input);
+  const semanticArtifact = await generateN8RuntimeValueDraftArtifact(ctx, input, draft);
+  const driftedArtifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef = {
+    ...semanticArtifact,
+    source_hashes: {
+      ...semanticArtifact.source_hashes,
+      n7_to_n8_projection_hash: '9'.repeat(64),
+    },
+  };
+
+  const result = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [driftedArtifact],
+  });
+  assert.equal(result.gate_status, 'blocked');
+  assert.equal(result.error_code, 'N8_DRAFT_ARTIFACT_SOURCE_HASH_DRIFT');
+  assert.equal(result.authority_ref, null);
+  assert.equal(result.handoff_ref, null);
+});
+
+test('v1b N8 runtime compression quality gate blocks dropped required facts before draft output', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n7 } = await runReadyN7(ctx);
+  const input = await n8Request(ctx, n7, {
+    workflow_run_id: 'workflow_run_v1b_n8_runtime_compression_blocked',
+    node_attempt_id: 'node_attempt_v1b_n8_runtime_compression_blocked',
+  });
+  const runtime = new TopicSelectionV1bN8ValueAssessmentRuntimeService(ctx.controlPlane);
+  const generated = await runtime.generateDraftArtifact({
+    request: input,
+    execution_mode: 'codex_assisted',
+    run_mode: 'acceptance',
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 120_000,
+      estimated_input_tokens_after_compression_override: 12_000,
+    },
+    compression_attempt: {
+      compression_executor_kind: 'deterministic_structural',
+      compressed_context: {
+        summary: 'Intentionally incomplete N8 compressed context for quality-gate regression.',
+        raw_provider_logs: ['must not be persisted in compressed runtime context'],
+      },
+      summary: {
+        preserved_fact_kinds: ['topic_question_contract'],
+      },
+      compressed_preserved_facts: {
+        topic_question_contract: ['incomplete'],
+      },
+    },
+    codex_response: {
+      output: n8ValueDraft(input),
+      operator_label: 'unit-test-runtime',
+    },
+    created_by: 'system',
+  });
+
+  assert.equal(generated.status, 'blocked');
+  assert.equal(generated.invocation_result.status, 'blocked');
+  assert.equal(generated.invocation_result.error_code, 'COMPRESSION_QUALITY_GATE_BLOCKED');
+  assert.ok(generated.invocation_result.blocker_codes.includes('COMPRESSION_QUALITY_GATE_BLOCKED'));
+  assert.ok(generated.invocation_result.blocker_codes.includes('COMPRESSION_FORBIDDEN_PERSISTED_PAYLOAD'));
+  assert.ok(generated.invocation_result.blocker_codes.includes('COMPRESSION_REQUIRED_N7_HANDOFF_DROPPED'));
+  assert.equal(generated.invocation_result.structured_output, null);
+});
+
+test('v1b N8 runtime generation blocks missing N7-to-N8 context projection', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n7 } = await runReadyN7(ctx);
+  const input = await n8Request(ctx, n7, {
+    workflow_run_id: 'workflow_run_v1b_n8_runtime_missing_projection',
+    node_attempt_id: 'node_attempt_v1b_n8_runtime_missing_projection',
+  });
+  const projectionRef = await n7ToN8ProjectionRef(ctx, n7);
+  const frozenInput = {
+    ...input.frozen_input,
+    source_refs: input.frozen_input.source_refs.filter((sourceRef) => (
+      sourceRef.ref_type !== projectionRef.ref_type || sourceRef.ref_id !== projectionRef.ref_id
+    )),
+  };
+  const missingProjectionInput = {
+    ...input,
+    frozen_input: {
+      ...frozenInput,
+      frozen_input_hash: frozenInputHash(frozenInput),
+    },
+  };
+  const runtime = new TopicSelectionV1bN8ValueAssessmentRuntimeService(ctx.controlPlane);
+  await assert.rejects(
+    () => runtime.generateDraftArtifact({
+      request: missingProjectionInput,
+      execution_mode: 'codex_assisted',
+      run_mode: 'acceptance',
+      codex_response: {
+        output: n8ValueDraft(missingProjectionInput),
+        operator_label: 'unit-test-runtime',
+      },
+      created_by: 'system',
+    }),
+    (error) => error instanceof AppError
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && /requires exactly one N7-to-N8 runtime context projection/u.test(error.message),
+  );
+});
+
+test('v1b workflow harness N8 blocks fixture replay value draft in product mode', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n7 } = await runReadyN7(ctx);
+  const input = await n8Request(ctx, n7, {
+    workflow_run_id: 'workflow_run_v1b_n8_fixture_product',
+    node_attempt_id: 'node_attempt_v1b_n8_fixture_product',
+    execution_spec: {
+      execution_mode: 'codex_assisted',
+      model_option_id: null,
+    },
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.topic_value_assessment_single_agent,
+    run_mode: 'product',
+  });
+  const draft = n8ValueDraft(input);
+  const result = await ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [await recordN8ValueDraftArtifact(ctx, input, draft)],
+  });
+  assert.equal(result.gate_status, 'blocked');
+  assert.equal(result.error_code, 'N8_DRAFT_ARTIFACT_PROVENANCE_CLASS_INVALID');
+  assert.equal(result.authority_ref, null);
+  assert.equal(result.handoff_ref, null);
+});
+
 test('v1b workflow harness N8 blocks missing value draft and risk-dropping drafts before authority write', async () => {
   const noDraftCtx = await seedHarnessV1aBundle();
   const { n7: noDraftN7 } = await runReadyN7(noDraftCtx);
@@ -4763,6 +5297,500 @@ test('v1b workflow harness N7 exhausted trials can loop back to regenerated N6 a
   const terminal = await runTerminalPackageFromN8(ctx, n8, 'after_exhaustion_regen');
   assert.equal(terminal.n11.route_decision, 'stop_v1b_complete');
   assert.equal((await ctx.topicQuestionRepository.listCandidateSetsByTitleCardId(TITLE_CARD_ID)).length, 2);
+});
+
+test('v1b workflow harness N6 admits runtime regeneration from N7 loopback projection', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const loopback = await runN7ExhaustionLoopbackFixture(ctx, 'runtime_regen');
+  const regenInputBase = await n6Request(ctx, loopback.n5, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_regen_after_n7',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_regen_after_n7',
+  });
+  const regenInput = n6InputWithN7LoopbackProjection(regenInputBase, loopback.projectionRef);
+  const regenDraft = await n6Draft(ctx, regenInput, {
+    generation_notes: ['Runtime regeneration consumed N7 failed-trial projection context.'],
+  });
+  regenDraft.recommended_candidate_keys = ['runtime_regenerated_after_n7_candidate'];
+  regenDraft.candidates[0] = {
+    ...regenDraft.candidates[0]!,
+    candidate_key: 'runtime_regenerated_after_n7_candidate',
+    main_question: 'How can runtime-regenerated N6 candidates recover after N7 failed-trial exhaustion?',
+    expected_claim: 'Runtime-regenerated candidates can recover the v1b path after N7 trial exhaustion.',
+  };
+
+  const semanticArtifact = await generateN6RuntimeDraftArtifact(
+    ctx,
+    regenInput,
+    regenDraft,
+    'regeneration_after_n7_loopback',
+  );
+  assert.equal(semanticArtifact.prompt_variant_key, 'n6_question_candidate_draft.regeneration_after_n7_loopback');
+  assert.equal(semanticArtifact.source_hashes.n7_loopback_projection_hash, loopback.projectionArtifact.checksum);
+  assert.equal(
+    semanticArtifact.source_hashes.n7_loopback_failed_trial_synthesis_hash,
+    loopback.projection.failed_trial_synthesis_hash,
+  );
+
+  const regenerated = await ctx.service.invokeNode({
+    ...regenInput,
+    semantic_artifacts: [semanticArtifact],
+  });
+  assert.equal(regenerated.gate_status, 'admitted');
+  assert.equal(regenerated.route_decision, 'invoke_next');
+  assert.equal(regenerated.authority_ref?.ref_type, 'topic_question_candidate_set');
+  assert.equal(regenerated.handoff_ref?.ref_type, 'artifact_ref');
+
+  const promptMismatchBase = await n6Request(ctx, loopback.n5, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_regen_prompt_mismatch',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_regen_prompt_mismatch',
+  });
+  const promptMismatchInput = n6InputWithN7LoopbackProjection(promptMismatchBase, loopback.projectionRef);
+  const promptMismatchArtifact = await generateN6RuntimeDraftArtifact(
+    ctx,
+    promptMismatchInput,
+    await n6Draft(ctx, promptMismatchInput),
+    'regeneration_after_n7_loopback',
+  );
+  const promptMismatch = await ctx.service.invokeNode({
+    ...promptMismatchInput,
+    semantic_artifacts: [{
+      ...promptMismatchArtifact,
+      prompt_variant_key: 'n6_question_candidate_draft.initial_from_n5',
+    }],
+  });
+  assert.equal(promptMismatch.gate_status, 'blocked');
+  assert.equal(promptMismatch.error_code, 'N6_DRAFT_ARTIFACT_PROMPT_IDENTITY_DRIFT');
+
+  const sourceDriftBase = await n6Request(ctx, loopback.n5, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_regen_source_drift',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_regen_source_drift',
+  });
+  const sourceDriftInput = n6InputWithN7LoopbackProjection(sourceDriftBase, loopback.projectionRef);
+  const sourceDriftArtifact = await generateN6RuntimeDraftArtifact(
+    ctx,
+    sourceDriftInput,
+    await n6Draft(ctx, sourceDriftInput),
+    'regeneration_after_n7_loopback',
+  );
+  const sourceDrift = await ctx.service.invokeNode({
+    ...sourceDriftInput,
+    semantic_artifacts: [{
+      ...sourceDriftArtifact,
+      source_hashes: {
+        ...sourceDriftArtifact.source_hashes,
+        n7_loopback_projection_hash: '9'.repeat(64),
+      },
+    }],
+  });
+  assert.equal(sourceDrift.gate_status, 'blocked');
+  assert.equal(sourceDrift.error_code, 'N6_DRAFT_ARTIFACT_SOURCE_HASH_DRIFT');
+});
+
+test('v1b N6 runtime regeneration blocks orphan and malformed N7 loopback projections', async () => {
+  const orphanCtx = await seedHarnessV1aBundle();
+  const { n5: orphanN5 } = await runReadyN5(orphanCtx);
+  const orphanInput = await n6Request(orphanCtx, orphanN5, {
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_regen_orphan',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_regen_orphan',
+  });
+  const orphanDraft = await n6Draft(orphanCtx, orphanInput);
+  const orphanRuntime = new TopicSelectionV1bN6DraftRuntimeService(orphanCtx.controlPlane);
+  await assert.rejects(
+    () => orphanRuntime.generateDraftArtifact({
+      request: orphanInput,
+      generation_mode: 'regeneration_after_n7_loopback',
+      execution_mode: 'codex_assisted',
+      run_mode: 'acceptance',
+      codex_response: {
+        output: orphanDraft,
+        operator_label: 'unit-test-runtime',
+      },
+      created_by: 'system',
+    }),
+    (error) => error instanceof AppError
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && error.message.includes('requires an N7 failed-trial loopback projection'),
+  );
+
+  const malformedCtx = await seedHarnessV1aBundle();
+  const loopback = await runN7ExhaustionLoopbackFixture(malformedCtx, 'runtime_regen_malformed_projection');
+  const projection = loopback.projection;
+  const firstExhaustedRef = projection.exhausted_candidate_refs[0]!;
+  const malformedProjection = {
+    ...projection,
+    source_refs: projection.source_refs.filter((sourceRef) =>
+      sourceRef.ref_id !== firstExhaustedRef.ref_id || sourceRef.ref_type !== firstExhaustedRef.ref_type),
+  };
+  const malformedProjectionArtifact = await malformedCtx.controlPlane.recordArtifactRef({
+    title_card_id: TITLE_CARD_ID,
+    artifact_kind: 'diagnostic',
+    storage_kind: 'inline',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_regen_malformed_projection',
+    payload: malformedProjection as unknown as Record<string, unknown>,
+    checksum: sha256Text(stableStringify(malformedProjection)),
+    created_by: 'system',
+  });
+  const malformedInputBase = await n6Request(malformedCtx, loopback.n5, {
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_regen_bad_projection',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_regen_bad_projection',
+  });
+  const malformedInput = n6InputWithN7LoopbackProjection(
+    malformedInputBase,
+    ref('artifact_ref', malformedProjectionArtifact.artifact_ref_id, TITLE_CARD_ID),
+  );
+  const malformedDraft = await n6Draft(malformedCtx, malformedInput);
+  const malformedRuntime = new TopicSelectionV1bN6DraftRuntimeService(malformedCtx.controlPlane);
+  await assert.rejects(
+    () => malformedRuntime.generateDraftArtifact({
+      request: malformedInput,
+      generation_mode: 'regeneration_after_n7_loopback',
+      execution_mode: 'codex_assisted',
+      run_mode: 'acceptance',
+      codex_response: {
+        output: malformedDraft,
+        operator_label: 'unit-test-runtime',
+      },
+      created_by: 'system',
+    }),
+    (error) => error instanceof AppError
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && error.message.includes('unknown exhausted candidate ref'),
+  );
+});
+
+test('v1b workflow harness N6 admits runtime regeneration from N6 gate-failure retry projection', async () => {
+  const ctx = await seedHarnessV1aBundle();
+  const { n5 } = await runReadyN5(ctx);
+  const failedInput = await n6Request(ctx, n5, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_gate_failure_first',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_gate_failure_first',
+  });
+  const failedDraft = await n6Draft(ctx, failedInput);
+  failedDraft.candidates[0] = {
+    ...failedDraft.candidates[0]!,
+    answerability_verdict: 'not_answerable',
+    main_question: 'How can AI improve research?',
+  };
+  const failedDraftArtifact = await generateN6RuntimeDraftArtifact(ctx, failedInput, failedDraft);
+  const failedDraftHash = sha256Text(stableStringify(failedDraft));
+  const failed = await ctx.service.invokeNode({
+    ...failedInput,
+    semantic_artifacts: [failedDraftArtifact],
+  });
+  assert.equal(failed.gate_status, 'blocked');
+  assert.equal(failed.route_decision, 'loopback');
+  assert.equal(failed.error_code, 'N6_NO_ADMISSIBLE_TOPIC_QUESTION_CANDIDATE');
+  const projectionRef = await n6GateFailureRetryProjectionRef(ctx, failed);
+  const projectionArtifact = await ctx.controlPlane.getArtifactRef(projectionRef.ref_id);
+  assert.ok(projectionArtifact);
+  const projectionPayload = projectionArtifact.payload;
+  assert.ok(projectionPayload);
+  assert.equal(projectionPayload.projection_kind, 'v1b_n6_gate_failure_retry_context');
+  assert.equal(projectionPayload.failed_draft_hash, failedDraftHash);
+  assert.deepEqual(await ctx.topicQuestionRepository.listCandidateSetsByTitleCardId(TITLE_CARD_ID), []);
+
+  const retryInputBase = await n6Request(ctx, n5, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_gate_failure_retry',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_gate_failure_retry',
+  });
+  const retryInput = n6InputWithN6GateFailureProjection(retryInputBase, projectionRef);
+  const retryDraft = await n6Draft(ctx, retryInput, {
+    generation_notes: ['Runtime regeneration consumed N6 gate-failure retry context.'],
+  });
+  retryDraft.recommended_candidate_keys = ['runtime_regenerated_after_n6_gate_failure'];
+  retryDraft.candidates[0] = {
+    ...retryDraft.candidates[0]!,
+    candidate_key: 'runtime_regenerated_after_n6_gate_failure',
+    main_question: 'How can runtime-regenerated N6 candidates recover after an N6 deterministic gate failure?',
+    expected_claim: 'Runtime-regenerated candidates can recover the v1b path after an N6 gate failure.',
+  };
+  const retryArtifact = await generateN6RuntimeDraftArtifact(
+    ctx,
+    retryInput,
+    retryDraft,
+    'regeneration_after_n6_gate_failure',
+  );
+  assert.equal(retryArtifact.prompt_variant_key, 'n6_question_candidate_draft.regeneration_after_n6_gate_failure');
+  assert.equal(retryArtifact.source_hashes.n6_gate_failure_projection_hash, projectionArtifact.checksum);
+  assert.equal(retryArtifact.source_hashes.n6_gate_failure_failed_draft_hash, failedDraftHash);
+  assert.equal(
+    retryArtifact.source_hashes.n6_gate_failure_blocked_candidate_context_hash,
+    projectionPayload.blocked_candidate_context_hash,
+  );
+
+  const regenerated = await ctx.service.invokeNode({
+    ...retryInput,
+    semantic_artifacts: [retryArtifact],
+  });
+  assert.equal(regenerated.gate_status, 'admitted');
+  assert.equal(regenerated.route_decision, 'invoke_next');
+  assert.equal(regenerated.authority_ref?.ref_type, 'topic_question_candidate_set');
+  assert.equal(regenerated.handoff_ref?.ref_type, 'artifact_ref');
+
+  const promptMismatchBase = await n6Request(ctx, n5, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_gate_failure_prompt_mismatch',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_gate_failure_prompt_mismatch',
+  });
+  const promptMismatchInput = n6InputWithN6GateFailureProjection(promptMismatchBase, projectionRef);
+  const promptMismatchArtifact = await generateN6RuntimeDraftArtifact(
+    ctx,
+    promptMismatchInput,
+    await n6Draft(ctx, promptMismatchInput),
+    'regeneration_after_n6_gate_failure',
+  );
+  const promptMismatch = await ctx.service.invokeNode({
+    ...promptMismatchInput,
+    semantic_artifacts: [{
+      ...promptMismatchArtifact,
+      prompt_variant_key: 'n6_question_candidate_draft.initial_from_n5',
+    }],
+  });
+  assert.equal(promptMismatch.gate_status, 'blocked');
+  assert.equal(promptMismatch.error_code, 'N6_DRAFT_ARTIFACT_PROMPT_IDENTITY_DRIFT');
+
+  const sourceDriftBase = await n6Request(ctx, n5, {
+    run_mode: 'product',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_gate_failure_source_drift',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_gate_failure_source_drift',
+  });
+  const sourceDriftInput = n6InputWithN6GateFailureProjection(sourceDriftBase, projectionRef);
+  const sourceDriftArtifact = await generateN6RuntimeDraftArtifact(
+    ctx,
+    sourceDriftInput,
+    await n6Draft(ctx, sourceDriftInput),
+    'regeneration_after_n6_gate_failure',
+  );
+  const sourceDrift = await ctx.service.invokeNode({
+    ...sourceDriftInput,
+    semantic_artifacts: [{
+      ...sourceDriftArtifact,
+      source_hashes: {
+        ...sourceDriftArtifact.source_hashes,
+        n6_gate_failure_projection_hash: '9'.repeat(64),
+      },
+    }],
+  });
+  assert.equal(sourceDrift.gate_status, 'blocked');
+  assert.equal(sourceDrift.error_code, 'N6_DRAFT_ARTIFACT_SOURCE_HASH_DRIFT');
+});
+
+test('v1b N6 runtime regeneration blocks orphan and malformed N6 gate-failure retry projections', async () => {
+  const orphanCtx = await seedHarnessV1aBundle();
+  const { n5: orphanN5 } = await runReadyN5(orphanCtx);
+  const orphanInput = await n6Request(orphanCtx, orphanN5, {
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_gate_failure_orphan',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_gate_failure_orphan',
+  });
+  const orphanDraft = await n6Draft(orphanCtx, orphanInput);
+  const orphanRuntime = new TopicSelectionV1bN6DraftRuntimeService(orphanCtx.controlPlane);
+  await assert.rejects(
+    () => orphanRuntime.generateDraftArtifact({
+      request: orphanInput,
+      generation_mode: 'regeneration_after_n6_gate_failure',
+      execution_mode: 'codex_assisted',
+      run_mode: 'acceptance',
+      codex_response: {
+        output: orphanDraft,
+        operator_label: 'unit-test-runtime',
+      },
+      created_by: 'system',
+    }),
+    (error) => error instanceof AppError
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && error.message.includes('requires exactly one N6 gate-failure retry projection'),
+  );
+
+  const malformedCtx = await seedHarnessV1aBundle();
+  const { n5: malformedN5 } = await runReadyN5(malformedCtx);
+  const failedInput = await n6Request(malformedCtx, malformedN5, {
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_gate_failure_malformed_first',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_gate_failure_malformed_first',
+  });
+  const failedDraft = await n6Draft(malformedCtx, failedInput);
+  failedDraft.candidates[0] = {
+    ...failedDraft.candidates[0]!,
+    answerability_verdict: 'not_answerable',
+    main_question: 'How can AI improve research?',
+  };
+  const failedArtifact = await generateN6RuntimeDraftArtifact(malformedCtx, failedInput, failedDraft);
+  const failed = await malformedCtx.service.invokeNode({
+    ...failedInput,
+    semantic_artifacts: [failedArtifact],
+  });
+  const projectionRef = await n6GateFailureRetryProjectionRef(malformedCtx, failed);
+  const projectionArtifact = await malformedCtx.controlPlane.getArtifactRef(projectionRef.ref_id);
+  assert.ok(projectionArtifact);
+  const projectionPayload = projectionArtifact.payload;
+  assert.ok(projectionPayload);
+  const malformedProjection = {
+    ...projectionPayload,
+    source_refs: (projectionPayload.source_refs as TopicSelectionFunctionalRef[]).filter((sourceRef) =>
+      sourceRef.ref_id !== (projectionPayload.failed_draft_ref as TopicSelectionFunctionalRef).ref_id),
+  };
+  const malformedProjectionArtifact = await malformedCtx.controlPlane.recordArtifactRef({
+    title_card_id: TITLE_CARD_ID,
+    artifact_kind: 'diagnostic',
+    storage_kind: 'inline',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_gate_failure_malformed_projection',
+    payload: malformedProjection as unknown as Record<string, unknown>,
+    checksum: sha256Text(stableStringify(malformedProjection)),
+    created_by: 'system',
+  });
+  const malformedInputBase = await n6Request(malformedCtx, malformedN5, {
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_gate_failure_bad_projection',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_gate_failure_bad_projection',
+  });
+  const malformedInput = n6InputWithN6GateFailureProjection(
+    malformedInputBase,
+    ref('artifact_ref', malformedProjectionArtifact.artifact_ref_id, TITLE_CARD_ID),
+  );
+  const malformedDraft = await n6Draft(malformedCtx, malformedInput);
+  const malformedRuntime = new TopicSelectionV1bN6DraftRuntimeService(malformedCtx.controlPlane);
+  await assert.rejects(
+    () => malformedRuntime.generateDraftArtifact({
+      request: malformedInput,
+      generation_mode: 'regeneration_after_n6_gate_failure',
+      execution_mode: 'codex_assisted',
+      run_mode: 'acceptance',
+      codex_response: {
+        output: malformedDraft,
+        operator_label: 'unit-test-runtime',
+      },
+      created_by: 'system',
+    }),
+    (error) => error instanceof AppError
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && error.message.includes('does not preserve required N6 lineage refs'),
+  );
+
+  const sourceHashDriftProjection = {
+    ...projectionPayload,
+    source_hashes: {
+      ...(projectionPayload.source_hashes as Record<string, string>),
+      failed_draft_prompt_packet_hash: '8'.repeat(64),
+    },
+  };
+  const sourceHashDriftProjectionArtifact = await malformedCtx.controlPlane.recordArtifactRef({
+    title_card_id: TITLE_CARD_ID,
+    artifact_kind: 'diagnostic',
+    storage_kind: 'inline',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_gate_failure_source_hash_drift_projection',
+    payload: sourceHashDriftProjection as unknown as Record<string, unknown>,
+    checksum: sha256Text(stableStringify(sourceHashDriftProjection)),
+    created_by: 'system',
+  });
+  const sourceHashDriftInputBase = await n6Request(malformedCtx, malformedN5, {
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_gate_failure_bad_projection_hashes',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_gate_failure_bad_projection_hashes',
+  });
+  const sourceHashDriftInput = n6InputWithN6GateFailureProjection(
+    sourceHashDriftInputBase,
+    ref('artifact_ref', sourceHashDriftProjectionArtifact.artifact_ref_id, TITLE_CARD_ID),
+  );
+  const sourceHashDriftDraft = await n6Draft(malformedCtx, sourceHashDriftInput);
+  await assert.rejects(
+    () => malformedRuntime.generateDraftArtifact({
+      request: sourceHashDriftInput,
+      generation_mode: 'regeneration_after_n6_gate_failure',
+      execution_mode: 'codex_assisted',
+      run_mode: 'acceptance',
+      codex_response: {
+        output: sourceHashDriftDraft,
+        operator_label: 'unit-test-runtime',
+      },
+      created_by: 'system',
+    }),
+    (error) => error instanceof AppError
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && error.message.includes('source hashes drift from frozen N6 lineage'),
+  );
+
+  const selectedSliceRefDriftProjection = {
+    ...projectionPayload,
+    selected_research_slice_ref: ref('research_slice', 'research_slice_outside_retry_projection', TITLE_CARD_ID),
+  };
+  const selectedSliceRefDriftProjectionArtifact = await malformedCtx.controlPlane.recordArtifactRef({
+    title_card_id: TITLE_CARD_ID,
+    artifact_kind: 'diagnostic',
+    storage_kind: 'inline',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_gate_failure_selected_slice_ref_drift_projection',
+    payload: selectedSliceRefDriftProjection as unknown as Record<string, unknown>,
+    checksum: sha256Text(stableStringify(selectedSliceRefDriftProjection)),
+    created_by: 'system',
+  });
+  const selectedSliceRefDriftInputBase = await n6Request(malformedCtx, malformedN5, {
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_gate_failure_selected_slice_ref_drift',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_gate_failure_selected_slice_ref_drift',
+  });
+  const selectedSliceRefDriftInput = n6InputWithN6GateFailureProjection(
+    selectedSliceRefDriftInputBase,
+    ref('artifact_ref', selectedSliceRefDriftProjectionArtifact.artifact_ref_id, TITLE_CARD_ID),
+  );
+  const selectedSliceRefDriftDraft = await n6Draft(malformedCtx, selectedSliceRefDriftInput);
+  await assert.rejects(
+    () => malformedRuntime.generateDraftArtifact({
+      request: selectedSliceRefDriftInput,
+      generation_mode: 'regeneration_after_n6_gate_failure',
+      execution_mode: 'codex_assisted',
+      run_mode: 'acceptance',
+      codex_response: {
+        output: selectedSliceRefDriftDraft,
+        operator_label: 'unit-test-runtime',
+      },
+      created_by: 'system',
+    }),
+    (error) => error instanceof AppError
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && error.message.includes('source hashes drift from frozen N6 lineage'),
+  );
+
+  const rawHashMapProjection = {
+    ...projectionPayload,
+    source_hashes: {
+      ...(projectionPayload.source_hashes as Record<string, unknown>),
+      raw_context_payload: { forbidden: 'raw payload in projection hash map' },
+    },
+  };
+  const rawHashMapProjectionArtifact = await malformedCtx.controlPlane.recordArtifactRef({
+    title_card_id: TITLE_CARD_ID,
+    artifact_kind: 'diagnostic',
+    storage_kind: 'inline',
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_gate_failure_raw_hash_map_projection',
+    payload: rawHashMapProjection as unknown as Record<string, unknown>,
+    checksum: sha256Text(stableStringify(rawHashMapProjection)),
+    created_by: 'system',
+  });
+  const rawHashMapInputBase = await n6Request(malformedCtx, malformedN5, {
+    workflow_run_id: 'workflow_run_v1b_n6_runtime_gate_failure_raw_hash_map',
+    node_attempt_id: 'node_attempt_v1b_n6_runtime_gate_failure_raw_hash_map',
+  });
+  const rawHashMapInput = n6InputWithN6GateFailureProjection(
+    rawHashMapInputBase,
+    ref('artifact_ref', rawHashMapProjectionArtifact.artifact_ref_id, TITLE_CARD_ID),
+  );
+  const rawHashMapDraft = await n6Draft(malformedCtx, rawHashMapInput);
+  await assert.rejects(
+    () => malformedRuntime.generateDraftArtifact({
+      request: rawHashMapInput,
+      generation_mode: 'regeneration_after_n6_gate_failure',
+      execution_mode: 'codex_assisted',
+      run_mode: 'acceptance',
+      codex_response: {
+        output: rawHashMapDraft,
+        operator_label: 'unit-test-runtime',
+      },
+      created_by: 'system',
+    }),
+    (error) => error instanceof AppError
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && error.message.includes('hash maps contain non-hash or unexpected keys'),
+  );
 });
 
 test('v1b workflow harness N9 creates advance disposition and N10 creates draft package plus v1c bundle', async () => {

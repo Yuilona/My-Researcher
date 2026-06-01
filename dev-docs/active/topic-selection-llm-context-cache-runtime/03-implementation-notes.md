@@ -750,6 +750,151 @@
   - The smoke asserts the N6 prompt-index delta equals the generated N6 prompt hash count.
   - The smoke also checks Prisma runtime model metadata to ensure `TopicSelectionPromptPacketCacheIndex` does not persist prompt payloads, provider responses, provider telemetry payloads, raw provider logs, authority payloads, or secrets.
 
+## 2026-05-31 - v1b N6 P2.1b N7 Loopback Regeneration Slice Implemented
+- Promoted `n6_question_candidate_draft.regeneration_after_n7_loopback` as the first P2.1b row; `regeneration_after_n6_gate_failure` and `n6_loopback_triage` remain planned.
+- Extended `TopicSelectionV1bN6DraftRuntimeService` with generation-mode-aware context:
+  - `initial_from_n5` remains the promoted initial path and rejects N7 loopback projection context.
+  - `regeneration_after_n7_loopback` requires exactly one `v1b_n7_to_n6_failed_trial_loopback_context` artifact in frozen `source_refs`.
+  - The N7 projection is loaded by ref, checksum-verified, schema/policy-checked, and embedded into the N6 runtime context packet as non-authority mode context.
+  - Prompt/runtime identity now includes the generation mode, projection hash, old N6 handoff hash, exhausted candidate hashes, failure reason codes, regeneration hints, and optional N8 feedback hash.
+- Strengthened N7 loopback projection production:
+  - N7 now includes selected research slice ref and `selected_research_slice_hash` in the failed-trial loopback projection.
+  - N6 regeneration admission requires the projection source hashes to match `failed_trial_synthesis_hash`, `topic_question_candidate_set_hash`, `n6_handoff_hash`, and the current frozen selected research slice hash.
+- Wired WorkflowHarness N6 draft admission to infer generation mode from prompt identity plus frozen projection context.
+  - A regeneration prompt variant without projection blocks.
+  - Projection context with an initial prompt variant blocks as prompt identity drift.
+  - Runtime expected identity is computed from the same mode context before admission, so old runtime artifacts cannot enter a different N6 chain.
+- Expanded N6 compression preserved facts for P2.1b: N7 loopback projection, failed-trial synthesis, exhausted candidate refs/hashes, candidate order, failure reason codes, regeneration hints, and N8 feedback.
+- Added L1/L2 coverage for N7->N6 regeneration:
+  - runtime-generated N6 regeneration draft admits in product mode and still passes through the existing deterministic N6 candidate gate and authority write path;
+  - prompt identity drift and source hash drift block before authority writes;
+  - orphan regeneration requests block before runtime generation;
+  - malformed projections with unknown exhausted candidate refs block before draft generation/admission.
+
+## 2026-06-01 - v1b N6 P2.1b Loopback Triage Runtime Slice Implemented
+- Promoted `n6_loopback_triage` from guarded/planned fixture support to an optional support-only runtime/admission slot.
+- Added `TopicSelectionV1bN6LoopbackTriageRuntimeService`:
+  - binds `n6_loopback_triage` to `v1b_n6_loopback_triage_context`;
+  - routes Codex-assisted and mocked support generation through `AgentOrchestrator`;
+  - records runtime-verified semantic support artifacts with runtime audit ref/hash, prompt packet hash, profile hash, runtime invocation context hash, redaction policy, source hashes, and output hash;
+  - binds triage identity to the frozen N5->N6 lineage plus failed draft hash, failed draft prompt packet hash, and failed draft source-hash bundle;
+  - rejects non-N6 draft artifacts or failed draft hash mismatch before building triage context.
+- Added `TopicSelectionV1bN6LoopbackTriageAdmissionService`:
+  - blocks missing provenance class, `legacy_unverified`, fixture replay in product mode, prompt identity drift, profile drift, runtime audit drift, source hash drift, payload hash mismatch, and incomplete compression identity;
+  - permits fixture replay only outside product for explicit fixture tests.
+- Wired WorkflowHarness N6 loopback plan resolution to verify runtime-verified triage audit artifacts before admitting present triage.
+  - Absent triage remains optional and falls back to deterministic routing.
+  - Malformed or drifted present triage blocks before loopback routing and before authority/handoff writes.
+- Registered the N6 loopback triage context runtime profile and compression preserved facts.
+  - Required facts include failed draft identity, blocked candidate context, dominant reason codes, affected refs, regeneration hints, debate escalation, upstream rollback, and loopback target.
+- Added L1/L2 coverage:
+  - product-mode runtime-verified triage is admitted and still produces only a blocked loopback result with no authority or handoff;
+  - source hash drift blocks with `N6_LOOPBACK_TRIAGE_ARTIFACT_SOURCE_HASH_DRIFT`;
+  - product-mode fixture triage blocks with `N6_LOOPBACK_TRIAGE_ARTIFACT_PROVENANCE_CLASS_INVALID`;
+  - compression quality gate blocks dropped N6 loopback triage facts.
+- Remaining P2.1b work is `n6_question_candidate_draft.regeneration_after_n6_gate_failure`.
+
+## 2026-06-01 - v1b N6 P2.1b Gate-Failure Regeneration Slice Implemented
+- Promoted `n6_question_candidate_draft.regeneration_after_n6_gate_failure` as the final P2.1b row.
+- Added `TopicSelectionV1bN6RuntimeContextProjection@v1` with projection kind `v1b_n6_gate_failure_retry_context`.
+  - The projection is emitted only for N6 blocked loopback results whose target is `n6_regenerate_candidates`.
+  - It is non-authority runtime context and participates in trace payloads as `runtime_context_projection_ref/hash`.
+  - It preserves failed draft ref/hash, failed draft prompt packet hash, failed draft source-hash bundle, blocked-candidate context hash, failure reason codes, regeneration hints, selected slice identity, and N5 handoff hash.
+- Extended `TopicSelectionV1bN6DraftRuntimeService` generation modes:
+  - `initial_from_n5` rejects any N7 loopback or N6 gate-failure projection context;
+  - `regeneration_after_n7_loopback` requires exactly one N7 failed-trial projection and no N6 gate-failure projection;
+  - `regeneration_after_n6_gate_failure` requires exactly one N6 gate-failure retry projection and no N7 failed-trial projection.
+- Wired WorkflowHarness draft admission to infer `regeneration_after_n6_gate_failure` from prompt variant plus frozen projection context.
+  - Retry projection context with an initial prompt variant blocks as prompt identity drift.
+  - Source-hash drift blocks before deterministic candidate gate and before authority/handoff writes.
+  - Orphan or malformed retry projections block before runtime generation/admission.
+- Tightened retry projection admission so source/support hashes must self-consistently bind failed draft prompt identity, failed draft source-hash bundle, blocked-candidate context, failure reason codes, regeneration hints, and optional triage refs/hashes.
+- Expanded N6 compression preserved facts with N6 gate-failure projection, failed draft identity, blocked candidate context, and loopback target.
+- P2.1b L1/L2 is now closed. Remaining v1b runtime expansion moves to P2.2 N8.
+
+## 2026-06-01 - v1b N8 P2.2 D25-A-E Locked
+- D25-A locks the first N8 runtime slice to `n8_value_assessment_draft` only.
+  - The first slice does not expand N9/N10/N11, does not change the N8 deterministic value gate, does not runtime-ize N8->N7 feedback generation, and does not introduce debate/provider canary paths.
+  - Runtime output remains a non-authority `TopicValueAssessmentDraft@v1` semantic artifact with allowed effect `model_draft_for_gate`.
+  - N8 authority writes still require deterministic N8 gate admission and existing `topic_value_assessment` / `N8ToN9Handoff@v1` persistence.
+- D25-B locks N8 context input and prompt/cache identity.
+  - N8 runtime must bind both `N7ToN8Handoff@v1` authority lineage and exactly one `v1b_n7_to_n8_topic_question_contract_context` non-authority projection.
+  - The projection is LLM-operable context only; it is not business authority and cannot bypass N8 deterministic gates.
+  - Prompt/cache identity must include the invocation slot, prompt variant `n8_value_assessment_draft.initial_from_n7`, model/profile identity, context profile hash, redaction policy, frozen input hash, N7 handoff hash, N7->N8 projection hash, topic question hash, topic question contract hash, active candidate hash, answerability plan hash, trial ledger hash, selected research slice hash, candidate set hash, source hash bundle hash, output contract, and runtime modifiers hash.
+  - Missing, duplicated, checksum-drifted, wrong-route, wrong-lineage, or source-hash-drifted N7->N8 projections block before draft generation/admission and before authority/handoff writes.
+- D25-C locks N8 compression as workflow robustness, not content pruning.
+  - Compression may reduce expression density, but it must preserve the fact set and structural shape needed by N8 deterministic gate, N8->N9 handoff, N8 rejection feedback, replay/idempotency, and prompt/cache identity.
+  - Required preservation includes N7 handoff/projection lineage, topic question and contract refs/hashes, active candidate identity, answerability plan, trial ledger, value rationale, support-quality facts, reviewer-facing uncertainty, risk/gap/blocker facts, source-health warnings, and downstream feedback/recheck hints.
+  - Missing required facts, missing required arrays/maps/refs/hashes, rewritten authority semantics, or schema-invalid compressed context blocks before draft generation/admission.
+  - A blocked compressed artifact remains non-authority workflow evidence for LLM iteration and cannot become an admissible prompt/cache hit.
+- D25-D locks the N8 authority boundary.
+  - Runtime output remains advisory and cannot create `topic_value_assessment`, `N8ToN9Handoff@v1`, `N8ToN7Feedback`, route decisions, trial-ledger updates, or candidate mutations.
+  - Gate pass is the only authority admission path for N8 value assessment and N8->N9 handoff persistence.
+  - Gate reject creates no value authority or handoff; deterministic harness logic creates N8->N7 feedback from validated gate blockers and ref/hash-bound failed draft context.
+  - Malformed runtime output, malformed compression output, or cache/reuse hit cannot create feedback and cannot skip the deterministic gate or feedback rules.
+- D25-E locks compression failure detection as runtime self-check, not harness-only judgment.
+  - Shared runtime must validate compression report schema, source refs/hashes, compressed context hash, forbidden payload classes, post-compression token budget, blocker/warning codes, and rejected-artifact cache exclusion before prompt packet creation.
+  - N8 adapter must provide a required-structure manifest for node semantics: lineage refs/hashes, required compact-context paths, preserved fact groups, allowed authority fields, and route/gate semantics.
+  - Runtime/admission must compare compressed context against the manifest: required paths are present, required ids/refs/hashes are unchanged, required fact groups survive, no new authority-looking fields appear, and no route/gate semantics are rewritten.
+  - `WorkflowHarness` must not own a parallel production validity decision for compression. Harness coverage must construct adversarial inputs and assert that runtime/admission services return blockers.
+  - Valid adversarial cases include missing trial ledger, missing required arrays/maps/refs/hashes, N7 projection hash drift, dropped value/risk/gap facts, schema-invalid compact context, rejected compression artifact used as prompt input, and compression success attempting to create feedback or authority.
+
+## 2026-06-01 - v1b N8 P2.2 First Slice Implemented
+- Readiness scan result:
+  - no DB/schema/provider blocker was found for the L1/L2 N8 slice;
+  - the existing N8 deterministic gate and authority path already load `N7ToN8Handoff@v1`, validate value draft structure, and create `TopicValueAssessment` / `N8ToN9Handoff@v1` only after gate admission;
+  - the missing production pieces were the N8 runtime profile, value-draft runtime generator, runtime/admission self-check, and test helper propagation of the N7->N8 projection into N8 frozen source refs.
+- Added `topic-selection.v1b.n8.topic-value-assessment.context-runtime@v1`.
+  - Context family: `v1b_n8_topic_value_assessment`.
+  - Invocation slot: `n8_value_assessment_draft`.
+  - Preserved facts include N7 handoff, N7->N8 projection, topic question/contract, active candidate, answerability plan, trial ledger, selected slice, candidate set, value rationale, support quality, reviewer uncertainty, risk/gap/blocker facts, and feedback/recheck hints.
+  - Post-cache/reuse gates include draft admission, compression structure manifest, deterministic gate, feedback boundary, and authority boundary.
+- Added `TopicSelectionV1bN8ValueAssessmentRuntimeService`.
+  - It requires exactly one ref-backed `v1b_n7_to_n8_topic_question_contract_context` projection in N8 `frozen_input.source_refs`.
+  - It checksum-verifies the projection artifact, enforces non-authority invoke-next policy, checks projection lineage against the frozen N8 payload, and includes the projection hash in source hashes and prompt/runtime identity.
+  - It builds a `TopicSelectionV1bN8RequiredStructureManifest@v1` before prompt packet creation and self-checks required paths, required source hashes, forbidden authority-looking fields, and route/gate semantics.
+  - It invokes `AgentOrchestrator` for Codex-assisted or mocked output and records a `runtime_verified` `n8_value_assessment_draft` semantic artifact with audit ref/hash, prompt packet hash, runtime invocation hash, profile hash, redaction policy, source hashes, and output hash.
+  - It now builds N8 compression-attempt preserved-fact inventory inside the runtime adapter before invoking `AgentOrchestrator`, so dropped required facts or forbidden persisted payloads are blocked by the shared compression quality gate before draft output/admission.
+- Added `TopicSelectionV1bN8ValueAssessmentAdmissionService`.
+  - It blocks missing provenance, `legacy_unverified`, fixture replay in product mode, prompt/profile/runtime-audit/source-hash/run-mode drift, payload hash mismatch, and incomplete compression identity.
+  - Fixture replay remains test/acceptance-only; product admission requires `runtime_verified` provenance.
+- Wired `TopicSelectionV1bWorkflowHarnessService` N8 draft resolution through runtime admission.
+  - Runtime audit artifacts are dereferenced and checksum/provenance-checked before admission.
+  - Expected runtime identity is recomputed from the current N8 frozen payload, requested run mode, and N7->N8 projection, so stale or drifted runtime draft artifacts cannot pass into the deterministic N8 value gate.
+  - The deterministic N8 value gate, feedback behavior, replay/idempotency, and authority writes remain unchanged.
+- Updated v1b harness fixtures so N8 input now carries the N7 trace projection ref by default.
+  - This removes a potential semantic split where tests could pass with only the business handoff but production runtime identity required the non-authority projection.
+  - Product-mode fixture replay is explicitly blocked for N8 value drafts.
+- Added a v1b WorkflowHarness trace-snapshot read route for LLM-operable workflow continuation.
+  - HTTP clients can read `runtime_context_projection_ref/hash` from the N7 trace snapshot and include the projection artifact in N8 frozen source refs.
+  - The route exposes already-persisted trace metadata; it does not create authority and does not expose provider payloads beyond the existing trace snapshot contract.
+- P2.2 L1/L2 status:
+  - runtime-verified Codex N8 value draft admits in product mode;
+  - N7->N8 projection source-hash drift blocks before authority writes;
+  - missing projection blocks runtime generation before prompt creation;
+  - product fixture replay blocks before deterministic N8 authority admission.
+
+## 2026-06-01 - v1b N8 P2.2 L3/L4/L5 Verification Slice Implemented
+- Added Prisma-backed L3 smoke scenario `n8_runtime_smoke` to `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` and package script `pnpm topic-selection:v1b-n8-runtime-smoke`.
+  - The smoke drives N1-N7 setup, reads the N7 trace projection, includes the `v1b_n7_to_n8_topic_question_contract_context` ref in N8 frozen source refs, generates a product-mode `runtime_verified` Codex-assisted N8 value draft through `TopicSelectionV1bN8ValueAssessmentRuntimeService`, and admits it through the existing deterministic N8 value gate.
+  - Exact replay reuses the same `topic_value_assessment` and `N8ToN9Handoff@v1` refs without additional artifact writes for the N8 workflow run.
+  - Projection source-hash drift blocks with `N8_DRAFT_ARTIFACT_SOURCE_HASH_DRIFT` before authority or handoff emission.
+  - Prompt packet index checks confirm metadata-only N8 rows for `n8_value_assessment_draft.initial_from_n7`; rows contain refs/hashes and do not expose messages or provider responses.
+- Added v1b N8 provider canary methods to `TopicSelectionProviderCanaryService`.
+  - Local fake-gateway coverage proves OpenAI/DashScope prompt packet cache hits still require two provider-facing calls and exact response reuse remains null/not-applicable.
+  - OpenAI/DashScope over-budget N8 canaries block before provider calls.
+  - Live N8 provider canaries are gated by `T112_V1B_N8_PROVIDER_CANARY_LIVE=1` and `BACKEND_TEST_PRESERVE_REAL_ENV=1`.
+- Added N8 L5 compression/adversarial tests to `topic-selection-compression-runtime-service.unit.test.ts`.
+  - Dropping N8 long-context facts blocks for missing N7 handoff, N7->N8 projection, topic question, active candidate, answerability plan, trial ledger, candidate set, value rationale, support quality, reviewer uncertainty, risk/gap/blocker facts, and feedback/recheck hints.
+  - Persisting adversarial raw provider logs in compressed N8 context blocks with `COMPRESSION_FORBIDDEN_PERSISTED_PAYLOAD`.
+- Follow-up quality fixes:
+  - N8 product/runtime admission now rejects run-mode drift rather than deriving prompt identity solely from the submitted semantic artifact.
+  - N8 runtime compression self-check is exercised through `TopicSelectionV1bN8ValueAssessmentRuntimeService`, not only direct compression-unit fixtures.
+  - Live N8 provider canary assertions now check prompt packet hash stability, prompt artifact/quality-report reuse, `not_applicable` provider response cache statuses, null response reuse refs, and telemetry count.
+- P2.2 status:
+  - `n8_value_assessment_draft.initial_from_n7` now has L1/L2 implementation, L3 Prisma-backed smoke, L4 local/live provider canary evidence, and L5 long-context/adversarial compression coverage.
+  - Remaining post-N7 v1b runtime expansion should move to v1b N4 rather than widening N8 into N9/N10/N11 or runtime-owned feedback generation.
+
 ## 2026-06-01 - v1a Runtime/Harness Boundary Lock
 - Locked D18.1: v1a node runtime and `WorkflowHarness` have separate responsibilities.
 - Node runtime adapters/context compiler facades own node-level LLM-like execution semantics. For v1a this includes N6 single-agent/debate generation mode, runtime context packet identity, prompt/profile/variant binding, compression and re-rendering, schema/admission/routing gates, and persistence command shape.
@@ -763,3 +908,108 @@
   - review N5/N7/N8 runtime token-budget binding in the harness and keep it as simple orchestration input assembly only;
   - if those nodes gain node-specific prompt/cache/compression/admission policy, introduce node facades instead of extending `WorkflowHarness`;
   - add regression coverage that promoted v1a nodes pass through node adapters/shared runtime collaborators, and that harness assertions do not become production policy.
+
+## 2026-06-01 - v1a N5/N8 Mocked Runtime Stress Mode
+- Added an explicit N8 semantic review execution-mode switch to `.ai/scripts/topic-selection-v1a-harness-e2e.mjs`.
+  - Default remains `deterministic_parser`.
+  - `TOPIC_SELECTION_V1A_HARNESS_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_EXECUTION_MODE=mocked_llm` now drives N8 through `AgentOrchestrator` without external provider calls.
+  - Provider mode is gated by the existing model-option path and remains separate from this mocked stress mode.
+- Added runtime context-ref hydration for N8 mocked semantic review fixtures.
+  - The fixture uses `__runtime_context_packet_ref__` only as a harness placeholder.
+  - `TopicSelectionWorkflowHarnessService` replaces the placeholder with the actual semantic review context packet artifact ref before invoking `AgentOrchestrator`, so final semantic review output, audit response hash, and lineage checks remain ref-backed and self-consistent.
+  - This avoids a test-only bypass of the N8 lineage gate.
+- Extended `.ai/scripts/topic-selection-v1a-runtime-stress.mjs` with `TOPIC_SELECTION_V1A_RUNTIME_STRESS_CONTEXT_MODES`.
+  - `baseline` preserves the existing N6/N7-focused behavior: N5 extraction stays deterministic and N8 semantic review stays deterministic.
+  - `mocked_n5_n8` sets N5 evidence extraction and N8 semantic review to `mocked_llm`.
+  - Prompt packet index snapshots now include N5/N8 counts and assert expected slot minimums for `evidence_extraction` and `confirmation_semantic_review` only when the mocked context mode is active.
+- The new stress run found and fixed a real fixture drift:
+  - N8 mocked review initially carried `policy_version=v1`, while HTTP harness invocation normalizes node scenario input to `topic-selection-v1a-workflow-route-policy-v1`.
+  - The fixture now binds the route-policy version used by the invocation envelope, preserving the same lineage semantics as production harness execution.
+- V1A-GAP-04 is closed. Remaining v1a production-readiness work moves to N5 over-budget compression closure, followed by N7/N8 compression closure, N1-N4 producer replay/drift smoke, and provider slices.
+
+## 2026-06-01 - v1a N5 Over-Budget Compression Closure
+- Added N5 evidence extraction compressed-context planning to `TopicSelectionV1aLlmRuntimeBindingService`.
+  - The plan creates `topic-selection-v1a-n5-evidence-extraction-compressed-context-v1` with source context hashes, compacted search-run handoff, compacted extraction context packet, preserved fact inventory, and explicit non-authority compression notes.
+  - Preserved N5 facts include blocker codes, residual/accepted risk refs, source-health warnings, method-family gaps, unresolved challenge refs, and recheck hint refs where present in the N5 context packet payload.
+  - Compressed prompt rendering uses ref-backed compressed context and keeps the original context packet hash plus compression report identity in runtime provenance.
+- Wired N5 `WorkflowHarness` execution through a production-shaped preflight path.
+  - Over-target N5 provider/codex/mock invocations now run the shared token-budget gate before provider execution.
+  - `requires_compression` records a `context_compression_report` diagnostic artifact through the shared compression runtime, then re-renders the N5 prompt with compressed context.
+  - The second invocation still enters `AgentOrchestrator`, so prompt packet identity, schema validation, token gate audit, and provider/Codex/mock provenance remain centralized.
+  - If compressed context remains over budget, `AgentOrchestrator` blocks before the gateway; EvidenceMap materialization receives no draft and creates no authority refs.
+- Preserved authority boundaries.
+  - Compression report and compressed context are diagnostic/advisory only.
+  - EvidenceMap authority creation still only happens through `TopicSelectionEvidenceMapMaterializationService`.
+  - Cache/compression cannot satisfy materialization, skip role/locator/lineage checks, or write EvidenceMap/EvidenceUnit authority.
+- Added N5 focused coverage.
+  - Over-target N5 compression succeeds with one gateway call, a compression report artifact, a within-budget final audit, and normal materialization warnings.
+  - Compressed-context-still-over-budget blocks with gateway call count `0`, a compression report artifact, blocked token gate audit, and no EvidenceMap authority.
+- Remaining D18 work:
+  - repeat the closure for N7 adjudication recommendation and N8 semantic review;
+  - add N1-N4 producer replay/drift smoke;
+  - add uneven provider slices after N7/N8 closure.
+
+## 2026-06-01 - v1a N7 Over-Budget Compression Closure
+- Added N7 adjudication compressed-context planning to `TopicSelectionV1aLlmRuntimeBindingService`.
+  - The plan creates `topic-selection-v1a-n7-need-adjudication-compressed-context-v1` with source hashes for NeedCandidate, readiness assessment, and validation support packet.
+  - Preserved N7 facts include blockers, residual risks, accepted risks, source-health warnings, method-family gaps, unresolved challenges, and recheck hints from candidate/readiness/support packet sources.
+  - Compressed prompt rendering carries only refs plus `compressed_need_adjudication_context`; the original candidate/readiness/support packet remain authority refs, not authority replacement payloads.
+- Wired N7 `WorkflowHarness` execution through a production-shaped compression preflight.
+  - Over-target N7 provider/codex/mock invocations run the shared token-budget gate before provider execution.
+  - `requires_compression` records a `context_compression_report` diagnostic artifact through the shared compression runtime, then re-renders the N7 prompt with compressed context and compression identity.
+  - The second invocation still enters `AgentOrchestrator`, so prompt packet identity, schema validation, token gate audit, provider/Codex/mock provenance, and response-reuse semantics remain centralized.
+  - If the compression quality gate itself blocks, N7 stops before `AgentOrchestrator`/provider invocation and carries the compression report ref plus blocker codes into the harness trace.
+  - If compressed context remains over budget, `AgentOrchestrator` blocks before the gateway; no adjudication result or reserved ValidatedNeed authority is created.
+- Preserved deterministic adjudication boundaries.
+  - Compression report and compressed context are advisory only.
+  - N7 deterministic gates still enforce recommendation lineage, residual-risk carry, method-family gap carry, high-risk human acceptance, duplicate adjudication blocking, and route-policy outcomes.
+  - Cache/compression cannot satisfy adjudication authority, skip residual-risk/gap checks, create recheck/merge routes, or write ValidatedNeed authority.
+- Added N7 focused coverage.
+  - Over-target N7 compression succeeds with one gateway call, a compression report artifact in the harness trace, a within-budget final audit, and normal adjudication warnings.
+  - Compressed-context-still-over-budget blocks with gateway call count `0`, a compression report artifact, blocked token gate audit, and no adjudication authority.
+  - Compression-quality-gate failure blocks with gateway call count `0`, a blocked compression report artifact, and no adjudication authority.
+- Remaining D18 work:
+  - repeat the closure for N8 semantic review;
+  - add N1-N4 producer replay/drift smoke;
+  - add uneven provider slices after N8 closure.
+
+## 2026-06-01 - v1a N8 Over-Budget Compression Closure
+- Added N8 human-confirmation semantic-review compressed-context planning to `TopicSelectionV1aLlmRuntimeBindingService`.
+  - The plan creates `topic-selection-v1a-n8-human-confirmation-compressed-context-v1` with the semantic review context packet ref/hash, compacted advisory payload, preserved fact inventory, and explicit non-authority compression notes.
+  - Preserved N8 facts include residual risks, accepted risks, source-health warnings, method-family gaps, unresolved challenges, recheck hints, and non-accepted required human checks as blockers.
+  - Compressed prompt rendering carries the original context packet ref/hash plus `compressed_human_confirmation_context`; the compressed payload remains advisory and cannot satisfy human confirmation authority writes.
+- Wired N8 `WorkflowHarness` semantic review execution through a production-shaped compression preflight.
+  - Over-target N8 provider/codex/mock invocations run the shared token-budget gate before provider execution.
+  - `requires_compression` records a `context_compression_report` diagnostic artifact through the shared compression runtime, then re-renders the N8 prompt with compressed context and compression identity.
+  - The second invocation still enters `AgentOrchestrator`, so prompt packet identity, schema validation, token gate audit, provider/Codex/mock provenance, and response-reuse semantics remain centralized.
+  - If the compression quality gate blocks, N8 stops before `AgentOrchestrator`/provider invocation and carries the compression report ref plus blocker codes into the harness trace.
+  - If compressed context remains over budget, `AgentOrchestrator` blocks before the gateway; no semantic review, human decision, or ValidatedNeed authority is created.
+- Preserved human confirmation boundaries.
+  - Compression report and compressed context are advisory only.
+  - N8 semantic review still only gates semantic alignment; `confirmValidatedNeed` remains the sole human authority materialization path.
+  - Cache/compression cannot satisfy required human checks, create accepted-risk refs, skip lineage checks, or write ValidatedNeed authority.
+- Added N8 focused coverage.
+  - Over-target N8 compression succeeds with one gateway call, a compression report artifact in the harness trace, a within-budget final audit, and normal human confirmation authority materialization.
+  - Compressed-context-still-over-budget blocks with gateway call count `0`, a compression report artifact, blocked token gate audit, and no ValidatedNeed authority.
+  - Compression-quality-gate failure blocks with gateway call count `0`, a blocked compression report artifact, and no ValidatedNeed authority.
+- Remaining D18 work:
+  - add N1-N4 producer replay/drift smoke;
+  - add uneven provider slices: DashScope N7/N8 and OpenAI N8.
+
+## 2026-06-01 - v1a N1-N4 Producer Replay/Drift Smoke
+- Added replay identity to deterministic v1a context producers N1-N4.
+  - N1 TopicSeed, N2 LiteratureResourcePoolSnapshot, N3 SearchPlan, and N4 SearchRun traces now carry `input_hash`, `node_input`, `node_result`, and `replay_provenance`.
+  - Exact same `workflow_run_id + node_attempt_id + input_hash` replays return the existing authority refs and source trace artifact ref without creating duplicate TopicSeed/Snapshot/SearchPlan/SearchRun authority.
+  - Same `node_attempt_id` with input-hash drift returns `REPLAY_INPUT_HASH_MISMATCH` as a blocked trace result for N1-N4 and creates only diagnostic trace artifacts.
+- Extended the production-shaped v1a harness replay smoke.
+  - `.ai/scripts/topic-selection-v1a-harness-e2e.mjs` now covers N1-N4 plus N6-N9 exact replay and input-hash drift.
+  - Replay DB counts include N1-N4 authority tables, N5 authority tables, N6-N9 authority tables, and control-plane input/gate/transition counts.
+  - The smoke asserts exact replay has zero DB count drift and zero LLM calls; input-hash drift has zero authority/control-plane drift, zero LLM calls, and only trace artifact growth.
+- Fixed a production-shape replay assertion issue found by the DB smoke.
+  - N4 SearchRun replay is read back from JSON, so `authority_refs.includes(search_run_ref)` used object identity and failed after deserialization.
+  - The assertion now compares functional ref identity by value through `sameFunctionalRef`, matching production storage semantics.
+- Added focused unit coverage.
+  - The new N1-N4 producer replay unit test covers exact replay provenance, ref stability, same-attempt input-hash drift blocking, no authority refs on drift, and zero LLM gateway calls.
+- Remaining v1a work:
+  - add uneven provider slices: DashScope N7/N8 and OpenAI N8;
+  - optional N9 terminal context handoff audit projection.

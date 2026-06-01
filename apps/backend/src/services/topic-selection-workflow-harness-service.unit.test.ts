@@ -8,6 +8,7 @@ import {
   TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION,
   TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION,
   type HumanConfirmationSemanticReview,
+  type HumanConfirmationSemanticReviewContextPacket,
   type HumanConfirmationInput,
   type TopicSelectionArtifactFunctionalRef,
   type TopicSelectionNeedAdjudicationDecision,
@@ -58,17 +59,25 @@ import { TopicSelectionGenerateNeedCandidateOrchestratorAdapterService } from '.
 import { TopicSelectionNeedDiscoveryArtifactBoundaryService } from './topic-selection-need-discovery-artifact-boundary-service.js';
 import { TopicSelectionNeedDiscoveryContextCompilerService } from './topic-selection-need-discovery-context-compiler-service.js';
 import { TopicSelectionContextPacketCacheService } from './topic-selection-context-packet-cache-service.js';
+import {
+  type CreateTopicSelectionCompressionReportInput,
+  type TopicSelectionCompressionReportRuntimeResult,
+  TopicSelectionCompressionRuntimeService,
+} from './topic-selection-compression-runtime-service.js';
 import { TopicSelectionPersistNeedCandidateBatchService } from './topic-selection-persist-need-candidate-batch-service.js';
 import { TopicSelectionRankedCandidateDraftBatchValidatorService } from './topic-selection-ranked-candidate-draft-batch-validator-service.js';
 import { TopicSelectionSearchResourceService } from './topic-selection-search-resource-service.js';
 import {
+  type TopicSelectionWorkflowHarnessCreateTopicSeedInput,
   type TopicSelectionWorkflowHarnessCreateSearchPlanInput,
   type TopicSelectionWorkflowHarnessBuildEvidenceMapInput,
   type TopicSelectionWorkflowHarnessHumanConfirmNeedInput,
   type TopicSelectionWorkflowHarnessPublishV1bInputBundleInput,
+  type TopicSelectionWorkflowHarnessRecordSearchRunInput,
   type TopicSelectionWorkflowHarnessValidateNeedAdjudicationInput,
   type TopicSelectionWorkflowHarnessSnapshotLiteratureResourcePoolInput,
   type TopicSelectionWorkflowHarnessGenerateNeedCandidateInput,
+  TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_RUNTIME_CONTEXT_REF_PLACEHOLDER,
   TopicSelectionWorkflowHarnessService,
 } from './topic-selection-workflow-harness-service.js';
 import {
@@ -141,8 +150,28 @@ class ForcedStaleContextPacketCacheService extends TopicSelectionContextPacketCa
   }
 }
 
+class ForcedBlockedCompressionRuntime extends TopicSelectionCompressionRuntimeService {
+  override createReport(
+    input: CreateTopicSelectionCompressionReportInput,
+  ): TopicSelectionCompressionReportRuntimeResult {
+    const result = super.createReport(input);
+    const blockerCodes = [...result.blocker_codes, 'COMPRESSION_FORCED_TEST_BLOCK'];
+    return {
+      ...result,
+      quality_gate_result: 'blocked',
+      blocker_codes: blockerCodes,
+      report: {
+        ...result.report,
+        quality_gate_result: 'blocked',
+        blocker_codes: blockerCodes,
+      },
+    };
+  }
+}
+
 async function makeRuntime(options: {
   contextPacketCache?: TopicSelectionContextPacketCacheService;
+  compressionRuntime?: TopicSelectionCompressionRuntimeService;
 } = {}) {
   const controlPlaneRepository = new InMemoryTopicSelectionControlPlaneRepository();
   let sequence = 0;
@@ -222,6 +251,7 @@ async function makeRuntime(options: {
     evidenceMapExtractionAgent: agentOrchestrator,
     needValidation: needService,
     needAdjudicationAgent: agentOrchestrator,
+    compressionRuntime: options.compressionRuntime,
   }, {
     now: () => '2026-05-19T00:00:00.000Z',
   });
@@ -318,6 +348,7 @@ async function findAgentAuditSnapshot(input: {
   nodeId: string;
 }): Promise<{
   node_id: string;
+  provenance?: { source_kind?: string | null; non_provider?: boolean | null } | null;
   token_budget_gate_result?: { decision?: string | null } | null;
 }> {
   for (const refEntry of input.refs) {
@@ -332,6 +363,7 @@ async function findAgentAuditSnapshot(input: {
     const snapshot = payload as {
       schema_version?: string;
       node_id?: string;
+      provenance?: { source_kind?: string | null; non_provider?: boolean | null } | null;
       token_budget_gate_result?: { decision?: string | null } | null;
     };
     if (
@@ -340,6 +372,7 @@ async function findAgentAuditSnapshot(input: {
     ) {
       return {
         node_id: snapshot.node_id,
+        provenance: snapshot.provenance ?? null,
         token_budget_gate_result: snapshot.token_budget_gate_result ?? null,
       };
     }
@@ -565,8 +598,11 @@ function makeLiterature(id: string, overrides: Partial<LiteratureRecord> = {}): 
 async function seedSnapshotRuntime(options: {
   mature?: boolean;
   missingLiterature?: boolean;
+  compressionRuntime?: TopicSelectionCompressionRuntimeService;
 } = {}) {
-  const ctx = await makeRuntime();
+  const ctx = await makeRuntime({
+    compressionRuntime: options.compressionRuntime,
+  });
   const titleCard = await ctx.titleCards.createTitleCard({
     working_title: 'Risk-aware RAG adaptation',
     brief: 'Find a bounded research need for RAG and fine-tuning decisions.',
@@ -648,8 +684,12 @@ function snapshotScenarioInput(
   };
 }
 
-async function seedSearchPlanRuntime() {
-  const ctx = await seedSnapshotRuntime();
+async function seedSearchPlanRuntime(options: {
+  compressionRuntime?: TopicSelectionCompressionRuntimeService;
+} = {}) {
+  const ctx = await seedSnapshotRuntime({
+    compressionRuntime: options.compressionRuntime,
+  });
   const snapshotResult = await ctx.workflowHarness.runSnapshotLiteratureResourcePoolScenario(snapshotScenarioInput({
     title_card_id: ctx.titleCard.title_card_id,
     topic_seed_ref: ctx.topicSeedRef,
@@ -748,8 +788,12 @@ function searchPlanScenarioInput(
   };
 }
 
-async function seedRecordSearchRunRuntime() {
-  const ctx = await seedSearchPlanRuntime();
+async function seedRecordSearchRunRuntime(options: {
+  compressionRuntime?: TopicSelectionCompressionRuntimeService;
+} = {}) {
+  const ctx = await seedSearchPlanRuntime({
+    compressionRuntime: options.compressionRuntime,
+  });
   const blueprint = searchPlanBlueprint({
     title_card_id: ctx.titleCard.title_card_id,
     topic_seed_ref: ctx.topicSeedRef,
@@ -1042,8 +1086,11 @@ async function seedValidateNeedAdjudicationRuntime(options: {
   includeContext?: boolean;
   includeChallenge?: boolean;
   gapCodes?: string[];
+  compressionRuntime?: TopicSelectionCompressionRuntimeService;
 } = {}) {
-  const ctx = await seedRecordSearchRunRuntime();
+  const ctx = await seedRecordSearchRunRuntime({
+    compressionRuntime: options.compressionRuntime,
+  });
   const titleCardId = ctx.titleCard.title_card_id;
   const literatureRef = ctx.literatureSnapshot.literature_refs[0]!;
   const sourceRef = ctx.literatureSnapshot.content_source_refs[0]!;
@@ -2417,6 +2464,226 @@ test('workflow harness blocks SearchRun snapshot hash drift before authority cre
   assert.equal((await ctx.searchResourceRepository.listCoverageEvidenceBindingsBySearchPlanId(ctx.searchPlan.search_plan_id)).length, 0);
 });
 
+test('workflow harness replays N1-N4 producer attempts and blocks same-attempt drift', async () => {
+  const ctx = await makeRuntime();
+  const titleCard = await ctx.titleCards.createTitleCard({
+    working_title: 'Risk-aware RAG adaptation',
+    brief: 'Exercise v1a producer replay identity before LLM runtime consumption.',
+  });
+  const topicSeedInput = {
+    scenario_id: 'topic-selection.v1a.producer-replay.v1',
+    scenario_case_id: 'producer-replay-n1-topic-seed',
+    title_card_id: titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_producer_replay_n1',
+    node_attempt_id: 'node_attempt_producer_replay_n1',
+    intent_summary: 'Seed v1a with a stable producer replay fixture.',
+    scope_notes: 'Replay should reuse the existing trace and not create authority.',
+    intent_preparation_refs: [{
+      ref_type: 'topic_seed_intent_draft',
+      ref_id: 'producer_replay_intent_draft',
+      title_card_id: titleCard.title_card_id,
+    }],
+    policy_version: 'v1',
+    output_schema_version: 'v1',
+    expectations: {
+      status: 'succeeded',
+      seed_version: 'v1',
+    },
+  } satisfies TopicSelectionWorkflowHarnessCreateTopicSeedInput;
+  const topicSeed = await ctx.workflowHarness.runCreateTopicSeedScenario(topicSeedInput);
+  const topicSeedReplay = await ctx.workflowHarness.runCreateTopicSeedScenario(topicSeedInput);
+  assertScenarioPassed(topicSeed);
+  assertScenarioPassed(topicSeedReplay);
+  assert.equal(topicSeedReplay.node_result.replay_provenance?.replayed, true);
+  assert.equal(topicSeedReplay.node_result.topic_seed_ref?.ref_id, topicSeed.node_result.topic_seed_ref?.ref_id);
+  assert.equal((await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(topicSeedInput.workflow_run_id)).length, 1);
+  const topicSeedDrift = await ctx.workflowHarness.runCreateTopicSeedScenario({
+    ...topicSeedInput,
+    output_schema_version: 'v1-replay-drift',
+    expectations: {
+      status: 'blocked',
+      error_code: 'VERSION_CONFLICT',
+    },
+  });
+  assertScenarioPassed(topicSeedDrift);
+  assert.deepEqual(topicSeedDrift.node_result.blocker_codes, ['REPLAY_INPUT_HASH_MISMATCH']);
+  assert.equal(topicSeedDrift.node_result.authority_refs.length, 0);
+  assert.equal((await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(topicSeedInput.workflow_run_id)).length, 2);
+
+  await ctx.literature.createLiterature(makeLiterature('producer_replay_lit'));
+  await ctx.literature.upsertLiteratureSource({
+    id: 'producer_replay_source',
+    literatureId: 'producer_replay_lit',
+    provider: 'manual',
+    sourceItemId: 'manual-producer-replay-lit',
+    sourceUrl: 'file://producer_replay_lit.pdf',
+    rawPayload: {},
+    fetchedAt: '2026-05-19T00:00:00.000Z',
+  });
+  await ctx.literature.upsertPipelineState({
+    id: 'producer_replay_pipeline',
+    literatureId: 'producer_replay_lit',
+    citationComplete: true,
+    abstractReady: true,
+    keyContentReady: true,
+    dedupStatus: 'unique',
+    updatedAt: '2026-05-19T00:00:00.000Z',
+  });
+  await ctx.titleCards.updateEvidenceBasket(titleCard.title_card_id, {
+    add_literature_ids: ['producer_replay_lit'],
+  });
+
+  const snapshotInput = snapshotScenarioInput({
+    title_card_id: titleCard.title_card_id,
+    topic_seed_ref: topicSeed.node_result.topic_seed_ref!,
+  }, {
+    scenario_id: 'topic-selection.v1a.producer-replay.v1',
+    scenario_case_id: 'producer-replay-n2-snapshot',
+    workflow_run_id: 'workflow_run_producer_replay_n2',
+    node_attempt_id: 'node_attempt_producer_replay_n2',
+    resource_sample_set_provenance_ref: refForTitleCard(
+      'resource_sample_set',
+      'producer_replay_resource_sample_set',
+      titleCard.title_card_id,
+    ),
+    expectations: {
+      status: 'succeeded',
+      included_literature_count: 1,
+      content_source_count: 1,
+    },
+  });
+  const snapshot = await ctx.workflowHarness.runSnapshotLiteratureResourcePoolScenario(snapshotInput);
+  const snapshotReplay = await ctx.workflowHarness.runSnapshotLiteratureResourcePoolScenario(snapshotInput);
+  assertScenarioPassed(snapshot);
+  assertScenarioPassed(snapshotReplay);
+  assert.equal(snapshotReplay.node_result.replay_provenance?.replayed, true);
+  assert.equal(
+    snapshotReplay.node_result.literature_resource_pool_snapshot_ref?.ref_id,
+    snapshot.node_result.literature_resource_pool_snapshot_ref?.ref_id,
+  );
+  assert.equal(snapshotReplay.node_result.snapshot_hash, snapshot.node_result.snapshot_hash);
+  assert.equal((await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(snapshotInput.workflow_run_id)).length, 1);
+  const snapshotDrift = await ctx.workflowHarness.runSnapshotLiteratureResourcePoolScenario({
+    ...snapshotInput,
+    output_schema_version: 'v1-replay-drift',
+    expectations: {
+      status: 'blocked',
+      error_code: 'VERSION_CONFLICT',
+      blocker_codes: ['REPLAY_INPUT_HASH_MISMATCH'],
+    },
+  });
+  assertScenarioPassed(snapshotDrift);
+  assert.deepEqual(snapshotDrift.node_result.blocker_codes, ['REPLAY_INPUT_HASH_MISMATCH']);
+  assert.equal(snapshotDrift.node_result.authority_refs.length, 0);
+  assert.equal((await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(snapshotInput.workflow_run_id)).length, 2);
+
+  const producerSnapshotHash = snapshot.node_result.snapshot_hash;
+  assert.ok(producerSnapshotHash);
+  const blueprint = searchPlanBlueprint({
+    title_card_id: titleCard.title_card_id,
+    topic_seed_ref: topicSeed.node_result.topic_seed_ref!,
+    literature_resource_pool_snapshot_ref: snapshot.node_result.literature_resource_pool_snapshot_ref!,
+    expected_snapshot_hash: producerSnapshotHash,
+  });
+  const searchPlanInput = searchPlanScenarioInput(blueprint, {
+    scenario_id: 'topic-selection.v1a.producer-replay.v1',
+    scenario_case_id: 'producer-replay-n3-search-plan',
+    title_card_id: titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_producer_replay_n3',
+    node_attempt_id: 'node_attempt_producer_replay_n3',
+  });
+  const searchPlan = await ctx.workflowHarness.runCreateSearchPlanScenario(searchPlanInput);
+  const searchPlanReplay = await ctx.workflowHarness.runCreateSearchPlanScenario(searchPlanInput);
+  assertScenarioPassed(searchPlan);
+  assertScenarioPassed(searchPlanReplay);
+  assert.equal(searchPlanReplay.node_result.replay_provenance?.replayed, true);
+  assert.equal(searchPlanReplay.node_result.search_plan_ref?.ref_id, searchPlan.node_result.search_plan_ref?.ref_id);
+  assert.deepEqual(
+    searchPlanReplay.node_result.coverage_row_intent_refs.map((ref) => ref.ref_id),
+    searchPlan.node_result.coverage_row_intent_refs.map((ref) => ref.ref_id),
+  );
+  assert.equal((await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(searchPlanInput.workflow_run_id)).length, 1);
+  const searchPlanDrift = await ctx.workflowHarness.runCreateSearchPlanScenario({
+    ...searchPlanInput,
+    blueprint: {
+      ...searchPlanInput.blueprint!,
+      output_schema_version: 'v1-replay-drift',
+    },
+    expectations: {
+      status: 'blocked',
+      error_code: 'VERSION_CONFLICT',
+      blocker_codes: ['REPLAY_INPUT_HASH_MISMATCH'],
+      coverage_row_count: 0,
+    },
+  });
+  assertScenarioPassed(searchPlanDrift);
+  assert.deepEqual(searchPlanDrift.node_result.blocker_codes, ['REPLAY_INPUT_HASH_MISMATCH']);
+  assert.equal(searchPlanDrift.node_result.authority_refs.length, 0);
+  assert.equal((await ctx.searchResourceRepository.listSearchPlansByTitleCardId(titleCard.title_card_id)).length, 1);
+  assert.equal((await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(searchPlanInput.workflow_run_id)).length, 2);
+
+  const bundle = searchRunBundle({
+    title_card_id: titleCard.title_card_id,
+    search_plan_ref: searchPlan.node_result.search_plan_ref!,
+    literature_resource_pool_snapshot_ref: snapshot.node_result.literature_resource_pool_snapshot_ref!,
+    expected_literature_snapshot_hash: producerSnapshotHash,
+    coverage_row_intent_ref: searchPlan.node_result.coverage_row_intent_refs[0]!,
+    literature_ref: snapshot.node_result.included_literature_refs[0]!,
+    source_ref: snapshot.node_result.content_source_refs[0]!,
+  });
+  const searchRunInput = {
+    scenario_id: 'topic-selection.v1a.producer-replay.v1',
+    scenario_case_id: 'producer-replay-n4-search-run',
+    title_card_id: titleCard.title_card_id,
+    workflow_run_id: 'workflow_run_producer_replay_n4',
+    node_attempt_id: 'node_attempt_producer_replay_n4',
+    bundle,
+    expectations: {
+      status: 'succeeded',
+      consumable_for_evidence_map: true,
+      downstream_handoff_present: true,
+      loopback_signal_present: false,
+    },
+  } satisfies TopicSelectionWorkflowHarnessRecordSearchRunInput;
+  const searchRun = await ctx.workflowHarness.runRecordSearchRunScenario(searchRunInput);
+  const searchRunReplay = await ctx.workflowHarness.runRecordSearchRunScenario(searchRunInput);
+  assertScenarioPassed(searchRun);
+  assertScenarioPassed(searchRunReplay);
+  assert.equal(searchRunReplay.node_result.replay_provenance?.replayed, true);
+  assert.equal(searchRunReplay.node_result.search_run_ref?.ref_id, searchRun.node_result.search_run_ref?.ref_id);
+  assert.deepEqual(
+    searchRunReplay.node_result.evidence_binding_refs.map((ref) => ref.ref_id),
+    searchRun.node_result.evidence_binding_refs.map((ref) => ref.ref_id),
+  );
+  assert.equal((await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(searchRunInput.workflow_run_id)).length, 1);
+  const searchRunDrift = await ctx.workflowHarness.runRecordSearchRunScenario({
+    ...searchRunInput,
+    bundle: {
+      ...searchRunInput.bundle,
+      output_schema_version: 'v1-replay-drift',
+    },
+    expectations: {
+      status: 'blocked',
+      error_code: 'VERSION_CONFLICT',
+      blocker_codes: ['REPLAY_INPUT_HASH_MISMATCH'],
+      consumable_for_evidence_map: false,
+      downstream_handoff_present: false,
+      loopback_signal_present: false,
+    },
+  });
+  assertScenarioPassed(searchRunDrift);
+  assert.deepEqual(searchRunDrift.node_result.blocker_codes, ['REPLAY_INPUT_HASH_MISMATCH']);
+  assert.equal(searchRunDrift.node_result.authority_refs.length, 0);
+  assert.equal(
+    (await ctx.searchResourceRepository.listCoverageEvidenceBindingsBySearchPlanId(
+      searchPlan.node_result.search_plan_ref!.ref_id,
+    )).length,
+    1,
+  );
+  assert.equal((await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(searchRunInput.workflow_run_id)).length, 2);
+  assert.equal(ctx.llmGateway.calls.length, 0);
+});
+
 test('workflow harness stress-tests v1a context producers and publish boundary', async () => {
   const producerCtx = await makeRuntime();
   const titleCard = await producerCtx.titleCards.createTitleCard({
@@ -3374,6 +3641,168 @@ test('workflow harness runs provider single-agent EvidenceMap extraction through
   assert.equal(result.node_result.blocker_codes.length, 0);
 });
 
+test('workflow harness compresses over-target EvidenceMap extraction context and still applies materialization gates', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(ctx.searchRunHandoff);
+  const workflowRunId = 'workflow_run_build_evidence_map_provider_compression';
+  const nodeAttemptId = 'node_attempt_build_evidence_map_provider_compression';
+  const draft = evidenceMapExtractionDraft({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    input_refs_hash: inputRefsHash,
+  }, {
+    producer_kind: 'provider_llm',
+  });
+  ctx.llmGateway.setOutputForSchema('TopicSelectionEvidenceMapExtractionDraft@v1', draft);
+  const contextPacket = evidenceMapExtractionContextPacket({
+    workflow_run_id: workflowRunId,
+    node_attempt_id: nodeAttemptId,
+    handoff: ctx.searchRunHandoff,
+    input_refs_hash: inputRefsHash,
+    execution_mode: 'provider_llm',
+  });
+
+  const result = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    draft,
+  }, {
+    workflow_run_id: workflowRunId,
+    node_attempt_id: nodeAttemptId,
+    extraction_draft: null,
+    execution_mode: 'provider_llm',
+    execution_spec: {
+      execution_mode: 'provider_llm',
+      model_option_id: `${TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+    },
+    run_mode: 'product',
+    model_option_id: `${TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+    extraction_context_packet: {
+      ...contextPacket,
+      payload: {
+        ...contextPacket.payload,
+        source_health_warning_codes: ['SOURCE_HEALTH_RECHECK'],
+        method_family_gap_codes: ['METHOD_FAMILY_COVERAGE_GAP'],
+        long_context_for_compression: 'compressible evidence extraction context '.repeat(500),
+      },
+    },
+    extraction_context_packet_ref: {
+      ref_type: 'artifact_ref',
+      ref_id: 'context_packet_provider_compression_001',
+      title_card_id: ctx.titleCard.title_card_id,
+    },
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 80_000,
+      estimated_input_tokens_after_compression_override: 8_000,
+    },
+    expectations: {
+      status: 'succeeded',
+      materialization_status: 'ready_with_warning',
+      evidence_unit_count: 1,
+      downstream_handoff_present: true,
+      warning_codes: ['ABSTRACT_ONLY_SUPPORT', 'COMPRESSION_REPORT_RECORDED'],
+    },
+  }));
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'succeeded');
+  assert.equal(ctx.llmGateway.calls.length, 1);
+  assert.ok(result.node_result.context_compression_report_ref);
+  assert.ok(result.node_result.artifact_refs.some(
+    (artifactRef) => artifactRef.ref_id === result.node_result.context_compression_report_ref?.ref_id,
+  ));
+  const compressionArtifact = await ctx.controlPlaneRepository.findArtifactRefById(
+    result.node_result.context_compression_report_ref!.ref_id,
+  );
+  assert.equal(compressionArtifact?.payload?.artifact_key, 'context_compression_report');
+  assert.equal(compressionArtifact?.payload?.payload_schema, 'TopicSelectionCompressionReportEnvelope@v1');
+  assert.equal(
+    (compressionArtifact?.payload?.report as { quality_gate_result?: string } | undefined)?.quality_gate_result,
+    'passed',
+  );
+  const audit = await findAgentAuditSnapshot({
+    repository: ctx.controlPlaneRepository,
+    refs: result.node_result.artifact_refs,
+    nodeId: 'topic-selection.v1a.build-evidence-map.v1',
+  });
+  assert.equal(audit.token_budget_gate_result?.decision, 'within_budget');
+});
+
+test('workflow harness blocks EvidenceMap extraction when compressed context remains over budget', async () => {
+  const ctx = await seedBuildEvidenceMapRuntime();
+  const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(ctx.searchRunHandoff);
+  const workflowRunId = 'workflow_run_build_evidence_map_provider_compressed_over_budget';
+  const nodeAttemptId = 'node_attempt_build_evidence_map_provider_compressed_over_budget';
+  const draft = evidenceMapExtractionDraft({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    literature_ref: ctx.literatureSnapshot.literature_refs[0]!,
+    source_ref: ctx.literatureSnapshot.content_source_refs[0]!,
+    coverage_row_intent_ref: ctx.coverageRowIntentRefs[0]!,
+    input_refs_hash: inputRefsHash,
+  }, {
+    producer_kind: 'provider_llm',
+  });
+  ctx.llmGateway.setOutputForSchema('TopicSelectionEvidenceMapExtractionDraft@v1', draft);
+  const contextPacket = evidenceMapExtractionContextPacket({
+    workflow_run_id: workflowRunId,
+    node_attempt_id: nodeAttemptId,
+    handoff: ctx.searchRunHandoff,
+    input_refs_hash: inputRefsHash,
+    execution_mode: 'provider_llm',
+  });
+
+  const result = await ctx.workflowHarness.runBuildEvidenceMapScenario(buildEvidenceMapScenarioInput({
+    title_card_id: ctx.titleCard.title_card_id,
+    handoff: ctx.searchRunHandoff,
+    draft,
+  }, {
+    workflow_run_id: workflowRunId,
+    node_attempt_id: nodeAttemptId,
+    extraction_draft: null,
+    execution_mode: 'provider_llm',
+    execution_spec: {
+      execution_mode: 'provider_llm',
+      model_option_id: `${TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+    },
+    run_mode: 'product',
+    model_option_id: `${TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+    extraction_context_packet: contextPacket,
+    extraction_context_packet_ref: {
+      ref_type: 'artifact_ref',
+      ref_id: 'context_packet_provider_compressed_over_budget_001',
+      title_card_id: ctx.titleCard.title_card_id,
+    },
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 80_000,
+      estimated_input_tokens_after_compression_override: 200_000,
+    },
+    expectations: {
+      status: 'blocked',
+      materialization_status: 'blocked',
+      error_code: 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION',
+      blocker_codes: ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION'],
+      downstream_handoff_present: false,
+    },
+  }));
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(ctx.llmGateway.calls.length, 0);
+  assert.ok(result.node_result.context_compression_report_ref);
+  assert.equal(result.node_result.authority_refs.length, 0);
+  assert.equal((await ctx.evidenceRepository.listEvidenceMapsByTitleCardId(ctx.titleCard.title_card_id)).length, 0);
+  const audit = await findAgentAuditSnapshot({
+    repository: ctx.controlPlaneRepository,
+    refs: result.node_result.artifact_refs,
+    nodeId: 'topic-selection.v1a.build-evidence-map.v1',
+  });
+  assert.equal(audit.token_budget_gate_result?.decision, 'blocked_over_budget');
+});
+
 test('workflow harness carries a valid EvidenceMap handoff into generate-need-candidate input refs', async () => {
   const ctx = await seedBuildEvidenceMapRuntime();
   const inputRefsHash = ctx.evidenceMapMaterializer.inputRefsHashForSearchRunHandoff(ctx.searchRunHandoff);
@@ -3591,6 +4020,228 @@ test('workflow harness runs validate-need-adjudication through canonical executi
   assert.equal(result.node_result.status, 'ready');
 });
 
+test('workflow harness compresses over-target validate-need-adjudication context and still applies adjudication gates', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime({
+    includeChallenge: true,
+    gapCodes: ['METHOD_FAMILY_COVERAGE_GAP'],
+  });
+  assert.ok(ctx.supportPacket);
+  const workflowRunId = 'workflow_run_validate_need_provider_compression';
+  const nodeAttemptId = 'node_attempt_validate_need_provider_compression';
+  const packet = needAdjudicationRecommendationPacket(ctx, {
+    workflow_run_id: workflowRunId,
+    node_attempt_id: nodeAttemptId,
+  }, {
+    execution_mode: 'provider_llm',
+    required_actions: ['carry residual risks and method-family coverage gap into human confirmation'],
+    residual_risk_refs: ctx.supportPacket.residual_risk_refs,
+    gap_codes: ['METHOD_FAMILY_COVERAGE_GAP'],
+  });
+  ctx.llmGateway.setOutputForSchema(
+    TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION,
+    packet,
+  );
+
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, packet, {
+      scenario_case_id: 'validate-need-adjudication-provider-compression',
+      workflow_run_id: workflowRunId,
+      node_attempt_id: nodeAttemptId,
+      execution_mode: 'provider_llm',
+      execution_spec: {
+        execution_mode: 'provider_llm',
+        model_option_id: `${TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+      },
+      run_mode: 'product',
+      mocked_output: null,
+      model_option_id: `${TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+      runtime_token_budget_overrides: {
+        estimated_input_tokens_override: 80_000,
+        estimated_input_tokens_after_compression_override: 12_000,
+      },
+      expectations: {
+        status: 'ready',
+        route_outcome: 'advance_to_human_confirmation',
+        final_decision: 'validate',
+        adjudication_created: true,
+        warning_codes: [
+          'METHOD_FAMILY_COVERAGE_GAP',
+          'VALIDATE_WITH_RESIDUAL_RISK',
+          'COMPRESSION_REPORT_RECORDED',
+        ],
+      },
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'ready');
+  assert.equal(ctx.llmGateway.calls.length, 1);
+  assert.equal(result.node_result.warning_codes.includes('COMPRESSION_REPORT_RECORDED'), true);
+  const artifacts = await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(workflowRunId);
+  const compressionArtifact = artifacts.find((artifact) =>
+    artifact.payload?.artifact_key === 'context_compression_report'
+      && artifact.payload?.node_id === 'topic-selection.v1a.validate-need-adjudication.v1'
+  );
+  assert.ok(compressionArtifact);
+  assert.equal(compressionArtifact.payload?.payload_schema, 'TopicSelectionCompressionReportEnvelope@v1');
+  assert.equal(
+    result.harness_trace_snapshot.artifact_refs.some((refEntry) =>
+      refEntry.ref_type === 'artifact_ref' && refEntry.ref_id === compressionArtifact.artifact_ref_id,
+    ),
+    true,
+  );
+  assert.equal(
+    (compressionArtifact.payload?.report as { quality_gate_result?: string } | undefined)?.quality_gate_result,
+    'passed',
+  );
+  const audit = await findAgentAuditSnapshot({
+    repository: ctx.controlPlaneRepository,
+    refs: result.harness_trace_snapshot.artifact_refs,
+    nodeId: 'topic-selection.v1a.validate-need-adjudication.v1',
+  });
+  assert.equal(audit.token_budget_gate_result?.decision, 'within_budget');
+});
+
+test('workflow harness blocks validate-need-adjudication when compressed context remains over budget', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const workflowRunId = 'workflow_run_validate_need_provider_compressed_over_budget';
+  const nodeAttemptId = 'node_attempt_validate_need_provider_compressed_over_budget';
+  const packet = needAdjudicationRecommendationPacket(ctx, {
+    workflow_run_id: workflowRunId,
+    node_attempt_id: nodeAttemptId,
+  }, {
+    execution_mode: 'provider_llm',
+  });
+  ctx.llmGateway.setOutputForSchema(
+    TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION,
+    packet,
+  );
+
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, packet, {
+      scenario_case_id: 'validate-need-adjudication-provider-compressed-over-budget',
+      workflow_run_id: workflowRunId,
+      node_attempt_id: nodeAttemptId,
+      execution_mode: 'provider_llm',
+      execution_spec: {
+        execution_mode: 'provider_llm',
+        model_option_id: `${TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+      },
+      run_mode: 'product',
+      mocked_output: null,
+      model_option_id: `${TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+      runtime_token_budget_overrides: {
+        estimated_input_tokens_override: 80_000,
+        estimated_input_tokens_after_compression_override: 200_000,
+      },
+      expectations: {
+        status: 'blocked',
+        route_outcome: 'blocked',
+        final_decision: null,
+        error_code: 'GATE_CONSTRAINT_FAILED',
+        blocker_codes: ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION'],
+        adjudication_created: false,
+      },
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(ctx.llmGateway.calls.length, 0);
+  assert.equal(
+    (await ctx.needValidationRepository.listAdjudicationResultsByNeedCandidateId(ctx.candidate.need_candidate_id)).length,
+    0,
+  );
+  const artifacts = await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(workflowRunId);
+  const compressionArtifact = artifacts.find((artifact) =>
+    artifact.payload?.artifact_key === 'context_compression_report'
+      && artifact.payload?.node_id === 'topic-selection.v1a.validate-need-adjudication.v1'
+  );
+  assert.ok(compressionArtifact);
+  assert.equal(
+    result.harness_trace_snapshot.artifact_refs.some((refEntry) =>
+      refEntry.ref_type === 'artifact_ref' && refEntry.ref_id === compressionArtifact.artifact_ref_id,
+    ),
+    true,
+  );
+  const audit = await findAgentAuditSnapshot({
+    repository: ctx.controlPlaneRepository,
+    refs: result.harness_trace_snapshot.artifact_refs,
+    nodeId: 'topic-selection.v1a.validate-need-adjudication.v1',
+  });
+  assert.equal(audit.token_budget_gate_result?.decision, 'blocked_over_budget');
+});
+
+test('workflow harness blocks validate-need-adjudication when compression quality gate fails', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime({
+    compressionRuntime: new ForcedBlockedCompressionRuntime(),
+  });
+  const workflowRunId = 'workflow_run_validate_need_provider_compression_quality_block';
+  const nodeAttemptId = 'node_attempt_validate_need_provider_compression_quality_block';
+  const packet = needAdjudicationRecommendationPacket(ctx, {
+    workflow_run_id: workflowRunId,
+    node_attempt_id: nodeAttemptId,
+  }, {
+    execution_mode: 'provider_llm',
+  });
+  ctx.llmGateway.setOutputForSchema(
+    TOPIC_SELECTION_NEED_ADJUDICATION_RECOMMENDATION_PACKET_SCHEMA_VERSION,
+    packet,
+  );
+
+  const result = await ctx.workflowHarness.runValidateNeedAdjudicationScenario(
+    validateNeedAdjudicationScenarioInput(ctx, packet, {
+      scenario_case_id: 'validate-need-adjudication-provider-compression-quality-block',
+      workflow_run_id: workflowRunId,
+      node_attempt_id: nodeAttemptId,
+      execution_mode: 'provider_llm',
+      execution_spec: {
+        execution_mode: 'provider_llm',
+        model_option_id: `${TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+      },
+      run_mode: 'product',
+      mocked_output: null,
+      model_option_id: `${TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+      runtime_token_budget_overrides: {
+        estimated_input_tokens_override: 80_000,
+        estimated_input_tokens_after_compression_override: 12_000,
+      },
+      expectations: {
+        status: 'blocked',
+        route_outcome: 'blocked',
+        final_decision: null,
+        error_code: 'GATE_CONSTRAINT_FAILED',
+        blocker_codes: ['COMPRESSION_QUALITY_GATE_BLOCKED', 'COMPRESSION_FORCED_TEST_BLOCK'],
+        adjudication_created: false,
+      },
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(ctx.llmGateway.calls.length, 0);
+  assert.equal(
+    (await ctx.needValidationRepository.listAdjudicationResultsByNeedCandidateId(ctx.candidate.need_candidate_id)).length,
+    0,
+  );
+  const artifacts = await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(workflowRunId);
+  const compressionArtifact = artifacts.find((artifact) =>
+    artifact.payload?.artifact_key === 'context_compression_report'
+      && artifact.payload?.node_id === 'topic-selection.v1a.validate-need-adjudication.v1'
+  );
+  assert.ok(compressionArtifact);
+  assert.equal(
+    (compressionArtifact.payload?.report as { quality_gate_result?: string } | undefined)?.quality_gate_result,
+    'blocked',
+  );
+  assert.equal(
+    result.harness_trace_snapshot.artifact_refs.some((refEntry) =>
+      refEntry.ref_type === 'artifact_ref' && refEntry.ref_id === compressionArtifact.artifact_ref_id,
+    ),
+    true,
+  );
+});
+
 test('workflow harness blocks validate-need-adjudication when validate drops residual risks', async () => {
   const ctx = await seedValidateNeedAdjudicationRuntime({ includeChallenge: true });
   assert.ok(ctx.supportPacket);
@@ -3731,6 +4382,264 @@ test('workflow harness runs human-confirm-need and materializes reserved Validat
     result.node_result.validated_need_ref!.ref_id,
   );
   assert.equal(bundles.length, 0);
+});
+
+test('workflow harness hashes human-confirm semantic context without volatile timestamps', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const result = await ctx.workflowHarness.runHumanConfirmNeedScenario(
+    humanConfirmNeedScenarioInput(ctx, validateResult, {
+      workflow_run_id: 'workflow_run_human_confirm_context_hash_stability',
+      node_attempt_id: 'node_attempt_human_confirm_context_hash_stability',
+    }),
+  );
+
+  assertScenarioPassed(result);
+  assert.ok(result.node_result.semantic_review_context_packet_ref);
+  const contextArtifact = await ctx.controlPlaneRepository.findArtifactRefById(
+    result.node_result.semantic_review_context_packet_ref.ref_id,
+  );
+  const payload = contextArtifact?.payload as {
+    context_packet?: HumanConfirmationSemanticReviewContextPacket;
+  } | null;
+  const packet = payload?.context_packet;
+  assert.ok(packet);
+  const {
+    context_packet_hash: contextPacketHash,
+    created_at: createdAt,
+    ...stablePayload
+  } = packet;
+
+  assert.equal(contextPacketHash, sha256Text(stableStringify(stablePayload)));
+  assert.notEqual(
+    contextPacketHash,
+    sha256Text(stableStringify({ ...stablePayload, created_at: createdAt })),
+  );
+});
+
+test('workflow harness hydrates mocked human-confirm semantic review with runtime context ref', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const input = humanConfirmNeedScenarioInput(ctx, validateResult, {
+    workflow_run_id: 'workflow_run_human_confirm_mocked_semantic_review',
+    node_attempt_id: 'node_attempt_human_confirm_mocked_semantic_review',
+    execution_mode: 'mocked_llm',
+  });
+  const runtimeContextPlaceholder = refForTitleCard(
+    'artifact_ref',
+    TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_RUNTIME_CONTEXT_REF_PLACEHOLDER,
+    ctx.titleCard.title_card_id,
+  );
+  input.mocked_output = {
+    fixture_id: 'fixture_human_confirm_mocked_semantic_review',
+    output: humanConfirmationSemanticReviewOutput(ctx, input, {
+      context_packet_ref: runtimeContextPlaceholder,
+      provenance_ref: runtimeContextPlaceholder,
+      execution_mode: 'mocked_llm',
+    }),
+  };
+
+  const result = await ctx.workflowHarness.runHumanConfirmNeedScenario(input);
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'ready');
+  assert.ok(result.node_result.semantic_review_context_packet_ref);
+  assert.ok(result.node_result.semantic_review_ref);
+  const reviewArtifact = await ctx.controlPlaneRepository.findArtifactRefById(
+    result.node_result.semantic_review_ref.ref_id,
+  );
+  const reviewPayload = reviewArtifact?.payload as {
+    semantic_review?: HumanConfirmationSemanticReview;
+  } | null;
+  const semanticReview = reviewPayload?.semantic_review;
+  assert.ok(semanticReview);
+  assert.deepEqual(semanticReview.context_packet_ref, result.node_result.semantic_review_context_packet_ref);
+  assert.deepEqual(semanticReview.provenance_ref, result.node_result.semantic_review_context_packet_ref);
+  const audit = await findAgentAuditSnapshot({
+    repository: ctx.controlPlaneRepository,
+    refs: result.harness_trace_snapshot.artifact_refs,
+    nodeId: 'topic-selection.v1a.human-confirm-need.v1',
+  });
+  assert.equal(audit.provenance?.source_kind, 'mock_fixture');
+  assert.equal(audit.provenance?.non_provider, true);
+  assert.equal(audit.token_budget_gate_result?.decision, 'within_budget');
+});
+
+test('workflow harness compresses over-target human-confirm semantic review context and still applies human authority gates', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const input = humanConfirmNeedScenarioInput(ctx, validateResult, {
+    scenario_case_id: 'human-confirm-need-provider-compression',
+    workflow_run_id: 'workflow_run_human_confirm_provider_compression',
+    node_attempt_id: 'node_attempt_human_confirm_provider_compression',
+    execution_mode: 'provider_llm',
+    execution_spec: {
+      execution_mode: 'provider_llm',
+      model_option_id: `${TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+    },
+    run_mode: 'product',
+    mocked_output: null,
+    model_option_id: `${TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 80_000,
+      estimated_input_tokens_after_compression_override: 8_000,
+    },
+  });
+  ctx.llmGateway.setOutputForSchema(
+    TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION,
+    (request: LlmStructuredOutputRequest) => {
+      const payload = JSON.parse(request.messages[1]?.content ?? '{}') as {
+        context_packet_ref?: TopicSelectionFunctionalRef;
+      };
+      assert.ok(payload.context_packet_ref);
+      return humanConfirmationSemanticReviewOutput(ctx, input, {
+        context_packet_ref: payload.context_packet_ref,
+        provenance_ref: payload.context_packet_ref,
+        execution_mode: 'provider_llm',
+      });
+    },
+  );
+
+  const result = await ctx.workflowHarness.runHumanConfirmNeedScenario(input);
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'ready');
+  assert.ok(result.node_result.validated_need_ref);
+  assert.equal(ctx.llmGateway.calls.length, 1);
+  assert.equal(result.node_result.warning_codes.includes('COMPRESSION_REPORT_RECORDED'), true);
+  const artifacts = await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(input.workflow_run_id);
+  const compressionArtifact = artifacts.find((artifact) =>
+    artifact.payload?.artifact_key === 'context_compression_report'
+      && artifact.payload?.node_id === 'topic-selection.v1a.human-confirm-need.v1'
+  );
+  assert.ok(compressionArtifact);
+  assert.equal(compressionArtifact.payload?.payload_schema, 'TopicSelectionCompressionReportEnvelope@v1');
+  assert.equal(
+    result.harness_trace_snapshot.artifact_refs.some((refEntry) =>
+      refEntry.ref_type === 'artifact_ref' && refEntry.ref_id === compressionArtifact.artifact_ref_id,
+    ),
+    true,
+  );
+  const audit = await findAgentAuditSnapshot({
+    repository: ctx.controlPlaneRepository,
+    refs: result.harness_trace_snapshot.artifact_refs,
+    nodeId: 'topic-selection.v1a.human-confirm-need.v1',
+  });
+  assert.equal(audit.token_budget_gate_result?.decision, 'within_budget');
+});
+
+test('workflow harness blocks human-confirm semantic review when compressed context remains over budget', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime();
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const input = humanConfirmNeedScenarioInput(ctx, validateResult, {
+    scenario_case_id: 'human-confirm-need-provider-compressed-over-budget',
+    workflow_run_id: 'workflow_run_human_confirm_provider_compressed_over_budget',
+    node_attempt_id: 'node_attempt_human_confirm_provider_compressed_over_budget',
+    execution_mode: 'provider_llm',
+    execution_spec: {
+      execution_mode: 'provider_llm',
+      model_option_id: `${TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+    },
+    run_mode: 'product',
+    mocked_output: null,
+    model_option_id: `${TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 80_000,
+      estimated_input_tokens_after_compression_override: 200_000,
+    },
+    expectations: {
+      status: 'blocked',
+      route_outcome: 'blocked',
+      error_code: 'GATE_CONSTRAINT_FAILED',
+      blocker_codes: ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION'],
+      validated_need_created: false,
+      v1b_bundle_created: false,
+    },
+  });
+  ctx.llmGateway.setOutputForSchema(
+    TOPIC_SELECTION_HUMAN_CONFIRMATION_SEMANTIC_REVIEW_SCHEMA_VERSION,
+    humanConfirmationSemanticReviewOutput(ctx, input, { execution_mode: 'provider_llm' }),
+  );
+
+  const result = await ctx.workflowHarness.runHumanConfirmNeedScenario(input);
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(ctx.llmGateway.calls.length, 0);
+  assert.equal(result.node_result.validated_need_ref, null);
+  const artifacts = await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(input.workflow_run_id);
+  const compressionArtifact = artifacts.find((artifact) =>
+    artifact.payload?.artifact_key === 'context_compression_report'
+      && artifact.payload?.node_id === 'topic-selection.v1a.human-confirm-need.v1'
+  );
+  assert.ok(compressionArtifact);
+  assert.equal(
+    result.harness_trace_snapshot.artifact_refs.some((refEntry) =>
+      refEntry.ref_type === 'artifact_ref' && refEntry.ref_id === compressionArtifact.artifact_ref_id,
+    ),
+    true,
+  );
+  const audit = await findAgentAuditSnapshot({
+    repository: ctx.controlPlaneRepository,
+    refs: result.harness_trace_snapshot.artifact_refs,
+    nodeId: 'topic-selection.v1a.human-confirm-need.v1',
+  });
+  assert.equal(audit.token_budget_gate_result?.decision, 'blocked_over_budget');
+});
+
+test('workflow harness blocks human-confirm semantic review when compression quality gate fails', async () => {
+  const ctx = await seedValidateNeedAdjudicationRuntime({
+    compressionRuntime: new ForcedBlockedCompressionRuntime(),
+  });
+  const validateResult = await runValidateNeedForHumanConfirm(ctx);
+  const input = humanConfirmNeedScenarioInput(ctx, validateResult, {
+    scenario_case_id: 'human-confirm-need-provider-compression-quality-block',
+    workflow_run_id: 'workflow_run_human_confirm_provider_compression_quality_block',
+    node_attempt_id: 'node_attempt_human_confirm_provider_compression_quality_block',
+    execution_mode: 'provider_llm',
+    execution_spec: {
+      execution_mode: 'provider_llm',
+      model_option_id: `${TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+    },
+    run_mode: 'product',
+    mocked_output: null,
+    model_option_id: `${TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_ID}.openai-quality`,
+    runtime_token_budget_overrides: {
+      estimated_input_tokens_override: 80_000,
+      estimated_input_tokens_after_compression_override: 8_000,
+    },
+    expectations: {
+      status: 'blocked',
+      route_outcome: 'blocked',
+      error_code: 'GATE_CONSTRAINT_FAILED',
+      blocker_codes: ['COMPRESSION_QUALITY_GATE_BLOCKED', 'COMPRESSION_FORCED_TEST_BLOCK'],
+      validated_need_created: false,
+      v1b_bundle_created: false,
+    },
+  });
+
+  const result = await ctx.workflowHarness.runHumanConfirmNeedScenario(input);
+
+  assertScenarioPassed(result);
+  assert.equal(result.node_result.status, 'blocked');
+  assert.equal(ctx.llmGateway.calls.length, 0);
+  assert.equal(result.node_result.validated_need_ref, null);
+  const artifacts = await ctx.controlPlaneRepository.listArtifactRefsByWorkflowRunId(input.workflow_run_id);
+  const compressionArtifact = artifacts.find((artifact) =>
+    artifact.payload?.artifact_key === 'context_compression_report'
+      && artifact.payload?.node_id === 'topic-selection.v1a.human-confirm-need.v1'
+  );
+  assert.ok(compressionArtifact);
+  assert.equal(
+    (compressionArtifact.payload?.report as { quality_gate_result?: string } | undefined)?.quality_gate_result,
+    'blocked',
+  );
+  assert.equal(
+    result.harness_trace_snapshot.artifact_refs.some((refEntry) =>
+      refEntry.ref_type === 'artifact_ref' && refEntry.ref_id === compressionArtifact.artifact_ref_id,
+    ),
+    true,
+  );
 });
 
 test('workflow harness publishes v1b input bundle as terminal v1a handoff', async () => {
@@ -4272,13 +5181,15 @@ test('workflow harness blocks recommendation packets that try to carry orchestra
         route_outcome: 'blocked',
         final_decision: null,
         error_code: 'GATE_CONSTRAINT_FAILED',
-        blocker_codes: ['GATE_CONSTRAINT_FAILED'],
+        blocker_codes: ['SCHEMA_VALIDATION_FAILED'],
         adjudication_created: false,
       },
     }),
   );
 
   assertScenarioPassed(result);
+  assert.equal(result.node_result.error_code, 'GATE_CONSTRAINT_FAILED');
+  assert.ok(result.node_result.blocker_codes.includes('SCHEMA_VALIDATION_FAILED'));
   assert.equal(result.node_result.recommendation_packet_ref, null);
   assert.equal(result.node_result.adjudication_result_ref, null);
 });

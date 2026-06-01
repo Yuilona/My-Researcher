@@ -43,6 +43,7 @@ export const TOPIC_SELECTION_CONTEXT_FAMILIES = [
   'v1a_n8_human_confirmation_semantic_review',
   'v1b_n4_research_slice_option_generation',
   'v1b_n6_topic_question_generation',
+  'v1b_n6_loopback_triage_context',
   'v1b_n7_topic_question_hardening',
   'v1b_n8_topic_value_assessment',
   'v1c_n2_promotion_support',

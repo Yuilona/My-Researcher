@@ -81,10 +81,13 @@ export const TOPIC_SELECTION_V1A_N8_INVOCATION_SLOT_IDS = {
 export const TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS = {
   question_candidate_draft:
     'topic-selection.v1b.n6.question-candidate-draft.context-runtime@v1',
+  loopback_triage:
+    'topic-selection.v1b.n6.loopback-triage.context-runtime@v1',
 } as const;
 
 export const TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS = {
   question_candidate_draft: 'n6_question_candidate_draft',
+  loopback_triage: 'n6_loopback_triage',
 } as const;
 
 export const TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS = {
@@ -100,6 +103,15 @@ export const TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS = {
   candidate_grouping: 'n7_candidate_grouping',
   failed_trial_synthesis: 'n7_failed_trial_synthesis',
   n8_debate_admission_review: 'n7_n8_debate_admission_review',
+} as const;
+
+export const TOPIC_SELECTION_V1B_N8_CONTEXT_RUNTIME_PROFILE_IDS = {
+  value_assessment_draft:
+    'topic-selection.v1b.n8.topic-value-assessment.context-runtime@v1',
+} as const;
+
+export const TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS = {
+  value_assessment_draft: 'n8_value_assessment_draft',
 } as const;
 
 export type TopicSelectionContextPolicyProfileRegistryValidationIssueCode =
@@ -393,6 +405,18 @@ const DEFAULT_TOPIC_SELECTION_CONTEXT_POLICY_PROFILE_REGISTRY:
           'claim_ceiling',
           'non_goal',
           'source_health_warning',
+          'n7_loopback_projection',
+          'n6_gate_failure_projection',
+          'failed_draft_identity',
+          'blocked_candidate_context',
+          'failed_trial_synthesis',
+          'exhausted_candidate_ref',
+          'exhausted_candidate_hash',
+          'candidate_order',
+          'failure_reason_code',
+          'regeneration_hint',
+          'loopback_target',
+          'n8_feedback',
         ],
         post_reuse_gates: [
           'schema_validation',
@@ -404,6 +428,42 @@ const DEFAULT_TOPIC_SELECTION_CONTEXT_POLICY_PROFILE_REGISTRY:
           'schema_validation',
           'draft_admission',
           'deterministic_gate',
+          'authority_boundary',
+        ],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS.loopback_triage,
+        invocation_slot_id: TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS.loopback_triage,
+        functional_template: 'support_only_semantic',
+        context_family: 'v1b_n6_loopback_triage_context',
+        estimated_input_token_target: 18000,
+        estimated_output_token_budget: 1200,
+        preserved_fact_kinds: [
+          ...COMMON_PRESERVED_FACT_KINDS,
+          'selected_slice_identity',
+          'n5_handoff',
+          'failed_draft_identity',
+          'blocked_candidate_context',
+          'dominant_reason_code',
+          'affected_ref',
+          'regeneration_hint',
+          'debate_escalation',
+          'upstream_rollback',
+          'loopback_target',
+        ],
+        post_reuse_gates: [
+          'schema_validation',
+          'support_artifact_admission',
+          'deterministic_gate',
+          'loopback_boundary',
+          'authority_boundary',
+        ],
+        post_cache_gates: [
+          'schema_validation',
+          'support_artifact_admission',
+          'deterministic_gate',
+          'loopback_boundary',
           'authority_boundary',
         ],
       }),
@@ -498,6 +558,48 @@ const DEFAULT_TOPIC_SELECTION_CONTEXT_POLICY_PROFILE_REGISTRY:
           'support_artifact_admission',
           'deterministic_gate',
           'n8_admission_boundary',
+          'authority_boundary',
+        ],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1B_N8_CONTEXT_RUNTIME_PROFILE_IDS.value_assessment_draft,
+        invocation_slot_id: TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS.value_assessment_draft,
+        functional_template: 'candidate_for_deterministic_gate',
+        context_family: 'v1b_n8_topic_value_assessment',
+        estimated_input_token_target: 22000,
+        estimated_output_token_budget: 4096,
+        preserved_fact_kinds: [
+          ...COMMON_PRESERVED_FACT_KINDS,
+          'n7_handoff',
+          'n7_to_n8_projection',
+          'topic_question',
+          'topic_question_contract',
+          'active_candidate_identity',
+          'answerability_plan',
+          'trial_ledger',
+          'selected_slice_identity',
+          'candidate_set_identity',
+          'value_rationale',
+          'support_quality',
+          'reviewer_uncertainty',
+          'risk_gap_blocker_fact',
+          'feedback_recheck_hint',
+        ],
+        post_reuse_gates: [
+          'schema_validation',
+          'draft_admission',
+          'compression_structure_manifest',
+          'deterministic_gate',
+          'feedback_boundary',
+          'authority_boundary',
+        ],
+        post_cache_gates: [
+          'schema_validation',
+          'draft_admission',
+          'compression_structure_manifest',
+          'deterministic_gate',
+          'feedback_boundary',
           'authority_boundary',
         ],
       }),

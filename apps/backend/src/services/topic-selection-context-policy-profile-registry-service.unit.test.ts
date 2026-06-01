@@ -16,6 +16,8 @@ import {
   TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1B_N8_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
 } from './topic-selection-context-policy-profile-registry-service.js';
 
@@ -110,10 +112,42 @@ test('context policy profile registry validates and resolves v1a runtime profile
     true,
   );
   assert.equal(
+    n6Draft.profile.compression_policy.preserved_fact_kinds.includes('n7_loopback_projection'),
+    true,
+  );
+  assert.equal(
+    n6Draft.profile.compression_policy.preserved_fact_kinds.includes('n6_gate_failure_projection'),
+    true,
+  );
+  assert.equal(
+    n6Draft.profile.compression_policy.preserved_fact_kinds.includes('failed_draft_identity'),
+    true,
+  );
+  assert.equal(
+    n6Draft.profile.compression_policy.preserved_fact_kinds.includes('regeneration_hint'),
+    true,
+  );
+  assert.equal(
     n6Draft.profile.compression_policy.allowed_executor_kinds.includes(
       'provider_llm' as never,
     ),
     false,
+  );
+
+  const n6LoopbackTriage = service.resolveProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS.loopback_triage,
+    invocation_slot_id: TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS.loopback_triage,
+  });
+  assert.equal(n6LoopbackTriage.profile.context_family, 'v1b_n6_loopback_triage_context');
+  assert.equal(n6LoopbackTriage.profile.functional_template, 'support_only_semantic');
+  assert.equal(
+    n6LoopbackTriage.profile.compression_policy.preserved_fact_kinds.includes('failed_draft_identity'),
+    true,
+  );
+  assert.equal(
+    n6LoopbackTriage.profile.cache_policy.post_cache_gates.includes('loopback_boundary'),
+    true,
   );
 
   assert.deepEqual(
@@ -160,6 +194,32 @@ test('context policy profile registry validates and resolves v1a runtime profile
   );
   assert.equal(
     debateAdmission.profile.cache_policy.post_cache_gates.includes('n8_admission_boundary'),
+    true,
+  );
+
+  const n8ValueAssessment = service.resolveProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N8_CONTEXT_RUNTIME_PROFILE_IDS.value_assessment_draft,
+    invocation_slot_id: TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS.value_assessment_draft,
+  });
+  assert.equal(n8ValueAssessment.profile.context_family, 'v1b_n8_topic_value_assessment');
+  assert.equal(n8ValueAssessment.profile.functional_template, 'candidate_for_deterministic_gate');
+  assert.equal(n8ValueAssessment.profile.token_budget_policy.estimated_output_token_budget, 4096);
+  assert.equal(n8ValueAssessment.profile.cache_policy.post_cache_gates.includes('draft_admission'), true);
+  assert.equal(
+    n8ValueAssessment.profile.cache_policy.post_cache_gates.includes('compression_structure_manifest'),
+    true,
+  );
+  assert.equal(
+    n8ValueAssessment.profile.compression_policy.preserved_fact_kinds.includes('n7_to_n8_projection'),
+    true,
+  );
+  assert.equal(
+    n8ValueAssessment.profile.compression_policy.preserved_fact_kinds.includes('trial_ledger'),
+    true,
+  );
+  assert.equal(
+    n8ValueAssessment.profile.compression_policy.preserved_fact_kinds.includes('feedback_recheck_hint'),
     true,
   );
 });

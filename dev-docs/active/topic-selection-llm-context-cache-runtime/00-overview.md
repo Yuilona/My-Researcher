@@ -46,16 +46,19 @@
 - [x] `codex_assisted` exact cached reuse requires approval plus non-provider reuse provenance before schema/deterministic gate admission.
 - [x] Over-budget paths with supplied compression attempts record quality-gated compression report artifacts before blocking provider execution.
 - [x] v1a N6 single-agent over-target provider path performs deterministic structural compression, records a `context_compression_report` artifact, re-renders the prompt with compressed context, and then still runs token/schema/admission/persistence gates.
+- [x] v1a N7 adjudication over-target provider path records a quality-gated compression report, re-renders compressed recommendation context, reruns token gate through `AgentOrchestrator`, and still applies deterministic residual-risk/method-gap/adjudication authority gates.
 - [x] Minimal OpenAI/DashScope provider-canary harness proves local provider-required prompt-cache hits still execute gateway calls, while over-budget fixtures execute zero provider calls.
 - [x] Prompt packet cache has a Prisma-backed persistent exact index that stores artifact refs and hashes only, with no prompt payload or provider response payload.
 - [x] v1a production boundary keeps context packet cache process-local and artifact-ref-only; restart/deploy cache misses are safe recompilation paths, not correctness dependencies.
-- [x] Production-shaped local/dev Prisma smokes verify persistent prompt-index read-through semantics, provider-required non-response-reuse behavior, over-budget provider call count `0`, v1a N1-N9 main WorkflowHarness execution, N6-N9 exact replay/input-hash drift behavior, and default mock-sample fallback to the balanced T-112 fixture.
+- [x] Production-shaped local/dev Prisma smokes verify persistent prompt-index read-through semantics, provider-required non-response-reuse behavior, over-budget provider call count `0`, v1a N1-N9 main WorkflowHarness execution, N1-N4/N6-N9 exact replay/input-hash drift behavior, and default mock-sample fallback to the balanced T-112 fixture.
 - [x] Prisma-backed v1a runtime stress runner repeatedly executes N1-N9 replay smoke, verifies prompt packet index growth/slot distribution, confirms exact replay and drift branches do not invoke the LLM gateway, and supports parameterized single-agent or multi-agent-debate N6 modes.
 - [x] v1b N7 runtime first slice routes promoted support generation through `TopicSelectionV1bN7SupportRuntimeService`, emits `runtime_verified` support artifacts, and blocks fixture/legacy/product identity drift before deterministic gates.
 - [x] Prisma-backed v1b N7 runtime smoke verifies N6->N7->N8, N8->N7 readmission, N7->N6 loopback projection, N7 prompt-index metadata rows, non-provider audit provenance, and provider-response non-reuse for all three N7 support slots.
 - [x] v1b N7 quality closure verifies runtime audit artifact dereference/checksum/provenance binding, unknown failed-trial synthesis ref blocking, and post-authority-write runtime projection recording.
 - [x] Live OpenAI/DashScope provider canaries verify provider-backed v1a N6 invocations perform token-budget preflight before gateway calls and do not treat prompt-cache hits as provider response reuse.
 - [x] v1a WorkflowHarness runtime policy stress verifies N1-N4 context producer lineage/source-health/hash-drift behavior, N9 publish replay/lineage drift boundaries, N6 exact context-cache hit/drift/stale behavior, provider-required call counts, deterministic gate artifacts after cache hit, N6 compression/re-render, and N5/N7/N8 token-budget audit decisions.
+- [x] v1a N5 EvidenceMap extraction over-target path records a quality-gated compression report, rerenders compressed context, reruns token gate through `AgentOrchestrator`, and preserves the deterministic materialization authority boundary.
+- [x] v1a N8 human-confirmation semantic review over-target path records a quality-gated compression report, rerenders compressed advisory context, reruns token gate through `AgentOrchestrator`, and preserves the human confirmation authority boundary.
 - [ ] Provider-backed invocations outside the promoted v1a N6 first slice perform token-budget preflight before calling OpenAI/DashScope/DeepSeek-compatible gateways.
 - [x] `provider_llm` execution in the promoted v1a N6 first slice never silently serves cached responses as live provider calls.
 - [x] Exact response reuse is allowed only for explicit replay/test/acceptance or operator-approved Codex-assisted reuse with `non_provider=true` in the `AgentOrchestrator` Codex path.
@@ -66,8 +69,14 @@
 - [x] Live OpenAI/DashScope v1a N6 provider canaries record telemetry and prove provider-required scenarios still perform live provider calls.
 
 ## Current Focus
+- Current v1a production-readiness focus: D18.2/D18.3/D18.4/D18.5/D18.6 plus N1-N4 producer replay/drift smoke are closed. N5/N7/N8 runtime binding now lives outside `WorkflowHarness`, v1a runtime stress has separate `baseline` and `mocked_n5_n8` context modes with prompt-index assertions for N5/N6/N7/N8, N5/N7/N8 over-budget compression has report/rerender/post-gate closure, and N1-N4 deterministic context producers now have DB-backed exact replay/input-hash drift coverage.
+- Next v1a implementation focus: uneven provider slices for DashScope N7/N8 plus OpenAI N8.
 - v1b N7 runtime first slice is closed for L1-L3 plus minimum adversarial quality coverage.
 - D24 v1b N6 chain alignment is closed for first-slice planning.
 - v1b N6 `n6_question_candidate_draft.initial_from_n5` is implemented through L3 Prisma-backed smoke, L4 provider canary, and L5 long-context/adversarial compression coverage.
-- Current implementation-readiness focus is the next v1b N6 slice: N7->N6 regeneration and N6 loopback/triage promotion.
-- Later post-N7 v1b runtime expansion remains ordered as N6, then N8, then N4.
+- v1b N6 P2.1b has promoted the N7->N6 failed-trial regeneration path through L1/L2: `v1b_n7_to_n6_failed_trial_loopback_context` now enters N6 as ref-backed non-authority runtime context for `n6_question_candidate_draft.regeneration_after_n7_loopback`.
+- v1b N6 P2.1b has promoted `n6_loopback_triage` through L1/L2 as an optional support-only runtime/admission slot for failed-draft routing, debate escalation advice, and rollback-to-N5 advice.
+- v1b N6 P2.1b has promoted `n6_question_candidate_draft.regeneration_after_n6_gate_failure` through L1/L2: N6 deterministic gate failures now emit `v1b_n6_gate_failure_retry_context` as ref-backed non-authority retry context.
+- v1b N8 P2.2 has promoted `n8_value_assessment_draft.initial_from_n7` through L1-L5: runtime-verified Codex value drafts can enter product-mode N8 admission only when the N7 handoff and N7->N8 projection identity match, fixture replay is blocked in product, Prisma-backed smoke validates replay/drift/prompt-index behavior, provider canaries cover OpenAI/DashScope prompt-cache live-call semantics, and long-context/adversarial compression blocks dropped N8 value facts and raw provider logs.
+- Current implementation-readiness focus moves to the remaining post-N7 v1b runtime expansion surface: v1b N4.
+- Later post-N7 v1b runtime expansion remains ordered as N4, then v1c slices.

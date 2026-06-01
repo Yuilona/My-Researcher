@@ -152,6 +152,15 @@ export type TopicSelectionV1bWorkflowHarnessRuntimeProvenanceClass =
 export const TOPIC_SELECTION_V1B_N7_RUNTIME_CONTEXT_PROJECTION_SCHEMA_VERSION =
   'TopicSelectionV1bN7RuntimeContextProjection@v1' as const;
 
+export const TOPIC_SELECTION_V1B_N6_RUNTIME_CONTEXT_PROJECTION_SCHEMA_VERSION =
+  'TopicSelectionV1bN6RuntimeContextProjection@v1' as const;
+
+export const TOPIC_SELECTION_V1B_N6_RUNTIME_CONTEXT_PROJECTION_KINDS = [
+  'v1b_n6_gate_failure_retry_context',
+] as const;
+export type TopicSelectionV1bN6RuntimeContextProjectionKind =
+  (typeof TOPIC_SELECTION_V1B_N6_RUNTIME_CONTEXT_PROJECTION_KINDS)[number];
+
 export const TOPIC_SELECTION_V1B_N7_RUNTIME_CONTEXT_PROJECTION_KINDS = [
   'v1b_n7_to_n8_topic_question_contract_context',
   'v1b_n7_to_n6_failed_trial_loopback_context',
@@ -1164,6 +1173,46 @@ export interface TopicSelectionV1bN7RuntimeContextProjectionBase {
   support_hashes: Record<string, string>;
   preserved_fact_kinds: string[];
 }
+
+export interface TopicSelectionV1bN6RuntimeContextProjectionBase {
+  schema_version: typeof TOPIC_SELECTION_V1B_N6_RUNTIME_CONTEXT_PROJECTION_SCHEMA_VERSION;
+  projection_kind: TopicSelectionV1bN6RuntimeContextProjectionKind;
+  node_id: 'topic-selection.v1b.generate-topic-question-candidates.v1';
+  workflow_run_id: string;
+  node_attempt_id: string;
+  route_decision: 'loopback';
+  non_authority: true;
+  context_cache_scope: 'process_local_runtime_only';
+  context_authority: 'non_authority_runtime_context';
+  source_refs: TopicSelectionFunctionalRef[];
+  source_hashes: Record<string, string>;
+  support_refs: TopicSelectionFunctionalRef[];
+  support_hashes: Record<string, string>;
+  preserved_fact_kinds: string[];
+}
+
+export interface TopicSelectionV1bN6GateFailureRetryContextProjection
+extends TopicSelectionV1bN6RuntimeContextProjectionBase {
+  projection_kind: 'v1b_n6_gate_failure_retry_context';
+  loopback_target_code: 'n6_regenerate_candidates';
+  selected_research_slice_ref: TopicSelectionFunctionalRef;
+  selected_research_slice_hash: string;
+  n5_handoff_hash: string;
+  failed_draft_ref: TopicSelectionFunctionalRef;
+  failed_draft_hash: string;
+  failed_draft_prompt_packet_hash: string;
+  failed_draft_source_hashes_hash: string;
+  blocked_candidate_context: Record<string, unknown>[];
+  blocked_candidate_context_hash: string;
+  failure_reason_codes: string[];
+  regeneration_hints: string[];
+  triage_artifact_ref: TopicSelectionFunctionalRef | null;
+  triage_artifact_hash: string | null;
+  triage_payload_hash: string | null;
+}
+
+export type TopicSelectionV1bN6RuntimeContextProjection =
+  TopicSelectionV1bN6GateFailureRetryContextProjection;
 
 export interface TopicSelectionV1bN7ToN8TopicQuestionContractContextProjection
 extends TopicSelectionV1bN7RuntimeContextProjectionBase {
@@ -2878,6 +2927,88 @@ export const topicSelectionV1bWorkflowHarnessAuthorityRefSchema = {
     policy_version: stringId,
     schema_version: stringId,
   },
+} as const;
+
+const n6RuntimeContextProjectionBaseRequired = [
+  'schema_version',
+  'projection_kind',
+  'node_id',
+  'workflow_run_id',
+  'node_attempt_id',
+  'route_decision',
+  'non_authority',
+  'context_cache_scope',
+  'context_authority',
+  'source_refs',
+  'source_hashes',
+  'support_refs',
+  'support_hashes',
+  'preserved_fact_kinds',
+] as const;
+
+const n6RuntimeContextProjectionBaseProperties = {
+  schema_version: { const: TOPIC_SELECTION_V1B_N6_RUNTIME_CONTEXT_PROJECTION_SCHEMA_VERSION },
+  projection_kind: { enum: [...TOPIC_SELECTION_V1B_N6_RUNTIME_CONTEXT_PROJECTION_KINDS] },
+  node_id: { const: 'topic-selection.v1b.generate-topic-question-candidates.v1' },
+  workflow_run_id: stringId,
+  node_attempt_id: stringId,
+  route_decision: { const: 'loopback' },
+  non_authority: { const: true },
+  context_cache_scope: { const: 'process_local_runtime_only' },
+  context_authority: { const: 'non_authority_runtime_context' },
+  source_refs: strictFunctionalRefArray,
+  source_hashes: hashMap,
+  support_refs: strictFunctionalRefArray,
+  support_hashes: hashMap,
+  preserved_fact_kinds: stringArray,
+} as const;
+
+const topicSelectionV1bN6GateFailureRetryContextProjectionSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    ...n6RuntimeContextProjectionBaseRequired,
+    'loopback_target_code',
+    'selected_research_slice_ref',
+    'selected_research_slice_hash',
+    'n5_handoff_hash',
+    'failed_draft_ref',
+    'failed_draft_hash',
+    'failed_draft_prompt_packet_hash',
+    'failed_draft_source_hashes_hash',
+    'blocked_candidate_context',
+    'blocked_candidate_context_hash',
+    'failure_reason_codes',
+    'regeneration_hints',
+    'triage_artifact_ref',
+    'triage_artifact_hash',
+    'triage_payload_hash',
+  ],
+  properties: {
+    ...n6RuntimeContextProjectionBaseProperties,
+    projection_kind: { const: 'v1b_n6_gate_failure_retry_context' },
+    loopback_target_code: { const: 'n6_regenerate_candidates' },
+    selected_research_slice_ref: strictFunctionalRefSchema,
+    selected_research_slice_hash: hashString,
+    n5_handoff_hash: hashString,
+    failed_draft_ref: strictFunctionalRefSchema,
+    failed_draft_hash: hashString,
+    failed_draft_prompt_packet_hash: hashString,
+    failed_draft_source_hashes_hash: hashString,
+    blocked_candidate_context: { type: 'array', items: objectPayload },
+    blocked_candidate_context_hash: hashString,
+    failure_reason_codes: stringArray,
+    regeneration_hints: stringArray,
+    triage_artifact_ref: nullableStrictFunctionalRef,
+    triage_artifact_hash: nullableHashString,
+    triage_payload_hash: nullableHashString,
+  },
+} as const;
+
+export const topicSelectionV1bN6RuntimeContextProjectionSchema = {
+  anyOf: [
+    topicSelectionV1bN6GateFailureRetryContextProjectionSchema,
+  ],
 } as const;
 
 const n7RuntimeContextProjectionBaseRequired = [

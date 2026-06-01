@@ -33,6 +33,7 @@ import { TopicSelectionControlPlaneService } from '../../apps/backend/src/servic
 import { TopicSelectionPromptPacketCacheService } from '../../apps/backend/src/services/topic-selection-prompt-packet-cache-service.ts';
 import { TopicSelectionV1bN6DraftRuntimeService } from '../../apps/backend/src/services/topic-selection-v1b-n6-draft-runtime-service.ts';
 import { TopicSelectionV1bN7SupportRuntimeService } from '../../apps/backend/src/services/topic-selection-v1b-n7-support-runtime-service.ts';
+import { TopicSelectionV1bN8ValueAssessmentRuntimeService } from '../../apps/backend/src/services/topic-selection-v1b-n8-value-assessment-runtime-service.ts';
 import {
   TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_DRAFT_SCHEMA_VERSION,
 } from '../../packages/shared/src/research-lifecycle/topic-selection-evidence-map-contracts.ts';
@@ -126,6 +127,7 @@ const N7_RUNTIME_SUPPORT_SLOT_IDS = new Set([
   'n7_n8_debate_admission_review',
 ]);
 const N6_RUNTIME_DRAFT_SLOT_ID = 'n6_question_candidate_draft';
+const N8_RUNTIME_DRAFT_SLOT_ID = 'n8_value_assessment_draft';
 
 function uniqueId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -155,6 +157,7 @@ function scenarioMode(raw) {
     value === 'positive'
     || value === 'n6_runtime_smoke'
     || value === 'n7_runtime_smoke'
+    || value === 'n8_runtime_smoke'
     || value === 'provider_negative_loopbacks'
     || value === 'external_codex_n6_variance'
     || value === 'external_codex_n4_variance'
@@ -264,14 +267,32 @@ async function promptPacketIndexSnapshot(prisma, since = null) {
   });
   const n7Rows = rows.filter((row) => N7_RUNTIME_SUPPORT_SLOT_IDS.has(row.invocationSlotId));
   const n6Rows = rows.filter((row) => row.invocationSlotId === N6_RUNTIME_DRAFT_SLOT_ID);
+  const n8Rows = rows.filter((row) => row.invocationSlotId === N8_RUNTIME_DRAFT_SLOT_ID);
   return {
     total_count: rows.length,
     n6_count: n6Rows.length,
     n7_count: n7Rows.length,
+    n8_count: n8Rows.length,
     by_invocation_slot_id: groupBy(rows, 'invocationSlotId'),
     by_quality_decision: groupBy(rows, 'qualityDecision'),
     by_freshness_status: groupBy(rows, 'freshnessStatus'),
     n6_rows: n6Rows.map((row) => ({
+      prompt_packet_hash: row.promptPacketHash,
+      invocation_slot_id: row.invocationSlotId,
+      prompt_template_id: row.promptTemplateId,
+      prompt_template_version: row.promptTemplateVersion,
+      prompt_variant_key: row.promptVariantKey,
+      context_policy_profile_id: row.contextPolicyProfileId,
+      output_contract: row.outputContract,
+      model_option_id: row.modelOptionId,
+      quality_decision: row.qualityDecision,
+      freshness_status: row.freshnessStatus,
+      has_provenance_ref: Boolean(row.provenanceRef),
+      has_redacted_prompt_artifact_ref: Boolean(row.redactedPromptArtifactRef),
+      has_prompt_quality_report_ref: Boolean(row.promptQualityReportRef),
+      created_at: row.createdAt.toISOString(),
+    })),
+    n8_rows: n8Rows.map((row) => ({
       prompt_packet_hash: row.promptPacketHash,
       invocation_slot_id: row.invocationSlotId,
       prompt_template_id: row.promptTemplateId,
@@ -944,6 +965,7 @@ async function v1bHarnessRequestFromHandoff(
   inputContract,
   snapshotKind,
   payloadPatch,
+  extraSourceRefs = [],
 ) {
   assert.ok(result.authority_ref && result.handoff_ref && result.hashes.handoff_hash);
   const handoff = await getWorkflowHarnessHandoff(app, result.handoff_ref);
@@ -955,7 +977,7 @@ async function v1bHarnessRequestFromHandoff(
   const frozenInput = {
     input_contract: inputContract,
     snapshot_kind: snapshotKind,
-    source_refs: [result.authority_ref, result.handoff_ref, ...handoff.required_refs],
+    source_refs: uniqueRefs([result.authority_ref, result.handoff_ref, ...extraSourceRefs, ...handoff.required_refs]),
     payload,
   };
   return harnessRequest(result.authority_ref.title_card_id, suffix, nodeAttemptSuffix, nodeId, frozenInput);
@@ -1127,6 +1149,7 @@ async function v1bHarnessN7Request(app, n6Result, suffix) {
 }
 
 async function v1bHarnessN8Request(app, n7Result, suffix) {
+  const projectionRef = await n7ToN8ProjectionRef(n7Result);
   return v1bHarnessRequestFromHandoff(
     app,
     n7Result,
@@ -1137,7 +1160,15 @@ async function v1bHarnessN8Request(app, n7Result, suffix) {
     'N7ToN8Handoff@v1',
     'topic_question_contract',
     { n7_handoff_hash: n7Result.hashes.handoff_hash },
+    [projectionRef],
   );
+}
+
+async function n7ToN8ProjectionRef(n7Result) {
+  const trace = await getWorkflowHarnessTraceSnapshotPayload(n7Result.trace_snapshot_ref);
+  const projectionRef = trace.runtime_context_projection_ref;
+  assert.equal(projectionRef?.ref_type, 'artifact_ref');
+  return projectionRef;
 }
 
 function v1bHarnessN8ValueDraft(input) {
@@ -1867,6 +1898,28 @@ function createN6RuntimeDraftRuntime(prisma) {
   });
 }
 
+function createN8RuntimeValueAssessmentRuntime(prisma) {
+  assertPrismaBackedHarness('v1b N8 runtime value assessment');
+  const controlPlane = new TopicSelectionControlPlaneService(
+    new PrismaTopicSelectionControlPlaneRepository(prisma),
+  );
+  const modelProfileRegistry = new TopicSelectionModelProfileRegistryService();
+  const promptPacketCache = new TopicSelectionPromptPacketCacheService({
+    store: new PrismaTopicSelectionPromptPacketCacheStore(prisma, {
+      allowMissingTableFallback: true,
+    }),
+  });
+  const agentOrchestrator = new TopicSelectionAgentOrchestratorService({
+    controlPlane,
+    modelProfileRegistry,
+    promptPacketCache,
+  });
+  return new TopicSelectionV1bN8ValueAssessmentRuntimeService(controlPlane, {
+    agentOrchestrator,
+    modelProfileRegistry,
+  });
+}
+
 async function assertRuntimeVerifiedN6DraftArtifact(app, semanticArtifact) {
   assert.equal(semanticArtifact.runtime_provenance_class, 'runtime_verified');
   assert.equal(semanticArtifact.execution_mode, 'codex_assisted');
@@ -1925,6 +1978,83 @@ async function generateN6RuntimeDraftArtifact(app, runtime, input, payload, opti
     summary: {
       node_id: input.node_id,
       slot_id: 'n6_question_candidate_draft',
+      execution_mode: 'codex_assisted',
+      runtime_provenance_class: generated.semantic_artifact.runtime_provenance_class,
+      context_policy_profile_id: generated.semantic_artifact.context_policy_profile_id,
+      prompt_packet_hash: generated.semantic_artifact.prompt_packet_hash,
+      prompt_variant_key: generated.semantic_artifact.prompt_variant_key,
+      runtime_invocation_context_hash: generated.semantic_artifact.runtime_invocation_context_hash,
+      runtime_audit_hash: generated.semantic_artifact.runtime_audit_hash,
+      context_packet_hash: generated.context_packet_hash,
+      output_hash: generated.semantic_artifact.structured_output_hash,
+      audit_source_kind: auditSnapshot.provenance?.source_kind ?? null,
+      audit_cache_status: auditSnapshot.provenance?.cache_status ?? null,
+      provider_telemetry_present: Boolean(auditSnapshot.provenance?.telemetry),
+    },
+  };
+}
+
+async function assertRuntimeVerifiedN8DraftArtifact(app, semanticArtifact) {
+  assert.equal(semanticArtifact.runtime_provenance_class, 'runtime_verified');
+  assert.equal(semanticArtifact.execution_mode, 'codex_assisted');
+  assert.equal(semanticArtifact.allowed_effect, 'model_draft_for_gate');
+  assert.equal(semanticArtifact.model_option_id, null);
+  assert.equal(semanticArtifact.prompt_variant_key, 'n8_value_assessment_draft.initial_from_n7');
+  assert.equal(
+    semanticArtifact.context_policy_profile_id,
+    'topic-selection.v1b.n8.topic-value-assessment.context-runtime@v1',
+  );
+  assert.match(semanticArtifact.prompt_packet_hash, /^[a-f0-9]{64}$/);
+  assert.match(semanticArtifact.runtime_invocation_context_hash, /^[a-f0-9]{64}$/);
+  assert.ok(semanticArtifact.runtime_audit_ref, 'runtime value draft requires audit ref.');
+  assert.match(semanticArtifact.runtime_audit_hash, /^[a-f0-9]{64}$/);
+  assert.ok(semanticArtifact.source_hashes?.n7_handoff_hash, 'runtime draft requires N7 handoff hash.');
+  assert.ok(
+    semanticArtifact.source_hashes?.n7_to_n8_projection_hash,
+    'runtime draft requires N7-to-N8 projection hash.',
+  );
+  assert.ok(semanticArtifact.source_hashes?.topic_question_contract_hash, 'runtime draft requires contract hash.');
+
+  const auditArtifact = await getWorkflowHarnessArtifact(app, semanticArtifact.runtime_audit_ref);
+  assert.equal(auditArtifact.checksum, semanticArtifact.runtime_audit_hash);
+  const provenance = auditArtifact.payload?.provenance;
+  assert.equal(provenance?.source_kind, 'codex_response');
+  assert.equal(provenance?.non_provider, true);
+  assert.equal(provenance?.execution_mode, 'codex_assisted');
+  assert.equal(provenance?.model_option_id, null);
+  assert.equal(provenance?.prompt_packet_hash, semanticArtifact.prompt_packet_hash);
+  assert.equal(provenance?.cache_status, 'not_applicable');
+  assert.equal(provenance?.response_reuse_ref, null);
+  assert.equal(provenance?.telemetry, null);
+  return auditArtifact.payload;
+}
+
+async function generateN8RuntimeValueDraftArtifact(app, runtime, input, payload, options = {}) {
+  const runMode = options.runMode ?? input.run_mode ?? 'acceptance';
+  const generated = await runtime.generateDraftArtifact({
+    request: {
+      ...input,
+      run_mode: runMode,
+    },
+    execution_mode: 'codex_assisted',
+    run_mode: runMode,
+    codex_response: {
+      output: payload,
+      operator_label: options.operatorLabel ?? 'v1b-harness-e2e-n8-runtime',
+    },
+    created_by: 'system',
+  });
+  assert.equal(generated.status, 'succeeded');
+  if (generated.status !== 'succeeded') {
+    assert.fail(`N8 runtime value draft generation blocked: ${JSON.stringify(generated.invocation_result)}`);
+  }
+  const auditSnapshot = await assertRuntimeVerifiedN8DraftArtifact(app, generated.semantic_artifact);
+  return {
+    semanticArtifact: generated.semantic_artifact,
+    structuredOutput: generated.structured_output,
+    summary: {
+      node_id: input.node_id,
+      slot_id: 'n8_value_assessment_draft',
       execution_mode: 'codex_assisted',
       runtime_provenance_class: generated.semantic_artifact.runtime_provenance_class,
       context_policy_profile_id: generated.semantic_artifact.context_policy_profile_id,
@@ -2960,6 +3090,44 @@ async function assertN6RuntimePromptIndex(prisma, startedAt, expectedPromptPacke
   return snapshot;
 }
 
+async function assertN8RuntimePromptIndex(prisma, startedAt, expectedPromptPacketHashes = []) {
+  assertPromptPacketIndexModelMetadataOnly(prisma);
+  const snapshot = await promptPacketIndexSnapshot(prisma, startedAt);
+  const expectedHashes = [...new Set(expectedPromptPacketHashes)];
+  assert.ok(
+    snapshot.n8_rows.some((row) =>
+      row.invocation_slot_id === N8_RUNTIME_DRAFT_SLOT_ID
+      && row.prompt_variant_key === 'n8_value_assessment_draft.initial_from_n7'
+    ),
+    'Expected Prisma prompt packet index row for n8_value_assessment_draft.initial_from_n7.',
+  );
+  if (expectedHashes.length > 0) {
+    assert.equal(
+      snapshot.n8_rows.length,
+      expectedHashes.length,
+      'Expected exactly one N8 prompt packet index row for each generated N8 runtime prompt hash.',
+    );
+    for (const promptPacketHash of expectedHashes) {
+      assert.ok(
+        snapshot.n8_rows.some((row) => row.prompt_packet_hash === promptPacketHash),
+        `Expected N8 prompt packet index row for ${promptPacketHash}.`,
+      );
+    }
+  }
+  for (const row of snapshot.n8_rows) {
+    assert.match(row.prompt_packet_hash, /^[a-f0-9]{64}$/);
+    assert.equal(row.model_option_id, null);
+    assert.equal(row.context_policy_profile_id, 'topic-selection.v1b.n8.topic-value-assessment.context-runtime@v1');
+    assert.equal(row.output_contract, 'TopicValueAssessmentDraft@v1');
+    assert.ok(row.has_provenance_ref, 'Prompt index row must store provenance ref metadata.');
+    assert.ok(row.has_redacted_prompt_artifact_ref, 'Prompt index row must store redacted prompt ref metadata.');
+    assert.ok(row.has_prompt_quality_report_ref, 'Prompt index row must store prompt quality report ref metadata.');
+    assert.equal(Object.hasOwn(row, 'messages'), false);
+    assert.equal(Object.hasOwn(row, 'provider_response'), false);
+  }
+  return snapshot;
+}
+
 async function assertLoopbackProjection(app, result) {
   const trace = await getWorkflowHarnessTraceSnapshotPayload(result.trace_snapshot_ref);
   const projectionRef = trace.runtime_context_projection_ref;
@@ -3324,6 +3492,128 @@ async function runN6RuntimeSmoke(app, suffix, existingBundle = null) {
           semantic_artifacts: [driftDraft.summary],
           nodes: {
             n6_drift: summarizeNode(drift),
+          },
+        },
+      ],
+    };
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+async function runN8RuntimeSmoke(app, suffix, existingBundle = null) {
+  const startedAt = new Date();
+  const prisma = new PrismaClient();
+  const n8ValueRuntime = createN8RuntimeValueAssessmentRuntime(prisma);
+  try {
+    const promptIndexBefore = await promptPacketIndexSnapshot(prisma);
+    const setup = await runV1bHarnessHttpSetupToN5(app, `${suffix}_setup`, existingBundle);
+    const ready = await runReadyN6Fixture(app, setup, `${suffix}_n6_ready`);
+    const n7Input = await v1bHarnessN7Request(app, ready.n6, `${suffix}_n7_ready`);
+    const n7 = await invokeV1bHarnessNode(app, n7Input);
+    assert.equal(n7.route_decision, 'invoke_next');
+
+    const n8Input = {
+      ...(await v1bHarnessN8Request(app, n7, `${suffix}_n8_runtime`)),
+      run_mode: 'product',
+    };
+    const draft = v1bHarnessN8ValueDraft(n8Input);
+    const runtimeDraft = await generateN8RuntimeValueDraftArtifact(
+      app,
+      n8ValueRuntime,
+      n8Input,
+      draft,
+      { runMode: 'product', operatorLabel: 'v1b-n8-runtime-smoke-initial' },
+    );
+    const n8 = await invokeV1bHarnessNode(app, {
+      ...n8Input,
+      semantic_artifacts: [runtimeDraft.semanticArtifact],
+    });
+    assert.ok(['admitted', 'admitted_with_warnings'].includes(n8.gate_status));
+    assert.equal(n8.route_decision, 'invoke_next');
+    assert.equal(n8.authority_ref?.ref_type, 'topic_value_assessment');
+    assert.equal(n8.handoff_ref?.ref_type, 'artifact_ref');
+
+    const artifactRefsBeforeReplay = await prisma.topicSelectionArtifactRef.count({
+      where: { workflowRunId: n8Input.workflow_run_id },
+    });
+    const replay = await invokeV1bHarnessNode(app, {
+      ...n8Input,
+      semantic_artifacts: [runtimeDraft.semanticArtifact],
+    });
+    const artifactRefsAfterReplay = await prisma.topicSelectionArtifactRef.count({
+      where: { workflowRunId: n8Input.workflow_run_id },
+    });
+    assert.equal(replay.replay_provenance?.replayed, true);
+    assert.equal(replay.authority_ref?.ref_id, n8.authority_ref?.ref_id);
+    assert.equal(replay.handoff_ref?.ref_id, n8.handoff_ref?.ref_id);
+    assert.equal(artifactRefsAfterReplay, artifactRefsBeforeReplay);
+
+    const driftInput = {
+      ...(await v1bHarnessN8Request(app, n7, `${suffix}_n8_source_drift`)),
+      run_mode: 'product',
+    };
+    const driftDraftPayload = v1bHarnessN8ValueDraft(driftInput);
+    const driftDraft = await generateN8RuntimeValueDraftArtifact(
+      app,
+      n8ValueRuntime,
+      driftInput,
+      driftDraftPayload,
+      { runMode: 'product', operatorLabel: 'v1b-n8-runtime-smoke-source-drift' },
+    );
+    const drift = await invokeV1bHarnessNode(app, {
+      ...driftInput,
+      semantic_artifacts: [{
+        ...driftDraft.semanticArtifact,
+        source_hashes: {
+          ...driftDraft.semanticArtifact.source_hashes,
+          n7_to_n8_projection_hash: '9'.repeat(64),
+        },
+      }],
+    });
+    assert.equal(drift.gate_status, 'blocked');
+    assert.equal(drift.error_code, 'N8_DRAFT_ARTIFACT_SOURCE_HASH_DRIFT');
+    assert.equal(drift.authority_ref, null);
+    assert.equal(drift.handoff_ref, null);
+
+    const expectedPromptPacketHashes = [
+      runtimeDraft.summary.prompt_packet_hash,
+      driftDraft.summary.prompt_packet_hash,
+    ];
+    const expectedPromptPacketHashCount = new Set(expectedPromptPacketHashes).size;
+    const promptIndexAfter = await promptPacketIndexSnapshot(prisma);
+    assert.equal(
+      promptIndexAfter.n8_count - promptIndexBefore.n8_count,
+      expectedPromptPacketHashCount,
+      'Expected N8 prompt packet index delta to match generated N8 runtime prompt hashes.',
+    );
+    const promptIndexCreated = await assertN8RuntimePromptIndex(
+      prisma,
+      startedAt,
+      expectedPromptPacketHashes,
+    );
+    return {
+      bundle: setup.bundle,
+      selectedOption: setup.selectedOption,
+      setupSemanticSummaries: [...setup.semanticSummaries, ...ready.semanticSummaries],
+      setupNodes: { ...setup.nodes, n6: ready.n6, n7 },
+      prompt_index_before: promptIndexBefore,
+      prompt_index_after: promptIndexAfter,
+      prompt_index_created: promptIndexCreated,
+      cases: [
+        {
+          case_id: 'n8_runtime_initial_to_n9_handoff',
+          semantic_artifacts: [runtimeDraft.summary],
+          nodes: {
+            n8: summarizeNode(n8),
+            replay: summarizeNode(replay),
+          },
+        },
+        {
+          case_id: 'n8_runtime_projection_source_drift_blocks',
+          semantic_artifacts: [driftDraft.summary],
+          nodes: {
+            n8_drift: summarizeNode(drift),
           },
         },
       ],
@@ -4574,6 +4864,27 @@ async function main() {
 
       if (SCENARIO === 'n6_runtime_smoke') {
         const result = await runN6RuntimeSmoke(app, suffix, existingBundle);
+        runs.push({
+          run_index: index + 1,
+          scenario: SCENARIO,
+          v1b_input_bundle_source: existingBundle ? 'existing' : 'created_in_run',
+          title_card_id: result.bundle.title_card_id,
+          v1b_input_bundle_id: result.bundle.v1b_input_bundle_id,
+          selected_option_id: result.selectedOption.research_slice_option_id,
+          setup_semantic_artifacts: result.setupSemanticSummaries,
+          setup_nodes: Object.fromEntries(
+            Object.entries(result.setupNodes).map(([node, nodeResult]) => [node, summarizeNode(nodeResult)]),
+          ),
+          prompt_index_before: result.prompt_index_before,
+          prompt_index_after: result.prompt_index_after,
+          prompt_index_created: result.prompt_index_created,
+          cases: result.cases,
+        });
+        continue;
+      }
+
+      if (SCENARIO === 'n8_runtime_smoke') {
+        const result = await runN8RuntimeSmoke(app, suffix, existingBundle);
         runs.push({
           run_index: index + 1,
           scenario: SCENARIO,

@@ -10,8 +10,14 @@ import {
 } from './literature-content-processing-utils.js';
 import {
   type TopicSelectionV1bTopicQuestionCandidateSetDraftPayload,
+  type TopicSelectionV1bTopicValueAssessmentDraftPayload,
   topicSelectionV1bTopicQuestionCandidateSetDraftPayloadSchema,
+  topicSelectionV1bTopicValueAssessmentDraftPayloadSchema,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-workflow-harness-contracts';
+import {
+  TOPIC_SELECTION_VALUE_DIMENSIONS,
+  TOPIC_SELECTION_VALUE_GATE_KEYS,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-value-assessment-contracts';
 import {
   TopicSelectionAgentOrchestratorService,
   type TopicSelectionAgentInvocationRequest,
@@ -23,12 +29,15 @@ import {
   TOPIC_SELECTION_V1A_N6_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1B_N8_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
 } from './topic-selection-context-policy-profile-registry-service.js';
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
 import {
   TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID,
   TopicSelectionModelProfileRegistryService,
 } from './topic-selection-model-profile-registry-service.js';
 
@@ -231,6 +240,55 @@ export class TopicSelectionProviderCanaryService {
     };
   }
 
+  async runV1bN8PromptCacheLiveRequiredCanary(
+    input: { provider_id: TopicSelectionProviderCanaryProviderId },
+  ): Promise<TopicSelectionProviderCanaryLiveRequiredEvidence> {
+    const modelOptionId = this.v1bN8ModelOptionId(input.provider_id);
+    const countingGateway = new CountingTopicSelectionProviderCanaryGateway(this.llmGateway);
+    const orchestrator = this.makeOrchestrator(countingGateway);
+    const invocation = this.v1bN8ProviderInvocation(input.provider_id, {
+      estimated_input_tokens_override: 1000,
+    });
+    const first = await orchestrator.invokeStructuredOutput<TopicSelectionV1bTopicValueAssessmentDraftPayload>(
+      invocation,
+    );
+    const second = await orchestrator.invokeStructuredOutput<TopicSelectionV1bTopicValueAssessmentDraftPayload>(
+      invocation,
+    );
+
+    return this.liveRequiredEvidence({
+      providerId: input.provider_id,
+      modelOptionId,
+      first,
+      second,
+      countingGateway,
+    });
+  }
+
+  async runV1bN8OverBudgetZeroCallCanary(
+    input: { provider_id: TopicSelectionProviderCanaryProviderId },
+  ): Promise<TopicSelectionProviderCanaryOverBudgetEvidence> {
+    const modelOptionId = this.v1bN8ModelOptionId(input.provider_id);
+    const countingGateway = new CountingTopicSelectionProviderCanaryGateway(this.llmGateway);
+    const orchestrator = this.makeOrchestrator(countingGateway);
+    const result = await orchestrator.invokeStructuredOutput<TopicSelectionV1bTopicValueAssessmentDraftPayload>(
+      this.v1bN8ProviderInvocation(input.provider_id, {
+        estimated_input_tokens_override: 200_000,
+        compression_already_applied: true,
+      }),
+    );
+
+    return {
+      provider_id: input.provider_id,
+      model_option_id: modelOptionId,
+      provider_call_count: countingGateway.callCount,
+      status: result.status,
+      error_code: result.error_code,
+      token_budget_gate_decision: result.token_budget_gate_result?.decision ?? null,
+      blocker_codes: result.blocker_codes,
+    };
+  }
+
   private makeOrchestrator(
     llmGateway: TopicSelectionAgentOrchestratorLlmGateway,
   ): TopicSelectionAgentOrchestratorService {
@@ -380,6 +438,80 @@ export class TopicSelectionProviderCanaryService {
     };
   }
 
+  private v1bN8ProviderInvocation(
+    providerId: TopicSelectionProviderCanaryProviderId,
+    runtimeOptions: {
+      estimated_input_tokens_override: number;
+      compression_already_applied?: boolean;
+    },
+  ): TopicSelectionAgentInvocationRequest<TopicSelectionV1bTopicValueAssessmentDraftPayload> {
+    const resolvedContextProfile = this.contextProfileRegistry.resolveProfile({
+      context_policy_profile_id:
+        TOPIC_SELECTION_V1B_N8_CONTEXT_RUNTIME_PROFILE_IDS.value_assessment_draft,
+      invocation_slot_id:
+        TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS.value_assessment_draft,
+    });
+    this.assertProviderRequiredLiveProfile(
+      resolvedContextProfile.profile.execution_modifiers,
+    );
+
+    return {
+      workspace_id: 'workspace_provider_canary',
+      title_card_id: 'title_card_provider_canary',
+      node_id: 'topic-selection.v1b.assess-topic-value.v1',
+      workflow_run_id: `provider_canary_v1b_n8_${providerId}_workflow_run_001`,
+      node_attempt_id: `provider_canary_v1b_n8_${providerId}_node_attempt_001`,
+      invocation_attempt_id: `provider_canary_v1b_n8_${providerId}_initial_from_n7`,
+      execution_mode: 'provider_llm',
+      executor_kind: 'single_agent',
+      run_mode: 'acceptance',
+      profile_id: TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID,
+      model_option_id: this.v1bN8ModelOptionId(providerId),
+      output_contract: 'TopicValueAssessmentDraft@v1',
+      prompt: {
+        promptTemplateId: 'topic-selection-v1b-n8-provider-canary-live-required',
+        version: 'v1',
+      },
+      prompt_variant_key: 'n8_value_assessment_draft.initial_from_n7',
+      schema_name: 'topic_selection_v1b_n8_provider_canary_draft',
+      schema: topicSelectionV1bTopicValueAssessmentDraftPayloadSchema as unknown as Record<string, unknown>,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Return only JSON matching TopicValueAssessmentDraft@v1 for a v1b N8 provider live invocation canary.',
+        },
+        {
+          role: 'user',
+          content: [
+            'Return one synthetic topic-value assessment draft.',
+            'Use the supplied reference draft values exactly unless JSON Schema validation requires a small correction.',
+            stableStringify(this.v1bN8CanaryReferenceDraft()),
+          ].join(' '),
+        },
+      ],
+      context_packet_refs: [
+        {
+          ref_type: 'artifact_ref',
+          ref_id: `provider_canary_v1b_n8_${providerId}_context_packet_001`,
+          title_card_id: 'title_card_provider_canary',
+        },
+      ],
+      runtime_token_budget: {
+        context_policy_profile: resolvedContextProfile.profile,
+        context_policy_profile_hash: resolvedContextProfile.profile_hash,
+        runtime_invocation_context_hash: this.hash({
+          scenario_id: 'v1b_n8_topic_value_assessment',
+          scenario_case_id: 'provider_canary_initial_from_n7',
+          provider_id: providerId,
+        }),
+        estimated_input_tokens_override: runtimeOptions.estimated_input_tokens_override,
+        compression_already_applied: runtimeOptions.compression_already_applied ?? false,
+      },
+      created_by: 'system',
+    };
+  }
+
   private liveRequiredEvidence(input: {
     providerId: TopicSelectionProviderCanaryProviderId;
     modelOptionId: string;
@@ -426,6 +558,13 @@ export class TopicSelectionProviderCanaryService {
       ? 'openai-balanced'
       : 'dashscope-thinking-budget';
     return `${TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID}.${suffix}`;
+  }
+
+  private v1bN8ModelOptionId(providerId: TopicSelectionProviderCanaryProviderId): string {
+    const suffix = providerId === 'openai'
+      ? 'openai-balanced'
+      : 'dashscope-thinking-budget';
+    return `${TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID}.${suffix}`;
   }
 
   private assertProviderRequiredLiveProfile(executionModifiers: string[]): void {
@@ -544,6 +683,65 @@ export class TopicSelectionProviderCanaryService {
           confidence: 0.8,
         },
       ],
+    };
+  }
+
+  private v1bN8CanaryReferenceDraft(): TopicSelectionV1bTopicValueAssessmentDraftPayload {
+    const contractRef = this.ref('topic_question_contract', 'provider_canary_contract_001');
+    const evidenceRef = this.ref('evidence_unit', 'provider_canary_evidence_001');
+    return {
+      readiness_status: 'ready_with_accepted_risk',
+      strongest_claim_if_success:
+        'The shared runtime can keep N8 provider-required calls live while preserving prompt-cache provenance.',
+      fallback_claim_if_success: 'The canary validates N8 provider transport and runtime provenance only.',
+      hard_gates: TOPIC_SELECTION_VALUE_GATE_KEYS.map((gateKey) => ({
+        gate_key: gateKey,
+        verdict: gateKey === 'answerability_sanity' ? 'pass_with_risk' : 'pass',
+        severity: gateKey === 'answerability_sanity' ? 'warning' : 'info',
+        overridable_with_risk: gateKey === 'answerability_sanity',
+        rationale: `${gateKey} is satisfied for the synthetic non-authority N8 provider canary.`,
+        refs: [contractRef],
+      })),
+      dimension_scores: TOPIC_SELECTION_VALUE_DIMENSIONS.map((dimensionKey) => ({
+        dimension_key: dimensionKey,
+        score: dimensionKey === 'reviewer_risk' ? 72 : 80,
+        rationale: `${dimensionKey} is adequate for a synthetic provider/runtime canary.`,
+        evidence_refs: [evidenceRef],
+        uncertainty: 'medium',
+      })),
+      risk_penalty: {
+        residual_risk: 'provider output quality may drift and remains non-authority',
+      },
+      reviewer_objections: ['Synthetic provider canary output is not business authority.'],
+      ceiling_case: 'The canary can show provider-live runtime semantics, not topic value.',
+      base_case: 'The canary validates prompt cache and provider telemetry separation for N8.',
+      floor_case: 'The canary still blocks unsafe over-budget provider execution.',
+      recommended_disposition: 'advance_to_package',
+      total_score: 76,
+      value_summary:
+        'The synthetic N8 canary is value-positive only as runtime evidence for prompt-cache/provider semantics.',
+      confidence: 0.78,
+      accepted_risk_refs: [],
+      blocker_refs: [],
+      risk_notes: ['Provider response reuse must remain null for this canary.'],
+      reasoning_memo: {
+        recommendation: 'advance_to_package',
+        value_thesis: 'The N8 provider canary is useful because it verifies provider-live behavior at the value-draft slot.',
+        significance: 'It gives workflow agents evidence that prompt packet reuse does not become response reuse.',
+        originality: 'The canary targets N8 value-draft runtime provenance rather than generic provider transport.',
+        claim_leverage: 'The claim is bounded to runtime semantics and auditability.',
+        reviewer_risks: ['Synthetic output does not prove topic quality.'],
+        effort_to_value: 'The canary has high diagnostic value for low implementation effort.',
+        strategic_fit: 'It supports reviewer-aligned workflow robustness checks.',
+        negative_memory_check: 'No negative memory is allowed to become standalone evidence.',
+        evidence_backed_rationale: 'Prompt hashes, cache metadata, and provider telemetry are ref-backed runtime evidence.',
+        top_objections: ['Provider output may require normalization in full workflow runs.'],
+        uncertainty: 'Medium uncertainty remains for live provider schema drift.',
+        disposition_bridge: 'Use this only as non-authority provider/runtime evidence.',
+        requires_critic_review: false,
+        critic_triggers: [],
+        cited_refs: [contractRef, evidenceRef],
+      },
     };
   }
 

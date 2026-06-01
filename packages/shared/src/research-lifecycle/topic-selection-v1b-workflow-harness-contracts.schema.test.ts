@@ -28,6 +28,7 @@ import {
   topicSelectionV1bResearchSliceOptionSetDraftPayloadSchema,
   topicSelectionV1bTopicQuestionCandidateSetDraftPayloadSchema,
   topicSelectionV1bTopicValueAssessmentDraftPayloadSchema,
+  topicSelectionV1bN6RuntimeContextProjectionSchema,
   topicSelectionV1bN7RuntimeContextProjectionSchema,
   type TopicSelectionV1bAcceptedConstraintProfilePayload,
   type TopicSelectionV1bAcceptedSliceSelectionPayload,
@@ -38,6 +39,7 @@ import {
   type TopicSelectionV1bN5HarnessFrozenInputPayload,
   type TopicSelectionV1bN6HarnessFrozenInputPayload,
   type TopicSelectionV1bN6LoopbackTriageSupportPayload,
+  type TopicSelectionV1bN6RuntimeContextProjection,
   type TopicSelectionV1bN7HarnessFrozenInputPayload,
   type TopicSelectionV1bN7RuntimeContextProjection,
   type TopicSelectionV1bN7ToN8HandoffPayload,
@@ -891,6 +893,70 @@ function canonicalV1cPublicationHandoff(): TopicSelectionV1bWorkflowHarnessHando
   };
 }
 
+function canonicalN6RuntimeContextProjection(): TopicSelectionV1bN6RuntimeContextProjection {
+  return {
+    schema_version: 'TopicSelectionV1bN6RuntimeContextProjection@v1',
+    projection_kind: 'v1b_n6_gate_failure_retry_context',
+    node_id: 'topic-selection.v1b.generate-topic-question-candidates.v1',
+    workflow_run_id: 'workflow_run_v1b_001',
+    node_attempt_id: 'node_attempt_v1b_n6_001',
+    route_decision: 'loopback',
+    loopback_target_code: 'n6_regenerate_candidates',
+    non_authority: true,
+    context_cache_scope: 'process_local_runtime_only',
+    context_authority: 'non_authority_runtime_context',
+    source_refs: [
+      ref('research_slice', 'research_slice_001'),
+      ref('research_slice_selection_decision', 'slice_selection_001'),
+      ref('artifact_ref', 'failed_n6_draft_001'),
+    ],
+    source_hashes: {
+      frozen_input_hash: HASH_A,
+      n5_handoff_hash: HASH_B,
+      selected_research_slice_hash: HASH_C,
+      failed_draft_hash: HASH_D,
+      failed_draft_prompt_packet_hash: HASH_E,
+      failed_draft_source_hashes_hash: HASH_F,
+      blocked_candidate_context_hash: HASH_A,
+      failure_reason_codes_hash: HASH_B,
+      regeneration_hints_hash: HASH_C,
+    },
+    support_refs: [ref('artifact_ref', 'failed_n6_draft_001')],
+    support_hashes: {
+      failed_draft_hash: HASH_D,
+      failed_draft_prompt_packet_hash: HASH_E,
+      failed_draft_source_hashes_hash: HASH_F,
+      blocked_candidate_context_hash: HASH_A,
+    },
+    preserved_fact_kinds: [
+      'failed_draft_identity',
+      'blocked_candidate_context',
+      'failure_reason_code',
+      'regeneration_hint',
+      'loopback_target',
+    ],
+    selected_research_slice_ref: ref('research_slice', 'research_slice_001'),
+    selected_research_slice_hash: HASH_C,
+    n5_handoff_hash: HASH_B,
+    failed_draft_ref: ref('artifact_ref', 'failed_n6_draft_001'),
+    failed_draft_hash: HASH_D,
+    failed_draft_prompt_packet_hash: HASH_E,
+    failed_draft_source_hashes_hash: HASH_F,
+    blocked_candidate_context: [{
+      affected_refs: [ref('research_slice', 'research_slice_001')],
+      candidate_key: 'candidate_001',
+      dominant_reason: 'answerability_weak',
+      scope: 'candidate_level',
+    }],
+    blocked_candidate_context_hash: HASH_A,
+    failure_reason_codes: ['answerability_weak'],
+    regeneration_hints: ['Regenerate with a narrower answerable question.'],
+    triage_artifact_ref: null,
+    triage_artifact_hash: null,
+    triage_payload_hash: null,
+  };
+}
+
 function canonicalN7RuntimeContextProjection(
   kind: TopicSelectionV1bN7RuntimeContextProjection['projection_kind'] =
     'v1b_n7_to_n8_topic_question_contract_context',
@@ -910,12 +976,14 @@ function canonicalN7RuntimeContextProjection(
         ref('artifact_ref', 'n6_handoff_001'),
         ref('artifact_ref', 'n8_feedback_001'),
         ref('artifact_ref', 'failed_trial_synthesis_001'),
+        ref('research_slice', 'research_slice_001'),
       ],
       source_hashes: {
         frozen_input_hash: HASH_A,
         n6_handoff_hash: HASH_B,
         n8_feedback_hash: HASH_C,
         failed_trial_synthesis_hash: HASH_D,
+        selected_research_slice_hash: HASH_E,
       },
       support_refs: [ref('artifact_ref', 'failed_trial_synthesis_001')],
       support_hashes: {
@@ -1418,6 +1486,21 @@ test('topic-selection v1b N7 runtime context projection schema accepts route pro
   const wrongRoute = canonicalN7RuntimeContextProjection('v1b_n7_to_n6_failed_trial_loopback_context') as unknown as Record<string, unknown>;
   wrongRoute.route_decision = 'invoke_next';
   assert.equal(await validatesBody(topicSelectionV1bN7RuntimeContextProjectionSchema, wrongRoute), false);
+});
+
+test('topic-selection v1b N6 runtime context projection schema accepts retry projection and rejects authority drift', async () => {
+  assert.equal(
+    await validatesBody(topicSelectionV1bN6RuntimeContextProjectionSchema, canonicalN6RuntimeContextProjection()),
+    true,
+  );
+
+  const authorityDrift = canonicalN6RuntimeContextProjection() as unknown as Record<string, unknown>;
+  authorityDrift.non_authority = false;
+  assert.equal(await validatesBody(topicSelectionV1bN6RuntimeContextProjectionSchema, authorityDrift), false);
+
+  const wrongTarget = canonicalN6RuntimeContextProjection() as unknown as Record<string, unknown>;
+  wrongTarget.loopback_target_code = 'n6_loopback_to_n5_select_different_slice';
+  assert.equal(await validatesBody(topicSelectionV1bN6RuntimeContextProjectionSchema, wrongTarget), false);
 });
 
 test('topic-selection v1b semantic support artifact schema rejects unknown slots wrong effects and raw payload leakage', async () => {

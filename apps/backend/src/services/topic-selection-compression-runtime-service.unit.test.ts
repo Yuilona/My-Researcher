@@ -14,6 +14,8 @@ import {
   TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1B_N7_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1B_N8_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
 } from './topic-selection-context-policy-profile-registry-service.js';
 import { TopicSelectionCompressionRuntimeService } from './topic-selection-compression-runtime-service.js';
@@ -125,6 +127,60 @@ function v1bN6RequiredFacts() {
     method_family_gap: ['gap_method_family_runtime_only'],
     unresolved_challenge: ['challenge_candidate_overlap'],
     recheck_hint: ['recheck_after_value_trial'],
+    n7_loopback_projection: ['n7_loopback_projection_hash_001'],
+    n6_gate_failure_projection: ['n6_gate_failure_projection_hash_001'],
+    failed_draft_identity: ['failed_draft_hash_001'],
+    blocked_candidate_context: ['blocked_candidate_context_hash_001'],
+    failed_trial_synthesis: ['failed_trial_synthesis_hash_001'],
+    exhausted_candidate_ref: ['topic_question_candidate_failed_001'],
+    exhausted_candidate_hash: ['failed_candidate_hash_001'],
+    candidate_order: ['candidate_order_hash_001'],
+    failure_reason_code: ['value_not_supported'],
+    regeneration_hint: ['hint_add_stronger_value_evidence'],
+    loopback_target: ['n6_regenerate_candidates'],
+    n8_feedback: ['n8_feedback_hash_001'],
+  };
+}
+
+function v1bN6LoopbackTriageRequiredFacts() {
+  return {
+    blocker: ['blocker_no_admissible_candidate'],
+    selected_slice_identity: ['research_slice_ref_001'],
+    n5_handoff: ['n5_handoff_hash_001'],
+    failed_draft_identity: ['failed_draft_hash_001'],
+    blocked_candidate_context: ['blocked_candidate_context_hash_001'],
+    dominant_reason_code: ['not_answerable'],
+    affected_ref: ['research_slice_ref_001'],
+    regeneration_hint: ['hint_regenerate_candidate'],
+    debate_escalation: ['mixed_cost_control'],
+    upstream_rollback: ['select_different_slice'],
+    loopback_target: ['n6_debate_escalation'],
+  };
+}
+
+function v1bN8RequiredFacts() {
+  return {
+    blocker: ['blocker_value_evidence_missing'],
+    residual_risk: ['risk_provider_quality_drift'],
+    accepted_risk: ['accepted_risk_bounded_claim'],
+    source_health_warning: ['source_health_partial_value_evidence'],
+    method_family_gap: ['gap_value_measurement_baseline'],
+    unresolved_challenge: ['challenge_reviewer_uncertainty'],
+    recheck_hint: ['recheck_after_n8_feedback'],
+    n7_handoff: ['n7_handoff_hash_001'],
+    n7_to_n8_projection: ['n7_to_n8_projection_hash_001'],
+    topic_question: ['topic_question_hash_001'],
+    topic_question_contract: ['topic_question_contract_hash_001'],
+    active_candidate_identity: ['active_candidate_hash_001'],
+    answerability_plan: ['answerability_plan_hash_001'],
+    trial_ledger: ['trial_ledger_hash_001'],
+    selected_slice_identity: ['research_slice_hash_001'],
+    candidate_set_identity: ['candidate_set_hash_001'],
+    value_rationale: ['value_rationale_fact_001'],
+    support_quality: ['support_quality_fact_001'],
+    reviewer_uncertainty: ['reviewer_uncertainty_fact_001'],
+    risk_gap_blocker_fact: ['risk_gap_blocker_fact_001'],
+    feedback_recheck_hint: ['feedback_recheck_hint_001'],
   };
 }
 
@@ -356,6 +412,18 @@ test('compression quality gate blocks when v1b N6 long-context facts are dropped
         method_family_gap: 'gap_method_family_runtime_only',
         unresolved_challenge: 'challenge_candidate_overlap',
         recheck_hint: 'recheck_after_value_trial',
+        n7_loopback_projection: 'n7_loopback_projection_hash_001',
+        n6_gate_failure_projection: 'n6_gate_failure_projection_hash_001',
+        failed_draft_identity: 'failed_draft_hash_001',
+        blocked_candidate_context: 'blocked_candidate_context_hash_001',
+        failed_trial_synthesis: 'failed_trial_synthesis_hash_001',
+        exhausted_candidate_ref: 'topic_question_candidate_failed_001',
+        exhausted_candidate_hash: 'failed_candidate_hash_001',
+        candidate_order: 'candidate_order_hash_001',
+        failure_reason_code: 'value_not_supported',
+        regeneration_hint: 'hint_add_stronger_value_evidence',
+        loopback_target: 'n6_regenerate_candidates',
+        n8_feedback: 'n8_feedback_hash_001',
       })),
     },
     compressed_context: {
@@ -393,6 +461,65 @@ test('compression quality gate blocks when v1b N6 long-context facts are dropped
   assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_METHOD_FAMILY_GAP_DROPPED'));
   assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_UNRESOLVED_CHALLENGE_DROPPED'));
   assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_RECHECK_HINT_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_N7_LOOPBACK_PROJECTION_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_N6_GATE_FAILURE_PROJECTION_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_FAILED_DRAFT_IDENTITY_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_BLOCKED_CANDIDATE_CONTEXT_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_FAILED_TRIAL_SYNTHESIS_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_EXHAUSTED_CANDIDATE_REF_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_EXHAUSTED_CANDIDATE_HASH_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_CANDIDATE_ORDER_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_FAILURE_REASON_CODE_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_REGENERATION_HINT_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_LOOPBACK_TARGET_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_N8_FEEDBACK_DROPPED'));
+});
+
+test('compression quality gate blocks when v1b N6 loopback triage facts are dropped', () => {
+  const triageProfile = resolvedContextProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS.loopback_triage,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS.loopback_triage,
+  });
+  const runtime = new TopicSelectionCompressionRuntimeService();
+  const result = runtime.createReport({
+    context_policy_profile: triageProfile.profile,
+    context_policy_profile_hash: triageProfile.profile_hash,
+    compression_report_ref: ref('artifact_ref', 'compression_report_v1b_n6_loopback_triage'),
+    source_refs: [ref('artifact_ref', 'n6_loopback_triage_context_packet')],
+    input_context: {
+      failed_draft_identity: 'failed_draft_hash_001',
+      blocked_candidate_context: 'blocked_candidate_context_hash_001',
+      dominant_reason_code: 'not_answerable',
+      affected_ref: 'research_slice_ref_001',
+      loopback_target: 'n6_debate_escalation',
+      debate_escalation: 'mixed_cost_control',
+      upstream_rollback: 'select_different_slice',
+    },
+    compressed_context: {
+      summary: 'Dropped failed draft, blocked candidate, and loopback routing facts.',
+    },
+    summary: 'Incomplete N6 loopback triage compression.',
+    compression_executor_kind: 'codex_assisted',
+    required_preserved_facts: v1bN6LoopbackTriageRequiredFacts(),
+    compressed_preserved_facts: {
+      selected_slice_identity: ['research_slice_ref_001'],
+      n5_handoff: ['n5_handoff_hash_001'],
+    },
+    estimated_input_tokens_before_override: 16_000,
+    estimated_input_tokens_after_override: 4_000,
+  });
+
+  assert.equal(result.quality_gate_result, 'blocked');
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_FAILED_DRAFT_IDENTITY_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_BLOCKED_CANDIDATE_CONTEXT_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_DOMINANT_REASON_CODE_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_AFFECTED_REF_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_REGENERATION_HINT_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_DEBATE_ESCALATION_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_UPSTREAM_ROLLBACK_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_LOOPBACK_TARGET_DROPPED'));
 });
 
 test('compression quality gate blocks v1b N6 adversarial persisted payloads', () => {
@@ -423,6 +550,121 @@ test('compression quality gate blocks v1b N6 adversarial persisted payloads', ()
     compressed_preserved_facts: v1bN6RequiredFacts(),
     estimated_input_tokens_before_override: 20_000,
     estimated_input_tokens_after_override: 8_000,
+  });
+
+  assert.equal(result.quality_gate_result, 'blocked');
+  assert.ok(result.blocker_codes.includes('COMPRESSION_FORBIDDEN_PERSISTED_PAYLOAD'));
+  assert.match(result.warning_codes.join(' '), /compressed_payload\.raw_provider_logs/);
+});
+
+test('compression quality gate blocks when v1b N8 long-context facts are dropped', () => {
+  const n8Profile = resolvedContextProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N8_CONTEXT_RUNTIME_PROFILE_IDS.value_assessment_draft,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS.value_assessment_draft,
+  });
+  const runtime = new TopicSelectionCompressionRuntimeService();
+  const result = runtime.createReport({
+    context_policy_profile: n8Profile.profile,
+    context_policy_profile_hash: n8Profile.profile_hash,
+    compression_report_ref: ref('artifact_ref', 'compression_report_v1b_n8_long_context'),
+    source_refs: [ref('artifact_ref', 'n8_value_assessment_context_packet')],
+    input_context: {
+      frozen_n7_lineage: {
+        n7_handoff_hash: 'n7_handoff_hash_001',
+        projection_hash: 'n7_to_n8_projection_hash_001',
+        topic_question_hash: 'topic_question_hash_001',
+        topic_question_contract_hash: 'topic_question_contract_hash_001',
+        active_candidate_hash: 'active_candidate_hash_001',
+        answerability_plan_hash: 'answerability_plan_hash_001',
+        trial_ledger_hash: 'trial_ledger_hash_001',
+      },
+      long_value_context_chunks: Array.from({ length: 24 }, (_, index) => ({
+        chunk_id: `value_chunk_${index + 1}`,
+        selected_slice_identity: 'research_slice_hash_001',
+        candidate_set_identity: 'candidate_set_hash_001',
+        value_rationale: 'value_rationale_fact_001',
+        support_quality: 'support_quality_fact_001',
+        reviewer_uncertainty: 'reviewer_uncertainty_fact_001',
+        risk_gap_blocker_fact: 'risk_gap_blocker_fact_001',
+        feedback_recheck_hint: 'feedback_recheck_hint_001',
+        blocker: 'blocker_value_evidence_missing',
+        residual_risk: 'risk_provider_quality_drift',
+        accepted_risk: 'accepted_risk_bounded_claim',
+        source_health_warning: 'source_health_partial_value_evidence',
+        method_family_gap: 'gap_value_measurement_baseline',
+        unresolved_challenge: 'challenge_reviewer_uncertainty',
+        recheck_hint: 'recheck_after_n8_feedback',
+      })),
+    },
+    compressed_context: {
+      frozen_n7_lineage: {
+        topic_question_contract_hash: 'topic_question_contract_hash_001',
+      },
+      summary: 'Dropped projection, candidate, trial ledger, value rationale, uncertainty, risk, and feedback facts.',
+    },
+    summary: 'Incomplete N8 long-context compression.',
+    compression_executor_kind: 'codex_assisted',
+    required_preserved_facts: v1bN8RequiredFacts(),
+    compressed_preserved_facts: {
+      topic_question_contract: ['topic_question_contract_hash_001'],
+      selected_slice_identity: ['research_slice_hash_001'],
+      source_health_warning: ['source_health_partial_value_evidence'],
+    },
+    estimated_input_tokens_before_override: 54_000,
+    estimated_input_tokens_after_override: 13_000,
+  });
+
+  assert.equal(result.quality_gate_result, 'blocked');
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_BLOCKER_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_RESIDUAL_RISK_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_ACCEPTED_RISK_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_METHOD_FAMILY_GAP_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_UNRESOLVED_CHALLENGE_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_RECHECK_HINT_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_N7_HANDOFF_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_N7_TO_N8_PROJECTION_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_TOPIC_QUESTION_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_ACTIVE_CANDIDATE_IDENTITY_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_ANSWERABILITY_PLAN_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_TRIAL_LEDGER_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_CANDIDATE_SET_IDENTITY_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_VALUE_RATIONALE_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_SUPPORT_QUALITY_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_REVIEWER_UNCERTAINTY_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_RISK_GAP_BLOCKER_FACT_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_FEEDBACK_RECHECK_HINT_DROPPED'));
+});
+
+test('compression quality gate blocks v1b N8 adversarial persisted payloads', () => {
+  const n8Profile = resolvedContextProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1B_N8_CONTEXT_RUNTIME_PROFILE_IDS.value_assessment_draft,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS.value_assessment_draft,
+  });
+  const runtime = new TopicSelectionCompressionRuntimeService();
+  const result = runtime.createReport({
+    context_policy_profile: n8Profile.profile,
+    context_policy_profile_hash: n8Profile.profile_hash,
+    compression_report_ref: ref('artifact_ref', 'compression_report_v1b_n8_adversarial_payload'),
+    source_refs: [ref('artifact_ref', 'n8_value_assessment_context_packet')],
+    input_context: {
+      n7_handoff_hash: 'n7_handoff_hash_001',
+      projection_hash: 'n7_to_n8_projection_hash_001',
+      topic_question_contract_hash: 'topic_question_contract_hash_001',
+    },
+    compressed_context: {
+      preserved_hashes: ['n7_handoff_hash_001', 'n7_to_n8_projection_hash_001'],
+      raw_provider_logs: ['provider request body must never persist in N8 compressed context'],
+    },
+    summary: 'Compressed N8 context with an adversarial raw provider log field.',
+    compression_executor_kind: 'deterministic_structural',
+    required_preserved_facts: v1bN8RequiredFacts(),
+    compressed_preserved_facts: v1bN8RequiredFacts(),
+    estimated_input_tokens_before_override: 24_000,
+    estimated_input_tokens_after_override: 7_000,
   });
 
   assert.equal(result.quality_gate_result, 'blocked');
