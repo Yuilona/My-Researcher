@@ -18,7 +18,6 @@ const ROLE_ORDER = ['support', 'challenge', 'baseline', 'context'];
 const SCENARIO_IDS = Object.freeze({
   canary: 'topic-selection.real-e2e.canary.v1',
   scaleQuality: 'topic-selection.real-e2e.scale-quality.v1',
-  v1bNonAdvanceNegative: 'topic-selection.v1b.non-advance-negative.v1',
 });
 const SCENARIO_ID = process.env.TOPIC_SELECTION_WORKFLOW_SCENARIO_ID
   ?? parseScenarioArg(process.argv.slice(2))
@@ -28,15 +27,12 @@ const QUALITY_RUN_ID = process.env.TOPIC_SELECTION_REAL_E2E_QUALITY_RUN_ID
   ?? `real-e2e-quality-${timestamp()}`;
 const REPEATS = parsePositiveInt(process.env.TOPIC_SELECTION_REAL_E2E_REPEATS, 3);
 const SAMPLE_SIZE = parsePositiveInt(process.env.TOPIC_SELECTION_REAL_LITERATURE_LIMIT, 32);
-const RUN_NEGATIVE = process.env.TOPIC_SELECTION_REAL_E2E_SKIP_NEGATIVE !== '1';
 const MODEL_ID = process.env.TOPIC_SELECTION_REAL_MODEL_ID ?? 'gpt-5.5';
 const PROVIDER_LLM_MODE = process.env.TOPIC_SELECTION_REAL_FLOW_MOCK_LLM ?? '0';
 const EXISTING_PROVIDER_RUN_IDS = parseCsv(process.env.TOPIC_SELECTION_REAL_E2E_EXISTING_RUN_IDS);
-const EXISTING_NEGATIVE_RUN_ID = process.env.TOPIC_SELECTION_REAL_E2E_EXISTING_NEGATIVE_RUN_ID ?? null;
 
 const QUALITY_DIR = path.join(REPO_ROOT, '.ai/.tmp/topic-selection-real-e2e-quality', QUALITY_RUN_ID);
 const E2E_DIR = path.join(REPO_ROOT, '.ai/.tmp/topic-selection-real-e2e');
-const V1B_HARNESS_DIR = path.join(REPO_ROOT, '.ai/.tmp/topic-selection-v1b-harness-e2e');
 
 function parseScenarioArg(args) {
   for (let index = 0; index < args.length; index += 1) {
@@ -259,66 +255,6 @@ async function loadExistingE2e(runId, label) {
   };
 }
 
-async function runV1bProviderNegativeLoopbacks(runId, label) {
-  const logPath = path.join(QUALITY_DIR, `${label}.log`);
-  await fs.writeFile(logPath, '');
-  const childEnv = {
-    ...process.env,
-    TOPIC_SELECTION_V1B_HARNESS_RUN_ID: runId,
-    TOPIC_SELECTION_V1B_HARNESS_SCENARIO: 'provider_negative_loopbacks',
-    TOPIC_SELECTION_V1B_HARNESS_SEMANTIC_MODE: 'provider_llm',
-    TOPIC_SELECTION_V1B_HARNESS_PROVIDER_ID: process.env.TOPIC_SELECTION_REAL_PROVIDER_ID ?? 'openai',
-    TOPIC_SELECTION_V1B_HARNESS_LLM_MAX_RETRIES: process.env.TOPIC_SELECTION_REAL_LLM_MAX_RETRIES ?? '3',
-  };
-  const child = spawn(process.execPath, [
-    '--loader',
-    './apps/backend/node_modules/ts-node/esm.mjs',
-    '.ai/scripts/topic-selection-v1b-harness-e2e.mjs',
-  ], {
-    cwd: REPO_ROOT,
-    env: childEnv,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  child.stdout.on('data', (chunk) => {
-    void appendLog(logPath, chunk);
-  });
-  child.stderr.on('data', (chunk) => {
-    void appendLog(logPath, chunk);
-  });
-
-  const exitCode = await new Promise((resolve) => {
-    child.on('close', resolve);
-  });
-  const summaryPath = path.join(V1B_HARNESS_DIR, runId, 'result.json');
-  const summary = await readJson(summaryPath).catch(async (error) => ({
-    status: 'missing_summary',
-    run_id: runId,
-    error: { message: error instanceof Error ? error.message : String(error) },
-  }));
-  return {
-    exit_code: exitCode,
-    log_path: path.relative(REPO_ROOT, logPath),
-    summary_path: path.relative(REPO_ROOT, summaryPath),
-    summary,
-  };
-}
-
-async function loadExistingV1bProviderNegativeLoopbacks(runId, label) {
-  const summaryPath = path.join(V1B_HARNESS_DIR, runId, 'result.json');
-  const summary = await readJson(summaryPath).catch(async (error) => ({
-    status: 'missing_summary',
-    run_id: runId,
-    error: { message: error instanceof Error ? error.message : String(error) },
-  }));
-  return {
-    exit_code: summary.status === 'passed' ? 0 : 1,
-    log_path: path.relative(REPO_ROOT, path.join(QUALITY_DIR, `${label}.log`)),
-    summary_path: path.relative(REPO_ROOT, summaryPath),
-    summary,
-  };
-}
-
 async function loadSelectedDetails(runId) {
   const filePath = path.join(E2E_DIR, runId, '01-selected-literature.json');
   const payload = await readJson(filePath).catch(() => null);
@@ -509,53 +445,6 @@ function auditStability(runAudits) {
   };
 }
 
-function auditNegativeRun(run) {
-  const failures = [];
-  const summary = run.summary;
-  if (run.exit_code !== 0) {
-    failures.push(`negative run exited with ${run.exit_code}`);
-  }
-  if (summary.status !== 'passed') {
-    failures.push(`negative harness status=${summary.status}, expected passed`);
-  }
-  if (summary.scenario !== 'provider_negative_loopbacks') {
-    failures.push(`negative harness scenario=${summary.scenario}, expected provider_negative_loopbacks`);
-  }
-  const cases = summary.runs?.[0]?.cases ?? [];
-  const caseIds = new Set(cases.map((item) => item.case_id));
-  for (const requiredCase of [
-    'n6_regenerate_candidates',
-    'n6_debate_escalation',
-    'n6_loopback_to_n5_select_different_slice',
-    'n8_blocking_gate_to_n7_readmission',
-    'n7_trial_switch_and_exhaustion_to_n6_loopback',
-  ]) {
-    if (!caseIds.has(requiredCase)) {
-      failures.push(`negative harness missing case ${requiredCase}`);
-    }
-  }
-  for (const item of cases.filter((entry) => entry.case_id?.startsWith('n6_'))) {
-    const node = item.nodes?.n6;
-    if (node?.authority_ref !== null || node?.handoff_ref !== null) {
-      failures.push(`${item.case_id} wrote authority or handoff`);
-    }
-    if (node?.route_decision !== 'loopback') {
-      failures.push(`${item.case_id} route_decision=${node?.route_decision}, expected loopback`);
-    }
-    if (item.loopback_trace?.loopback_target_code !== item.expected_loopback_target_code) {
-      failures.push(`${item.case_id} loopback target mismatch`);
-    }
-  }
-  return {
-    run_id: summary.run_id,
-    status: summary.status,
-    scenario: summary.scenario ?? null,
-    provider_id: summary.provider_id ?? null,
-    covered_cases: cases.map((item) => item.case_id),
-    failures,
-  };
-}
-
 function markdownCell(value) {
   return String(value ?? '')
     .replace(/\|/gu, '\\|')
@@ -623,34 +512,6 @@ async function runCanaryScenario() {
   }
 }
 
-async function runV1bNonAdvanceNegativeScenario() {
-  await fs.mkdir(QUALITY_DIR, { recursive: true });
-  const runId = EXISTING_NEGATIVE_RUN_ID ?? process.env.TOPIC_SELECTION_REAL_RUN_ID ?? `${QUALITY_RUN_ID}-v1b-negative`;
-  console.log(`[${EXISTING_NEGATIVE_RUN_ID ? 'load' : 'run'}] ${SCENARIO_IDS.v1bNonAdvanceNegative}: ${runId}`);
-  const run = EXISTING_NEGATIVE_RUN_ID
-    ? await loadExistingV1bProviderNegativeLoopbacks(runId, 'v1b-negative')
-    : await runV1bProviderNegativeLoopbacks(runId, 'v1b-negative');
-  const negativeAudit = auditNegativeRun(run);
-  const scenarioSummary = {
-    status: negativeAudit.failures.length === 0 ? 'passed' : 'failed',
-    scenario_id: SCENARIO_IDS.v1bNonAdvanceNegative,
-    scenario_type: 'negative',
-    quality_run_id: QUALITY_RUN_ID,
-    artifact_dir: path.relative(REPO_ROOT, QUALITY_DIR),
-    v1b_negative: {
-      ...negativeAudit,
-      log_path: run.log_path,
-      summary_path: run.summary_path,
-    },
-    failures: negativeAudit.failures,
-  };
-  await writeJson(path.join(QUALITY_DIR, 'scenario-summary.json'), scenarioSummary);
-  console.log(JSON.stringify(scenarioSummary, null, 2));
-  if (negativeAudit.failures.length > 0) {
-    process.exitCode = 1;
-  }
-}
-
 async function runScaleQualityScenario() {
   await fs.mkdir(QUALITY_DIR, { recursive: true });
 
@@ -684,25 +545,10 @@ async function runScaleQualityScenario() {
     auditRun(run, selectedDetailsByRun[index], resourceSamplesByRun[index], expectedTargets));
   const stability = auditStability(providerAudits);
 
-  let negativeRun = null;
-  let negativeAudit = null;
-  if (RUN_NEGATIVE) {
-    const runId = EXISTING_NEGATIVE_RUN_ID ?? `${QUALITY_RUN_ID}-v1b-negative`;
-    if (EXISTING_NEGATIVE_RUN_ID) {
-      console.log(`[load] ${SCENARIO_IDS.v1bNonAdvanceNegative}: ${runId}`);
-      negativeRun = await loadExistingV1bProviderNegativeLoopbacks(runId, 'v1b-negative');
-    } else {
-      console.log(`[run] ${SCENARIO_IDS.v1bNonAdvanceNegative}: ${runId}`);
-      negativeRun = await runV1bProviderNegativeLoopbacks(runId, 'v1b-negative');
-    }
-    negativeAudit = auditNegativeRun(negativeRun);
-  }
-
   const manualSpotCheckPath = await writeManualSpotCheck(providerAudits[0]);
   const failures = [
     ...providerAudits.flatMap((run) => run.failures),
     ...stability.failures,
-    ...(negativeAudit?.failures ?? []),
   ];
   const warnings = providerAudits.flatMap((run) => run.warnings);
 
@@ -710,10 +556,7 @@ async function runScaleQualityScenario() {
     status: failures.length === 0 ? 'passed' : 'failed',
     scenario_id: SCENARIO_IDS.scaleQuality,
     scenario_type: 'scale_quality_gate',
-    covered_child_scenarios: [
-      SCENARIO_IDS.canary,
-      ...(RUN_NEGATIVE ? [SCENARIO_IDS.v1bNonAdvanceNegative] : []),
-    ],
+    covered_child_scenarios: [SCENARIO_IDS.canary],
     assertion_scope: [
       'resource_sample_hash_present',
       'resource_sample_not_blocked',
@@ -726,7 +569,7 @@ async function runScaleQualityScenario() {
       'carried_literature_evidence_ids_present',
       'downstream_feedback_recheck_counts',
       'selected_literature_role_semantics',
-      'v1b_provider_negative_loopbacks_no_authority_leakage',
+      'retired_v1b_full_chain_provider_loopbacks_not_invoked',
     ],
     node_authority_created_by:
       'child WorkflowScenario runs; this runner only aggregates scenario-level assertions and artifacts',
@@ -755,12 +598,11 @@ async function runScaleQualityScenario() {
       summary_path: providerRuns[index].summary_path,
     })),
     stability,
-    v1b_negative: negativeAudit ? {
-      ...negativeAudit,
-      scenario_id: SCENARIO_IDS.v1bNonAdvanceNegative,
-      log_path: negativeRun.log_path,
-      summary_path: negativeRun.summary_path,
-    } : null,
+    v1b_negative: {
+      status: 'retired',
+      replacement:
+        'Use topic-selection:v1b-runtime-stress for deterministic loopback coverage and topic-selection:v1b-provider-canary for provider-required-live slot coverage.',
+    },
     manual_spot_check_path: manualSpotCheckPath,
     warnings,
     failures,
@@ -780,10 +622,6 @@ async function main() {
   }
   if (SCENARIO_ID === SCENARIO_IDS.scaleQuality) {
     await runScaleQualityScenario();
-    return;
-  }
-  if (SCENARIO_ID === SCENARIO_IDS.v1bNonAdvanceNegative) {
-    await runV1bNonAdvanceNegativeScenario();
     return;
   }
   throw new Error(`Unsupported TOPIC_SELECTION_WORKFLOW_SCENARIO_ID: ${SCENARIO_ID}`);

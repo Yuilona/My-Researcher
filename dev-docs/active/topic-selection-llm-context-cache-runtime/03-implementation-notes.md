@@ -589,7 +589,7 @@
   - N7 failed-trial exhaustion -> N6 loopback projection with runtime-verified `n7_failed_trial_synthesis`;
   - Prisma prompt packet index metadata rows for all three N7 support slots;
   - runtime audit provenance with `source_kind=codex_response`, `non_provider=true`, `cache_status=not_applicable`, `response_reuse_ref=null`, and no provider telemetry.
-- Removed the promoted-slot direct N7 support writer from the v1b harness e2e script. Provider-negative loopback scenarios now generate N7 support through `TopicSelectionV1bN7SupportRuntimeService`, and the package script enforces Prisma-backed storage so runtime artifacts share the HTTP harness store.
+- Removed the promoted-slot direct N7 support writer from the v1b harness e2e script. Historical provider-negative loopback scenarios generated N7 support through `TopicSelectionV1bN7SupportRuntimeService` before the provider-negative harness entry was retired; active N7 runtime support evidence now comes from `n7_runtime_smoke` and `topic-selection:v1b-runtime-stress`.
 - Fixture helpers remain available for non-promoted fixture paths through `fixture_replay`; they are not allowed to produce `runtime_verified` support or prompt packet cache evidence.
 - First-slice status after this closure:
   - v1b N7 L1-L3 and promoted-slot legacy exit are complete;
@@ -1160,3 +1160,46 @@
   - They are not missing coverage for v1b closure unless a later decision promotes them.
 - D27-E defines the post-closure roadmap fork.
   - With closure evidence recorded, the next decision is either a separate delegated semantic support runtime-promotion decision for N2/N3/N5, or a return to v1c/resource-sampling rollout.
+
+## 2026-06-01 - v1b Provider Canary Entrypoint Repair
+- Deep v1b review found that the old `pnpm topic-selection:v1b-provider-canary` entry still invoked the N1-N11 harness with `TOPIC_SELECTION_V1B_HARNESS_SEMANTIC_MODE=provider_llm`.
+- Current T-112 first-slice runtime policy correctly rejects provider `model_option_id` values on promoted N4/N6/N8 semantic artifacts, so the old full-chain provider harness path now fails closed with `N4_DRAFT_ARTIFACT_RUNTIME_CONTEXT_DRIFT`.
+- Kept the fail-closed runtime policy unchanged.
+- Repointed `pnpm topic-selection:v1b-provider-canary` to the supported `TopicSelectionProviderCanaryService` slot-level provider checks for v1b N4/N6/N8.
+- Updated the v1b runner guide and v1b hardening acceptance wording so provider-required-live evidence is slot-level, while deterministic full-chain evidence remains `pnpm topic-selection:v1b-harness-e2e` and `pnpm topic-selection:v1b-runtime-stress`.
+
+## 2026-06-01 - v1b Runtime Documentation Consistency Closure
+- Closed the remaining provider-canary wording drift before planning near-production v1b deep testing.
+  - `06-node-scope-matrix.md` now marks `n6_question_candidate_draft.provider_canary` as implemented L4 slot-level evidence instead of deferred.
+  - `08-exit-gate-review.md` now describes current provider-backed v1b evidence as `TopicSelectionProviderCanaryService -> AgentOrchestrator -> BackendLlmGateway` slot checks, not the retired N1-N11 provider repeat harness.
+- No runtime policy changed in this documentation closure.
+  - Deterministic full-chain evidence remains `pnpm topic-selection:v1b-harness-e2e`.
+  - Promoted runtime closure evidence remains `pnpm topic-selection:v1b-runtime-stress`.
+  - Provider-required-live evidence remains `pnpm topic-selection:v1b-provider-canary`.
+
+## 2026-06-01 - v1b Near-Production Deep Test Entrypoint
+- Added `.ai/scripts/topic-selection-v1b-near-prod-deep-test.mjs` and `pnpm topic-selection:v1b-near-prod-deep-test`.
+  - The runner wraps existing evidence entries only; it does not implement independent prompt/cache/compression/admission semantics.
+  - The default bundle runs Prisma-backed N1-N11 fixture behavior, promoted N4/N6/N7/N8 runtime stress, focused runtime/compression/admission unit tests, and the current N4/N6/N8 provider slot canary.
+  - It writes one wrapper summary under `.ai/.tmp/topic-selection-v1b-near-prod-deep-test/<run-id>/90-summary.json` and references child command logs plus child JSON summaries where available.
+- Retired the active provider-negative loopback harness entry.
+  - Removed `topic-selection:v1b-provider-negative-loopbacks` from `package.json`.
+  - Removed `provider_negative_loopbacks` from `.ai/scripts/topic-selection-v1b-harness-e2e.mjs`.
+  - Removed the provider-negative child scenario from `.ai/scripts/topic-selection-workflow-scenario-runner.mjs`.
+  - Updated `.ai/scripts/topic-selection-real-e2e.mjs` so retired quality-negative direct-route mode points to runtime stress plus provider slot canary instead of the removed provider-negative harness entry.
+- Rationale:
+  - Current T-112 v1b N6 first-slice runtime admission correctly rejects provider `model_option_id` values in promoted N6 draft artifacts.
+  - The old provider-negative loopback path therefore conflicts with the promoted runtime boundary and would reintroduce a dual-track semantic surface.
+  - Active negative/loopback coverage now belongs to deterministic runtime stress and service-level tests; provider-required-live evidence stays slot-level and non-authority.
+
+## 2026-06-01 - v1b Provider Harness Compatibility Exit
+- Completed the hard exit for the retired v1b full-chain provider harness semantics.
+  - `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` now accepts only `TOPIC_SELECTION_V1B_HARNESS_SEMANTIC_MODE=fixture`; `provider_llm` fails at argument parsing with guidance to use `pnpm topic-selection:v1b-provider-canary`.
+  - Removed the old provider draft helpers, provider schema routing, harness provider env parsing, and provider telemetry passthrough from the v1b harness runner.
+  - Renamed remaining negative/loopback fixture payload fields away from provider-negative terminology because those cases are deterministic runtime stress semantics, not live-provider acceptance.
+  - `.ai/scripts/topic-selection-real-e2e.mjs` now forces its v1b leg to the fixture harness and no longer passes v1b provider id, timeout, or retry envs into the v1b harness child.
+  - The desktop v1b acceptance copy now points provider live validation to N4/N6/N8 slot canaries plus near-production runtime stress, not a repeat=3 full-chain provider harness.
+- Boundary retained:
+  - Provider-required-live v1b evidence remains slot-level through `TopicSelectionProviderCanaryService -> AgentOrchestrator -> BackendLlmGateway`.
+  - Deterministic full-chain authority evidence remains `pnpm topic-selection:v1b-harness-e2e`.
+  - Negative/loopback coverage remains deterministic runtime-stress/service coverage.

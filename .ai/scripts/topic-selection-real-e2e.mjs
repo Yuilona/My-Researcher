@@ -1520,7 +1520,8 @@ async function runV1b(_app, v1a) {
   if (QUALITY_NEGATIVE_MODE || ALLOW_NON_ADVANCE_V1B) {
     throw new Error(
       'topic-selection:real-e2e quality-negative direct v1b mode was retired with legacy v1b write routes; '
-      + 'use pnpm topic-selection:v1b-provider-negative-loopbacks for current negative loopback/readmission coverage.',
+      + 'use pnpm topic-selection:v1b-runtime-stress for deterministic loopback coverage and '
+      + 'pnpm topic-selection:v1b-provider-canary for provider-required-live slot coverage.',
     );
   }
 
@@ -1535,10 +1536,7 @@ async function runV1b(_app, v1a) {
     ...process.env,
     TOPIC_SELECTION_V1B_HARNESS_RUN_ID: v1bRunId,
     TOPIC_SELECTION_V1B_HARNESS_INPUT_BUNDLE_ID: v1a.v1bInputBundleId,
-    TOPIC_SELECTION_V1B_HARNESS_SEMANTIC_MODE: USE_MOCK_LLM ? 'fixture' : 'provider_llm',
-    TOPIC_SELECTION_V1B_HARNESS_PROVIDER_ID: PROVIDER_ID,
-    TOPIC_SELECTION_V1B_HARNESS_LLM_TIMEOUT_MS: String(LLM_TIMEOUT_MS),
-    TOPIC_SELECTION_V1B_HARNESS_LLM_MAX_RETRIES: String(LLM_MAX_RETRIES),
+    TOPIC_SELECTION_V1B_HARNESS_SEMANTIC_MODE: 'fixture',
   };
   const child = await runNodeScript({
     script: '.ai/scripts/topic-selection-v1b-harness-e2e.mjs',

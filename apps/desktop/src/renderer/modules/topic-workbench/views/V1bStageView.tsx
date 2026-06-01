@@ -76,7 +76,7 @@ export function V1bStageView({
         <div data-ui="stack" data-direction="row" data-gap="2" data-wrap="wrap" data-align="center">
           <span data-ui="badge" data-variant="subtle" data-tone="warning">验收口径</span>
           <span data-ui="text" data-variant="caption" data-tone="muted">
-            当前页展示 harness 写入的 v1b authority。快速本地 smoke 默认 1 轮；provider 验收使用 3 轮独立 canary，失败即停；重试预算由 provider retry 配置控制。
+            当前页展示 harness 写入的 v1b authority。快速本地 smoke 默认 1 轮；provider live 验收使用 N4/N6/N8 slot canary；近生产深测由 runtime stress 与 provider slot canary 组合完成。
           </span>
         </div>
       </article>

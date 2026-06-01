@@ -652,6 +652,7 @@ Implementation is complete for T-107. v1b has shared harness contracts, policy/r
 - This implements route-level debate switching and upstream rollback signaling. It does not introduce a hidden live debate executor inside N6; the next N6 attempt must still arrive as a frozen semantic artifact through the existing harness admission boundary.
 
 ## 2026-05-28 Provider-Backed Negative Loopback Runner
+- Status as of 2026-06-01: superseded and active entry removed by T-112 v1b runtime closure. Historical evidence remains recorded, but `provider_negative_loopbacks` is no longer an accepted harness scenario because promoted N6 draft runtime admission rejects provider `model_option_id` by design.
 - Extended `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` with `TOPIC_SELECTION_V1B_HARNESS_SCENARIO=provider_negative_loopbacks` and package script `pnpm topic-selection:v1b-provider-negative-loopbacks`.
 - The new scenario keeps the default positive N1-N11 runner unchanged. It builds a fixture-backed N1-N5 setup, then uses live provider artifacts for negative N6/N8 semantic outputs while retaining deterministic harness gates as the authority boundary.
 - Covered provider-backed N6 all-failed candidate variants for default `n6_regenerate_candidates`, Codex-triage-backed `n6_debate_escalation`, and Codex-triage-backed `n6_loopback_to_n5_select_different_slice`.
@@ -662,10 +663,10 @@ Implementation is complete for T-107. v1b has shared harness contracts, policy/r
 
 ## 2026-05-28 Repeat Semantics And LLM-Facing Runner Guidance
 
-- Kept the low-level v1b harness runner default at `TOPIC_SELECTION_V1B_HARNESS_REPEAT=1`. This remains the right local smoke default and the right default for provider-negative loopback probes because those runs are expensive and intentionally fail-fast on the first broken chain.
-- Added package script `pnpm topic-selection:v1b-provider-canary` as the explicit provider acceptance entry. It runs `TOPIC_SELECTION_V1B_HARNESS_SEMANTIC_MODE=provider_llm` with `TOPIC_SELECTION_V1B_HARNESS_REPEAT=3`, while still allowing the provider id to be selected by `TOPIC_SELECTION_V1B_HARNESS_PROVIDER_ID`.
+- Kept the low-level v1b harness runner default at `TOPIC_SELECTION_V1B_HARNESS_REPEAT=1`. This remains the right local smoke default. The provider-negative loopback probe default is historical only because that active entry was removed on 2026-06-01.
+- Added package script `pnpm topic-selection:v1b-provider-canary` as the explicit provider acceptance entry. This originally ran the N1-N11 harness in `provider_llm` mode with `TOPIC_SELECTION_V1B_HARNESS_REPEAT=3`; the 2026-06-01 T-112 runtime closure retired that interpretation and repointed the command to slot-level provider canaries.
 - Added `docs/context/process/topic-selection-v1b-harness-runner.md` as the LLM-facing runner guide and routed `docs/context/AGENTS.md` / `docs/context/INDEX.md` to it. The guide states that `repeat` is exact independent-chain count and fail-fast, not retry budget or an upper bound.
-- Added a compact v1b desktop workbench hint that mirrors the operational口径: UI displays harness-written authority, local smoke defaults to one run, provider canary acceptance uses three independent runs, and provider transport retries are configured separately.
+- Added a compact v1b desktop workbench hint that mirrored the original operational口径: UI displays harness-written authority, local smoke defaults to one run, provider canary acceptance used three independent runs, and provider transport retries were configured separately. The 2026-06-01 T-112 repair supersedes the provider-canary part with slot-level live checks.
 
 ## 2026-05-28 External Codex CLI N6 Variance Entry
 
@@ -700,8 +701,8 @@ Implementation is complete for T-107. v1b has shared harness contracts, policy/r
 
 - Removed obsolete `apps/backend/src/routes/topic-selection-decision-chain-acceptance.test.ts`. Its cross-stage acceptance shape depended on retired direct v1b write routes; retained coverage now lives in per-stage route tests, offline replay route tests, v1c route tests, and the v1b harness HTTP N1-N11 smoke.
 - Renamed the ambiguous N6 external Codex entry to `topic-selection:v1b-external-codex-n6-variance` and `external_codex_n6_variance`; no generic `external_codex_variance` or `v1b-external-codex-variance` entry remains.
-- Rewired `.ai/scripts/topic-selection-real-e2e.mjs` so the v1b leg invokes `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` with `TOPIC_SELECTION_V1B_HARNESS_INPUT_BUNDLE_ID` instead of recreating retired direct write-route orchestration. The quality-negative direct-route mode now fails fast with a pointer to `pnpm topic-selection:v1b-provider-negative-loopbacks`.
-- Updated `.ai/scripts/topic-selection-workflow-scenario-runner.mjs` so the `topic-selection.v1b.non-advance-negative.v1` child scenario uses the provider-backed v1b harness negative loopback runner instead of setting retired real-e2e quality-negative direct-route env vars.
+- Rewired `.ai/scripts/topic-selection-real-e2e.mjs` so the v1b leg invokes `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` with `TOPIC_SELECTION_V1B_HARNESS_INPUT_BUNDLE_ID` instead of recreating retired direct write-route orchestration. The quality-negative direct-route mode originally pointed to provider-negative loopbacks; as of 2026-06-01 it points to `pnpm topic-selection:v1b-runtime-stress` and `pnpm topic-selection:v1b-provider-canary`.
+- Updated `.ai/scripts/topic-selection-workflow-scenario-runner.mjs` so the `topic-selection.v1b.non-advance-negative.v1` child scenario used the provider-backed v1b harness negative loopback runner instead of setting retired real-e2e quality-negative direct-route env vars. As of 2026-06-01 that child scenario is removed from the active WorkflowScenario runner.
 - Removed desktop v1b direct write helpers and inline submit forms. The v1b workbench now displays read-only authority written by the WorkflowHarness path and uses copy that points reviewers to N5/N7/N9/N10 harness-owned progression.
 - Tightened N6 loopback triage integrity: the service now requires support, normalized, and provenance artifact refs to exist, and verifies support/normalized artifact checksums against semantic artifact hashes before applying triage routing. A mismatched support artifact blocks with `N6_LOOPBACK_TRIAGE_ARTIFACT_HASH_MISMATCH` before routing or authority writes.
 - Cleaned stale local v1b tmp run directories that were unreferenced failed/no-result probes or redundant generated fixture runs. Deliberately documented acceptance evidence under `.ai/.tmp/topic-selection-v1b-harness-e2e/` was preserved.
@@ -712,3 +713,10 @@ Implementation is complete for T-107. v1b has shared harness contracts, policy/r
 - Removed obsolete OpenAPI request/response schemas for the old direct route path (`TopicSelectionV1bIntakeSnapshotRequest`, direct slice/question/value/package request schemas, and direct creation response schemas). The API context now models harness request/result/artifact contracts instead.
 - Rebuilt the tracked desktop renderer bundle from a clean HEAD worktree outside the repo to avoid embedding unrelated dirty experiment-foundation source changes into T-107 dist artifacts. The new tracked bundle no longer contains old v1b submit forms or direct route strings.
 - Old direct-route strings intentionally remain only in the v1b harness e2e script and backend route integration test as 404 negative assertions. They are not formal API, UI, package, shared-contract, or process-context entrypoints.
+
+## 2026-06-01 Provider Canary Entrypoint Retirement
+
+- Retired the old interpretation of `pnpm topic-selection:v1b-provider-canary` as an N1-N11 provider-backed repeat harness.
+- Root cause: T-112 first-slice runtime admission now deliberately rejects provider `model_option_id` values for promoted N4/N6/N8 semantic artifacts. The fail-closed blocker is correct; the stale package script and runner guide were the drift.
+- Repointed `pnpm topic-selection:v1b-provider-canary` to the supported `TopicSelectionProviderCanaryService` live slot tests for v1b N4/N6/N8.
+- Updated runner guidance and acceptance wording so deterministic full-chain evidence comes from `pnpm topic-selection:v1b-harness-e2e`, while provider-required-live semantics come from the slot canary entry.
