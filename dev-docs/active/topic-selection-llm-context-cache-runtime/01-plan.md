@@ -550,11 +550,11 @@
   - N6 frozen payload/context/handoff lineage validation now runs before draft artifact resolution/admission;
   - next work is P2.1b regeneration/triage promotion.
 - P2.1b implementation status:
-  - `regeneration_after_n7_loopback` is implemented through L1/L2 with ref-backed N7 failed-trial projection identity and drift blockers;
-  - `n6_loopback_triage` is implemented through L1/L2 as an optional support-only runtime/admission slot bound to the failed N6 draft hash, failed draft prompt identity, failed draft source-hash bundle, runtime audit, and `v1b_n6_loopback_triage_context`;
+  - `regeneration_after_n7_loopback` is implemented through L1-L3 with ref-backed N7 failed-trial projection identity and drift blockers;
+  - `n6_loopback_triage` is implemented through L1-L3 as an optional support-only runtime/admission slot bound to the failed N6 draft hash, failed draft prompt identity, failed draft source-hash bundle, runtime audit, and `v1b_n6_loopback_triage_context`;
   - product mode blocks fixture loopback triage, and `legacy_unverified` triage cannot enter promoted admission;
-  - `regeneration_after_n6_gate_failure` is implemented through L1/L2 with ref-backed N6 gate-failure retry projection identity, failed draft identity, blocked-candidate context, reason/hint hashes, and drift blockers;
-  - P2.1b is closed at L1/L2. P2.2 v1b N8 is the next implementation-readiness focus.
+  - `regeneration_after_n6_gate_failure` is implemented through L1-L3 with ref-backed N6 gate-failure retry projection identity, failed draft identity, blocked-candidate context, reason/hint hashes, and drift blockers;
+  - P2.1b is closed at L1-L3 with L5 compression blockers. P2.2 v1b N8 is the next implementation-readiness focus.
 
 ### Implementation Order
 - P2.1 v1b N6 initial topic-question candidate generation:
@@ -569,7 +569,7 @@
   - verify N7 loopback drift, unknown failed-trial refs, orphan projection blocking, triage authority boundaries, and no authority bypass;
   - `n6_loopback_triage` is now bound as optional support-only runtime context for N6 failed-draft routing; it can classify failure scope, dominant reason codes, affected refs, regeneration hints, debate escalation advice, and rollback-to-N5 advice, but cannot create candidates, select a slice, emit handoff authority, or create downstream recheck;
   - `regeneration_after_n6_gate_failure` is now bound to `v1b_n6_gate_failure_retry_context`, preserving failed draft identity, blocked-candidate context, failure reason codes, regeneration hints, selected slice identity, and N5 handoff hash through prompt identity and compression gates;
-  - P2.1b L1/L2 is complete.
+  - P2.1b L1-L3 and L5 compression blocker coverage are complete.
 - P2.2 v1b N8 topic value assessment:
   - D25-A is locked: first slice promotes only `n8_value_assessment_draft`; it does not expand N9/N10/N11, does not change the N8 deterministic gate, does not runtime-ize N8->N7 feedback generation, and does not introduce multi-agent debate/provider canaries in the first slice;
   - D25-A boundary: `n8_value_assessment_draft` remains `model_draft_for_gate`; runtime success produces a non-authority semantic artifact only, and N8 authority writes still require the existing deterministic value gate plus `N8ToN9Handoff@v1` persistence;
@@ -597,6 +597,13 @@
   - L4 local and live provider/executor canary is implemented for OpenAI and DashScope over `AgentOrchestrator -> BackendLlmGateway`; live N4 provider canaries are explicit-gated by `T112_V1B_N4_PROVIDER_CANARY_LIVE=1` and provider keys;
   - L5 long-context/adversarial coverage blocks dropped N4 preserved facts and forbidden persisted payloads before compressed context can become prompt input;
   - N4 first-slice runtime closure evidence is complete for local/dev, local provider canary, live provider canary, and L5 adversarial compression.
+- P2.4 v1b runtime closure:
+  - focus stays on v1b runtime; no additional v1c rollout proceeds in this closure slice;
+  - add `pnpm topic-selection:v1b-runtime-stress` as the combined Prisma-backed local/dev runtime stress entry for promoted N4/N6/N7/N8 slots;
+  - the runner composes the existing `n4_runtime_smoke`, `n6_runtime_smoke`, `n6_loopback_runtime_smoke`, `n7_runtime_smoke`, and `n8_runtime_smoke` harness scenarios, records child summaries, and asserts prompt packet index rows for `n4_research_slice_option_draft`, `n6_question_candidate_draft`, `n6_loopback_triage`, all three N7 support slots, and `n8_value_assessment_draft`;
+  - the stress runner remains a closure harness, not a new node-orchestration authority: existing node adapters still own context compilation, prompt/cache identity, compression self-check, draft/support admission, and deterministic gate boundaries;
+  - P2.1b N6 loopback/regeneration rows now have L3 Prisma-backed smoke through `pnpm topic-selection:v1b-n6-loopback-runtime-smoke`; L5 compression coverage blocks dropped N7 loopback projection, N6 gate-failure projection, failed draft identity, blocked candidate context, regeneration hints, loopback target, and triage facts;
+  - v1b N2/N3/N5 stay frozen semantic support unless a later decision explicitly promotes them to runtime slots.
 - P3.1 v1c N2 promotion support `llm_draft` runtime migration:
   - first v1c slice is limited to `promotion_support_generation.llm_draft`; bounded micro-debate roles, N3/N4 canaries, and N6 feedback normalization remain separate follow-up slots;
   - direct `BackendLlmGateway` is removed from the v1c N2 LLM draft path in favor of `TopicSelectionAgentOrchestratorService` with `v1c_n2_promotion_support` context profile and `topic-selection-promotion-decision-support` model profile;

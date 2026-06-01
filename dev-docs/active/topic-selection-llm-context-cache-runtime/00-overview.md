@@ -76,9 +76,10 @@
 - v1b N7 runtime first slice is closed for L1-L3 plus minimum adversarial quality coverage.
 - D24 v1b N6 chain alignment is closed for first-slice planning.
 - v1b N6 `n6_question_candidate_draft.initial_from_n5` is implemented through L3 Prisma-backed smoke, L4 provider canary, and L5 long-context/adversarial compression coverage.
-- v1b N6 P2.1b has promoted the N7->N6 failed-trial regeneration path through L1/L2: `v1b_n7_to_n6_failed_trial_loopback_context` now enters N6 as ref-backed non-authority runtime context for `n6_question_candidate_draft.regeneration_after_n7_loopback`.
-- v1b N6 P2.1b has promoted `n6_loopback_triage` through L1/L2 as an optional support-only runtime/admission slot for failed-draft routing, debate escalation advice, and rollback-to-N5 advice.
-- v1b N6 P2.1b has promoted `n6_question_candidate_draft.regeneration_after_n6_gate_failure` through L1/L2: N6 deterministic gate failures now emit `v1b_n6_gate_failure_retry_context` as ref-backed non-authority retry context.
+- v1b N6 P2.1b has promoted the N7->N6 failed-trial regeneration path through L1-L3: `v1b_n7_to_n6_failed_trial_loopback_context` now enters N6 as ref-backed non-authority runtime context for `n6_question_candidate_draft.regeneration_after_n7_loopback`.
+- v1b N6 P2.1b has promoted `n6_loopback_triage` through L1-L3 as an optional support-only runtime/admission slot for failed-draft routing, debate escalation advice, and rollback-to-N5 advice.
+- v1b N6 P2.1b has promoted `n6_question_candidate_draft.regeneration_after_n6_gate_failure` through L1-L3: N6 deterministic gate failures now emit `v1b_n6_gate_failure_retry_context` as ref-backed non-authority retry context.
 - v1b N8 P2.2 has promoted `n8_value_assessment_draft.initial_from_n7` through L1-L5: runtime-verified Codex value drafts can enter product-mode N8 admission only when the N7 handoff and N7->N8 projection identity match, fixture replay is blocked in product, Prisma-backed smoke validates replay/drift/prompt-index behavior, provider canaries cover OpenAI/DashScope prompt-cache live-call semantics, and long-context/adversarial compression blocks dropped N8 value facts and raw provider logs.
-- Current implementation-readiness focus moves to the remaining post-N7 v1b runtime expansion surface: v1b N4.
-- Later post-N7 v1b runtime expansion remains ordered as N4, then v1c slices.
+- v1b N4 first-slice runtime closure is complete for the initial N3->N4 research-slice option path.
+- Current implementation-readiness focus is v1b runtime closure across promoted N4/N6/N7/N8 slots: combined Prisma stress, matrix sync, and any remaining P2.1b provider/long-run hardening before widening scope.
+- v1c follow-up slices remain paused until the v1b runtime closure signal is clean.

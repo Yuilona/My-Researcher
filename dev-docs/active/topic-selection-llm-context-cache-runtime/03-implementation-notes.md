@@ -810,7 +810,7 @@
   - Orphan or malformed retry projections block before runtime generation/admission.
 - Tightened retry projection admission so source/support hashes must self-consistently bind failed draft prompt identity, failed draft source-hash bundle, blocked-candidate context, failure reason codes, regeneration hints, and optional triage refs/hashes.
 - Expanded N6 compression preserved facts with N6 gate-failure projection, failed draft identity, blocked candidate context, and loopback target.
-- P2.1b L1/L2 is now closed. Remaining v1b runtime expansion moves to P2.2 N8.
+- P2.1b L1/L2 was closed in this slice; later closure work promoted it to L3 Prisma smoke plus L5 compression blockers.
 
 ## 2026-06-01 - v1b N8 P2.2 D25-A-E Locked
 - D25-A locks the first N8 runtime slice to `n8_value_assessment_draft` only.
@@ -1109,3 +1109,26 @@
 - Runtime provenance is stored in the existing v1c support control-plane telemetry.
   - Telemetry now includes `llm_runtime_provenance` and `llm_runtime_audit`.
   - Provider telemetry remains separated from business support fields.
+
+## 2026-06-01 - v1b Runtime Closure Refocus
+- Refocused the next implementation work on v1b runtime closure before any broader v1c rollout.
+- Added `.ai/scripts/topic-selection-v1b-runtime-stress.mjs` and `pnpm topic-selection:v1b-runtime-stress`.
+  - The runner composes the existing Prisma-backed v1b harness scenarios: `n4_runtime_smoke`, `n6_runtime_smoke`, `n7_runtime_smoke`, and `n8_runtime_smoke`.
+  - Child runs are isolated by `TOPIC_SELECTION_V1B_HARNESS_RUN_ID`, forced into `fixture` semantic mode, and keep `TITLE_CARD_REPOSITORY` plus `RESEARCH_LIFECYCLE_REPOSITORY` on Prisma.
+  - The runner asserts metadata-only prompt packet index shape, scenario-specific runtime cases, and expected prompt packet index rows across N4, N6, all promoted N7 support slots, and N8.
+- Updated the slot inventory wording for promoted v1b N6/N7 runtime rows so the main matrix no longer presents those rows as product frozen-semantic-only paths.
+- The closure runner is explicitly a stress harness around existing runtime adapters. It does not move prompt/cache/compression/admission authority into the stress script.
+- Remaining v1b runtime hardening after closure stress is stable: P2.1b N6 loopback/regeneration paths are now promoted from L1/L2 into integrated L3/L5 coverage.
+
+## 2026-06-01 - v1b N6 P2.1b Loopback L3/L5 Closure
+- Added `n6_loopback_runtime_smoke` to `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` and `pnpm topic-selection:v1b-n6-loopback-runtime-smoke`.
+  - The new scenario exercises `n6_question_candidate_draft.regeneration_after_n7_loopback` using a ref-backed `v1b_n7_to_n6_failed_trial_loopback_context` emitted by N7 failed-trial synthesis.
+  - It exercises runtime `n6_loopback_triage` on an N6 deterministic gate failure, then consumes the emitted `v1b_n6_gate_failure_retry_context` through `n6_question_candidate_draft.regeneration_after_n6_gate_failure`.
+  - Prompt packet index assertions now include `n6_loopback_triage` and the two regeneration prompt variants.
+- Extended `pnpm topic-selection:v1b-runtime-stress` so the default combined stress includes `n6_loopback_runtime_smoke` between the initial N6 and N7/N8 smokes.
+- Tightened the closure stress review checks:
+  - `n6_loopback_triage` smoke now asserts audit provenance binding for non-provider execution, null model option, prompt packet hash, structured output hash, cache status `not_applicable`, null response reuse, and absent provider telemetry.
+  - The combined runtime stress runner now validates each child harness run's own prompt-index delta before using the global DB snapshot, so unrelated prompt rows cannot mask a missing scenario slot.
+- L5 coverage for the P2.1b facts remains in `topic-selection-compression-runtime-service.unit.test.ts`.
+  - The long-context/adversarial tests block dropped N7 loopback projection, N6 gate-failure projection, failed draft identity, blocked candidate context, failed-trial synthesis, exhausted candidate identity/order, failure reason, regeneration hint, loopback target, N8 feedback, and loopback triage facts.
+- This closes the local/dev L3 path for P2.1b without making the harness runner an authority owner; node adapters and runtime/admission services still own all semantic decisions.
