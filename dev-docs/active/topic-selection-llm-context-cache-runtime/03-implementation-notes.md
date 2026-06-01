@@ -1081,6 +1081,9 @@
 
 ## 2026-06-01 - v1b N4 Live Provider Canary Evidence
 - Ran the explicit live v1b N4 provider canary gate with `T112_V1B_N4_PROVIDER_CANARY_LIVE=1` and local provider configuration.
+- Re-ran the N4 L3/L4 evidence after splitting the v1a provider slice into its own commit, so the v1b N4 verification now reflects the current uncommitted v1b patch set.
+  - L3 Prisma smoke run id: `t112-v1b-n4-runtime-smoke-20260601b`.
+  - L4 live provider test result: 2 N4 live provider canaries passed, 22 nonmatching tests skipped.
 - OpenAI N4 live provider canary passed through `AgentOrchestrator -> BackendLlmGateway`.
   - The canary used the N4 `ResearchSliceOptionSetDraft@v1` schema, live provider execution, and prompt-cache exact-hit repetition.
   - It verified two provider calls, prompt packet hash equality, prompt artifact/quality-report reuse, provider response cache status `not_applicable`, null response reuse refs, and provider telemetry.

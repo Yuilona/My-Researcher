@@ -661,7 +661,7 @@
 | `node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package.json ok')"` | passed | Package JSON remains valid after adding `topic-selection:v1b-n4-runtime-smoke`. |
 | `git diff --check -- .ai/scripts/topic-selection-v1b-harness-e2e.mjs package.json` | passed | No whitespace errors in the N4 smoke script and package entry. |
 | `pnpm --filter @paper-engineering-assistant/backend exec tsc --noEmit` | passed | Backend TypeScript compile passed after importing the N4 runtime service and Prisma v1b intake repository into the ESM harness script. |
-| `TOPIC_SELECTION_V1B_HARNESS_RUN_ID=t112-v1b-n4-runtime-smoke-verify-20260601 pnpm topic-selection:v1b-n4-runtime-smoke` | passed | Prisma-backed `n4_runtime_smoke` passed. Product-mode runtime draft admission created a `ResearchSliceOptionSet` and `N4ToN5Handoff`; exact replay reused the same authority/handoff refs with no additional artifact refs; source-hash drift blocked with `N4_DRAFT_ARTIFACT_SOURCE_HASH_DRIFT`; runtime audit provenance stayed non-provider with response reuse `not_applicable`/`null`; prompt index created 2 N4 rows for `n4_research_slice_option_draft.initial_from_n3`. |
+| `TOPIC_SELECTION_V1B_HARNESS_RUN_ID=t112-v1b-n4-runtime-smoke-20260601b pnpm topic-selection:v1b-n4-runtime-smoke` | passed | Prisma-backed `n4_runtime_smoke` passed after the v1a provider-slice commit split. Product-mode runtime draft admission created a `ResearchSliceOptionSet` and `N4ToN5Handoff`; exact replay reused the same authority/handoff refs with no additional artifact refs; source-hash drift blocked with `N4_DRAFT_ARTIFACT_SOURCE_HASH_DRIFT`; runtime audit provenance stayed non-provider with response reuse `not_applicable`/`null`; prompt index created 2 N4 rows for `n4_research_slice_option_draft.initial_from_n3`. |
 
 ## 2026-06-01 - v1b N4 L4/L5 Local Verification
 | Command | Result | Notes |
@@ -675,7 +675,7 @@
 ## 2026-06-01 - v1b N4 Live Provider Canary Evidence
 | Command | Result | Notes |
 |---|---|---|
-| `T112_V1B_N4_PROVIDER_CANARY_LIVE=1 BACKEND_TEST_PRESERVE_REAL_ENV=1 pnpm --filter @paper-engineering-assistant/backend exec node --env-file=/Volumes/DataDisk/Project/My-Researcher/.env.local --test --loader ts-node/esm --test-name-pattern "provider canary live v1b N4" src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | 24 tests discovered: 2 N4 live provider canaries passed and 22 nonmatching tests skipped by the test-name pattern. OpenAI completed in about 14.9 seconds; DashScope completed in about 159.8 seconds. Both used the configured `AgentOrchestrator -> BackendLlmGateway` path and preserved provider-required-live response non-reuse semantics. |
+| `T112_V1B_N4_PROVIDER_CANARY_LIVE=1 BACKEND_TEST_PRESERVE_REAL_ENV=1 pnpm --filter @paper-engineering-assistant/backend exec node --env-file=/Volumes/DataDisk/Project/My-Researcher/.env.local --test --loader ts-node/esm --test-name-pattern "provider canary live v1b N4" src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | 24 tests discovered after the v1a provider-slice commit split: 2 N4 live provider canaries passed and 22 nonmatching tests skipped by the test-name pattern. OpenAI completed in about 22.0 seconds; DashScope completed in about 159.8 seconds. Both used the configured `AgentOrchestrator -> BackendLlmGateway` path and preserved provider-required-live response non-reuse semantics. |
 
 ## Required Before Implementation
 - Contract design reviewed against T-088/T-089 D-18. Done.
