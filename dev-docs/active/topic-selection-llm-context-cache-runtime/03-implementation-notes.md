@@ -1132,3 +1132,31 @@
 - L5 coverage for the P2.1b facts remains in `topic-selection-compression-runtime-service.unit.test.ts`.
   - The long-context/adversarial tests block dropped N7 loopback projection, N6 gate-failure projection, failed draft identity, blocked candidate context, failed-trial synthesis, exhausted candidate identity/order, failure reason, regeneration hint, loopback target, N8 feedback, and loopback triage facts.
 - This closes the local/dev L3 path for P2.1b without making the harness runner an authority owner; node adapters and runtime/admission services still own all semantic decisions.
+
+## 2026-06-01 - D26 v1b Runtime Closure Scope Locked
+- D26-A locks v1b runtime closure to the promoted N4/N6/N7/N8 runtime surface.
+  - The closure signal is based on the existing promoted slots and their combined stress path, not on converting every v1b LLM-like or delegated semantic surface in the workflow.
+- D26-B defers v1b N2/N3/N5 runtime promotion.
+  - `n2_constraint_profile_semantic_support`, `n3_readiness_classification`, and `n5_slice_selection_review` remain frozen/delegated semantic support for the current v1b closure.
+  - Any promotion of these slots requires a later explicit decision with context family, authority boundary, prompt/cache identity, compression policy, and legacy-exit criteria.
+- D26-C defines v1b closure acceptance.
+  - `pnpm topic-selection:v1b-runtime-stress` is the combined local/dev Prisma evidence for promoted N4/N6/N7/N8 slots.
+  - Per-node L3/L4/L5 evidence remains the source of detailed slot confidence.
+  - Prompt packet index persistence must stay metadata-only, provider response reuse remains blocked, compression self-check stays in runtime/admission services, and deterministic gates/handoffs/authority writes remain owned by node adapters and workflow services.
+- The following D27 decision locks closure acceptance; execution evidence is recorded in verification.
+
+## 2026-06-01 - D27 v1b Closure Acceptance Locked
+- D27-A locks `pnpm topic-selection:v1b-runtime-stress` as the main closure command for the promoted v1b runtime surface.
+  - The command composes N4, N6 initial, N6 loopback/regeneration, N7, and N8 Prisma-backed runtime smokes.
+  - Child-level prompt-index deltas and the global prompt-index snapshot both participate in the acceptance signal.
+- D27-B keeps per-node evidence as the detailed confidence floor.
+  - Promoted N4/N6/N7/N8 slots must retain L1/L2 unit or harness policy coverage, L3 Prisma-backed smoke evidence, applicable L4 provider/executor canaries, and L5 compression/adversarial blockers.
+- D27-C locks runtime authority invariants for closure.
+  - Prompt packet index persistence remains metadata-only.
+  - Provider response reuse remains blocked.
+  - Compression failure remains runtime/admission-owned, not harness-only.
+  - Deterministic gates, handoffs, route decisions, and authority writes remain workflow-owned and cannot be bypassed by cache hits, compression artifacts, or runtime support artifacts.
+- D27-D marks N2/N3/N5 as deferred surfaces for this closure.
+  - They are not missing coverage for v1b closure unless a later decision promotes them.
+- D27-E defines the post-closure roadmap fork.
+  - With closure evidence recorded, the next decision is either a separate delegated semantic support runtime-promotion decision for N2/N3/N5, or a return to v1c/resource-sampling rollout.

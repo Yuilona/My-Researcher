@@ -599,6 +599,14 @@
   - N4 first-slice runtime closure evidence is complete for local/dev, local provider canary, live provider canary, and L5 adversarial compression.
 - P2.4 v1b runtime closure:
   - focus stays on v1b runtime; no additional v1c rollout proceeds in this closure slice;
+  - D26-A is locked: v1b runtime closure completes around the promoted N4/N6/N7/N8 runtime surface only, and does not silently expand to every v1b LLM-like or delegated semantic support node;
+  - D26-B is locked: v1b N2 `n2_constraint_profile_semantic_support`, N3 `n3_readiness_classification`, and N5 `n5_slice_selection_review` remain frozen/delegated semantic support for this closure and require a later explicit runtime-promotion decision before implementation;
+  - D26-C is locked: v1b closure acceptance is based on the combined runtime stress plus the per-node L3/L4/L5 evidence for N4/N6/N7/N8, prompt-index metadata-only persistence, provider response non-reuse, runtime/admission compression self-checks, and unchanged deterministic gate/handoff/authority boundaries;
+  - D27-A is locked: `pnpm topic-selection:v1b-runtime-stress` is the main v1b closure command for the promoted runtime surface;
+  - D27-B is locked: per-node evidence floor remains required for promoted N4/N6/N7/N8 slots, including L1/L2 unit or harness policy coverage, L3 Prisma-backed smoke, applicable L4 provider/executor canaries, and L5 compression/adversarial blockers;
+  - D27-C is locked: closure must preserve runtime authority invariants. Prompt packet index persistence is metadata-only, provider response reuse stays blocked, compression failure is blocked by runtime/admission self-checks, and deterministic gates/handoffs/authority writes are not bypassed by cache/compression/runtime artifacts;
+  - D27-D is locked: N2/N3/N5 are explicitly deferred surfaces, not missing closure blockers;
+  - D27-E is locked: after v1b closure evidence is recorded, the next roadmap choice is either a separate delegated semantic support runtime-promotion decision or return to v1c/resource-sampling rollout;
   - add `pnpm topic-selection:v1b-runtime-stress` as the combined Prisma-backed local/dev runtime stress entry for promoted N4/N6/N7/N8 slots;
   - the runner composes the existing `n4_runtime_smoke`, `n6_runtime_smoke`, `n6_loopback_runtime_smoke`, `n7_runtime_smoke`, and `n8_runtime_smoke` harness scenarios, records child summaries, and asserts prompt packet index rows for `n4_research_slice_option_draft`, `n6_question_candidate_draft`, `n6_loopback_triage`, all three N7 support slots, and `n8_value_assessment_draft`;
   - the stress runner remains a closure harness, not a new node-orchestration authority: existing node adapters still own context compilation, prompt/cache identity, compression self-check, draft/support admission, and deterministic gate boundaries;

@@ -719,6 +719,11 @@
 | `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registry remained structurally valid after the v1b closure review fixes. |
 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after the v1b closure review updates. |
 
+## 2026-06-01 - D27 v1b Closure Acceptance Evidence
+| Command | Result | Notes |
+|---|---|---|
+| `TOPIC_SELECTION_V1B_RUNTIME_STRESS_RUN_ID=t112-v1b-d27-closure-stress-20260601 TOPIC_SELECTION_V1B_RUNTIME_STRESS_ITERATIONS=1 pnpm topic-selection:v1b-runtime-stress` | passed | D27 closure stress passed with 5 child scenarios: `n4_runtime_smoke`, `n6_runtime_smoke`, `n6_loopback_runtime_smoke`, `n7_runtime_smoke`, and `n8_runtime_smoke`. Created prompt-index rows covered `n4_research_slice_option_draft` x2, `n6_question_candidate_draft` x5, `n6_loopback_triage` x1, `n7_candidate_grouping` x1, `n7_failed_trial_synthesis` x2, `n7_n8_debate_admission_review` x1, and `n8_value_assessment_draft` x2. Quality decisions were `warn` only, with no prompt quality `block` decisions. Artifact dir: `.ai/.tmp/topic-selection-v1b-runtime-stress/t112-v1b-d27-closure-stress-20260601`. |
+
 ## Required Before Implementation
 - Contract design reviewed against T-088/T-089 D-18. Done.
 - First slice selected and approved: shared contracts/runtime primitives followed by v1a N6 single-agent and debate slots. Done.

@@ -71,7 +71,6 @@
 - [x] Live OpenAI/DashScope v1a N6 provider canaries record telemetry and prove provider-required scenarios still perform live provider calls.
 
 ## Current Focus
-- Current operator focus is v1a closure audit. v1b/v1c follow-up work is paused for this pass except where already recorded as prior completed context.
 - Current v1a production-readiness focus is closed for the promoted T-112 runtime slice: D18.2/D18.3/D18.4/D18.5/D18.6, N1-N4 producer replay/drift smoke, N5/N7/N8 over-budget compression, and uneven provider slices for DashScope N7/N8 plus OpenAI N8 are complete. N5/N7/N8 runtime binding now lives outside `WorkflowHarness`, v1a runtime stress has separate `baseline` and `mocked_n5_n8` context modes with prompt-index assertions for N5/N6/N7/N8, and N1-N4 deterministic context producers have DB-backed exact replay/input-hash drift coverage.
 - v1b N7 runtime first slice is closed for L1-L3 plus minimum adversarial quality coverage.
 - D24 v1b N6 chain alignment is closed for first-slice planning.
@@ -81,5 +80,7 @@
 - v1b N6 P2.1b has promoted `n6_question_candidate_draft.regeneration_after_n6_gate_failure` through L1-L3: N6 deterministic gate failures now emit `v1b_n6_gate_failure_retry_context` as ref-backed non-authority retry context.
 - v1b N8 P2.2 has promoted `n8_value_assessment_draft.initial_from_n7` through L1-L5: runtime-verified Codex value drafts can enter product-mode N8 admission only when the N7 handoff and N7->N8 projection identity match, fixture replay is blocked in product, Prisma-backed smoke validates replay/drift/prompt-index behavior, provider canaries cover OpenAI/DashScope prompt-cache live-call semantics, and long-context/adversarial compression blocks dropped N8 value facts and raw provider logs.
 - v1b N4 first-slice runtime closure is complete for the initial N3->N4 research-slice option path.
-- Current implementation-readiness focus is v1b runtime closure across promoted N4/N6/N7/N8 slots: combined Prisma stress, matrix sync, and any remaining P2.1b provider/long-run hardening before widening scope.
-- v1c follow-up slices remain paused until the v1b runtime closure signal is clean.
+- D26 is locked: v1b runtime closure scope is the promoted N4/N6/N7/N8 runtime surface only. v1b N2/N3/N5 remain frozen/delegated semantic support and are deferred to a later explicit runtime-promotion decision.
+- D27 is locked: v1b closure acceptance uses the combined Prisma-backed runtime stress as the main entry, keeps per-node L3/L4/L5 evidence as the detailed floor, and requires prompt-index metadata-only persistence, provider response non-reuse, runtime/admission-owned compression self-checks, and unchanged deterministic authority boundaries.
+- D27 closure evidence is recorded for the promoted N4/N6/N7/N8 runtime surface; current v1b focus is readiness/commit and post-closure route selection, not widening the promoted slot set.
+- v1c follow-up slices remain paused until the v1b runtime closure decision is committed and accepted.
