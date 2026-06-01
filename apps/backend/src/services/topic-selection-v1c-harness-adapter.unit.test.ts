@@ -43,16 +43,17 @@ test('T-108 harness adapter normalizes N2 from split support bundle without N3 h
       source_refs: [topicSelectionV1cAcceptanceRef('topic_package', 'topic_package_001')],
       support_generation_mode: 'llm_draft',
     } as TopicSelectionPromotionDecisionSupportRecord,
-    promotion_dossier: {
-      promotion_dossier_id: 'promotion_dossier_001',
-      title_card_id: 'title_card_001',
-    } as TopicSelectionPromotionDossierRecord,
-  });
+	    promotion_dossier: {
+	      promotion_dossier_id: 'promotion_dossier_001',
+	      title_card_id: 'title_card_001',
+	    } as TopicSelectionPromotionDossierRecord,
+	    provider_involved: false,
+	  });
 
   assert.equal(result.node_id, 'N2');
   assert.equal(result.routing_outcome, 'support_ready');
   assert.equal(result.automation, 'advance');
-  assert.equal(result.provider_involved, true);
+  assert.equal(result.provider_involved, false);
   assert.deepEqual(result.authority_refs.map((ref) => ref.ref_type), [
     'promotion_decision_support',
     'promotion_dossier',

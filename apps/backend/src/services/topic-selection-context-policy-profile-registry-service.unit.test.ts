@@ -20,6 +20,10 @@ import {
   TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1C_N2_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1C_N2_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1C_N6_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
 } from './topic-selection-context-policy-profile-registry-service.js';
 
@@ -247,6 +251,93 @@ test('context policy profile registry validates and resolves v1a runtime profile
   );
 });
 
+test('context policy profile registry resolves v1c bounded debate and feedback runtime profiles', () => {
+  const service = new TopicSelectionContextPolicyProfileRegistryService();
+
+  const supporterDraft = service.resolveProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.promotion_supporter_draft,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.promotion_supporter_draft,
+  });
+  assert.equal(supporterDraft.profile.context_family, 'v1c_n2_bounded_promotion_support');
+  assert.equal(supporterDraft.profile.functional_template, 'support_only_semantic');
+  assert.equal(supporterDraft.profile.reuse_policy.provider_llm_response_reuse, 'blocked');
+  assert.equal(supporterDraft.profile.reuse_policy.provider_required_live_behavior, 'live_call_required');
+  assert.equal(supporterDraft.profile.cache_policy.post_cache_gates.includes('role_artifact_admission'), true);
+  assert.equal(supporterDraft.profile.post_reuse_gates.includes('dynamic_material_boundary'), true);
+  assert.equal(
+    supporterDraft.profile.compression_policy.preserved_fact_kinds.includes('claim_ceiling'),
+    true,
+  );
+  assert.equal(
+    supporterDraft.profile.compression_policy.preserved_fact_kinds.includes('allowed_ref_manifest'),
+    true,
+  );
+  assert.equal(
+    supporterDraft.profile.compression_policy.preserved_fact_kinds.includes('source_health_warning'),
+    true,
+  );
+
+  const reviewerCritic = service.resolveProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.reviewer_critic_review,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.reviewer_critic_review,
+  });
+  const supporterRepair = service.resolveProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.promotion_supporter_repair,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.promotion_supporter_repair,
+  });
+  const synthesizerFinal = service.resolveProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.synthesizer_final,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.synthesizer_final,
+  });
+
+  assert.notEqual(supporterDraft.profile_hash, reviewerCritic.profile_hash);
+  assert.notEqual(reviewerCritic.profile_hash, supporterRepair.profile_hash);
+  assert.notEqual(supporterRepair.profile_hash, synthesizerFinal.profile_hash);
+  assert.equal(
+    synthesizerFinal.profile.compression_policy.preserved_fact_kinds.includes('critic_resolution_map'),
+    true,
+  );
+  assert.equal(
+    synthesizerFinal.profile.compression_policy.preserved_fact_kinds.includes('readiness_coverage_item'),
+    true,
+  );
+
+  const downstreamFeedback = service.resolveProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1C_N6_CONTEXT_RUNTIME_PROFILE_IDS.downstream_feedback_normalization,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS.downstream_feedback_normalization,
+  });
+  assert.equal(downstreamFeedback.profile.context_family, 'v1c_n6_downstream_feedback_normalization');
+  assert.equal(downstreamFeedback.profile.functional_template, 'candidate_for_deterministic_gate');
+  assert.equal(
+    downstreamFeedback.profile.cache_policy.post_cache_gates.includes('feedback_normalization_admission'),
+    true,
+  );
+  assert.equal(
+    downstreamFeedback.profile.post_reuse_gates.includes('recheck_side_effect_boundary'),
+    true,
+  );
+  assert.equal(
+    downstreamFeedback.profile.compression_policy.preserved_fact_kinds.includes('paper_project_bridge'),
+    true,
+  );
+  assert.equal(
+    downstreamFeedback.profile.compression_policy.preserved_fact_kinds.includes(
+      'no_upstream_mutation_boundary',
+    ),
+    true,
+  );
+});
+
 test('context policy profile registry fails closed for unknown profile, version mismatch, slot mismatch, and hash drift', () => {
   const service = new TopicSelectionContextPolicyProfileRegistryService();
 
@@ -294,6 +385,19 @@ test('context policy profile registry fails closed for unknown profile, version 
       error instanceof AppError
       && error.errorCode === 'INVALID_PAYLOAD'
       && error.message === 'context policy profile hash drift detected.',
+  );
+
+  assert.throws(
+    () => service.resolveProfile({
+      context_policy_profile_id:
+        TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.synthesizer_final,
+      invocation_slot_id:
+        TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.reviewer_critic_review,
+    }),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && error.message === 'invocation_slot_id does not match context policy profile.',
   );
 });
 

@@ -91,6 +91,28 @@ profiles:
         model_id: gpt-5.5
         weight: 100
 
+  - profile_id: topic-selection.v1c.promotion-support.bounded-micro-debate.v1
+    intent: v1c_bounded_micro_debate_runtime
+    candidates:
+      - provider_id: openai
+        model_id: gpt-5.5
+        weight: 100
+    fallback:
+      - provider_id: openai
+        model_id: gpt-5.5
+        weight: 100
+
+  - profile_id: topic-selection.v1c.downstream-feedback-normalization.v1
+    intent: v1c_downstream_feedback_normalization_runtime
+    candidates:
+      - provider_id: openai
+        model_id: gpt-5.5
+        weight: 100
+    fallback:
+      - provider_id: openai
+        model_id: gpt-5.5
+        weight: 100
+
   - profile_id: topic-selection.v1c.promotion-support.bounded-micro-debate.provider-canary.v1
     intent: v1c_provider_canary_bounded_micro_debate
     candidates:

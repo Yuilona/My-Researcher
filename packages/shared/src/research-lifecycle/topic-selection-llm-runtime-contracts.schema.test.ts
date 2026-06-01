@@ -538,6 +538,26 @@ test('topic-selection context policy profile rejects unknown context family and 
   );
 });
 
+test('topic-selection runtime schemas accept v1c bounded promotion support context family', async () => {
+  const profile: TopicSelectionContextPolicyProfile = {
+    ...contextPolicyProfile(),
+    context_policy_profile_id:
+      'topic-selection.v1c.n2.bounded-debate.supporter-draft.context-runtime@v1',
+    invocation_slot_id: 'n2_bounded_micro_debate.promotion_supporter_draft',
+    functional_template: 'support_only_semantic',
+    context_family: 'v1c_n2_bounded_promotion_support',
+  };
+  assert.equal(await validatesBody(topicSelectionContextPolicyProfileSchema, profile), true);
+
+  const key: TopicSelectionContextPacketCacheKey = {
+    ...cacheKey(),
+    invocation_slot_id: 'n2_bounded_micro_debate.promotion_supporter_draft',
+    context_family: 'v1c_n2_bounded_promotion_support',
+    output_contract: 'TopicSelectionV1cBoundedMicroDebateRoleOrFinal@v1',
+  };
+  assert.equal(await validatesBody(topicSelectionContextPacketCacheKeySchema, key), true);
+});
+
 test('topic-selection context packet cache key rejects missing profile schema policy fields', async () => {
   assert.equal(await validatesBody(topicSelectionContextPacketCacheKeySchema, cacheKey()), true);
 

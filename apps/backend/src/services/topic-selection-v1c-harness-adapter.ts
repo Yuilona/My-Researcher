@@ -104,6 +104,7 @@ type TopicSelectionV1cPromotionSupportAdapterInput =
   | {
       promotion_decision_support: TopicSelectionPromotionDecisionSupportRecord;
       promotion_dossier: TopicSelectionPromotionDossierRecord;
+      provider_involved?: boolean;
     };
 
 export function normalizeN1PromotionInputSnapshot(
@@ -154,6 +155,9 @@ export function normalizeN2PromotionSupport(
     : {
         promotion_input_snapshot_hash: support.promotion_input_snapshot_hash,
       };
+  const providerInvolved = 'provider_involved' in input
+    ? input.provider_involved === true
+    : false;
   return {
     node_id: 'N2',
     node_name: 'generate-promotion-support',
@@ -171,7 +175,7 @@ export function normalizeN2PromotionSupport(
       ...support.source_refs,
     ],
     snapshot_hashes: snapshotHashes,
-    provider_involved: support.support_generation_mode !== 'deterministic',
+    provider_involved: providerInvolved,
     notes: ['N2 advisory support is ready; N3 owns deterministic gate routing.'],
   };
 }

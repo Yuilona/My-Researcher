@@ -132,6 +132,33 @@ export const TOPIC_SELECTION_V1C_N2_INVOCATION_SLOT_IDS = {
   promotion_support_llm_draft: 'promotion_support_generation.llm_draft',
 } as const;
 
+export const TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS = {
+  promotion_supporter_draft:
+    'topic-selection.v1c.n2.bounded-debate.supporter-draft.context-runtime@v1',
+  reviewer_critic_review:
+    'topic-selection.v1c.n2.bounded-debate.reviewer-critic.context-runtime@v1',
+  promotion_supporter_repair:
+    'topic-selection.v1c.n2.bounded-debate.supporter-repair.context-runtime@v1',
+  synthesizer_final:
+    'topic-selection.v1c.n2.bounded-debate.synthesizer-final.context-runtime@v1',
+} as const;
+
+export const TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS = {
+  promotion_supporter_draft: 'n2_bounded_micro_debate.promotion_supporter_draft',
+  reviewer_critic_review: 'n2_bounded_micro_debate.reviewer_critic_review',
+  promotion_supporter_repair: 'n2_bounded_micro_debate.promotion_supporter_repair',
+  synthesizer_final: 'n2_bounded_micro_debate.synthesizer_final',
+} as const;
+
+export const TOPIC_SELECTION_V1C_N6_CONTEXT_RUNTIME_PROFILE_IDS = {
+  downstream_feedback_normalization:
+    'topic-selection.v1c.n6.downstream-feedback-normalization.context-runtime@v1',
+} as const;
+
+export const TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS = {
+  downstream_feedback_normalization: 'downstream_feedback_normalization',
+} as const;
+
 export type TopicSelectionContextPolicyProfileRegistryValidationIssueCode =
   | 'SCHEMA_VALIDATION_FAILED'
   | 'DUPLICATE_PROFILE_ID'
@@ -230,6 +257,67 @@ const REQUIRED_CACHE_KEY_FIELDS = [
 const REQUIRED_POST_CACHE_GATES = [
   'schema_validation',
   'deterministic_gate',
+  'authority_boundary',
+] as const;
+
+const V1C_N2_BOUNDED_DEBATE_PRESERVED_FACT_KINDS = [
+  ...COMMON_PRESERVED_FACT_KINDS,
+  'promotion_input_snapshot',
+  'topic_package',
+  'topic_question_contract',
+  'answerability_plan',
+  'research_slice',
+  'value_assessment',
+  'promotion_readiness',
+  'selected_evidence',
+  'evidence_ref',
+  'evidence_support_map',
+  'claim_ceiling',
+  'contribution_summary',
+  'evaluation_plan',
+  'accepted_risk',
+  'blocker',
+  'recheck_hint',
+  'recheck_obligation',
+  'memory_suggestion',
+  'source_health_warning',
+  'allowed_ref_manifest',
+  'critic_finding',
+  'critic_resolution_map',
+  'readiness_coverage_item',
+] as const;
+
+const V1C_N2_BOUNDED_DEBATE_POST_RUNTIME_GATES = [
+  'schema_validation',
+  'role_artifact_admission',
+  'dynamic_material_boundary',
+  'promotion_support_admission',
+  'deterministic_gate',
+  'authority_boundary',
+] as const;
+
+const V1C_N6_DOWNSTREAM_FEEDBACK_PRESERVED_FACT_KINDS = [
+  ...COMMON_PRESERVED_FACT_KINDS,
+  'paper_project_bridge',
+  'source_promotion_decision',
+  'promotion_commitment_profile',
+  'promotion_input_snapshot',
+  'downstream_source_ref',
+  'source_feedback_ref',
+  'feedback_signal',
+  'required_action',
+  'affected_ref',
+  'loopback_target',
+  'severity',
+  'no_upstream_mutation_boundary',
+  'allowed_ref_manifest',
+] as const;
+
+const V1C_N6_DOWNSTREAM_FEEDBACK_POST_RUNTIME_GATES = [
+  'schema_validation',
+  'feedback_normalization_admission',
+  'deterministic_gate',
+  'recheck_side_effect_boundary',
   'authority_boundary',
 ] as const;
 
@@ -698,6 +786,71 @@ const DEFAULT_TOPIC_SELECTION_CONTEXT_POLICY_PROFILE_REGISTRY:
           'deterministic_gate',
           'authority_boundary',
         ],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.promotion_supporter_draft,
+        invocation_slot_id:
+          TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.promotion_supporter_draft,
+        functional_template: 'support_only_semantic',
+        context_family: 'v1c_n2_bounded_promotion_support',
+        estimated_input_token_target: 24000,
+        estimated_output_token_budget: 1600,
+        preserved_fact_kinds: [...V1C_N2_BOUNDED_DEBATE_PRESERVED_FACT_KINDS],
+        post_reuse_gates: [...V1C_N2_BOUNDED_DEBATE_POST_RUNTIME_GATES],
+        post_cache_gates: [...V1C_N2_BOUNDED_DEBATE_POST_RUNTIME_GATES],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.reviewer_critic_review,
+        invocation_slot_id:
+          TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.reviewer_critic_review,
+        functional_template: 'support_only_semantic',
+        context_family: 'v1c_n2_bounded_promotion_support',
+        estimated_input_token_target: 26000,
+        estimated_output_token_budget: 1800,
+        preserved_fact_kinds: [...V1C_N2_BOUNDED_DEBATE_PRESERVED_FACT_KINDS],
+        post_reuse_gates: [...V1C_N2_BOUNDED_DEBATE_POST_RUNTIME_GATES],
+        post_cache_gates: [...V1C_N2_BOUNDED_DEBATE_POST_RUNTIME_GATES],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.promotion_supporter_repair,
+        invocation_slot_id:
+          TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.promotion_supporter_repair,
+        functional_template: 'support_only_semantic',
+        context_family: 'v1c_n2_bounded_promotion_support',
+        estimated_input_token_target: 28000,
+        estimated_output_token_budget: 1800,
+        preserved_fact_kinds: [...V1C_N2_BOUNDED_DEBATE_PRESERVED_FACT_KINDS],
+        post_reuse_gates: [...V1C_N2_BOUNDED_DEBATE_POST_RUNTIME_GATES],
+        post_cache_gates: [...V1C_N2_BOUNDED_DEBATE_POST_RUNTIME_GATES],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.synthesizer_final,
+        invocation_slot_id:
+          TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.synthesizer_final,
+        functional_template: 'support_only_semantic',
+        context_family: 'v1c_n2_bounded_promotion_support',
+        estimated_input_token_target: 30000,
+        estimated_output_token_budget: 2400,
+        preserved_fact_kinds: [...V1C_N2_BOUNDED_DEBATE_PRESERVED_FACT_KINDS],
+        post_reuse_gates: [...V1C_N2_BOUNDED_DEBATE_POST_RUNTIME_GATES],
+        post_cache_gates: [...V1C_N2_BOUNDED_DEBATE_POST_RUNTIME_GATES],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1C_N6_CONTEXT_RUNTIME_PROFILE_IDS.downstream_feedback_normalization,
+        invocation_slot_id:
+          TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS.downstream_feedback_normalization,
+        functional_template: 'candidate_for_deterministic_gate',
+        context_family: 'v1c_n6_downstream_feedback_normalization',
+        estimated_input_token_target: 16000,
+        estimated_output_token_budget: 1200,
+        preserved_fact_kinds: [...V1C_N6_DOWNSTREAM_FEEDBACK_PRESERVED_FACT_KINDS],
+        post_reuse_gates: [...V1C_N6_DOWNSTREAM_FEEDBACK_POST_RUNTIME_GATES],
+        post_cache_gates: [...V1C_N6_DOWNSTREAM_FEEDBACK_POST_RUNTIME_GATES],
       }),
     ],
   };

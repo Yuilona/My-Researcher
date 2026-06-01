@@ -69,6 +69,9 @@ import {
   TOPIC_SELECTION_V1C_PROMOTION_DECISION_SUPPORT_PROFILE_ID,
   TopicSelectionModelProfileRegistryService,
 } from './topic-selection-model-profile-registry-service.js';
+import type {
+  TopicSelectionV1cN2BoundedDebateAdmissionIdentity,
+} from './topic-selection-v1c-n2-bounded-debate-admission-service.js';
 
 const WORKFLOW_KEY = 'topic-selection.v1c-promotion-gate-support';
 const GATE_KEY = 'topic-selection.v1c-promotion-gate-check';
@@ -97,6 +100,18 @@ export type CreatePromotionGateSupportInput = {
 };
 
 export type CreatePromotionDecisionSupportInput = CreatePromotionGateSupportInput;
+
+export type CreatePromotionDecisionSupportFromVerifiedRuntimeDraftInput =
+  Omit<CreatePromotionGateSupportInput, 'support_generation_mode'> & {
+    verified_runtime_draft: {
+      draft: TopicSelectionPromotionDecisionSupportLlmDraft;
+      provenance: TopicSelectionAgentInvocationProvenance;
+      telemetry?: TopicSelectionAgentInvocationTelemetrySummary | null;
+      audit_snapshot: TopicSelectionAgentInvocationAuditSnapshot;
+      admission_identity: TopicSelectionV1cN2BoundedDebateAdmissionIdentity;
+      admission_identity_hash: string;
+    };
+  };
 
 export type CreatePromotionGateCheckFromSupportInput = {
   promotion_decision_support_id?: string | null;
@@ -158,6 +173,8 @@ type LlmDraftResult = {
   telemetry: TopicSelectionAgentInvocationTelemetrySummary | null;
   provenance: TopicSelectionAgentInvocationProvenance | null;
   auditSnapshot: TopicSelectionAgentInvocationAuditSnapshot | null;
+  runtimeIdentity: TopicSelectionV1cN2BoundedDebateAdmissionIdentity | null;
+  runtimeIdentityHash: string | null;
   fallbackWarning: TopicSelectionGateIssue | null;
 };
 
@@ -189,6 +206,37 @@ export class TopicSelectionV1cPromotionGateService {
   async createPromotionDecisionSupport(
     input: CreatePromotionDecisionSupportInput,
   ): Promise<TopicSelectionV1cPromotionDecisionSupportCreationResult> {
+    return this.createPromotionDecisionSupportInternal(input, null);
+  }
+
+  async createPromotionDecisionSupportFromVerifiedRuntimeDraft(
+    input: CreatePromotionDecisionSupportFromVerifiedRuntimeDraftInput,
+  ): Promise<TopicSelectionV1cPromotionDecisionSupportCreationResult> {
+    this.assertVerifiedRuntimeDraft(input.verified_runtime_draft);
+    return this.createPromotionDecisionSupportInternal(
+      {
+        ...input,
+        support_generation_mode: 'llm_draft',
+      },
+      {
+        draft: input.verified_runtime_draft.draft,
+        raw: null,
+        telemetry: input.verified_runtime_draft.telemetry
+          ?? input.verified_runtime_draft.provenance?.telemetry
+          ?? null,
+        provenance: input.verified_runtime_draft.provenance,
+        auditSnapshot: input.verified_runtime_draft.audit_snapshot,
+        runtimeIdentity: input.verified_runtime_draft.admission_identity,
+        runtimeIdentityHash: input.verified_runtime_draft.admission_identity_hash,
+        fallbackWarning: null,
+      },
+    );
+  }
+
+  private async createPromotionDecisionSupportInternal(
+    input: CreatePromotionDecisionSupportInput,
+    verifiedRuntimeDraft: LlmDraftResult | null,
+  ): Promise<TopicSelectionV1cPromotionDecisionSupportCreationResult> {
     const handoff = await this.promotionInputService.getPromotionInputHandoff(
       input.promotion_input_snapshot_id,
     );
@@ -206,6 +254,7 @@ export class TopicSelectionV1cPromotionGateService {
       workflowProfileVersion,
       promptTemplateVersion,
       model,
+      verifiedRuntimeDraftIdentityHash: verifiedRuntimeDraft?.runtimeIdentityHash ?? null,
     });
     const existing = await this.repository.findSupportBundleBySupportRunKey(supportRunKey);
     if (existing) {
@@ -220,16 +269,18 @@ export class TopicSelectionV1cPromotionGateService {
     const workflowRunId = this.idFactory('workflow_run');
     const supportArtifactId = this.idFactory('artifact_ref');
     const dossierArtifactId = this.idFactory('artifact_ref');
-    const llmDraft = mode === 'llm_draft'
+    const llmDraft = verifiedRuntimeDraft ?? (mode === 'llm_draft'
       ? await this.createLlmDraft({ handoff, model, promptTemplateVersion, supportRunKey, workflowRunId })
-      : {
-          draft: null,
-          raw: null,
-          telemetry: null,
-          provenance: null,
-          auditSnapshot: null,
-          fallbackWarning: null,
-        };
+	      : {
+	          draft: null,
+	          raw: null,
+	          telemetry: null,
+	          provenance: null,
+	          auditSnapshot: null,
+	          runtimeIdentity: null,
+	          runtimeIdentityHash: null,
+	          fallbackWarning: null,
+	        });
     const sourceRefs = this.compileSourceRefs(handoff);
     const supportArtifactRef = this.ref('artifact_ref', supportArtifactId, handoff.snapshot.title_card_id, null);
     const dossierArtifactRef = this.ref('artifact_ref', dossierArtifactId, handoff.snapshot.title_card_id, null);
@@ -605,14 +656,16 @@ export class TopicSelectionV1cPromotionGateService {
           },
         );
       }
-      return {
-        draft: response.structured_output,
-        raw: null,
-        telemetry: response.provenance.telemetry,
-        provenance: response.provenance,
-        auditSnapshot: response.audit_snapshot,
-        fallbackWarning: null,
-      };
+	      return {
+	        draft: response.structured_output,
+	        raw: null,
+	        telemetry: response.provenance.telemetry,
+	        provenance: response.provenance,
+	        auditSnapshot: response.audit_snapshot,
+	        runtimeIdentity: null,
+	        runtimeIdentityHash: null,
+	        fallbackWarning: null,
+	      };
     } catch (error) {
       if (error instanceof AppError && error.statusCode === 502) {
         throw error;
@@ -626,6 +679,82 @@ export class TopicSelectionV1cPromotionGateService {
           failure_code: 'LLM_INVOCATION_FAILED',
           support_run_key: input.supportRunKey,
         },
+      );
+    }
+  }
+
+  private assertVerifiedRuntimeDraft(
+    runtimeDraft: CreatePromotionDecisionSupportFromVerifiedRuntimeDraftInput['verified_runtime_draft'],
+  ): void {
+    const {
+      draft,
+      provenance,
+      audit_snapshot: auditSnapshot,
+      admission_identity: admissionIdentity,
+      admission_identity_hash: admissionIdentityHash,
+    } = runtimeDraft;
+    const hasUsableSummary = this.hasText(draft.summary);
+    const hasReviewerQuestions = Array.isArray(draft.reviewer_questions)
+      && draft.reviewer_questions.some((item) => this.hasText(item));
+    const hasDossier = this.hasText(draft.dossier_markdown);
+    if (!hasUsableSummary && !hasReviewerQuestions && !hasDossier) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'Verified runtime draft must contain reviewer-usable support text before N2 support persistence.',
+      );
+    }
+    const recomputedAdmissionHash = sha256Text(stableStringify(admissionIdentity));
+    if (admissionIdentityHash !== recomputedAdmissionHash) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'Verified runtime draft admission identity hash drift detected.',
+      );
+    }
+    if (
+      admissionIdentity.allowed_effect !== 'support_only'
+      || admissionIdentity.final_slot_id !== 'n2_bounded_micro_debate.synthesizer_final'
+    ) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'Verified runtime draft admission identity is outside the N2 support-only boundary.',
+      );
+    }
+    if (
+      admissionIdentity.final_prompt_packet_hash !== provenance.prompt_packet_hash
+      || admissionIdentity.final_structured_output_hash !== provenance.structured_output_hash
+      || admissionIdentity.final_output_contract !== provenance.output_contract
+    ) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'Verified runtime draft provenance does not match admitted final artifact identity.',
+      );
+    }
+    if (
+      !admissionIdentity.final_runtime_audit_ref
+      || !admissionIdentity.final_runtime_audit_hash
+      || stableStringify(admissionIdentity.final_runtime_audit_ref)
+        !== stableStringify(admissionIdentity.final_provenance_ref)
+    ) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'Verified runtime draft admission identity is missing runtime audit provenance.',
+      );
+    }
+    if (
+      auditSnapshot.status !== 'succeeded'
+      || auditSnapshot.provenance.prompt_packet_hash !== provenance.prompt_packet_hash
+      || auditSnapshot.provenance.structured_output_hash !== provenance.structured_output_hash
+      || stableStringify(auditSnapshot.provenance) !== stableStringify(provenance)
+    ) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'Verified runtime draft audit snapshot does not match final invocation provenance.',
       );
     }
   }
@@ -945,14 +1074,15 @@ export class TopicSelectionV1cPromotionGateService {
     now: string;
   }): TopicSelectionV1cPromotionSupportControlPlanePersistence {
     const sourceRefs = input.support.source_refs;
-    const snapshotPayload = {
-      promotion_input_snapshot_handoff: input.handoff,
-      support_generation_mode: input.mode,
-      policy_version_id: input.policyVersionId,
-      prompt_template_version: input.promptTemplateVersion,
-      workflow_profile_version: input.workflowProfileVersion,
-      model: input.model,
-    };
+	    const snapshotPayload = {
+	      promotion_input_snapshot_handoff: input.handoff,
+	      support_generation_mode: input.mode,
+	      policy_version_id: input.policyVersionId,
+	      prompt_template_version: input.promptTemplateVersion,
+	      workflow_profile_version: input.workflowProfileVersion,
+	      model: input.model,
+	      llm_runtime_admission_identity_hash: input.llmDraft.runtimeIdentityHash,
+	    };
     const inputSnapshot: TopicSelectionInputSnapshotRecord = {
       input_snapshot_id: input.inputSnapshotId,
       workspace_id: input.support.workspace_id ?? null,
@@ -967,7 +1097,9 @@ export class TopicSelectionV1cPromotionGateService {
       created_by: input.createdBy,
       created_at: input.now,
     };
-    const workflowRun: TopicSelectionLlmWorkflowRunRecord = {
+	    const providerInvolved = input.mode === 'llm_draft'
+	      && input.llmDraft.provenance?.non_provider === false;
+	    const workflowRun: TopicSelectionLlmWorkflowRunRecord = {
       workflow_run_id: input.workflowRunId,
       workspace_id: input.support.workspace_id ?? null,
       title_card_id: input.support.title_card_id,
@@ -976,12 +1108,12 @@ export class TopicSelectionV1cPromotionGateService {
       workflow_profile_version: input.workflowProfileVersion,
       input_snapshot_id: input.inputSnapshotId,
       status: 'succeeded',
-      provider_id: input.mode === 'llm_draft'
-        ? input.llmDraft.provenance?.provider_id ?? input.model.providerId
-        : null,
-      model_id: input.mode === 'llm_draft'
-        ? input.llmDraft.provenance?.model_id ?? input.model.modelId
-        : null,
+	      provider_id: providerInvolved
+	        ? input.llmDraft.provenance?.provider_id ?? null
+	        : null,
+	      model_id: providerInvolved
+	        ? input.llmDraft.provenance?.model_id ?? null
+	        : null,
       prompt_template_id: input.mode === 'llm_draft'
         ? input.llmDraft.provenance?.prompt_template_id ?? PROMPT_TEMPLATE_ID
         : null,
@@ -992,10 +1124,12 @@ export class TopicSelectionV1cPromotionGateService {
       finished_at: input.now,
       telemetry: {
         deterministic_gate_authoritative: false,
-        llm_draft_telemetry: input.llmDraft.telemetry,
-        llm_runtime_provenance: input.llmDraft.provenance,
-        llm_runtime_audit: input.llmDraft.auditSnapshot,
-      },
+	        llm_draft_telemetry: input.llmDraft.telemetry,
+	        llm_runtime_provenance: input.llmDraft.provenance,
+	        llm_runtime_audit: input.llmDraft.auditSnapshot,
+	        llm_runtime_admission_identity: input.llmDraft.runtimeIdentity,
+	        llm_runtime_admission_identity_hash: input.llmDraft.runtimeIdentityHash,
+	      },
       output_summary: {
         support_status: input.support.support_status,
         reviewer_question_count: input.support.reviewer_questions.length,
@@ -1004,12 +1138,14 @@ export class TopicSelectionV1cPromotionGateService {
       error_message: null,
       created_by: input.createdBy,
     };
-    const supportArtifactPayload = {
-      support: input.support,
-      llm_draft_raw: null,
-      llm_runtime_provenance: input.llmDraft.provenance,
-      deterministic_gate_authoritative: false,
-    };
+	    const supportArtifactPayload = {
+	      support: input.support,
+	      llm_draft_raw: null,
+	      llm_runtime_provenance: input.llmDraft.provenance,
+	      llm_runtime_admission_identity: input.llmDraft.runtimeIdentity,
+	      llm_runtime_admission_identity_hash: input.llmDraft.runtimeIdentityHash,
+	      deterministic_gate_authoritative: false,
+	    };
     const dossierArtifactPayload = {
       dossier: input.dossier,
       packet: input.dossier.dossier_payload,
@@ -1561,25 +1697,27 @@ export class TopicSelectionV1cPromotionGateService {
     }
   }
 
-  private computeSupportRunKey(input: {
-    promotionInputSnapshotId: string;
-    promotionInputSnapshotHash: string;
-    policyVersionId: string | null;
-    supportGenerationMode: TopicSelectionPromotionSupportGenerationMode;
-    workflowProfileVersion: string | null;
-    promptTemplateVersion: string | null;
-    model: LlmModelRef | null;
-  }): string {
-    return sha256Text(stableStringify({
-      promotion_input_snapshot_id: input.promotionInputSnapshotId,
-      promotion_input_snapshot_hash: input.promotionInputSnapshotHash,
-      policy_version_id: input.policyVersionId,
-      support_generation_mode: input.supportGenerationMode,
-      workflow_profile_version: input.workflowProfileVersion,
-      prompt_template_version: input.promptTemplateVersion,
-      model: input.model,
-    }));
-  }
+	  private computeSupportRunKey(input: {
+	    promotionInputSnapshotId: string;
+	    promotionInputSnapshotHash: string;
+	    policyVersionId: string | null;
+	    supportGenerationMode: TopicSelectionPromotionSupportGenerationMode;
+	    workflowProfileVersion: string | null;
+	    promptTemplateVersion: string | null;
+	    model: LlmModelRef | null;
+	    verifiedRuntimeDraftIdentityHash: string | null;
+	  }): string {
+	    return sha256Text(stableStringify({
+	      promotion_input_snapshot_id: input.promotionInputSnapshotId,
+	      promotion_input_snapshot_hash: input.promotionInputSnapshotHash,
+	      policy_version_id: input.policyVersionId,
+	      support_generation_mode: input.supportGenerationMode,
+	      workflow_profile_version: input.workflowProfileVersion,
+	      prompt_template_version: input.promptTemplateVersion,
+	      model: input.model,
+	      verified_runtime_draft_identity_hash: input.verifiedRuntimeDraftIdentityHash,
+	    }));
+	  }
 
   private hasClaimCeiling(
     packageSnapshot: Record<string, unknown>,

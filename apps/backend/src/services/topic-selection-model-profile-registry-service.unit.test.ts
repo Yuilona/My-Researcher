@@ -15,6 +15,8 @@ import {
   TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID,
+  TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID,
   TOPIC_SELECTION_V1C_PROMOTION_DECISION_SUPPORT_PROFILE_ID,
   TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS,
   TopicSelectionModelProfileRegistryService,
@@ -240,6 +242,42 @@ test('model profile registry validates default DMP v1 profiles and resolves prov
   );
   assert.equal(v1cPromotionSupport.selected_model_option?.provider_id, 'openai');
   assert.equal(v1cPromotionSupport.selected_model_option?.model_id, 'gpt-5.5');
+
+  const v1cBoundedDebateCodex = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID,
+    execution_mode: 'codex_assisted',
+    run_mode: 'product',
+  });
+  assert.equal(
+    v1cBoundedDebateCodex.profile.output_contract,
+    'TopicSelectionV1cBoundedMicroDebateRoleOrFinal@v1',
+  );
+  assert.equal(v1cBoundedDebateCodex.profile.profile_function, 'v1c_promotion_support_bounded_micro_debate');
+  assert.equal(v1cBoundedDebateCodex.selected_model_option, null);
+
+  const v1cBoundedDebateProvider = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'acceptance',
+    model_option_id: `${TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID}.openai-balanced`,
+  });
+  assert.equal(v1cBoundedDebateProvider.selected_model_option?.provider_id, 'openai');
+  assert.equal(v1cBoundedDebateProvider.selected_model_option?.normalized_params.creativity, 'low');
+  assert.equal(v1cBoundedDebateProvider.selected_model_option?.normalized_params.output_budget, 'large');
+
+  const v1cFeedbackNormalization = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'acceptance',
+    model_option_id: `${TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID}.openai-balanced`,
+  });
+  assert.equal(
+    v1cFeedbackNormalization.profile.output_contract,
+    'TopicSelectionV1cDownstreamFeedbackCandidate@v1',
+  );
+  assert.equal(v1cFeedbackNormalization.profile.stage_family, 'v1c_downstream_feedback_recheck');
+  assert.equal(v1cFeedbackNormalization.selected_model_option?.provider_id, 'openai');
+  assert.equal(v1cFeedbackNormalization.selected_model_option?.normalized_params.creativity, 'low');
 });
 
 test('model profile registry enforces run-mode and role profile execution eligibility', () => {

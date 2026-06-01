@@ -112,6 +112,10 @@ export const TOPIC_SELECTION_CONFIRMATION_SEMANTIC_REVIEW_SINGLE_AGENT_PROFILE_I
   'topic-selection.confirmation-semantic-review.single-agent.v1' as const;
 export const TOPIC_SELECTION_V1C_PROMOTION_DECISION_SUPPORT_PROFILE_ID =
   'topic-selection-promotion-decision-support' as const;
+export const TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID =
+  'topic-selection.v1c.promotion-support.bounded-micro-debate.v1' as const;
+export const TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID =
+  'topic-selection.v1c.downstream-feedback-normalization.v1' as const;
 export const TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID =
   'topic-selection.need-discovery.explorer.v1' as const;
 export const TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID =
@@ -696,6 +700,52 @@ const DEFAULT_TOPIC_SELECTION_MODEL_PROFILE_REGISTRY: TopicSelectionModelProfile
       run_mode_eligibility: PROVIDER_ONLY_RUN_MODE_ELIGIBILITY,
       output_contract: 'TopicSelectionPromotionDecisionSupportLlmDraft@v1',
       model_options: providerOptions(TOPIC_SELECTION_V1C_PROMOTION_DECISION_SUPPORT_PROFILE_ID),
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID,
+      profile_function: 'v1c_promotion_support_bounded_micro_debate',
+      role_family: 'single_agent',
+      stage_family: 'v1c_promotion_support',
+      quality_objectives: [
+        'run_fixed_role_promotion_support_debate_without_gate_authority',
+        'preserve_n1_frozen_context_refs_and_prior_role_hashes',
+        'prepare_synthesizer_final_for_n2_advisory_admission',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'provider_llm', 'codex_assisted'],
+      output_contract: 'TopicSelectionV1cBoundedMicroDebateRoleOrFinal@v1',
+      model_options: providerOptions(TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID).map(
+        (option) => ({
+          ...option,
+          normalized_params: normalizedParams({
+            creativity: 'low',
+            reasoning_depth: 'high',
+            output_budget: 'large',
+          }),
+        }),
+      ),
+    }),
+    profileBase({
+      profile_id: TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID,
+      profile_function: 'v1c_downstream_feedback_normalization',
+      role_family: 'single_agent',
+      stage_family: 'v1c_downstream_feedback_recheck',
+      quality_objectives: [
+        'normalize_downstream_feedback_without_side_effects',
+        'preserve_bridge_and_feedback_source_refs',
+        'prepare_deterministic_recheck_admission',
+      ],
+      allowed_execution_modes: ['mocked_llm', 'provider_llm', 'codex_assisted'],
+      output_contract: 'TopicSelectionV1cDownstreamFeedbackCandidate@v1',
+      model_options: providerOptions(TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID).map(
+        (option) => ({
+          ...option,
+          normalized_params: normalizedParams({
+            creativity: 'low',
+            reasoning_depth: 'high',
+            output_budget: 'medium',
+          }),
+        }),
+      ),
     }),
     profileBase({
       profile_id: TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n2_bounded_micro_debate,

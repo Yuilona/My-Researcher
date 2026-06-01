@@ -4,6 +4,11 @@ import fs from 'node:fs/promises';
 
 import { Prisma } from '@prisma/client';
 import type {
+  TopicSelectionAgentInvocationAuditSnapshot,
+  TopicSelectionAgentInvocationProvenance,
+  TopicSelectionAgentInvocationTelemetrySummary,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-agent-invocation-contracts';
+import type {
   TopicSelectionArtifactRefRecord,
   TopicSelectionChainTransitionAttemptRecord,
   TopicSelectionFunctionalRef,
@@ -15,6 +20,9 @@ import type {
 import type {
   TopicSelectionPromotionDecisionSupportLlmDraft,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1c-promotion-gate-contracts';
+import type {
+  TopicSelectionV1cN2BoundedDebateAdmissionIdentity,
+} from './topic-selection-v1c-n2-bounded-debate-admission-service.js';
 import type {
   TopicSelectionPromotionInputSnapshotHandoff,
   TopicSelectionPromotionInputSnapshotRecord,
@@ -30,6 +38,10 @@ import type {
 import {
   TopicSelectionV1cPromotionGateService,
 } from './topic-selection-v1c-promotion-gate-service.js';
+import {
+  sha256Text,
+  stableStringify,
+} from './literature-content-processing-utils.js';
 
 const NOW = '2026-05-15T00:00:00.000Z';
 
@@ -215,6 +227,111 @@ function makeSubject(input: {
     now: () => NOW,
   });
   return { service, repository, promotionInputService };
+}
+
+function makeVerifiedRuntimeDraft(input: {
+  draft: TopicSelectionPromotionDecisionSupportLlmDraft;
+  promptPacketHash?: string;
+  outputHash?: string;
+  auditRefId?: string;
+}) {
+  const promptPacketHash = input.promptPacketHash ?? 'a'.repeat(64);
+  const outputHash = input.outputHash ?? 'b'.repeat(64);
+  const auditRef = ref('artifact_ref', input.auditRefId ?? 'runtime_audit_artifact_001');
+  const provenance: TopicSelectionAgentInvocationProvenance = {
+    workflow_run_id: 'workflow_run_n2_bounded_001',
+    node_id: 'topic-selection.v1c.generate-promotion-support.v1',
+    node_attempt_id: 'node_attempt_n2_bounded_001',
+    invocation_attempt_id: 'node_attempt_n2_bounded_001.n2_bounded_micro_debate.synthesizer_final.runtime_role',
+    execution_mode: 'codex_assisted',
+    executor_kind: 'codex_assisted',
+    source_kind: 'codex_response',
+    non_provider: true,
+    run_mode: 'acceptance',
+    profile_id: 'topic-selection.v1c.promotion-support.bounded-micro-debate.v1',
+    profile_version: '1',
+    profile_hash: 'profile_hash_001',
+    model_option_id: null,
+    normalized_params_hash: null,
+    capability_degraded: false,
+    capability_degrade_reason: null,
+    output_contract: 'TopicSelectionV1cBoundedMicroDebateRoleOrFinal@v1',
+    prompt_template_id: 'topic-selection-v1c-promotion-support-bounded-micro-debate',
+    prompt_template_version: '1',
+    schema_name: 'TopicSelectionV1cBoundedMicroDebateRoleOrFinal@v1',
+    prompt_packet_hash: promptPacketHash,
+    response_hash: outputHash,
+    structured_output_hash: outputHash,
+    cache_status: 'not_applicable',
+    response_reuse_ref: null,
+    telemetry: null,
+  };
+  const auditSnapshot: TopicSelectionAgentInvocationAuditSnapshot = {
+    schema_version: 'topic-selection-agent-invocation-audit-v1',
+    node_id: provenance.node_id,
+    workflow_run_id: provenance.workflow_run_id,
+    node_attempt_id: provenance.node_attempt_id,
+    status: 'succeeded',
+    provenance,
+    token_budget_gate_result: null,
+    validation: {
+      valid: true,
+      error_count: 0,
+      errors: [],
+    },
+    warning_codes: [],
+    blocker_codes: [],
+    created_at: NOW,
+  };
+  const admissionIdentity: TopicSelectionV1cN2BoundedDebateAdmissionIdentity = {
+    schema_version: 'topic-selection-v1c-n2-bounded-debate-admission-identity-v1',
+    admission_policy_id: 'topic-selection.v1c.n2.bounded-micro-debate.admission.v1',
+    node_id: 'topic-selection.v1c.generate-promotion-support.v1',
+    allowed_effect: 'support_only',
+    promotion_input_snapshot_id: 'promotion_input_snapshot_001',
+    promotion_input_snapshot_hash: 'promotion_input_snapshot_hash_001',
+    final_slot_id: 'n2_bounded_micro_debate.synthesizer_final',
+    final_role_artifact_ref: ref('artifact_ref', 'final_role_artifact_001'),
+    final_role_artifact_hash: outputHash,
+    final_prompt_packet_hash: promptPacketHash,
+    final_runtime_invocation_context_hash: 'c'.repeat(64),
+    final_runtime_audit_ref: auditRef,
+    final_runtime_audit_hash: 'd'.repeat(64),
+    final_provenance_ref: auditRef,
+    final_structured_output_hash: outputHash,
+    final_output_contract: 'TopicSelectionV1cBoundedMicroDebateRoleOrFinal@v1',
+    final_context_policy_profile_id: 'topic-selection.v1c.n2.bounded-debate.synthesizer-final.context-runtime@v1',
+    final_context_policy_profile_version: '1',
+    final_context_policy_profile_hash: 'e'.repeat(64),
+    role_artifact_hashes: {
+      'n2_bounded_micro_debate.promotion_supporter_draft': '1'.repeat(64),
+      'n2_bounded_micro_debate.reviewer_critic_review': '2'.repeat(64),
+      'n2_bounded_micro_debate.promotion_supporter_repair': '3'.repeat(64),
+      'n2_bounded_micro_debate.synthesizer_final': outputHash,
+    },
+    role_prompt_packet_hashes: {
+      'n2_bounded_micro_debate.promotion_supporter_draft': '4'.repeat(64),
+      'n2_bounded_micro_debate.reviewer_critic_review': '5'.repeat(64),
+      'n2_bounded_micro_debate.promotion_supporter_repair': '6'.repeat(64),
+      'n2_bounded_micro_debate.synthesizer_final': promptPacketHash,
+    },
+    source_hashes: {
+      promotion_input_snapshot_hash: 'promotion_input_snapshot_hash_001',
+    },
+    prior_role_artifact_hashes: {
+      'n2_bounded_micro_debate.promotion_supporter_draft': '1'.repeat(64),
+      'n2_bounded_micro_debate.reviewer_critic_review': '2'.repeat(64),
+      'n2_bounded_micro_debate.promotion_supporter_repair': '3'.repeat(64),
+    },
+  };
+  return {
+    draft: input.draft,
+    provenance,
+    telemetry: null as TopicSelectionAgentInvocationTelemetrySummary | null,
+    audit_snapshot: auditSnapshot,
+    admission_identity: admissionIdentity,
+    admission_identity_hash: sha256Text(stableStringify(admissionIdentity)),
+  };
 }
 
 test('ready T-061 handoff creates support, dossier, mini-check, gate, and T-063 handoff', async () => {
@@ -483,6 +600,116 @@ test('LLM draft success stores draft prose while deterministic gate remains auth
   assert.equal(gatewayCalls[0]?.schemaName, 'TopicSelectionPromotionDecisionSupportLlmDraft');
   assert.equal(gatewayCalls[0]?.executionContext.metadata?.profile_id, 'topic-selection-promotion-decision-support');
   assert.equal(gatewayCalls[0]?.executionContext.metadata?.model_option_id, 'topic-selection-promotion-decision-support.openai-balanced');
+});
+
+test('verified runtime draft creates N2 support without bypassing N3 gate', async () => {
+  const { service, repository } = makeSubject();
+  const draft: TopicSelectionPromotionDecisionSupportLlmDraft = {
+    summary: 'Runtime-admitted bounded debate support summary.',
+    reviewer_questions: ['Does the claim ceiling remain visible?'],
+    risk_notes: ['Accepted risk was carried forward.'],
+    recheck_notes: ['Recheck obligation was preserved.'],
+    dossier_markdown: 'Runtime-admitted dossier markdown.',
+  };
+
+  const support = await service.createPromotionDecisionSupportFromVerifiedRuntimeDraft({
+    promotion_input_snapshot_id: 'promotion_input_snapshot_001',
+    verified_runtime_draft: makeVerifiedRuntimeDraft({ draft }),
+  });
+
+  assert.equal(support.promotion_decision_support.support_generation_mode, 'llm_draft');
+  assert.equal(support.promotion_decision_support.summary, draft.summary);
+  assert.deepEqual(support.promotion_decision_support.llm_draft_payload, draft);
+  assert.equal(
+    await repository.findGateCheckBundleBySupportRunKey(support.promotion_decision_support.support_run_key),
+    null,
+  );
+
+  const replay = await service.createPromotionDecisionSupportFromVerifiedRuntimeDraft({
+    promotion_input_snapshot_id: 'promotion_input_snapshot_001',
+    verified_runtime_draft: makeVerifiedRuntimeDraft({ draft }),
+  });
+  assert.equal(
+    replay.promotion_decision_support.promotion_decision_support_id,
+    support.promotion_decision_support.promotion_decision_support_id,
+  );
+
+  const gate = await service.createPromotionGateCheckFromSupport({
+    promotion_decision_support_id: support.promotion_decision_support.promotion_decision_support_id,
+  });
+  assert.equal(gate.promotion_gate_check.disposition, 'ready_for_human_decision');
+  assert.equal(
+    gate.promotion_decision_support.promotion_decision_support_id,
+    support.promotion_decision_support.promotion_decision_support_id,
+  );
+});
+
+test('verified runtime draft run key is bound to admitted runtime identity', async () => {
+  const { service } = makeSubject();
+  const firstDraft: TopicSelectionPromotionDecisionSupportLlmDraft = {
+    summary: 'First runtime-admitted summary.',
+    reviewer_questions: ['Does the claim ceiling remain visible?'],
+    risk_notes: [],
+    recheck_notes: [],
+    dossier_markdown: 'First runtime-admitted dossier.',
+  };
+  const secondDraft: TopicSelectionPromotionDecisionSupportLlmDraft = {
+    summary: 'Second runtime-admitted summary.',
+    reviewer_questions: ['Does the updated final artifact remain bounded?'],
+    risk_notes: [],
+    recheck_notes: [],
+    dossier_markdown: 'Second runtime-admitted dossier.',
+  };
+
+  const first = await service.createPromotionDecisionSupportFromVerifiedRuntimeDraft({
+    promotion_input_snapshot_id: 'promotion_input_snapshot_001',
+    verified_runtime_draft: makeVerifiedRuntimeDraft({ draft: firstDraft }),
+  });
+  const second = await service.createPromotionDecisionSupportFromVerifiedRuntimeDraft({
+    promotion_input_snapshot_id: 'promotion_input_snapshot_001',
+    verified_runtime_draft: makeVerifiedRuntimeDraft({
+      draft: secondDraft,
+      promptPacketHash: '7'.repeat(64),
+      outputHash: '8'.repeat(64),
+      auditRefId: 'runtime_audit_artifact_002',
+    }),
+  });
+
+  assert.notEqual(
+    second.promotion_decision_support.promotion_decision_support_id,
+    first.promotion_decision_support.promotion_decision_support_id,
+  );
+  assert.equal(second.promotion_decision_support.summary, secondDraft.summary);
+});
+
+test('verified runtime draft rejects missing audit/provenance identity', async () => {
+  const { service, repository } = makeSubject();
+  const draft: TopicSelectionPromotionDecisionSupportLlmDraft = {
+    summary: 'Runtime-admitted bounded debate support summary.',
+    reviewer_questions: ['Does the claim ceiling remain visible?'],
+    risk_notes: [],
+    recheck_notes: [],
+    dossier_markdown: 'Runtime-admitted dossier markdown.',
+  };
+  const verifiedRuntimeDraft = makeVerifiedRuntimeDraft({ draft });
+
+  await assert.rejects(
+    () => service.createPromotionDecisionSupportFromVerifiedRuntimeDraft({
+      promotion_input_snapshot_id: 'promotion_input_snapshot_001',
+      verified_runtime_draft: {
+        ...verifiedRuntimeDraft,
+        audit_snapshot: {
+          ...verifiedRuntimeDraft.audit_snapshot,
+          provenance: {
+            ...verifiedRuntimeDraft.provenance,
+            prompt_packet_hash: '9'.repeat(64),
+          },
+        },
+      },
+    }),
+    (error) => error instanceof AppError && /audit snapshot/.test(error.message),
+  );
+  assert.equal(await repository.findLatestBundleByPromotionInputSnapshotId('promotion_input_snapshot_001'), null);
 });
 
 test('LLM draft failure fails closed without deterministic fallback persistence', async () => {

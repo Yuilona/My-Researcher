@@ -11,6 +11,7 @@ import { InMemoryTopicSelectionV1cHumanPromotionDecisionRepository } from '../..
 import { InMemoryTopicSelectionV1cPaperProjectBridgeRepository } from '../../apps/backend/src/repositories/in-memory-topic-selection-v1c-paper-project-bridge-repository.ts';
 import { InMemoryTopicSelectionV1cPromotionGateRepository } from '../../apps/backend/src/repositories/in-memory-topic-selection-v1c-promotion-gate-repository.ts';
 import { InMemoryTopicSelectionV1cPromotionInputRepository } from '../../apps/backend/src/repositories/in-memory-topic-selection-v1c-promotion-input-repository.ts';
+import { InMemoryTopicSelectionControlPlaneRepository } from '../../apps/backend/src/repositories/in-memory-topic-selection-control-plane-repository.ts';
 import {
   TOPIC_SELECTION_V1C_HARNESS_ADAPTER_VERSION,
   normalizeN1PromotionInputSnapshot,
@@ -28,6 +29,12 @@ import {
   topicSelectionV1cAcceptanceRef,
   TopicSelectionV1cAcceptanceTopicPackageRepository,
 } from '../../apps/backend/src/services/topic-selection-v1c-acceptance-scenario-fixtures.ts';
+import { TopicSelectionControlPlaneService } from '../../apps/backend/src/services/topic-selection-control-plane-service.ts';
+import {
+  TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_ROLE_ORDER,
+  TopicSelectionV1cN2BoundedDebateAdmissionService,
+} from '../../apps/backend/src/services/topic-selection-v1c-n2-bounded-debate-admission-service.ts';
+import { TopicSelectionV1cN2BoundedDebateRuntimeService } from '../../apps/backend/src/services/topic-selection-v1c-n2-bounded-debate-runtime-service.ts';
 import { TopicSelectionV1cDownstreamFeedbackRecheckService } from '../../apps/backend/src/services/topic-selection-v1c-downstream-feedback-recheck-service.ts';
 import { TopicSelectionV1cHumanPromotionDecisionService } from '../../apps/backend/src/services/topic-selection-v1c-human-promotion-decision-service.ts';
 import { TopicSelectionV1cPaperProjectBridgeService } from '../../apps/backend/src/services/topic-selection-v1c-paper-project-bridge-service.ts';
@@ -160,6 +167,15 @@ function createWorkflowSubject(graph = createReadyGraph()) {
   const humanPromotionDecisionRepository = new RecordingHumanPromotionDecisionRepository();
   const paperProjectBridgeRepository = new RecordingPaperProjectBridgeRepository();
   const downstreamFeedbackRepository = new RecordingDownstreamFeedbackRepository();
+  const controlPlaneRepository = new InMemoryTopicSelectionControlPlaneRepository();
+  const controlPlaneService = new TopicSelectionControlPlaneService(controlPlaneRepository, {
+    idFactory: createTopicSelectionV1cAcceptanceIdFactory(),
+    now: () => TOPIC_SELECTION_V1C_ACCEPTANCE_TIMESTAMP,
+  });
+  const n2BoundedDebateRuntimeService = new TopicSelectionV1cN2BoundedDebateRuntimeService(controlPlaneService);
+  const n2BoundedDebateAdmissionService = new TopicSelectionV1cN2BoundedDebateAdmissionService(
+    n2BoundedDebateRuntimeService,
+  );
   const recheckSink = new RecordingRecheckSink();
   const promotionInputService = new TopicSelectionV1cPromotionInputService({
     repository: promotionInputRepository,
@@ -199,6 +215,10 @@ function createWorkflowSubject(graph = createReadyGraph()) {
     humanPromotionDecisionRepository,
     paperProjectBridgeRepository,
     downstreamFeedbackRepository,
+    controlPlaneRepository,
+    controlPlaneService,
+    n2BoundedDebateRuntimeService,
+    n2BoundedDebateAdmissionService,
     recheckSink,
     promotionInputService,
     promotionGateService,
@@ -208,16 +228,195 @@ function createWorkflowSubject(graph = createReadyGraph()) {
   };
 }
 
-async function createSplitGateSupport(subject, promotionInputSnapshotId) {
-  const supportBundle = await subject.promotionGateService.createPromotionDecisionSupport({
-    promotion_input_snapshot_id: promotionInputSnapshotId,
+function v1cN2BoundedDebateRoleOutput(slot, handoff) {
+  const evidenceRefs = handoff.evidence_refs.map((item) => item.evidence_ref);
+  const sourceRefs = [handoff.topic_package_ref, ...evidenceRefs];
+  if (slot === 'n2_bounded_micro_debate.promotion_supporter_draft') {
+    return {
+      schema_version: 'topic-selection-v1c-n2-bounded-micro-debate-role.v1',
+      role_slot: slot,
+      support_summary: 'Support draft preserves bounded claim, selected evidence, and carried obligations.',
+      support_points: [{
+        point_id: 'support_point_001',
+        point: 'The topic package has selected evidence and a bounded evaluation plan.',
+        source_refs: sourceRefs,
+      }],
+      risk_acknowledgements: handoff.accepted_risk_refs.map((riskRef) => ({
+        risk_ref: riskRef,
+        handling: 'Carry forward for deterministic gate and human review.',
+      })),
+      recheck_obligations: handoff.recheck_request_refs.map((recheckRef) => ({
+        recheck_ref: recheckRef,
+        handling: 'Preserve without automatic loopback.',
+      })),
+    };
+  }
+  if (slot === 'n2_bounded_micro_debate.reviewer_critic_review') {
+    return {
+      schema_version: 'topic-selection-v1c-n2-bounded-micro-debate-role.v1',
+      role_slot: slot,
+      critic_findings: [{
+        finding_id: 'critic_finding_001',
+        severity: 'warning',
+        issue: 'Final support must preserve claim ceiling, accepted risks, selected evidence, and recheck refs.',
+        required_resolution: 'Address all required facts in the final N3 semantic layer.',
+        source_refs: sourceRefs,
+      }],
+      required_repairs: ['Preserve accepted risk and recheck refs in the final semantic layer.'],
+    };
+  }
+  if (slot === 'n2_bounded_micro_debate.promotion_supporter_repair') {
+    return {
+      schema_version: 'topic-selection-v1c-n2-bounded-micro-debate-role.v1',
+      role_slot: slot,
+      repaired_summary: 'Repair addresses critic finding by adding explicit final semantic-layer coverage.',
+      accepted_findings: ['critic_finding_001'],
+      rebutted_findings: [],
+      repair_actions: [{
+        finding_id: 'critic_finding_001',
+        resolution_status: 'accepted_and_repaired',
+        repair_note: 'Added final semantic layer coverage for deterministic N3.',
+        source_refs: sourceRefs,
+      }],
+    };
+  }
+  return {
+    schema_version: 'topic-selection-v1c-n2-bounded-micro-debate-final.v1',
+    role_slot: slot,
+    final_support_summary: 'Final runtime-admitted support is ready for N3 deterministic gate review.',
+    dossier_markdown: 'Runtime-admitted dossier preserves claim ceiling, selected evidence, accepted risks, and recheck obligations.',
+    reviewer_questions: ['Are selected evidence refs still current before outline lock?'],
+    risk_notes: handoff.accepted_risk_refs.map((riskRef) => `Accepted risk preserved: ${riskRef.ref_type}:${riskRef.ref_id}.`),
+    recheck_notes: handoff.recheck_request_refs.map((recheckRef) => `Recheck obligation preserved: ${recheckRef.ref_type}:${recheckRef.ref_id}.`),
+    n3_semantic_layer: {
+      claim_ceiling_alignment: {
+        status: 'addressed',
+        summary: 'Correlation and mechanism claims only.',
+        source_refs: [handoff.topic_question_contract_ref, handoff.topic_package_ref],
+      },
+      contribution_summary: {
+        status: 'addressed',
+        summary: 'A focused contribution summary is visible in the frozen package.',
+        source_refs: [handoff.topic_package_ref],
+      },
+      evaluation_plan_summary: {
+        status: 'addressed',
+        summary: 'A bounded evaluation plan is visible in the frozen package.',
+        source_refs: [handoff.topic_package_ref, handoff.answerability_plan_ref],
+      },
+      evidence_support_map: {
+        status: 'addressed',
+        evidence_refs: evidenceRefs,
+      },
+      accepted_risk_acknowledgements: {
+        status: 'addressed',
+        risk_refs: handoff.accepted_risk_refs,
+      },
+      recheck_obligation_summary: {
+        status: handoff.recheck_request_refs.length > 0 ? 'addressed' : 'none_required',
+        recheck_refs: handoff.recheck_request_refs,
+      },
+      critic_finding_resolution_map: [{
+        finding_id: 'critic_finding_001',
+        resolution_status: 'accepted_and_repaired',
+        resolution_note: 'Handled in final semantic layer.',
+        source_refs: sourceRefs,
+      }],
+      readiness_coverage_items: [
+        { slot: 'claim_ceiling', status: 'addressed', source_refs: [handoff.topic_question_contract_ref] },
+        { slot: 'selected_evidence', status: 'addressed', source_refs: evidenceRefs },
+      ],
+    },
+  };
+}
+
+async function createN2BoundedDebateSupportBundle(subject, promotionInputSnapshotId) {
+  const handoff = await subject.promotionInputService.getPromotionInputHandoff(promotionInputSnapshotId);
+  const workflowRunId = `workflow_run_v1c_n2_bounded_debate_${promotionInputSnapshotId}`;
+  const nodeAttemptId = `node_attempt_v1c_n2_bounded_debate_${promotionInputSnapshotId}`;
+  const priorArtifacts = [];
+  const candidates = [];
+  let finalInvocation = null;
+
+  for (const slot of TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_ROLE_ORDER) {
+    const output = v1cN2BoundedDebateRoleOutput(slot, handoff);
+    const generated = await subject.n2BoundedDebateRuntimeService.generateRoleArtifact({
+      handoff,
+      slot_id: slot,
+      prior_role_artifacts: priorArtifacts,
+      workflow_run_id: workflowRunId,
+      node_attempt_id: nodeAttemptId,
+      execution_mode: 'codex_assisted',
+      run_mode: 'acceptance',
+      codex_response: {
+        output,
+        operator_label: 'v1c-harness-acceptance-n2-bounded-runtime',
+      },
+      created_by: 'system',
+    });
+    assert.equal(generated.status, 'succeeded');
+    if (generated.status !== 'succeeded') {
+      assert.fail(`N2 bounded runtime role blocked: ${JSON.stringify(generated.invocation_result)}`);
+    }
+    candidates.push({
+      artifact: generated.role_artifact,
+      structured_output: generated.structured_output,
+    });
+    priorArtifacts.push(generated.role_artifact);
+    finalInvocation = generated.invocation_result;
+  }
+
+  const admitted = subject.n2BoundedDebateAdmissionService.admit({
+    handoff,
+    role_results: candidates,
   });
+  assert.equal(admitted.admitted, true);
+  if (!admitted.admitted) {
+    assert.fail(`N2 bounded debate admission blocked: ${JSON.stringify(admitted.blocker)}`);
+  }
+  assert.ok(finalInvocation?.provenance, 'N2 bounded runtime final invocation provenance is required.');
+  assert.ok(finalInvocation?.audit_snapshot, 'N2 bounded runtime final invocation audit snapshot is required.');
+
+  const verifiedRuntimeDraft = {
+    draft: admitted.promotion_support_draft,
+    provenance: finalInvocation.provenance,
+    telemetry: finalInvocation?.provenance?.telemetry ?? null,
+    audit_snapshot: finalInvocation.audit_snapshot,
+    admission_identity: admitted.admission_identity,
+    admission_identity_hash: admitted.admission_identity_hash,
+  };
+  const supportBundle = await subject.promotionGateService.createPromotionDecisionSupportFromVerifiedRuntimeDraft({
+    promotion_input_snapshot_id: promotionInputSnapshotId,
+    verified_runtime_draft: verifiedRuntimeDraft,
+  });
+  return {
+    supportBundle,
+    handoff,
+    role_candidates: candidates,
+    final_artifact: admitted.final_artifact,
+    final_output: admitted.final_output,
+    final_invocation: finalInvocation,
+    verified_runtime_draft: verifiedRuntimeDraft,
+  };
+}
+
+function normalizeBoundedN2Support(boundedSupport) {
+  return normalizeN2PromotionSupport({
+    ...boundedSupport.supportBundle,
+    provider_involved: boundedSupport.final_invocation?.provenance?.non_provider === false,
+  });
+}
+
+async function createSplitGateSupport(subject, promotionInputSnapshotId) {
+  const boundedSupport = await createN2BoundedDebateSupportBundle(subject, promotionInputSnapshotId);
+  const supportBundle = boundedSupport.supportBundle;
   const gateBundle = await subject.promotionGateService.createPromotionGateCheckFromSupport({
     promotion_decision_support_id: supportBundle.promotion_decision_support.promotion_decision_support_id,
   });
   return {
     ...gateBundle,
     supportBundle,
+    n2_bounded_runtime: boundedSupport,
   };
 }
 
@@ -229,7 +428,7 @@ async function runHappyBridgeChain(subject = createWorkflowSubject()) {
   nodeTrace.push(normalizeN1PromotionInputSnapshot(promotionInputSnapshot));
 
   const gateSupport = await createSplitGateSupport(subject, promotionInputSnapshot.promotion_input_snapshot_id);
-  nodeTrace.push(normalizeN2PromotionSupport(gateSupport.supportBundle));
+  nodeTrace.push(normalizeBoundedN2Support(gateSupport.n2_bounded_runtime));
   nodeTrace.push(normalizeN3PromotionGate(gateSupport.handoff));
 
   const humanDecision = await subject.humanPromotionDecisionService.recordHumanPromotionDecision({
@@ -272,7 +471,7 @@ async function runActionRequiredStop() {
   nodeTrace.push(normalizeN1PromotionInputSnapshot(promotionInputSnapshot));
 
   const gateSupport = await createSplitGateSupport(subject, promotionInputSnapshot.promotion_input_snapshot_id);
-  nodeTrace.push(normalizeN2PromotionSupport(gateSupport.supportBundle));
+  nodeTrace.push(normalizeBoundedN2Support(gateSupport.n2_bounded_runtime));
   nodeTrace.push(normalizeN3PromotionGate(gateSupport.handoff));
 
   assert.equal(gateSupport.promotion_gate_check.promote_allowed, false);
@@ -294,7 +493,7 @@ async function runReadyGateOnly() {
   nodeTrace.push(normalizeN1PromotionInputSnapshot(promotionInputSnapshot));
 
   const gateSupport = await createSplitGateSupport(subject, promotionInputSnapshot.promotion_input_snapshot_id);
-  nodeTrace.push(normalizeN2PromotionSupport(gateSupport.supportBundle));
+  nodeTrace.push(normalizeBoundedN2Support(gateSupport.n2_bounded_runtime));
   nodeTrace.push(normalizeN3PromotionGate(gateSupport.handoff));
 
   assert.equal(gateSupport.promotion_gate_check.disposition, 'ready_for_human_decision');
@@ -307,6 +506,33 @@ async function runReadyGateOnly() {
   };
 }
 
+async function runN2SupportOnlyNoN3Bypass() {
+  const subject = createWorkflowSubject();
+  const nodeTrace = [];
+  const promotionInputSnapshot = await subject.promotionInputService.createPromotionInputSnapshot({
+    v1b_to_v1c_input_bundle_id: subject.graph.bundle.v1b_to_v1c_input_bundle_id,
+  });
+  nodeTrace.push(normalizeN1PromotionInputSnapshot(promotionInputSnapshot));
+
+  const boundedSupport = await createN2BoundedDebateSupportBundle(
+    subject,
+    promotionInputSnapshot.promotion_input_snapshot_id,
+  );
+  const n2Node = normalizeBoundedN2Support(boundedSupport);
+  nodeTrace.push(n2Node);
+
+  assert.equal(subject.promotionGateRepository.gateCheckWrites.length, 0);
+  assert.equal(subject.humanPromotionDecisionRepository.writes.length, 0);
+  assert.equal(subject.paperProjectBridgeRepository.writes.length, 0);
+  assert.equal(subject.downstreamFeedbackRepository.writes.length, 0);
+  return {
+    subject,
+    nodeTrace,
+    n2Node,
+    boundedSupport,
+  };
+}
+
 async function runN4NoBridgeCreationScenario() {
   const subject = createWorkflowSubject();
   const nodeTrace = [];
@@ -316,7 +542,7 @@ async function runN4NoBridgeCreationScenario() {
   nodeTrace.push(normalizeN1PromotionInputSnapshot(promotionInputSnapshot));
 
   const gateSupport = await createSplitGateSupport(subject, promotionInputSnapshot.promotion_input_snapshot_id);
-  nodeTrace.push(normalizeN2PromotionSupport(gateSupport.supportBundle));
+  nodeTrace.push(normalizeBoundedN2Support(gateSupport.n2_bounded_runtime));
   nodeTrace.push(normalizeN3PromotionGate(gateSupport.handoff));
 
   const humanDecision = await subject.humanPromotionDecisionService.recordHumanPromotionDecision({
@@ -348,7 +574,41 @@ async function runN4NoBridgeCreationScenario() {
 async function runReplayScenario() {
   const subject = createWorkflowSubject();
   const first = await runHappyBridgeChain(subject);
-  const second = await runHappyBridgeChain(subject);
+  const replayPromotionInputSnapshot = await subject.promotionInputService.createPromotionInputSnapshot({
+    v1b_to_v1c_input_bundle_id: subject.graph.bundle.v1b_to_v1c_input_bundle_id,
+  });
+  const replaySupportBundle = await subject.promotionGateService.createPromotionDecisionSupportFromVerifiedRuntimeDraft({
+    promotion_input_snapshot_id: replayPromotionInputSnapshot.promotion_input_snapshot_id,
+    verified_runtime_draft: first.gateSupport.n2_bounded_runtime.verified_runtime_draft,
+  });
+  const replayGateBundle = await subject.promotionGateService.createPromotionGateCheckFromSupport({
+    promotion_decision_support_id: replaySupportBundle.promotion_decision_support.promotion_decision_support_id,
+  });
+  const replayGateSupport = {
+    ...replayGateBundle,
+    supportBundle: replaySupportBundle,
+    n2_bounded_runtime: first.gateSupport.n2_bounded_runtime,
+  };
+  const replayHumanDecision = await subject.humanPromotionDecisionService.recordHumanPromotionDecision({
+    promotion_gate_check_id: replayGateBundle.promotion_gate_check.promotion_gate_check_id,
+    decision: 'promote_with_conditions',
+    human_actor: {
+      actor_type: 'human',
+      actor_id: 'reviewer_001',
+    },
+    rationale: 'Ready for bridge materialization with explicit condition.',
+    confirmed_snapshot_hash: replayGateBundle.handoff.promotion_input_snapshot_hash,
+    conditions: [createTopicSelectionV1cPromotionConditionFixture()],
+  });
+  const replayBridge = await subject.paperProjectBridgeService.createPaperProjectBridge({
+    promotion_decision_id: replayHumanDecision.promotion_decision.promotion_decision_id,
+  });
+  const second = {
+    promotionInputSnapshot: replayPromotionInputSnapshot,
+    gateSupport: replayGateSupport,
+    humanDecision: replayHumanDecision,
+    bridge: replayBridge,
+  };
   assert.equal(
     second.promotionInputSnapshot.promotion_input_snapshot_id,
     first.promotionInputSnapshot.promotion_input_snapshot_id,
@@ -475,6 +735,13 @@ async function buildManifest() {
   rowResults.push(rowPass('N1-01', 'ready_snapshot', happy.nodeTrace.filter((node) => node.node_id === 'N1'), {
     promotion_input_snapshot_id: happy.promotionInputSnapshot.promotion_input_snapshot_id,
   }));
+  rowResults.push(rowPass('N2-01', 'bounded_runtime_support_admitted', happy.nodeTrace.filter((node) => node.node_id === 'N2'), {
+    promotion_decision_support_id: happy.gateSupport.supportBundle.promotion_decision_support.promotion_decision_support_id,
+    final_slot_id: happy.gateSupport.n2_bounded_runtime.final_artifact.slot_id,
+    final_prompt_packet_hash: happy.gateSupport.n2_bounded_runtime.final_artifact.prompt_packet_hash,
+    runtime_role_count: happy.gateSupport.n2_bounded_runtime.role_candidates.length,
+    runtime_provenance_class: happy.gateSupport.n2_bounded_runtime.final_artifact.runtime_provenance_class,
+  }));
   rowResults.push(rowPass('N3-01', 'ready_gate_happy_path', happy.nodeTrace.filter((node) => node.node_id === 'N3'), {
     promotion_gate_check_id: happy.gateSupport.promotion_gate_check.promotion_gate_check_id,
   }));
@@ -507,6 +774,16 @@ async function buildManifest() {
     promotion_gate_check_id: readyGateOnly.gateSupport.promotion_gate_check.promotion_gate_check_id,
     human_decision_writes: readyGateOnly.subject.humanPromotionDecisionRepository.writes.length,
     bridge_writes: readyGateOnly.subject.paperProjectBridgeRepository.writes.length,
+  }));
+
+  const n2Only = await runN2SupportOnlyNoN3Bypass();
+  nodeTrace.push(...n2Only.nodeTrace);
+  rowResults.push(rowPass('N2-10', 'support_only_no_n3_bypass', [n2Only.n2Node], {
+    promotion_decision_support_id: n2Only.boundedSupport.supportBundle.promotion_decision_support.promotion_decision_support_id,
+    gate_check_writes: n2Only.subject.promotionGateRepository.gateCheckWrites.length,
+    human_decision_writes: n2Only.subject.humanPromotionDecisionRepository.writes.length,
+    bridge_writes: n2Only.subject.paperProjectBridgeRepository.writes.length,
+    downstream_feedback_writes: n2Only.subject.downstreamFeedbackRepository.writes.length,
   }));
 
   const n4NoBridge = await runN4NoBridgeCreationScenario();
@@ -557,6 +834,7 @@ async function buildManifest() {
     workflowWriteCounts(happy.subject),
     workflowWriteCounts(stop.subject),
     workflowWriteCounts(readyGateOnly.subject),
+    workflowWriteCounts(n2Only.subject),
     workflowWriteCounts(n4NoBridge.subject),
     workflowWriteCounts(replay.subject),
     workflowWriteCounts(n6NoRecheck.subject),
