@@ -20,6 +20,9 @@ export const TOPIC_SELECTION_DOWNSTREAM_FEEDBACK_SOURCE_KINDS = [
 export type TopicSelectionDownstreamFeedbackSourceKind =
   (typeof TOPIC_SELECTION_DOWNSTREAM_FEEDBACK_SOURCE_KINDS)[number];
 
+export const TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_CANDIDATE_SCHEMA_VERSION =
+  'topic-selection-v1c-downstream-feedback-candidate.v1' as const;
+
 export const TOPIC_SELECTION_DOWNSTREAM_LOOPBACK_TARGETS = [
   'package',
   'value_assessment',
@@ -107,6 +110,32 @@ export interface TopicSelectionDownstreamTopicFeedbackCreateInput {
   created_by?: TopicSelectionActorType;
 }
 
+export interface TopicSelectionV1cDownstreamFeedbackNormalizationHints {
+  requires_recheck_hint: boolean;
+  loopback_target_hint: TopicSelectionDownstreamLoopbackTarget | null;
+  affected_ref_hint: TopicSelectionFunctionalRef | null;
+  reason_codes: string[];
+}
+
+export interface TopicSelectionV1cDownstreamFeedbackCandidate {
+  schema_version: typeof TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_CANDIDATE_SCHEMA_VERSION;
+  paper_project_bridge_id: string;
+  workspace_id?: string | null;
+  downstream_source_kind: TopicSelectionDownstreamFeedbackSourceKind;
+  downstream_source_ref: TopicSelectionFunctionalRef;
+  source_feedback_refs: TopicSelectionFunctionalRef[];
+  observed_blocker_refs: TopicSelectionFunctionalRef[];
+  feedback_signal: TopicSelectionDownstreamLoopbackCause;
+  severity: TopicSelectionSeverity;
+  summary: string;
+  required_action: string | null;
+  artifact_refs: TopicSelectionFunctionalRef[];
+  feedback_payload: Record<string, unknown>;
+  normalization_hints: TopicSelectionV1cDownstreamFeedbackNormalizationHints;
+  cited_refs: TopicSelectionFunctionalRef[];
+  no_upstream_mutation_confirmed: boolean;
+}
+
 export interface TopicSelectionDownstreamTopicFeedbackRecord {
   downstream_topic_feedback_id: string;
   feedback_fingerprint: string;
@@ -166,6 +195,9 @@ const loopbackTargetSchema = {
 } as const;
 const loopbackCauseSchema = {
   enum: [...TOPIC_SELECTION_DOWNSTREAM_LOOPBACK_CAUSES],
+} as const;
+const downstreamFeedbackCandidateSchemaVersionSchema = {
+  enum: [TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_CANDIDATE_SCHEMA_VERSION],
 } as const;
 
 export const topicSelectionLoopbackClassificationSchema = {
@@ -274,6 +306,63 @@ export const topicSelectionDownstreamTopicFeedbackCreateInputSchema = {
     feedback_payload: objectPayload,
     policy_version_id: nullableStringId,
     created_by: actorTypeSchema,
+  },
+} as const;
+
+export const topicSelectionV1cDownstreamFeedbackNormalizationHintsSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'requires_recheck_hint',
+    'loopback_target_hint',
+    'affected_ref_hint',
+    'reason_codes',
+  ],
+  properties: {
+    requires_recheck_hint: { type: 'boolean' },
+    loopback_target_hint: { anyOf: [loopbackTargetSchema, { type: 'null' }] },
+    affected_ref_hint: nullableFunctionalRef,
+    reason_codes: stringArray,
+  },
+} as const;
+
+export const topicSelectionV1cDownstreamFeedbackCandidateSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'paper_project_bridge_id',
+    'downstream_source_kind',
+    'downstream_source_ref',
+    'source_feedback_refs',
+    'observed_blocker_refs',
+    'feedback_signal',
+    'severity',
+    'summary',
+    'required_action',
+    'artifact_refs',
+    'feedback_payload',
+    'normalization_hints',
+    'cited_refs',
+    'no_upstream_mutation_confirmed',
+  ],
+  properties: {
+    schema_version: downstreamFeedbackCandidateSchemaVersionSchema,
+    paper_project_bridge_id: stringId,
+    workspace_id: nullableStringId,
+    downstream_source_kind: sourceKindSchema,
+    downstream_source_ref: topicSelectionFunctionalRefSchema,
+    source_feedback_refs: functionalRefArray,
+    observed_blocker_refs: functionalRefArray,
+    feedback_signal: loopbackCauseSchema,
+    severity: severitySchema,
+    summary: stringId,
+    required_action: nullableStringId,
+    artifact_refs: functionalRefArray,
+    feedback_payload: objectPayload,
+    normalization_hints: topicSelectionV1cDownstreamFeedbackNormalizationHintsSchema,
+    cited_refs: functionalRefArray,
+    no_upstream_mutation_confirmed: { type: 'boolean' },
   },
 } as const;
 

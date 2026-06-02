@@ -16,9 +16,9 @@ import {
   TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID,
+  TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID,
   TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID,
   TOPIC_SELECTION_V1C_PROMOTION_DECISION_SUPPORT_PROFILE_ID,
-  TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS,
   TopicSelectionModelProfileRegistryService,
 } from './topic-selection-model-profile-registry-service.js';
 import type {
@@ -218,18 +218,6 @@ test('model profile registry validates default DMP v1 profiles and resolves prov
   assert.equal(v1bGroupingSupport.profile.output_contract, 'CandidateGroupingSupport@v1');
   assert.equal(v1bGroupingSupport.selected_model_option, null);
 
-  const v1cProviderCanary = service.resolveProfile({
-    profile_id: TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n4_delegated_promotion_decision,
-    execution_mode: 'provider_llm',
-    run_mode: 'acceptance',
-    model_option_id: `${TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n4_delegated_promotion_decision}.openai-balanced`,
-  });
-  assert.equal(v1cProviderCanary.profile.output_contract, 'TopicSelectionV1cDelegatedPromotionDecisionCandidate@v1');
-  assert.equal(v1cProviderCanary.profile.run_mode_eligibility.codex_assisted.length, 0);
-  assert.equal(v1cProviderCanary.selected_model_option?.provider_id, 'openai');
-  assert.equal(v1cProviderCanary.selected_model_option?.normalized_params.creativity, 'low');
-  assert.equal(v1cProviderCanary.selected_model_option?.normalized_params.reasoning_depth, 'high');
-
   const v1cPromotionSupport = service.resolveProfile({
     profile_id: TOPIC_SELECTION_V1C_PROMOTION_DECISION_SUPPORT_PROFILE_ID,
     execution_mode: 'provider_llm',
@@ -264,6 +252,24 @@ test('model profile registry validates default DMP v1 profiles and resolves prov
   assert.equal(v1cBoundedDebateProvider.selected_model_option?.provider_id, 'openai');
   assert.equal(v1cBoundedDebateProvider.selected_model_option?.normalized_params.creativity, 'low');
   assert.equal(v1cBoundedDebateProvider.selected_model_option?.normalized_params.output_budget, 'large');
+
+  const v1cDelegatedPromotionDecision = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'acceptance',
+    model_option_id: `${TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID}.openai-balanced`,
+  });
+  assert.equal(
+    v1cDelegatedPromotionDecision.profile.output_contract,
+    'TopicSelectionV1cDelegatedPromotionDecisionCandidate@v1',
+  );
+  assert.equal(
+    v1cDelegatedPromotionDecision.profile.profile_function,
+    'v1c_delegated_promotion_decision_candidate',
+  );
+  assert.equal(v1cDelegatedPromotionDecision.profile.stage_family, 'v1c_human_promotion_decision');
+  assert.equal(v1cDelegatedPromotionDecision.selected_model_option?.provider_id, 'openai');
+  assert.equal(v1cDelegatedPromotionDecision.selected_model_option?.normalized_params.creativity, 'low');
 
   const v1cFeedbackNormalization = service.resolveProfile({
     profile_id: TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID,
@@ -303,7 +309,7 @@ test('model profile registry enforces run-mode and role profile execution eligib
 
   assert.throws(
     () => service.resolveProfile({
-      profile_id: TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS.n2_bounded_micro_debate,
+      profile_id: TOPIC_SELECTION_V1C_PROMOTION_DECISION_SUPPORT_PROFILE_ID,
       execution_mode: 'codex_assisted',
       run_mode: 'acceptance',
     }),

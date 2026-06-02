@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { Ajv } from 'ajv';
 import type {
   LlmCallTelemetry,
   LlmStructuredOutputRequest,
@@ -23,6 +24,8 @@ import { TopicSelectionControlPlaneService } from './topic-selection-control-pla
 import {
   TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID,
+  TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID,
+  TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID,
   TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID,
@@ -30,7 +33,19 @@ import {
 import {
   TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1C_N4_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1C_N4_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1C_N6_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS,
 } from './topic-selection-context-policy-profile-registry-service.js';
+import {
+  TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_CANDIDATE_SCHEMA_VERSION,
+  type TopicSelectionV1cDownstreamFeedbackCandidate,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1c-downstream-feedback-recheck-contracts';
+import {
+  TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_CANDIDATE_SCHEMA_VERSION,
+  type TopicSelectionV1cDelegatedPromotionDecisionCandidate,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1c-human-promotion-decision-contracts';
 import {
   TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_ROLE_ORDER,
   type TopicSelectionV1cN2BoundedDebateRoleOutput,
@@ -81,9 +96,55 @@ class MinimalN2ProviderCanaryGateway extends StubProviderCanaryGateway {
   }
 }
 
+class MinimalN6ProviderCanaryGateway extends StubProviderCanaryGateway {
+  override async createStructuredOutput<T>(
+    request: LlmStructuredOutputRequest,
+  ): Promise<LlmStructuredOutputResponse<T>> {
+    if (request.schemaName !== 'topic_selection_v1c_n6_feedback_canary') {
+      return super.createStructuredOutput<T>(request);
+    }
+    this.calls.push(request);
+    const output = {
+      schema_version: TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_CANDIDATE_SCHEMA_VERSION,
+      paper_project_bridge_id: 'paper_project_bridge_provider_canary_001',
+    };
+    return {
+      parsed: output as T,
+      raw: { output },
+      telemetry: telemetry(request),
+    };
+  }
+}
+
+class MinimalN4ProviderCanaryGateway extends StubProviderCanaryGateway {
+  override async createStructuredOutput<T>(
+    request: LlmStructuredOutputRequest,
+  ): Promise<LlmStructuredOutputResponse<T>> {
+    if (request.schemaName !== 'topic_selection_v1c_n4_decision_canary') {
+      return super.createStructuredOutput<T>(request);
+    }
+    this.calls.push(request);
+    const output = {
+      schema_version: TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_CANDIDATE_SCHEMA_VERSION,
+      promotion_gate_check_id: 'promotion_gate_check_provider_canary_001',
+    };
+    return {
+      parsed: output as T,
+      raw: { output },
+      telemetry: telemetry(request),
+    };
+  }
+}
+
 function providerCanaryOutput(request: LlmStructuredOutputRequest) {
   if (request.schemaName === 'topic_selection_v1c_n2_provider_canary_role') {
     return v1cN2CanaryOutput(request);
+  }
+  if (request.schemaName === 'topic_selection_v1c_n4_decision_canary') {
+    return v1cN4CanaryOutput();
+  }
+  if (request.schemaName === 'topic_selection_v1c_n6_feedback_canary') {
+    return v1cN6CanaryOutput();
   }
   if (request.schemaName === 'topic_selection_v1b_n4_provider_canary_draft') {
     return v1bN4CanaryOutput();
@@ -203,6 +264,91 @@ function v1cN2CanaryOutput(request: LlmStructuredOutputRequest): TopicSelectionV
         { slot: 'provider_live_non_reuse', status: 'addressed', source_refs: [evidenceRef] },
       ],
     },
+  };
+}
+
+function v1cN6CanaryOutput(): TopicSelectionV1cDownstreamFeedbackCandidate {
+  const bridgeRef = functionalRef('paper_project_bridge', 'provider_canary_bridge_001');
+  const downstreamSourceRef = functionalRef('reviewer_check', 'provider_canary_reviewer_check_001');
+  const reviewCommentRef = functionalRef('review_comment', 'provider_canary_review_comment_001');
+  const blockerRef = functionalRef('topic_selection_blocker', 'provider_canary_blocker_001');
+  const artifactRef = functionalRef('artifact_ref', 'provider_canary_feedback_artifact_001');
+  const affectedRef = functionalRef('validated_need', 'provider_canary_validated_need_001');
+  return {
+    schema_version: TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_CANDIDATE_SCHEMA_VERSION,
+    paper_project_bridge_id: 'paper_project_bridge_provider_canary_001',
+    workspace_id: 'workspace_provider_canary',
+    downstream_source_kind: 'reviewer_check',
+    downstream_source_ref: downstreamSourceRef,
+    source_feedback_refs: [reviewCommentRef],
+    observed_blocker_refs: [blockerRef],
+    feedback_signal: 'need_invalidated',
+    severity: 'critical',
+    summary:
+      'Synthetic N6 provider canary feedback invalidates the promoted need for runtime-only validation.',
+    required_action: 'Recheck the validated need before downstream work continues.',
+    artifact_refs: [artifactRef],
+    feedback_payload: {
+      canary: true,
+      non_authority: true,
+      provider_live_required: true,
+    },
+    normalization_hints: {
+      requires_recheck_hint: true,
+      loopback_target_hint: 'validated_need',
+      affected_ref_hint: affectedRef,
+      reason_codes: ['need_invalidated'],
+    },
+    cited_refs: [bridgeRef, downstreamSourceRef, affectedRef],
+    no_upstream_mutation_confirmed: true,
+  };
+}
+
+function v1cN4CanaryOutput(): TopicSelectionV1cDelegatedPromotionDecisionCandidate {
+  const gateRef = functionalRef('promotion_gate_check', 'provider_canary_gate_check_001');
+  const snapshotRef = functionalRef('promotion_input_snapshot', 'provider_canary_snapshot_001');
+  const supportRef = functionalRef('promotion_decision_support', 'provider_canary_support_001');
+  const topicPackageRef = functionalRef('topic_package', 'provider_canary_topic_package_001');
+  const conditionAction = {
+    action_code: 'clarify_contribution_claim',
+    severity: 'warning' as const,
+    loopback_target: 'package' as const,
+    refs: [topicPackageRef],
+    reason: 'Clarify contribution wording before bridge materialization.',
+  };
+  return {
+    schema_version: TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_CANDIDATE_SCHEMA_VERSION,
+    promotion_gate_check_id: 'promotion_gate_check_provider_canary_001',
+    promotion_input_snapshot_id: 'promotion_input_snapshot_provider_canary_001',
+    promotion_input_snapshot_hash: 'a'.repeat(64),
+    workspace_id: 'workspace_provider_canary',
+    title_card_id: 'title_card_provider_canary',
+    decision: 'promote_with_conditions',
+    rationale:
+      'Synthetic N4 provider canary candidate validates provider-live runtime semantics without authority writes.',
+    confirmed_snapshot_hash: 'a'.repeat(64),
+    conditions: [{
+      condition_id: 'promotion_condition_provider_canary_001',
+      condition_code: 'clarify_contribution_claim',
+      owner: {
+        actor_type: 'human',
+        actor_id: 'reviewer_001',
+      },
+      required_action: conditionAction,
+      refs: [topicPackageRef],
+      early_check_obligations: ['Re-check contribution wording before outline lock.'],
+      verification_note: 'Condition is reviewer-visible and non-authority until human acceptance.',
+    }],
+    required_actions: [],
+    loopback_target: null,
+    allowed_refinements: [],
+    stop_conditions: [],
+    reopen_conditions: [],
+    cited_refs: [gateRef, snapshotRef, topicPackageRef],
+    decision_support_refs: [gateRef, snapshotRef, supportRef],
+    no_authority_write_confirmed: true,
+    no_bridge_creation_confirmed: true,
+    human_review_required: true,
   };
 }
 
@@ -503,6 +649,20 @@ function expectedV1cN2ModelOptionId(providerId: TopicSelectionProviderCanaryProv
   return `${TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID}.${suffix}`;
 }
 
+function expectedV1cN6ModelOptionId(providerId: TopicSelectionProviderCanaryProviderId): string {
+  const suffix = providerId === 'openai'
+    ? 'openai-balanced'
+    : 'dashscope-thinking-budget';
+  return `${TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID}.${suffix}`;
+}
+
+function expectedV1cN4ModelOptionId(providerId: TopicSelectionProviderCanaryProviderId): string {
+  const suffix = providerId === 'openai'
+    ? 'openai-balanced'
+    : 'dashscope-thinking-budget';
+  return `${TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID}.${suffix}`;
+}
+
 function expectedV1cN2ContextPolicyProfileId(slot: TopicSelectionV1cN2BoundedDebateRoleSlotId): string {
   if (slot === TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.promotion_supporter_draft) {
     return TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.promotion_supporter_draft;
@@ -514,6 +674,14 @@ function expectedV1cN2ContextPolicyProfileId(slot: TopicSelectionV1cN2BoundedDeb
     return TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.promotion_supporter_repair;
   }
   return TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.synthesizer_final;
+}
+
+function expectedV1cN6ContextPolicyProfileId(): string {
+  return TOPIC_SELECTION_V1C_N6_CONTEXT_RUNTIME_PROFILE_IDS.downstream_feedback_normalization;
+}
+
+function expectedV1cN4ContextPolicyProfileId(): string {
+  return TOPIC_SELECTION_V1C_N4_CONTEXT_RUNTIME_PROFILE_IDS.delegated_promotion_decision_candidate;
 }
 
 function assertV1bN8PromptCacheLiveRequiredResult(
@@ -707,6 +875,184 @@ async function assertV1cN2PromptCacheLiveRequiredCanary(
   assert.deepEqual(result.response_reuse_refs, [null, null]);
   assert.equal(result.telemetry.length, 2);
   assert.equal(result.telemetry[1]!.provider_side_cache_hit, true);
+}
+
+async function assertV1cN6PromptCacheLiveRequiredCanary(providerId: TopicSelectionProviderCanaryProviderId) {
+  const gateway = new StubProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runV1cN6PromptCacheLiveRequiredCanary({
+    provider_id: providerId,
+  });
+
+  assert.equal(result.provider_id, providerId);
+  assert.equal(result.model_option_id, expectedV1cN6ModelOptionId(providerId));
+  assert.equal(
+    result.invocation_slot_id,
+    TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS.downstream_feedback_normalization,
+  );
+  assert.equal(result.context_policy_profile_id, expectedV1cN6ContextPolicyProfileId());
+  assert.equal(result.model_profile_id, TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID);
+  assert.equal(result.canary_surface, 'production_runtime_slot');
+  assert.equal(result.provider_required_live, true);
+  assert.equal(result.first_status, 'succeeded');
+  assert.equal(result.second_status, 'succeeded');
+  assert.equal(result.provider_call_count, 2);
+  assert.equal(gateway.calls.length, 2);
+  assert.equal(gateway.calls[0]!.model.providerId, providerId);
+  assert.equal(gateway.calls[0]!.model.profileId, TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID);
+  assert.equal(gateway.calls[0]!.prompt.promptTemplateId, 'topic-selection-v1c-downstream-feedback-normalization');
+  assert.equal(gateway.calls[0]!.schemaName, 'topic_selection_v1c_n6_feedback_canary');
+  assert.ok(gateway.calls[0]!.schemaName.length <= 64);
+  assert.equal(gateway.calls[0]!.schema.additionalProperties, false);
+  const required = gateway.calls[0]!.schema.required as string[];
+  assert.ok(required.includes('schema_version'));
+  assert.ok(required.includes('paper_project_bridge_id'));
+  assert.ok(required.includes('downstream_source_ref'));
+  assert.ok(required.includes('normalization_hints'));
+  assert.ok(required.includes('no_upstream_mutation_confirmed'));
+  const properties = gateway.calls[0]!.schema.properties as Record<string, Record<string, unknown>>;
+  assert.deepEqual(properties.schema_version, {
+    type: 'string',
+    enum: [TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_CANDIDATE_SCHEMA_VERSION],
+  });
+  assert.deepEqual(properties.feedback_signal, {
+    type: 'string',
+    enum: ['need_invalidated'],
+  });
+  assert.deepEqual(properties.severity, {
+    type: 'string',
+    enum: ['critical'],
+  });
+  assert.deepEqual(properties.no_upstream_mutation_confirmed, {
+    type: 'boolean',
+    enum: [true],
+  });
+  const normalizationHints = properties.normalization_hints as {
+    properties: Record<string, Record<string, unknown>>;
+  };
+  assert.deepEqual(normalizationHints.properties.loopback_target_hint, {
+    type: 'string',
+    enum: ['validated_need'],
+  });
+  assert.deepEqual(normalizationHints.properties.requires_recheck_hint, {
+    type: 'boolean',
+    enum: [true],
+  });
+  assert.equal(gateway.calls[1]!.model.providerId, providerId);
+  assert.equal(result.first_prompt_packet_hash, result.second_prompt_packet_hash);
+  assert.equal(result.prompt_artifact_ref_reused, true);
+  assert.equal(result.prompt_quality_report_ref_reused, true);
+  assert.deepEqual(result.provider_response_cache_statuses, ['not_applicable', 'not_applicable']);
+  assert.deepEqual(result.response_reuse_refs, [null, null]);
+  assert.equal(result.telemetry.length, 2);
+  assert.equal(result.telemetry[1]!.provider_side_cache_hit, true);
+}
+
+async function assertV1cN4PromptCacheLiveRequiredCanary(providerId: TopicSelectionProviderCanaryProviderId) {
+  const gateway = new StubProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runV1cN4PromptCacheLiveRequiredCanary({
+    provider_id: providerId,
+  });
+
+  assertV1cN4LiveRequiredEvidence(result, providerId);
+  assert.equal(gateway.calls.length, 2);
+  assert.equal(gateway.calls[0]!.model.providerId, providerId);
+  assert.equal(gateway.calls[0]!.model.profileId, TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID);
+  assert.equal(gateway.calls[0]!.prompt.promptTemplateId, 'topic-selection-v1c-delegated-promotion-decision');
+  assert.equal(gateway.calls[0]!.schemaName, 'topic_selection_v1c_n4_decision_canary');
+  assert.ok(gateway.calls[0]!.schemaName.length <= 64);
+  assert.equal(gateway.calls[0]!.schema.additionalProperties, false);
+  const required = gateway.calls[0]!.schema.required as string[];
+  assert.ok(required.includes('schema_version'));
+  assert.ok(required.includes('promotion_gate_check_id'));
+  assert.ok(required.includes('promotion_input_snapshot_hash'));
+  assert.ok(required.includes('decision_support_refs'));
+  assert.ok(required.includes('no_authority_write_confirmed'));
+  assert.ok(required.includes('no_bridge_creation_confirmed'));
+  assert.ok(required.includes('human_review_required'));
+  const properties = gateway.calls[0]!.schema.properties as Record<string, Record<string, unknown>>;
+  assert.deepEqual(properties.schema_version, {
+    type: 'string',
+    enum: [TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_CANDIDATE_SCHEMA_VERSION],
+  });
+  assert.deepEqual(properties.decision, {
+    type: 'string',
+    enum: ['promote_with_conditions'],
+  });
+  assert.deepEqual(properties.no_authority_write_confirmed, {
+    type: 'boolean',
+    enum: [true],
+  });
+  assert.deepEqual(properties.no_bridge_creation_confirmed, {
+    type: 'boolean',
+    enum: [true],
+  });
+  assert.deepEqual(properties.human_review_required, {
+    type: 'boolean',
+    enum: [true],
+  });
+  const decisionSupportRefs = properties.decision_support_refs as {
+    maxItems?: number;
+    minItems?: number;
+    uniqueItems?: boolean;
+  };
+  assert.equal(decisionSupportRefs.minItems, 3);
+  assert.equal(decisionSupportRefs.maxItems, 3);
+  assert.equal(decisionSupportRefs.uniqueItems, true);
+  const conditions = properties.conditions as {
+    maxItems?: number;
+    minItems?: number;
+  };
+  assert.equal(conditions.minItems, 1);
+  assert.equal(conditions.maxItems, 1);
+  assertV1cN4SchemaRejectsDuplicatedDecisionSupportRefs(gateway.calls[0]!.schema);
+  assert.equal(gateway.calls[1]!.model.providerId, providerId);
+}
+
+function assertV1cN4LiveRequiredEvidence(
+  result: Awaited<ReturnType<TopicSelectionProviderCanaryService['runV1cN4PromptCacheLiveRequiredCanary']>>,
+  providerId: TopicSelectionProviderCanaryProviderId,
+) {
+  assert.equal(result.provider_id, providerId);
+  assert.equal(result.model_option_id, expectedV1cN4ModelOptionId(providerId));
+  assert.equal(
+    result.invocation_slot_id,
+    TOPIC_SELECTION_V1C_N4_INVOCATION_SLOT_IDS.delegated_promotion_decision_candidate,
+  );
+  assert.equal(result.context_policy_profile_id, expectedV1cN4ContextPolicyProfileId());
+  assert.equal(result.model_profile_id, TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID);
+  assert.equal(result.canary_surface, 'production_runtime_slot');
+  assert.equal(result.provider_required_live, true);
+  assert.equal(result.first_status, 'succeeded');
+  assert.equal(result.second_status, 'succeeded');
+  assert.equal(result.provider_call_count, 2);
+  assert.equal(result.first_prompt_packet_hash, result.second_prompt_packet_hash);
+  assert.equal(result.prompt_artifact_ref_reused, true);
+  assert.equal(result.prompt_quality_report_ref_reused, true);
+  assert.deepEqual(result.provider_response_cache_statuses, ['not_applicable', 'not_applicable']);
+  assert.deepEqual(result.response_reuse_refs, [null, null]);
+  assert.equal(result.telemetry.length, 2);
+  assert.equal(result.telemetry[0]?.provider_id, providerId);
+  assert.equal(result.telemetry[1]?.provider_id, providerId);
+}
+
+function assertV1cN4SchemaRejectsDuplicatedDecisionSupportRefs(schema: Record<string, unknown>) {
+  const validator = new Ajv({
+    allErrors: true,
+    strict: false,
+  }).compile(schema);
+  const gateRef = functionalRef('promotion_gate_check', 'provider_canary_gate_check_001');
+  const supportRef = functionalRef('promotion_decision_support', 'provider_canary_support_001');
+  const duplicatedRefsCandidate = {
+    ...v1cN4CanaryOutput(),
+    decision_support_refs: [gateRef, gateRef, supportRef],
+  };
+
+  assert.equal(validator(v1cN4CanaryOutput()), true);
+  assert.equal(validator(duplicatedRefsCandidate), false);
 }
 
 test('provider canary proves OpenAI prompt cache hits still require live provider calls', async () => {
@@ -963,6 +1309,152 @@ test('provider canary blocks malformed minimal v1c N2 provider outputs against t
   assert.deepEqual(result.response_reuse_refs, [null, null]);
 });
 
+test('provider canary proves v1c N4 OpenAI prompt cache hits still require live provider calls', async () => {
+  await assertV1cN4PromptCacheLiveRequiredCanary('openai');
+});
+
+test('provider canary proves v1c N4 DashScope prompt cache hits still require live provider calls', async () => {
+  await assertV1cN4PromptCacheLiveRequiredCanary('dashscope');
+});
+
+test('provider canary blocks over-budget v1c N4 OpenAI fixtures before gateway calls', async () => {
+  const gateway = new StubProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runV1cN4OverBudgetZeroCallCanary({
+    provider_id: 'openai',
+  });
+
+  assert.equal(result.provider_id, 'openai');
+  assert.equal(result.model_option_id, expectedV1cN4ModelOptionId('openai'));
+  assert.equal(
+    result.invocation_slot_id,
+    TOPIC_SELECTION_V1C_N4_INVOCATION_SLOT_IDS.delegated_promotion_decision_candidate,
+  );
+  assert.equal(result.context_policy_profile_id, expectedV1cN4ContextPolicyProfileId());
+  assert.equal(result.model_profile_id, TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID);
+  assert.equal(result.canary_surface, 'production_runtime_slot');
+  assert.equal(result.provider_call_count, 0);
+  assert.equal(gateway.calls.length, 0);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION');
+  assert.equal(result.token_budget_gate_decision, 'blocked_over_budget');
+  assert.deepEqual(result.blocker_codes, ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION']);
+});
+
+test('provider canary blocks over-budget v1c N4 DashScope fixtures before gateway calls', async () => {
+  const gateway = new StubProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runV1cN4OverBudgetZeroCallCanary({
+    provider_id: 'dashscope',
+  });
+
+  assert.equal(result.provider_id, 'dashscope');
+  assert.equal(result.model_option_id, expectedV1cN4ModelOptionId('dashscope'));
+  assert.equal(
+    result.invocation_slot_id,
+    TOPIC_SELECTION_V1C_N4_INVOCATION_SLOT_IDS.delegated_promotion_decision_candidate,
+  );
+  assert.equal(result.context_policy_profile_id, expectedV1cN4ContextPolicyProfileId());
+  assert.equal(result.model_profile_id, TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID);
+  assert.equal(result.canary_surface, 'production_runtime_slot');
+  assert.equal(result.provider_call_count, 0);
+  assert.equal(gateway.calls.length, 0);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION');
+  assert.equal(result.token_budget_gate_decision, 'blocked_over_budget');
+  assert.deepEqual(result.blocker_codes, ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION']);
+});
+
+test('provider canary blocks malformed minimal v1c N4 provider outputs against the slot schema', async () => {
+  const gateway = new MinimalN4ProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runV1cN4PromptCacheLiveRequiredCanary({
+    provider_id: 'openai',
+  });
+
+  assert.equal(result.first_status, 'blocked');
+  assert.equal(result.second_status, 'blocked');
+  assert.equal(result.provider_call_count, 2);
+  assert.equal(gateway.calls.length, 2);
+  assert.deepEqual(result.response_reuse_refs, [null, null]);
+});
+
+test('provider canary proves v1c N6 OpenAI prompt cache hits still require live provider calls', async () => {
+  await assertV1cN6PromptCacheLiveRequiredCanary('openai');
+});
+
+test('provider canary proves v1c N6 DashScope prompt cache hits still require live provider calls', async () => {
+  await assertV1cN6PromptCacheLiveRequiredCanary('dashscope');
+});
+
+test('provider canary blocks over-budget v1c N6 OpenAI fixtures before gateway calls', async () => {
+  const gateway = new StubProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runV1cN6OverBudgetZeroCallCanary({
+    provider_id: 'openai',
+  });
+
+  assert.equal(result.provider_id, 'openai');
+  assert.equal(result.model_option_id, expectedV1cN6ModelOptionId('openai'));
+  assert.equal(
+    result.invocation_slot_id,
+    TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS.downstream_feedback_normalization,
+  );
+  assert.equal(result.context_policy_profile_id, expectedV1cN6ContextPolicyProfileId());
+  assert.equal(result.model_profile_id, TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID);
+  assert.equal(result.canary_surface, 'production_runtime_slot');
+  assert.equal(result.provider_call_count, 0);
+  assert.equal(gateway.calls.length, 0);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION');
+  assert.equal(result.token_budget_gate_decision, 'blocked_over_budget');
+  assert.deepEqual(result.blocker_codes, ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION']);
+});
+
+test('provider canary blocks over-budget v1c N6 DashScope fixtures before gateway calls', async () => {
+  const gateway = new StubProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runV1cN6OverBudgetZeroCallCanary({
+    provider_id: 'dashscope',
+  });
+
+  assert.equal(result.provider_id, 'dashscope');
+  assert.equal(result.model_option_id, expectedV1cN6ModelOptionId('dashscope'));
+  assert.equal(
+    result.invocation_slot_id,
+    TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS.downstream_feedback_normalization,
+  );
+  assert.equal(result.context_policy_profile_id, expectedV1cN6ContextPolicyProfileId());
+  assert.equal(result.model_profile_id, TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID);
+  assert.equal(result.canary_surface, 'production_runtime_slot');
+  assert.equal(result.provider_call_count, 0);
+  assert.equal(gateway.calls.length, 0);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION');
+  assert.equal(result.token_budget_gate_decision, 'blocked_over_budget');
+  assert.deepEqual(result.blocker_codes, ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION']);
+});
+
+test('provider canary blocks malformed minimal v1c N6 provider outputs against the slot schema', async () => {
+  const gateway = new MinimalN6ProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runV1cN6PromptCacheLiveRequiredCanary({
+    provider_id: 'openai',
+  });
+
+  assert.equal(result.first_status, 'blocked');
+  assert.equal(result.second_status, 'blocked');
+  assert.equal(result.provider_call_count, 2);
+  assert.equal(gateway.calls.length, 2);
+  assert.deepEqual(result.response_reuse_refs, [null, null]);
+});
+
 function shouldRunLiveCanary(providerId: TopicSelectionProviderCanaryProviderId): boolean {
   if (
     process.env.T112_PROVIDER_CANARY_LIVE !== '1'
@@ -1014,6 +1506,30 @@ function shouldRunLiveV1bN8Canary(providerId: TopicSelectionProviderCanaryProvid
 function shouldRunLiveV1cN2Canary(providerId: TopicSelectionProviderCanaryProviderId): boolean {
   if (
     process.env.T112_V1C_N2_PROVIDER_CANARY_LIVE !== '1'
+    || process.env.BACKEND_TEST_PRESERVE_REAL_ENV !== '1'
+  ) {
+    return false;
+  }
+  return providerId === 'openai'
+    ? Boolean(process.env.OPENAI_API_KEY?.trim())
+    : Boolean(process.env.DASHSCOPE_API_KEY?.trim());
+}
+
+function shouldRunLiveV1cN4Canary(providerId: TopicSelectionProviderCanaryProviderId): boolean {
+  if (
+    process.env.T112_V1C_N4_PROVIDER_CANARY_LIVE !== '1'
+    || process.env.BACKEND_TEST_PRESERVE_REAL_ENV !== '1'
+  ) {
+    return false;
+  }
+  return providerId === 'openai'
+    ? Boolean(process.env.OPENAI_API_KEY?.trim())
+    : Boolean(process.env.DASHSCOPE_API_KEY?.trim());
+}
+
+function shouldRunLiveV1cN6Canary(providerId: TopicSelectionProviderCanaryProviderId): boolean {
+  if (
+    process.env.T112_V1C_N6_PROVIDER_CANARY_LIVE !== '1'
     || process.env.BACKEND_TEST_PRESERVE_REAL_ENV !== '1'
   ) {
     return false;
@@ -1111,6 +1627,118 @@ test(
       assert.equal(result.invocation_slot_id, slot);
       assert.equal(result.telemetry[0]?.provider_id, 'dashscope');
     }
+  },
+);
+
+test(
+  'provider canary live v1c N4 OpenAI invocation uses the configured provider gateway',
+  {
+    skip: shouldRunLiveV1cN4Canary('openai')
+      ? false
+      : 'set T112_V1C_N4_PROVIDER_CANARY_LIVE=1, BACKEND_TEST_PRESERVE_REAL_ENV=1, and OPENAI_API_KEY to run',
+    timeout: 300_000,
+  },
+  async () => {
+    const service = makeCanaryService({
+      llmGateway: new BackendLlmGateway({
+        defaultTimeoutMs: 300_000,
+        defaultMaxRetries: 0,
+      }),
+    });
+
+    const result = await service.runV1cN4PromptCacheLiveRequiredCanary({
+      provider_id: 'openai',
+    });
+
+    assertV1cN4LiveRequiredEvidence(result, 'openai');
+  },
+);
+
+test(
+  'provider canary live v1c N4 DashScope invocation uses the configured provider gateway',
+  {
+    skip: shouldRunLiveV1cN4Canary('dashscope')
+      ? false
+      : 'set T112_V1C_N4_PROVIDER_CANARY_LIVE=1, BACKEND_TEST_PRESERVE_REAL_ENV=1, and DASHSCOPE_API_KEY to run',
+    timeout: 300_000,
+  },
+  async () => {
+    const service = makeCanaryService({
+      llmGateway: new BackendLlmGateway({
+        defaultTimeoutMs: 300_000,
+        defaultMaxRetries: 0,
+      }),
+    });
+
+    const result = await service.runV1cN4PromptCacheLiveRequiredCanary({
+      provider_id: 'dashscope',
+    });
+
+    assertV1cN4LiveRequiredEvidence(result, 'dashscope');
+  },
+);
+
+test(
+  'provider canary live v1c N6 OpenAI invocation uses the configured provider gateway',
+  {
+    skip: shouldRunLiveV1cN6Canary('openai')
+      ? false
+      : 'set T112_V1C_N6_PROVIDER_CANARY_LIVE=1, BACKEND_TEST_PRESERVE_REAL_ENV=1, and OPENAI_API_KEY to run',
+    timeout: 300_000,
+  },
+  async () => {
+    const service = makeCanaryService({
+      llmGateway: new BackendLlmGateway({
+        defaultTimeoutMs: 300_000,
+        defaultMaxRetries: 0,
+      }),
+    });
+
+    const result = await service.runV1cN6PromptCacheLiveRequiredCanary({
+      provider_id: 'openai',
+    });
+
+    assert.equal(result.first_status, 'succeeded');
+    assert.equal(result.second_status, 'succeeded');
+    assert.equal(result.provider_call_count, 2);
+    assert.equal(result.model_option_id, expectedV1cN6ModelOptionId('openai'));
+    assert.equal(
+      result.invocation_slot_id,
+      TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS.downstream_feedback_normalization,
+    );
+    assert.equal(result.telemetry[0]?.provider_id, 'openai');
+  },
+);
+
+test(
+  'provider canary live v1c N6 DashScope invocation uses the configured provider gateway',
+  {
+    skip: shouldRunLiveV1cN6Canary('dashscope')
+      ? false
+      : 'set T112_V1C_N6_PROVIDER_CANARY_LIVE=1, BACKEND_TEST_PRESERVE_REAL_ENV=1, and DASHSCOPE_API_KEY to run',
+    timeout: 300_000,
+  },
+  async () => {
+    const service = makeCanaryService({
+      llmGateway: new BackendLlmGateway({
+        defaultTimeoutMs: 300_000,
+        defaultMaxRetries: 0,
+      }),
+    });
+
+    const result = await service.runV1cN6PromptCacheLiveRequiredCanary({
+      provider_id: 'dashscope',
+    });
+
+    assert.equal(result.first_status, 'succeeded');
+    assert.equal(result.second_status, 'succeeded');
+    assert.equal(result.provider_call_count, 2);
+    assert.equal(result.model_option_id, expectedV1cN6ModelOptionId('dashscope'));
+    assert.equal(
+      result.invocation_slot_id,
+      TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS.downstream_feedback_normalization,
+    );
+    assert.equal(result.telemetry[0]?.provider_id, 'dashscope');
   },
 );
 

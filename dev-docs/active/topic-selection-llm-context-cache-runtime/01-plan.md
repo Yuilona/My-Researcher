@@ -287,6 +287,7 @@
   - deterministic N6 service remains the only place that can record downstream feedback and open recheck work;
   - malformed, stale, drifted, or improperly reused normalized candidates must block before any recheck side effect;
   - N6 admission must verify active bridge handoff identity, downstream source refs, source feedback allowlist, feedback signal/severity, required action for recheck-producing signals, forbidden mutation fields, and prompt/profile/runtime/source hash binding;
+  - feedback signal routing, loopback target selection, affected-ref resolution, and affected-stage labels must live in a single downstream feedback policy shared by admission and deterministic recheck creation; harnesses may assert outcomes but must not duplicate these formulas;
   - N6 compression must preserve bridge identity, promotion decision and commitment refs, promotion input snapshot ref, downstream source ref, source feedback refs, feedback signal, required action, affected ref or loopback target hint, severity, no-upstream-mutation boundary, and allowed-ref manifest;
   - N6 `recheck_opened` records typed recheck work and resume hints only; it must not trigger N1-N5 automatically.
 - D28-E cache and compression persistence boundary:
@@ -305,16 +306,19 @@
   - N2 slot ids are `n2_bounded_micro_debate.promotion_supporter_draft`, `n2_bounded_micro_debate.reviewer_critic_review`, `n2_bounded_micro_debate.promotion_supporter_repair`, and `n2_bounded_micro_debate.synthesizer_final`;
   - N2 context profile ids are `topic-selection.v1c.n2.bounded-debate.supporter-draft.context-runtime@v1`, `topic-selection.v1c.n2.bounded-debate.reviewer-critic.context-runtime@v1`, `topic-selection.v1c.n2.bounded-debate.supporter-repair.context-runtime@v1`, and `topic-selection.v1c.n2.bounded-debate.synthesizer-final.context-runtime@v1`;
   - N2 context family is `v1c_n2_bounded_promotion_support`; role separation is carried by slot id, prompt variant, runtime invocation context hash, and dynamic material refs/hashes;
-  - N2 model profile id is `topic-selection.v1c.promotion-support.bounded-micro-debate.v1`; provider-canary profiles remain canary-only;
+  - N2 model profile id is `topic-selection.v1c.promotion-support.bounded-micro-debate.v1`; v1c provider canaries must exercise this production runtime profile through `TopicSelectionProviderCanaryService`, not a separate provider-canary-only profile;
   - all four N2 role profiles use `support_only_semantic`;
   - N6 slot id is `downstream_feedback_normalization`, profile id is `topic-selection.v1c.n6.downstream-feedback-normalization.context-runtime@v1`, context family is `v1c_n6_downstream_feedback_normalization`, model profile id is `topic-selection.v1c.downstream-feedback-normalization.v1`, and the runtime profile uses `candidate_for_deterministic_gate`.
 - D28-I implementation and verification order:
   - start with registry/contracts before service wiring: add `v1c_n2_bounded_promotion_support`, N2 four context profiles, N2 canonical model profile, N6 runtime/model profiles, and profile/schema tests for hash, slot mismatch, context family, preserved facts, and post-cache gates; done 2026-06-01;
   - implement N2 runtime/admission L1 next using mocked/Codex-response inputs before provider wiring; done 2026-06-02;
   - add N2 L2/L3 harness/Prisma smoke after L1 passes, proving prompt-index metadata-only behavior, support/gate replay, drift blocking, and no N3 authority bypass; done 2026-06-02 via `pnpm topic-selection:v1c-harness-acceptance` and `pnpm topic-selection:v1c-n2-runtime-smoke`;
-  - add N2 L4/L5 provider slot canaries and long-context/adversarial compression blockers;
-  - implement N6 runtime/admission after N2 stabilizes, focusing on malformed/stale/reused candidate blocking before feedback/recheck side effects;
-  - close with `pnpm topic-selection:v1c-runtime-stress` combining N2/N6 runtime smokes, prompt-index assertions, and no side-effect bypass checks.
+  - add N2 L4/L5 provider slot canaries and long-context/adversarial compression blockers; done 2026-06-02;
+  - implement N6 runtime/admission after N2 stabilizes, focusing on malformed/stale/reused candidate blocking before feedback/recheck side effects; L1 shared contract/runtime/admission slice done 2026-06-02;
+  - add N6 L2/L3 harness/Prisma smoke after L1 passes, proving v1c harness calls through runtime/admission, prompt-index metadata-only behavior, feedback/recheck replay, prompt drift blocking, and no upstream side-effect bypass; done 2026-06-02 via `pnpm topic-selection:v1c-harness-acceptance` and `pnpm topic-selection:v1c-n6-runtime-smoke`;
+  - remove N6 admission/recheck dual-track loopback and affected-ref policy before L4/L5 expansion; done 2026-06-02 with one canonical downstream feedback policy and missing-lineage admission blocking;
+  - add N6 L4/L5 provider slot canary and long-context/adversarial compression blockers after L3 stabilizes; done 2026-06-02 through `TopicSelectionProviderCanaryService` production runtime slot coverage and shared compression-runtime adversarial tests;
+  - close with `pnpm topic-selection:v1c-runtime-stress` combining N2/N6 runtime smokes, prompt-index assertions, provider canary local smoke, harness acceptance, and no side-effect bypass checks; done 2026-06-02.
 - D28-J minimum landable first slice:
   - first implementation slice is registry/contracts foundation only;
   - include `v1c_n2_bounded_promotion_support` in shared runtime context families;
@@ -686,6 +690,15 @@
   - prompt/cache identity includes promotion input snapshot hashes, support run key, prompt variant key, output contract, runtime invocation context hash, model option id, redaction policy, and context profile hash;
   - provider response reuse remains blocked; provider telemetry is stored as runtime telemetry/provenance, while raw provider response payload is not persisted in the support artifact;
   - deterministic N3 promotion gate remains authoritative; LLM draft output can only populate reviewer-facing support prose before the deterministic gate check.
+- P3.2 v1c N4 delegated promotion decision candidate runtime:
+  - first slice promotes only `n4_delegated_promotion_decision_candidate`; it does not automate N4 authority writes, does not create N5 bridge records, and does not change N3 gate semantics;
+  - runtime output is `TopicSelectionV1cDelegatedPromotionDecisionCandidate@v1`, a non-authority candidate for explicit human acceptance through the existing `TopicSelectionV1cHumanPromotionDecisionService`;
+  - runtime context family is `v1c_n4_delegated_promotion_decision`; runtime MUST consume the latest N3 `PromotionGateHandoff` refs/hashes, dossier/readiness/support refs, accepted risks, required actions, loopback hints, snapshot hashes, and existing N4 decision constraints;
+  - admission recomputes expected runtime identity from the runtime service and validates profile/prompt/runtime hashes, source hashes, snapshot hash, allowed refs, forbidden authority fields, decision/condition/loopback consistency, and no-N5/bridge side-effect intent before returning a safe `RecordHumanPromotionDecisionInput` candidate;
+  - `WorkflowHarness` may orchestrate N4 runtime/admission and assert outcomes, but MUST NOT own N4 prompt/cache/compression/admission formulas or call provider-only canary paths;
+  - L1-L3 local closure is implemented: shared contract/schema tests, runtime/admission unit tests, harness acceptance wiring, and Prisma smoke for prompt-index metadata, prompt-cache replay, prompt drift blocking, N4 authority no-bypass before human acceptance, and no N5 bridge creation from runtime/admission alone;
+  - N4 is included in `pnpm topic-selection:v1c-runtime-stress`;
+  - provider canary and long-context/adversarial compression follow after the current L1-L3 slice.
 
 ### Shared Rules
 - Every promoted v1b LLM-like slot MUST pass through the shared runtime boundary for token-budget preflight, prompt packet identity/cache, compression report validation, runtime audit, provider telemetry separation, and response-reuse provenance.

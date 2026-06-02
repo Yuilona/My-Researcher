@@ -22,6 +22,8 @@ import {
   TOPIC_SELECTION_V1C_N2_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1C_N4_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1C_N4_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1C_N6_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
@@ -307,6 +309,31 @@ test('context policy profile registry resolves v1c bounded debate and feedback r
   );
   assert.equal(
     synthesizerFinal.profile.compression_policy.preserved_fact_kinds.includes('readiness_coverage_item'),
+    true,
+  );
+
+  const delegatedPromotionDecision = service.resolveProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_V1C_N4_CONTEXT_RUNTIME_PROFILE_IDS.delegated_promotion_decision_candidate,
+    invocation_slot_id:
+      TOPIC_SELECTION_V1C_N4_INVOCATION_SLOT_IDS.delegated_promotion_decision_candidate,
+  });
+  assert.equal(delegatedPromotionDecision.profile.context_family, 'v1c_n4_delegated_promotion_decision');
+  assert.equal(delegatedPromotionDecision.profile.functional_template, 'delegated_payload_candidate');
+  assert.equal(
+    delegatedPromotionDecision.profile.cache_policy.post_cache_gates.includes(
+      'delegated_promotion_decision_admission',
+    ),
+    true,
+  );
+  assert.equal(
+    delegatedPromotionDecision.profile.post_reuse_gates.includes('human_authority_boundary'),
+    true,
+  );
+  assert.equal(
+    delegatedPromotionDecision.profile.compression_policy.preserved_fact_kinds.includes(
+      'no_bridge_creation_boundary',
+    ),
     true,
   );
 

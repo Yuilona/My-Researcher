@@ -271,6 +271,12 @@
 | v1b N7 N7->N6 loopback context | failed-trial synthesis and regeneration hints are preserved as refs/hashes and remain non-authority repair context for N6 |
 | v1c N2 llm_draft runtime | promotion support LLM draft runs through shared runtime instead of direct provider gateway |
 | v1c N2 | promotion support compression cannot bypass deterministic promotion gate |
+| v1c N4 delegated decision runtime | N4 candidate generation runs through shared runtime/admission before any human authority write | runtime emits a `runtime_verified` candidate, admission returns a safe `recordHumanPromotionDecision` candidate input, and no `HumanPromotionDecision`, `PromotionDecision`, or `PaperProjectBridge` is written until explicit human acceptance |
+| v1c N4 prompt replay | same latest N3 gate handoff and same runtime identity are replayed | prompt packet cache reuses prompt artifacts only; response reuse remains bounded by execution mode, admission reruns, and no authority/bridge write occurs from replay alone |
+| v1c N4 prompt/source drift | prompt packet hash, runtime invocation context hash, N3 gate handoff hash, snapshot hash, or allowed-ref set drifts | N4 admission blocks before human decision input is accepted |
+| v1c N4 no-N5 bypass | runtime/admission candidate recommends bridge authorization | N4 runtime/admission still creates no N5 bridge; existing N4 human authority writer may later emit a bridge handoff, and N5 bridge creation remains separate |
+| v1c N4 L4 provider canary | OpenAI/DashScope local and gated live canaries run for `TopicSelectionV1cDelegatedPromotionDecisionCandidate@v1` | provider-required prompt-cache hits still make provider calls, provider response reuse remains null/not-applicable, provider telemetry stays telemetry-only, over-budget canaries call zero providers, malformed minimal output blocks, and canary output cannot create N4 authority or N5 bridge records |
+| v1c N4 L5 compression adversarial | long N3 gate handoff and delegated-decision context is compressed before candidate generation/admission | dropped gate handoff, snapshot, disposition, promote-allowed status, support/dossier/readiness refs, condition/action/loopback facts, accepted risks, claim ceiling, early-check obligations, allowed refs, human authority boundary, no-bridge boundary, or forbidden raw provider logs block before human acceptance or N5 bridge creation |
 | v1c feedback normalization | malformed reused packet cannot create downstream recheck |
 
 ## Provider Canaries
@@ -283,12 +289,9 @@
 | DashScope | v1b N8 provider-required prompt-cache canary | live provider evidence passed: exact prompt cache hit still performs live gateway calls, prompt/cache/audit provenance is recorded, response reuse stays null |
 | OpenAI | v1c N2 bounded micro-debate four-call workflow | every role slot executes as live provider calls; cached response cannot replace any role output |
 | DashScope | v1c N2 bounded micro-debate four-call workflow | every role slot executes as live provider calls; provider telemetry and prompt/context hashes are recorded |
-| OpenAI | v1c N3 gate diagnostic adjunct | live provider call remains diagnostic only and cannot change deterministic gate disposition |
-| DashScope | v1c N3 gate diagnostic adjunct | live provider call remains diagnostic only and cannot change deterministic gate disposition |
-| OpenAI | v1c N4 delegated promotion decision candidate | live provider output is only a candidate before deterministic delegated-decision admission |
-| DashScope | v1c N4 delegated promotion decision candidate | live provider output is only a candidate before deterministic delegated-decision admission |
-| OpenAI | v1c N6 downstream feedback normalization | malformed or cached provider output cannot create downstream recheck authority |
-| DashScope | v1c N6 downstream feedback normalization | malformed or cached provider output cannot create downstream recheck authority |
+| OpenAI/DashScope | v1c N4 delegated promotion decision production runtime slot | local and gated live canaries target the production runtime slot; prompt-cache hits still perform provider calls, malformed/cached/over-budget provider output cannot create N4 authority or N5 bridge records, and response reuse remains null/not-applicable |
+| OpenAI | v1c N6 downstream feedback normalization production runtime slot | prompt-cache hit still performs live provider calls; malformed, cached, or over-budget provider output cannot create downstream recheck authority |
+| DashScope | v1c N6 downstream feedback normalization production runtime slot | prompt-cache hit still performs live provider calls; malformed, cached, or over-budget provider output cannot create downstream recheck authority |
 | OpenAI or DashScope | live token over budget fixture | provider call count remains zero |
 
 ## Closure Checks

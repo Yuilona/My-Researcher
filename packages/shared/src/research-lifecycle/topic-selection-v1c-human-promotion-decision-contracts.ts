@@ -215,11 +215,39 @@ export interface TopicSelectionPromotionBridgeHandoff {
   promotion_commitment_profile: TopicSelectionPromotionCommitmentProfileRecord;
 }
 
+export const TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_CANDIDATE_SCHEMA_VERSION =
+  'TopicSelectionV1cDelegatedPromotionDecisionCandidate@v1' as const;
+
+export interface TopicSelectionV1cDelegatedPromotionDecisionCandidate {
+  schema_version: typeof TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_CANDIDATE_SCHEMA_VERSION;
+  promotion_gate_check_id: string;
+  promotion_input_snapshot_id: string;
+  promotion_input_snapshot_hash: string;
+  workspace_id?: string | null;
+  title_card_id: string;
+  decision: TopicSelectionHumanPromotionDecisionKind;
+  rationale: string;
+  confirmed_snapshot_hash: string;
+  conditions: TopicSelectionPromotionCondition[];
+  required_actions: TopicSelectionPromotionGateRequiredAction[];
+  loopback_target: TopicSelectionPromotionLoopbackTarget | null;
+  allowed_refinements: TopicSelectionAllowedPromotionRefinement[];
+  stop_conditions: TopicSelectionPromotionStopOrReopenCondition[];
+  reopen_conditions: TopicSelectionPromotionStopOrReopenCondition[];
+  cited_refs: TopicSelectionFunctionalRef[];
+  decision_support_refs: TopicSelectionFunctionalRef[];
+  no_authority_write_confirmed: true;
+  no_bridge_creation_confirmed: true;
+  human_review_required: true;
+}
+
 export type HumanPromotionDecisionRecord = TopicSelectionHumanPromotionDecisionRecord;
 export type PromotionDecisionRecord = TopicSelectionPromotionDecisionRecord;
 export type PromotionCommitmentProfileRecord = TopicSelectionPromotionCommitmentProfileRecord;
 export type PromotionDecisionBundle = TopicSelectionPromotionDecisionBundle;
 export type PromotionBridgeHandoff = TopicSelectionPromotionBridgeHandoff;
+export type DelegatedPromotionDecisionCandidate =
+  TopicSelectionV1cDelegatedPromotionDecisionCandidate;
 export type PromotionDecision = TopicSelectionHumanPromotionDecisionKind;
 export type PromotionDecisionStatus = TopicSelectionPromotionDecisionStatus;
 export type PromotionDecisionClass = TopicSelectionPromotionDecisionClass;
@@ -330,6 +358,97 @@ const nullableLoopbackTarget = {
   anyOf: [
     { enum: [...TOPIC_SELECTION_PROMOTION_LOOPBACK_TARGETS] },
     { type: 'null' },
+  ],
+} as const;
+
+export const topicSelectionV1cDelegatedPromotionDecisionCandidateSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'schema_version',
+    'promotion_gate_check_id',
+    'promotion_input_snapshot_id',
+    'promotion_input_snapshot_hash',
+    'title_card_id',
+    'decision',
+    'rationale',
+    'confirmed_snapshot_hash',
+    'conditions',
+    'required_actions',
+    'loopback_target',
+    'allowed_refinements',
+    'stop_conditions',
+    'reopen_conditions',
+    'cited_refs',
+    'decision_support_refs',
+    'no_authority_write_confirmed',
+    'no_bridge_creation_confirmed',
+    'human_review_required',
+  ],
+  properties: {
+    schema_version: {
+      const: TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_CANDIDATE_SCHEMA_VERSION,
+    },
+    promotion_gate_check_id: stringId,
+    promotion_input_snapshot_id: stringId,
+    promotion_input_snapshot_hash: stringId,
+    workspace_id: nullableStringId,
+    title_card_id: stringId,
+    decision: { enum: [...TOPIC_SELECTION_HUMAN_PROMOTION_DECISIONS] },
+    rationale: stringId,
+    confirmed_snapshot_hash: stringId,
+    conditions: promotionConditionArray,
+    required_actions: requiredActionArray,
+    loopback_target: nullableLoopbackTarget,
+    allowed_refinements: allowedRefinementArray,
+    stop_conditions: stopOrReopenConditionArray,
+    reopen_conditions: stopOrReopenConditionArray,
+    cited_refs: functionalRefArray,
+    decision_support_refs: functionalRefArray,
+    no_authority_write_confirmed: { const: true },
+    no_bridge_creation_confirmed: { const: true },
+    human_review_required: { const: true },
+  },
+  allOf: [
+    {
+      if: { properties: { decision: { enum: ['promote_with_conditions'] } } },
+      then: {
+        properties: {
+          conditions: {
+            type: 'array',
+            items: topicSelectionPromotionConditionSchema,
+            minItems: 1,
+          },
+          loopback_target: { const: null },
+        },
+      },
+    },
+    {
+      if: { properties: { decision: { enum: ['promote_to_paper_project'] } } },
+      then: {
+        properties: {
+          conditions: {
+            type: 'array',
+            items: topicSelectionPromotionConditionSchema,
+            maxItems: 0,
+          },
+          loopback_target: { const: null },
+        },
+      },
+    },
+    {
+      if: { properties: { decision: { enum: [...TOPIC_SELECTION_NON_PROMOTE_DECISIONS] } } },
+      then: {
+        properties: {
+          conditions: {
+            type: 'array',
+            items: topicSelectionPromotionConditionSchema,
+            maxItems: 0,
+          },
+          loopback_target: { enum: [...TOPIC_SELECTION_PROMOTION_LOOPBACK_TARGETS] },
+        },
+      },
+    },
   ],
 } as const;
 

@@ -13,6 +13,12 @@ import { InMemoryTopicSelectionV1cPromotionGateRepository } from '../../apps/bac
 import { InMemoryTopicSelectionV1cPromotionInputRepository } from '../../apps/backend/src/repositories/in-memory-topic-selection-v1c-promotion-input-repository.ts';
 import { InMemoryTopicSelectionControlPlaneRepository } from '../../apps/backend/src/repositories/in-memory-topic-selection-control-plane-repository.ts';
 import {
+  TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_CANDIDATE_SCHEMA_VERSION,
+} from '../../packages/shared/src/research-lifecycle/topic-selection-v1c-downstream-feedback-recheck-contracts.ts';
+import {
+  TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_CANDIDATE_SCHEMA_VERSION,
+} from '../../packages/shared/src/research-lifecycle/topic-selection-v1c-human-promotion-decision-contracts.ts';
+import {
   TOPIC_SELECTION_V1C_HARNESS_ADAPTER_VERSION,
   normalizeN1PromotionInputSnapshot,
   normalizeN2PromotionSupport,
@@ -24,7 +30,6 @@ import {
 import {
   createTopicSelectionV1cAcceptanceGraph,
   createTopicSelectionV1cAcceptanceIdFactory,
-  createTopicSelectionV1cPromotionConditionFixture,
   TOPIC_SELECTION_V1C_ACCEPTANCE_TIMESTAMP,
   topicSelectionV1cAcceptanceRef,
   TopicSelectionV1cAcceptanceTopicPackageRepository,
@@ -36,6 +41,10 @@ import {
 } from '../../apps/backend/src/services/topic-selection-v1c-n2-bounded-debate-admission-service.ts';
 import { TopicSelectionV1cN2BoundedDebateRuntimeService } from '../../apps/backend/src/services/topic-selection-v1c-n2-bounded-debate-runtime-service.ts';
 import { TopicSelectionV1cDownstreamFeedbackRecheckService } from '../../apps/backend/src/services/topic-selection-v1c-downstream-feedback-recheck-service.ts';
+import { TopicSelectionV1cN4DelegatedPromotionDecisionAdmissionService } from '../../apps/backend/src/services/topic-selection-v1c-n4-delegated-promotion-decision-admission-service.ts';
+import { TopicSelectionV1cN4DelegatedPromotionDecisionRuntimeService } from '../../apps/backend/src/services/topic-selection-v1c-n4-delegated-promotion-decision-runtime-service.ts';
+import { TopicSelectionV1cN6FeedbackNormalizationAdmissionService } from '../../apps/backend/src/services/topic-selection-v1c-n6-feedback-normalization-admission-service.ts';
+import { TopicSelectionV1cN6FeedbackNormalizationRuntimeService } from '../../apps/backend/src/services/topic-selection-v1c-n6-feedback-normalization-runtime-service.ts';
 import { TopicSelectionV1cHumanPromotionDecisionService } from '../../apps/backend/src/services/topic-selection-v1c-human-promotion-decision-service.ts';
 import { TopicSelectionV1cPaperProjectBridgeService } from '../../apps/backend/src/services/topic-selection-v1c-paper-project-bridge-service.ts';
 import { TopicSelectionV1cPromotionGateService } from '../../apps/backend/src/services/topic-selection-v1c-promotion-gate-service.ts';
@@ -176,6 +185,18 @@ function createWorkflowSubject(graph = createReadyGraph()) {
   const n2BoundedDebateAdmissionService = new TopicSelectionV1cN2BoundedDebateAdmissionService(
     n2BoundedDebateRuntimeService,
   );
+  const n4DelegatedPromotionDecisionRuntimeService =
+    new TopicSelectionV1cN4DelegatedPromotionDecisionRuntimeService(controlPlaneService);
+  const n4DelegatedPromotionDecisionAdmissionService =
+    new TopicSelectionV1cN4DelegatedPromotionDecisionAdmissionService(
+      n4DelegatedPromotionDecisionRuntimeService,
+    );
+  const n6FeedbackNormalizationRuntimeService = new TopicSelectionV1cN6FeedbackNormalizationRuntimeService(
+    controlPlaneService,
+  );
+  const n6FeedbackNormalizationAdmissionService = new TopicSelectionV1cN6FeedbackNormalizationAdmissionService(
+    n6FeedbackNormalizationRuntimeService,
+  );
   const recheckSink = new RecordingRecheckSink();
   const promotionInputService = new TopicSelectionV1cPromotionInputService({
     repository: promotionInputRepository,
@@ -219,6 +240,10 @@ function createWorkflowSubject(graph = createReadyGraph()) {
     controlPlaneService,
     n2BoundedDebateRuntimeService,
     n2BoundedDebateAdmissionService,
+    n4DelegatedPromotionDecisionRuntimeService,
+    n4DelegatedPromotionDecisionAdmissionService,
+    n6FeedbackNormalizationRuntimeService,
+    n6FeedbackNormalizationAdmissionService,
     recheckSink,
     promotionInputService,
     promotionGateService,
@@ -407,6 +432,108 @@ function normalizeBoundedN2Support(boundedSupport) {
   });
 }
 
+function n4ConditionFromGateHandoff(handoff) {
+  const topicPackageRef = handoff.support.source_refs.find((item) => item.ref_type === 'topic_package')
+    ?? handoff.gate_check.source_refs.find((item) => item.ref_type === 'topic_package')
+    ?? topicSelectionV1cAcceptanceRef('topic_package', 'topic_package_001', 'v1');
+  const action = {
+    action_code: 'clarify_contribution_claim',
+    severity: 'warning',
+    loopback_target: 'package',
+    refs: [topicPackageRef],
+    reason: 'Clarify contribution claim before outline lock.',
+  };
+  return {
+    condition_id: 'promotion_condition_001',
+    condition_code: 'clarify_contribution_claim',
+    owner: {
+      actor_type: 'human',
+      actor_id: 'reviewer_001',
+    },
+    required_action: action,
+    refs: action.refs,
+    early_check_obligations: ['Re-check contribution claim before outline lock.'],
+    verification_note: 'Condition is reviewer-visible.',
+  };
+}
+
+function v1cN4DelegatedPromotionDecisionCandidate(handoff, overrides = {}) {
+  const condition = n4ConditionFromGateHandoff(handoff);
+  return {
+    schema_version: TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_CANDIDATE_SCHEMA_VERSION,
+    promotion_gate_check_id: handoff.promotion_gate_check_id,
+    promotion_input_snapshot_id: handoff.promotion_input_snapshot_id,
+    promotion_input_snapshot_hash: handoff.promotion_input_snapshot_hash,
+    workspace_id: handoff.gate_check.workspace_id ?? null,
+    title_card_id: handoff.gate_check.title_card_id,
+    decision: 'promote_with_conditions',
+    rationale: 'Ready for bridge authorization with one explicit condition.',
+    confirmed_snapshot_hash: handoff.promotion_input_snapshot_hash,
+    conditions: [condition],
+    required_actions: [],
+    loopback_target: null,
+    allowed_refinements: [],
+    stop_conditions: [],
+    reopen_conditions: [],
+    cited_refs: [
+      handoff.promotion_gate_check_ref,
+      handoff.promotion_input_snapshot_ref,
+      ...condition.refs,
+    ],
+    decision_support_refs: [
+      handoff.promotion_gate_check_ref,
+      handoff.promotion_input_snapshot_ref,
+      handoff.promotion_decision_support_ref,
+    ],
+    no_authority_write_confirmed: true,
+    no_bridge_creation_confirmed: true,
+    human_review_required: true,
+    ...overrides,
+  };
+}
+
+async function createN4DelegatedPromotionDecisionInput(subject, gateSupport) {
+  const output = v1cN4DelegatedPromotionDecisionCandidate(gateSupport.handoff);
+  const beforeHumanDecisionWrites = subject.humanPromotionDecisionRepository.writes.length;
+  const beforeBridgeWrites = subject.paperProjectBridgeRepository.writes.length;
+  const generated = await subject.n4DelegatedPromotionDecisionRuntimeService.generateCandidate({
+    gate_handoff: gateSupport.handoff,
+    workflow_run_id: `workflow_run_v1c_n4_delegated_decision_${gateSupport.promotion_gate_check.promotion_gate_check_id}`,
+    node_attempt_id: `node_attempt_v1c_n4_delegated_decision_${gateSupport.promotion_gate_check.promotion_gate_check_id}`,
+    execution_mode: 'codex_assisted',
+    run_mode: 'acceptance',
+    codex_response: {
+      output,
+      operator_label: 'v1c-harness-acceptance-n4-delegated-runtime',
+    },
+    created_by: 'system',
+  });
+  assert.equal(generated.status, 'succeeded');
+  if (generated.status !== 'succeeded') {
+    assert.fail(`N4 delegated runtime candidate blocked: ${JSON.stringify(generated.invocation_result)}`);
+  }
+  const admitted = subject.n4DelegatedPromotionDecisionAdmissionService.admit({
+    gate_handoff: gateSupport.handoff,
+    candidate_artifact: generated.candidate_artifact,
+    candidate: generated.structured_output,
+    human_actor: {
+      actor_type: 'human',
+      actor_id: 'reviewer_001',
+    },
+    policy_version_id: 'topic-selection-v1c-harness-n4-delegated-policy-v1',
+  });
+  assert.equal(admitted.admitted, true);
+  if (!admitted.admitted) {
+    assert.fail(`N4 delegated runtime candidate admission blocked: ${JSON.stringify(admitted.blocker)}`);
+  }
+  assert.equal(subject.humanPromotionDecisionRepository.writes.length, beforeHumanDecisionWrites);
+  assert.equal(subject.paperProjectBridgeRepository.writes.length, beforeBridgeWrites);
+  return {
+    generated,
+    admitted,
+  };
+}
+
 async function createSplitGateSupport(subject, promotionInputSnapshotId) {
   const boundedSupport = await createN2BoundedDebateSupportBundle(subject, promotionInputSnapshotId);
   const supportBundle = boundedSupport.supportBundle;
@@ -431,17 +558,10 @@ async function runHappyBridgeChain(subject = createWorkflowSubject()) {
   nodeTrace.push(normalizeBoundedN2Support(gateSupport.n2_bounded_runtime));
   nodeTrace.push(normalizeN3PromotionGate(gateSupport.handoff));
 
-  const humanDecision = await subject.humanPromotionDecisionService.recordHumanPromotionDecision({
-    promotion_gate_check_id: gateSupport.promotion_gate_check.promotion_gate_check_id,
-    decision: 'promote_with_conditions',
-    human_actor: {
-      actor_type: 'human',
-      actor_id: 'reviewer_001',
-    },
-    rationale: 'Ready for bridge materialization with explicit condition.',
-    confirmed_snapshot_hash: gateSupport.handoff.promotion_input_snapshot_hash,
-    conditions: [createTopicSelectionV1cPromotionConditionFixture()],
-  });
+  const n4DelegatedRuntime = await createN4DelegatedPromotionDecisionInput(subject, gateSupport);
+  const humanDecision = await subject.humanPromotionDecisionService.recordHumanPromotionDecision(
+    n4DelegatedRuntime.admitted.create_input,
+  );
   nodeTrace.push(normalizeN4HumanPromotionDecision(humanDecision));
 
   const bridge = await subject.paperProjectBridgeService.createPaperProjectBridge({
@@ -457,6 +577,7 @@ async function runHappyBridgeChain(subject = createWorkflowSubject()) {
     nodeTrace,
     promotionInputSnapshot,
     gateSupport,
+    n4DelegatedRuntime,
     humanDecision,
     bridge,
   };
@@ -545,17 +666,10 @@ async function runN4NoBridgeCreationScenario() {
   nodeTrace.push(normalizeBoundedN2Support(gateSupport.n2_bounded_runtime));
   nodeTrace.push(normalizeN3PromotionGate(gateSupport.handoff));
 
-  const humanDecision = await subject.humanPromotionDecisionService.recordHumanPromotionDecision({
-    promotion_gate_check_id: gateSupport.promotion_gate_check.promotion_gate_check_id,
-    decision: 'promote_with_conditions',
-    human_actor: {
-      actor_type: 'human',
-      actor_id: 'reviewer_001',
-    },
-    rationale: 'Authorize bridge, but do not materialize N5 inside N4.',
-    confirmed_snapshot_hash: gateSupport.handoff.promotion_input_snapshot_hash,
-    conditions: [createTopicSelectionV1cPromotionConditionFixture()],
-  });
+  const n4DelegatedRuntime = await createN4DelegatedPromotionDecisionInput(subject, gateSupport);
+  const humanDecision = await subject.humanPromotionDecisionService.recordHumanPromotionDecision(
+    n4DelegatedRuntime.admitted.create_input,
+  );
   const n4Node = normalizeN4HumanPromotionDecision(humanDecision);
   nodeTrace.push(n4Node);
 
@@ -566,6 +680,7 @@ async function runN4NoBridgeCreationScenario() {
     subject,
     nodeTrace,
     gateSupport,
+    n4DelegatedRuntime,
     humanDecision,
     n4Node,
   };
@@ -589,23 +704,17 @@ async function runReplayScenario() {
     supportBundle: replaySupportBundle,
     n2_bounded_runtime: first.gateSupport.n2_bounded_runtime,
   };
-  const replayHumanDecision = await subject.humanPromotionDecisionService.recordHumanPromotionDecision({
-    promotion_gate_check_id: replayGateBundle.promotion_gate_check.promotion_gate_check_id,
-    decision: 'promote_with_conditions',
-    human_actor: {
-      actor_type: 'human',
-      actor_id: 'reviewer_001',
-    },
-    rationale: 'Ready for bridge materialization with explicit condition.',
-    confirmed_snapshot_hash: replayGateBundle.handoff.promotion_input_snapshot_hash,
-    conditions: [createTopicSelectionV1cPromotionConditionFixture()],
-  });
+  const replayN4DelegatedRuntime = await createN4DelegatedPromotionDecisionInput(subject, replayGateSupport);
+  const replayHumanDecision = await subject.humanPromotionDecisionService.recordHumanPromotionDecision(
+    replayN4DelegatedRuntime.admitted.create_input,
+  );
   const replayBridge = await subject.paperProjectBridgeService.createPaperProjectBridge({
     promotion_decision_id: replayHumanDecision.promotion_decision.promotion_decision_id,
   });
   const second = {
     promotionInputSnapshot: replayPromotionInputSnapshot,
     gateSupport: replayGateSupport,
+    n4DelegatedRuntime: replayN4DelegatedRuntime,
     humanDecision: replayHumanDecision,
     bridge: replayBridge,
   };
@@ -641,12 +750,127 @@ async function runReplayScenario() {
   };
 }
 
+function uniqueRefs(refs) {
+  const seen = new Set();
+  const result = [];
+  for (const ref of refs) {
+    if (!ref) {
+      continue;
+    }
+    const key = JSON.stringify({
+      ref_type: ref.ref_type,
+      ref_id: ref.ref_id,
+      title_card_id: ref.title_card_id ?? null,
+      version_id: ref.version_id ?? null,
+    });
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(ref);
+  }
+  return result;
+}
+
+function createN6FeedbackSource(handoff, spec) {
+  return {
+    paper_project_bridge_id: handoff.paper_project_bridge_id,
+    workspace_id: spec.workspace_id ?? 'workspace_001',
+    downstream_source_kind: spec.downstream_source_kind,
+    downstream_source_ref: spec.downstream_source_ref,
+    source_feedback_refs: spec.source_feedback_refs ?? [],
+    observed_blocker_refs: spec.observed_blocker_refs ?? [],
+    artifact_refs: spec.artifact_refs ?? [],
+    raw_feedback_text: [
+      spec.feedback_signal,
+      spec.summary,
+      spec.required_action ?? '',
+    ].filter((item) => item.trim().length > 0).join('\n'),
+    policy_version_id: spec.policy_version_id ?? null,
+    created_by: spec.created_by ?? 'system',
+  };
+}
+
+function createN6CandidateOutput(handoff, source, spec) {
+  const requiresRecheck = spec.feedback_signal !== 'no_recheck_needed';
+  return {
+    schema_version: TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_CANDIDATE_SCHEMA_VERSION,
+    paper_project_bridge_id: handoff.paper_project_bridge_id,
+    workspace_id: source.workspace_id ?? null,
+    downstream_source_kind: source.downstream_source_kind,
+    downstream_source_ref: source.downstream_source_ref,
+    source_feedback_refs: source.source_feedback_refs ?? [],
+    observed_blocker_refs: source.observed_blocker_refs ?? [],
+    feedback_signal: spec.feedback_signal,
+    severity: spec.severity,
+    summary: spec.summary,
+    required_action: spec.required_action ?? null,
+    artifact_refs: source.artifact_refs ?? [],
+    feedback_payload: {
+      normalized_by: 'v1c_harness_acceptance_n6_runtime_fixture',
+    },
+    normalization_hints: {
+      requires_recheck_hint: requiresRecheck,
+      loopback_target_hint: null,
+      affected_ref_hint: null,
+      reason_codes: requiresRecheck ? [spec.feedback_signal] : [],
+    },
+    cited_refs: uniqueRefs([
+      handoff.paper_project_bridge_ref,
+      source.downstream_source_ref,
+      ...(source.source_feedback_refs ?? []),
+      ...(source.observed_blocker_refs ?? []),
+      ...(source.artifact_refs ?? []),
+    ]),
+    no_upstream_mutation_confirmed: true,
+  };
+}
+
+async function recordN6FeedbackThroughRuntime(chain, spec, suffix) {
+  const handoff = chain.bridge.handoff;
+  const source = createN6FeedbackSource(handoff, spec);
+  const generated = await chain.subject.n6FeedbackNormalizationRuntimeService.generateCandidate({
+    bridge_handoff: handoff,
+    source,
+    workflow_run_id: `workflow_run_v1c_n6_feedback_${suffix}`,
+    node_attempt_id: `node_attempt_v1c_n6_feedback_${suffix}`,
+    execution_mode: 'codex_assisted',
+    run_mode: 'acceptance',
+    codex_response: {
+      output: createN6CandidateOutput(handoff, source, spec),
+      operator_label: 'v1c-harness-acceptance-n6-feedback-normalization',
+    },
+    created_by: 'system',
+  });
+  assert.equal(generated.status, 'succeeded');
+  if (generated.status !== 'succeeded') {
+    assert.fail(`N6 feedback normalization runtime blocked: ${JSON.stringify(generated.invocation_result)}`);
+  }
+  const admitted = chain.subject.n6FeedbackNormalizationAdmissionService.admit({
+    bridge_handoff: handoff,
+    source,
+    candidate_artifact: generated.candidate_artifact,
+    candidate: generated.structured_output,
+  });
+  assert.equal(admitted.admitted, true);
+  if (!admitted.admitted) {
+    assert.fail(`N6 feedback normalization admission blocked: ${JSON.stringify(admitted.blocker)}`);
+  }
+  const feedback = await chain.subject.downstreamFeedbackService.recordDownstreamTopicFeedback(
+    admitted.create_input,
+  );
+  return {
+    source,
+    generated,
+    admitted,
+    feedback,
+  };
+}
+
 async function runN6NoRecheckScenario() {
   const chain = await runHappyBridgeChain();
   const beforeCounts = workflowWriteCounts(chain.subject);
-  const feedback = await chain.subject.downstreamFeedbackService.recordDownstreamTopicFeedback({
-    paper_project_bridge_id: chain.bridge.paper_project_bridge.paper_project_bridge_id,
-    workspace_id: 'workspace_001',
+  const runtimeFeedback = await recordN6FeedbackThroughRuntime(chain, {
     downstream_source_kind: 'reviewer_check',
     downstream_source_ref: topicSelectionV1cAcceptanceRef('reviewer_check', 'reviewer_check_no_recheck_001'),
     source_feedback_refs: [topicSelectionV1cAcceptanceRef('review_comment', 'review_comment_no_recheck_001')],
@@ -654,7 +878,8 @@ async function runN6NoRecheckScenario() {
     severity: 'info',
     summary: 'Reviewer confirms the bridge remains usable without recheck.',
     created_by: 'system',
-  });
+  }, 'no_recheck_001');
+  const feedback = runtimeFeedback.feedback;
   const n6Node = normalizeN6DownstreamFeedback(feedback.downstream_topic_feedback);
   const afterCounts = workflowWriteCounts(chain.subject);
   assert.equal(n6Node.routing_outcome, 'feedback_recorded');
@@ -670,6 +895,7 @@ async function runN6NoRecheckScenario() {
   );
   return {
     ...chain,
+    ...runtimeFeedback,
     feedback,
     n6Node,
     beforeCounts,
@@ -680,9 +906,7 @@ async function runN6NoRecheckScenario() {
 async function runN6NoAutoLoopScenario() {
   const chain = await runHappyBridgeChain();
   const beforeCounts = workflowWriteCounts(chain.subject);
-  const feedback = await chain.subject.downstreamFeedbackService.recordDownstreamTopicFeedback({
-    paper_project_bridge_id: chain.bridge.paper_project_bridge.paper_project_bridge_id,
-    workspace_id: 'workspace_001',
+  const runtimeFeedback = await recordN6FeedbackThroughRuntime(chain, {
     downstream_source_kind: 'reviewer_check',
     downstream_source_ref: topicSelectionV1cAcceptanceRef('reviewer_check', 'reviewer_check_001'),
     source_feedback_refs: [topicSelectionV1cAcceptanceRef('review_comment', 'review_comment_001')],
@@ -691,7 +915,8 @@ async function runN6NoAutoLoopScenario() {
     summary: 'The selected evidence is stale for the current paper framing.',
     required_action: 'Refresh selected evidence before continuing.',
     created_by: 'system',
-  });
+  }, 'stale_evidence_001');
+  const feedback = runtimeFeedback.feedback;
   const n6Node = normalizeN6DownstreamFeedback(feedback.downstream_topic_feedback);
   const afterCounts = workflowWriteCounts(chain.subject);
   assert.deepEqual(
@@ -706,6 +931,7 @@ async function runN6NoAutoLoopScenario() {
   assert.equal(afterCounts.recheck_sink_calls, 1);
   return {
     ...chain,
+    ...runtimeFeedback,
     feedback,
     n6Node,
     beforeCounts,
@@ -747,6 +973,10 @@ async function buildManifest() {
   }));
   rowResults.push(rowPass('N4-01', 'bridge_authorized_happy_path', happy.nodeTrace.filter((node) => node.node_id === 'N4'), {
     promotion_decision_id: happy.humanDecision.promotion_decision.promotion_decision_id,
+    candidate_prompt_packet_hash: happy.n4DelegatedRuntime.generated.candidate_artifact.prompt_packet_hash,
+    runtime_provenance_class: happy.n4DelegatedRuntime.generated.candidate_artifact.runtime_provenance_class,
+    admission_identity_hash: happy.n4DelegatedRuntime.admitted.admission_identity_hash,
+    runtime_allowed_effect: happy.n4DelegatedRuntime.generated.candidate_artifact.allowed_effect,
   }));
   rowResults.push(rowPass('N5-01', 'bridge_ready_happy_path', happy.nodeTrace.filter((node) => node.node_id === 'N5'), {
     paper_project_bridge_id: happy.bridge.paper_project_bridge.paper_project_bridge_id,
@@ -792,12 +1022,18 @@ async function buildManifest() {
     promotion_decision_id: n4NoBridge.humanDecision.promotion_decision.promotion_decision_id,
     bridge_writes: n4NoBridge.subject.paperProjectBridgeRepository.writes.length,
     downstream_feedback_writes: n4NoBridge.subject.downstreamFeedbackRepository.writes.length,
+    candidate_prompt_packet_hash: n4NoBridge.n4DelegatedRuntime.generated.candidate_artifact.prompt_packet_hash,
+    admission_identity_hash: n4NoBridge.n4DelegatedRuntime.admitted.admission_identity_hash,
+    runtime_allowed_effect: n4NoBridge.n4DelegatedRuntime.generated.candidate_artifact.allowed_effect,
   }));
 
   const replay = await runReplayScenario();
   rowResults.push(rowPass('X-06', 'replay_no_duplicate_writes', replay.first.nodeTrace, {
     persistence_summary: workflowWriteCounts(replay.subject),
     replay_bridge_id: replay.second.bridge.paper_project_bridge.paper_project_bridge_id,
+    replay_n4_candidate_prompt_packet_hash:
+      replay.second.n4DelegatedRuntime.generated.candidate_artifact.prompt_packet_hash,
+    replay_n4_admission_identity_hash: replay.second.n4DelegatedRuntime.admitted.admission_identity_hash,
   }));
 
   const n6NoRecheck = await runN6NoRecheckScenario();
@@ -805,6 +1041,9 @@ async function buildManifest() {
   rowResults.push(rowPass('N6-02', 'structured_no_recheck', [n6NoRecheck.n6Node], {
     feedback_id: n6NoRecheck.feedback.downstream_topic_feedback.downstream_topic_feedback_id,
     recheck_request_id: n6NoRecheck.feedback.recheck_request?.downstream_recheck_request_id ?? null,
+    candidate_prompt_packet_hash: n6NoRecheck.generated.candidate_artifact.prompt_packet_hash,
+    runtime_provenance_class: n6NoRecheck.generated.candidate_artifact.runtime_provenance_class,
+    admission_identity_hash: n6NoRecheck.admitted.admission_identity_hash,
     before_counts: n6NoRecheck.beforeCounts,
     after_counts: n6NoRecheck.afterCounts,
   }));
@@ -818,6 +1057,9 @@ async function buildManifest() {
   rowResults.push(rowPass('N6-01', 'structured_recheck_happy_path', [n6.n6Node], {
     feedback_id: n6.feedback.downstream_topic_feedback.downstream_topic_feedback_id,
     recheck_request_id: n6.feedback.recheck_request?.downstream_recheck_request_id ?? null,
+    candidate_prompt_packet_hash: n6.generated.candidate_artifact.prompt_packet_hash,
+    runtime_provenance_class: n6.generated.candidate_artifact.runtime_provenance_class,
+    admission_identity_hash: n6.admitted.admission_identity_hash,
   }));
   rowResults.push(rowPass('N6-10', 'no_upstream_mutation_auto_loop', [n6.n6Node], {
     unchanged_upstream_counts: {

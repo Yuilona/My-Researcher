@@ -48,6 +48,7 @@ export const TOPIC_SELECTION_CONTEXT_FAMILIES = [
   'v1b_n8_topic_value_assessment',
   'v1c_n2_bounded_promotion_support',
   'v1c_n2_promotion_support',
+  'v1c_n4_delegated_promotion_decision',
   'v1c_n6_downstream_feedback_normalization',
   'v1c_promotion_gate_advisory',
 ] as const;

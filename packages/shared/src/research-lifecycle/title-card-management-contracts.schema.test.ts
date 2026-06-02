@@ -1564,6 +1564,7 @@ test('topic-selection v1c human-promotion-decision schemas load through direct a
   assert.ok(topicSelectionV1cHumanPromotionDecisionContracts.topicSelectionPromotionCommitmentProfileRecordSchema);
   assert.ok(topicSelectionV1cHumanPromotionDecisionContracts.topicSelectionPromotionDecisionBundleSchema);
   assert.ok(topicSelectionV1cHumanPromotionDecisionContracts.topicSelectionPromotionBridgeHandoffSchema);
+  assert.ok(topicSelectionV1cHumanPromotionDecisionContracts.topicSelectionV1cDelegatedPromotionDecisionCandidateSchema);
   assert.deepEqual(
     [...topicSelectionV1cHumanPromotionDecisionContracts.TOPIC_SELECTION_HUMAN_PROMOTION_DECISIONS],
     [
@@ -1581,6 +1582,7 @@ test('topic-selection v1c human-promotion-decision schemas load through direct a
   );
   assert.ok(researchLifecycleContracts.topicSelectionHumanPromotionDecisionRecordSchema);
   assert.ok(researchLifecycleContracts.topicSelectionPromotionBridgeHandoffSchema);
+  assert.ok(researchLifecycleContracts.topicSelectionV1cDelegatedPromotionDecisionCandidateSchema);
 });
 
 test('topic-selection v1c human-promotion-decision schemas validate decisions and handoff invariants', async () => {
@@ -1608,6 +1610,12 @@ test('topic-selection v1c human-promotion-decision schemas validate decisions an
   app.post('/bridge', {
     schema: {
       body: topicSelectionV1cHumanPromotionDecisionContracts.topicSelectionPromotionBridgeHandoffSchema,
+    },
+  }, async () => ({ ok: true }));
+  app.post('/delegated-candidate', {
+    schema: {
+      body: topicSelectionV1cHumanPromotionDecisionContracts
+        .topicSelectionV1cDelegatedPromotionDecisionCandidateSchema,
     },
   }, async () => ({ ok: true }));
   await app.ready();
@@ -1763,6 +1771,29 @@ test('topic-selection v1c human-promotion-decision schemas validate decisions an
     promotion_decision: promotionDecision,
     promotion_commitment_profile: commitment,
   };
+  const delegatedCandidate = {
+    schema_version:
+      topicSelectionV1cHumanPromotionDecisionContracts
+        .TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_CANDIDATE_SCHEMA_VERSION,
+    promotion_gate_check_id: humanDecision.promotion_gate_check_id,
+    promotion_input_snapshot_id: humanDecision.promotion_input_snapshot_id,
+    promotion_input_snapshot_hash: humanDecision.promotion_input_snapshot_hash,
+    title_card_id: humanDecision.title_card_id,
+    decision: humanDecision.decision,
+    rationale: humanDecision.rationale,
+    confirmed_snapshot_hash: humanDecision.confirmed_snapshot_hash,
+    conditions: [condition],
+    required_actions: [],
+    loopback_target: null,
+    allowed_refinements: humanDecision.allowed_refinements,
+    stop_conditions: humanDecision.stop_conditions,
+    reopen_conditions: [],
+    cited_refs: [gateRef, inputRef, ...condition.refs],
+    decision_support_refs: [gateRef, inputRef],
+    no_authority_write_confirmed: true,
+    no_bridge_creation_confirmed: true,
+    human_review_required: true,
+  };
   const nonPromoteHumanDecision = {
     ...humanDecision,
     human_promotion_decision_id: 'human_promotion_decision_002',
@@ -1796,6 +1827,11 @@ test('topic-selection v1c human-promotion-decision schemas validate decisions an
     },
   });
   const validBridge = await app.inject({ method: 'POST', url: '/bridge', payload: bridgeHandoff });
+  const validDelegatedCandidate = await app.inject({
+    method: 'POST',
+    url: '/delegated-candidate',
+    payload: delegatedCandidate,
+  });
   const invalidMissingCondition = await app.inject({
     method: 'POST',
     url: '/human',
@@ -1863,6 +1899,14 @@ test('topic-selection v1c human-promotion-decision schemas validate decisions an
       },
     },
   });
+  const invalidDelegatedCandidateAuthorityFlag = await app.inject({
+    method: 'POST',
+    url: '/delegated-candidate',
+    payload: {
+      ...delegatedCandidate,
+      no_bridge_creation_confirmed: false,
+    },
+  });
   await app.close();
 
   assert.equal(validHuman.statusCode, 200);
@@ -1870,12 +1914,14 @@ test('topic-selection v1c human-promotion-decision schemas validate decisions an
   assert.equal(validCommitment.statusCode, 200);
   assert.equal(validBundle.statusCode, 200);
   assert.equal(validBridge.statusCode, 200);
+  assert.equal(validDelegatedCandidate.statusCode, 200);
   assert.equal(invalidMissingCondition.statusCode, 400);
   assert.equal(invalidConditionMissingOwner.statusCode, 400);
   assert.equal(invalidConditionMissingEarlyCheck.statusCode, 400);
   assert.equal(invalidNonPromoteActions.statusCode, 400);
   assert.equal(invalidBridgeDecision.statusCode, 400);
   assert.equal(invalidBridgeNestedDecision.statusCode, 400);
+  assert.equal(invalidDelegatedCandidateAuthorityFlag.statusCode, 400);
 });
 
 test('topic-selection v1c paper-project-bridge schemas load through direct and aggregate exports', () => {
@@ -2283,6 +2329,7 @@ test('topic-selection v1c paper-project-bridge schemas validate bridge handoff i
 });
 
 test('topic-selection v1c downstream-feedback/recheck schemas load through direct and aggregate exports', () => {
+  assert.ok(topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionV1cDownstreamFeedbackCandidateSchema);
   assert.ok(topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionDownstreamTopicFeedbackCreateInputSchema);
   assert.ok(topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionDownstreamTopicFeedbackRecordSchema);
   assert.ok(topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionLoopbackClassificationSchema);
@@ -2307,6 +2354,7 @@ test('topic-selection v1c downstream-feedback/recheck schemas load through direc
       'paper_project_intake',
     ],
   );
+  assert.ok(researchLifecycleContracts.topicSelectionV1cDownstreamFeedbackCandidateSchema);
   assert.ok(researchLifecycleContracts.topicSelectionDownstreamTopicFeedbackCreateInputSchema);
   assert.ok(researchLifecycleContracts.topicSelectionDownstreamTopicFeedbackRecordSchema);
 });
@@ -2316,6 +2364,11 @@ test('topic-selection v1c downstream-feedback/recheck schemas validate typed fee
   app.post('/create', {
     schema: {
       body: topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionDownstreamTopicFeedbackCreateInputSchema,
+    },
+  }, async () => ({ ok: true }));
+  app.post('/candidate', {
+    schema: {
+      body: topicSelectionV1cDownstreamFeedbackRecheckContracts.topicSelectionV1cDownstreamFeedbackCandidateSchema,
     },
   }, async () => ({ ok: true }));
   app.post('/classification', {
@@ -2416,6 +2469,31 @@ test('topic-selection v1c downstream-feedback/recheck schemas validate typed fee
     created_by: 'system',
     created_at: now,
   };
+  const candidate = {
+    schema_version:
+      topicSelectionV1cDownstreamFeedbackRecheckContracts
+        .TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_CANDIDATE_SCHEMA_VERSION,
+    paper_project_bridge_id: 'paper_project_bridge_001',
+    workspace_id: 'workspace_001',
+    downstream_source_kind: 'reviewer_check',
+    downstream_source_ref: sourceRef,
+    source_feedback_refs: [sourceRef],
+    observed_blocker_refs: [],
+    feedback_signal: 'need_invalidated',
+    severity: 'critical',
+    summary: 'Downstream reviewer check invalidated the claimed need.',
+    required_action: 'Recheck the validated need against downstream counter-evidence.',
+    artifact_refs: [functionalRefForSchema('artifact_ref', 'artifact_ref_001')],
+    feedback_payload: { quoted_feedback: 'Counter-evidence changes the need status.' },
+    normalization_hints: {
+      requires_recheck_hint: true,
+      loopback_target_hint: 'validated_need',
+      affected_ref_hint: affectedRef,
+      reason_codes: ['need_invalidated'],
+    },
+    cited_refs: [bridgeRef, sourceRef, affectedRef],
+    no_upstream_mutation_confirmed: true,
+  };
 
   const validCreate = await app.inject({
     method: 'POST',
@@ -2432,6 +2510,7 @@ test('topic-selection v1c downstream-feedback/recheck schemas validate typed fee
       required_action: 'Recheck the validated need against downstream counter-evidence.',
     },
   });
+  const validCandidate = await app.inject({ method: 'POST', url: '/candidate', payload: candidate });
   const validClassification = await app.inject({ method: 'POST', url: '/classification', payload: classification });
   const validRecheck = await app.inject({ method: 'POST', url: '/recheck', payload: recheckRequest });
   const validImpact = await app.inject({ method: 'POST', url: '/impact', payload: impactSummary });
@@ -2475,9 +2554,18 @@ test('topic-selection v1c downstream-feedback/recheck schemas validate typed fee
       summary: 'Malformed source ref should fail.',
     },
   });
+  const invalidCandidateSchemaVersion = await app.inject({
+    method: 'POST',
+    url: '/candidate',
+    payload: {
+      ...candidate,
+      schema_version: 'topic-selection-v1c-downstream-feedback-candidate.v0',
+    },
+  });
   await app.close();
 
   assert.equal(validCreate.statusCode, 200);
+  assert.equal(validCandidate.statusCode, 200);
   assert.equal(validClassification.statusCode, 200);
   assert.equal(validRecheck.statusCode, 200);
   assert.equal(validImpact.statusCode, 200);
@@ -2487,6 +2575,7 @@ test('topic-selection v1c downstream-feedback/recheck schemas validate typed fee
   assert.equal(invalidTarget.statusCode, 400);
   assert.equal(invalidCause.statusCode, 400);
   assert.equal(invalidSourceRef.statusCode, 400);
+  assert.equal(invalidCandidateSchemaVersion.statusCode, 400);
 });
 
 test('topic-selection v1b constraint profile schema accepts draft constraint gaps', async () => {

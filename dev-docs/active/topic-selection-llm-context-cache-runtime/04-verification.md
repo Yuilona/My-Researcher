@@ -838,6 +838,121 @@
 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after N2 L4/L5 documentation sync. |
 | `git diff --check -- apps/backend/src/services/topic-selection-provider-canary-service.ts apps/backend/src/services/topic-selection-provider-canary-service.unit.test.ts apps/backend/src/services/topic-selection-v1c-n2-bounded-debate-runtime-service.ts apps/backend/src/services/topic-selection-v1c-n2-bounded-debate-runtime-service.unit.test.ts apps/backend/src/services/topic-selection-compression-runtime-service.unit.test.ts dev-docs/active/topic-selection-llm-context-cache-runtime/03-implementation-notes.md dev-docs/active/topic-selection-llm-context-cache-runtime/04-verification.md dev-docs/active/topic-selection-llm-context-cache-runtime/06-node-scope-matrix.md` | passed | No whitespace errors in the N2 L4/L5 code/test/docs changes. |
 
+## 2026-06-02 - D28-K N6 Feedback Normalization L1 Runtime/Admission Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/shared exec node --test --loader ts-node/esm src/research-lifecycle/title-card-management-contracts.schema.test.ts` | passed | Shared schema aggregation passed: 41/41. New `TopicSelectionV1cDownstreamFeedbackCandidate@v1` schema is reachable through direct and barrel exports and rejects invalid schema versions. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-v1c-n6-feedback-normalization-runtime-service.unit.test.ts` | passed | N6 feedback normalization L1 tests passed: 4/4. Covered runtime-verified record-only candidate generation, admission to deterministic create input, deterministic feedback/recheck idempotency without bridge mutation, forbidden authority payload blocking, source mismatch blocking, no-upstream-mutation boundary blocking, and compression quality-gate blocking before output. |
+| `pnpm --filter @paper-engineering-assistant/backend exec tsc --noEmit --pretty false` | passed | Backend TypeScript compile passed after adding N6 runtime/admission services and tests. |
+| `pnpm --filter @paper-engineering-assistant/shared exec tsc --noEmit --pretty false` | passed | Shared package TypeScript compile passed after adding the N6 candidate contract. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registries remain structurally valid; no provider/config-key drift was introduced by the N6 L1 slice. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after N6 L1 documentation sync. |
+| `git diff --check -- packages/shared/src/research-lifecycle/topic-selection-v1c-downstream-feedback-recheck-contracts.ts packages/shared/src/research-lifecycle/title-card-management-contracts.schema.test.ts apps/backend/src/services/topic-selection-v1c-n6-feedback-normalization-admission-service.ts apps/backend/src/services/topic-selection-v1c-n6-feedback-normalization-runtime-service.ts apps/backend/src/services/topic-selection-v1c-n6-feedback-normalization-runtime-service.unit.test.ts dev-docs/active/topic-selection-llm-context-cache-runtime/00-overview.md dev-docs/active/topic-selection-llm-context-cache-runtime/01-plan.md dev-docs/active/topic-selection-llm-context-cache-runtime/03-implementation-notes.md dev-docs/active/topic-selection-llm-context-cache-runtime/04-verification.md dev-docs/active/topic-selection-llm-context-cache-runtime/06-node-scope-matrix.md` | passed | No whitespace errors in tracked N6 L1 code/test/docs changes. |
+
+## 2026-06-02 - D28-K Step 2 N6 Harness/Prisma Smoke Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm topic-selection:v1c-harness-acceptance` | passed | v1c harness acceptance passed with 17 rows and 29 node-trace entries after N6 routes through runtime/admission before deterministic downstream feedback/recheck persistence. Artifact dir: `.ai/.tmp/topic-selection-v1c-acceptance/v1c-harness-2026-06-01T23-48-28-536Z`. |
+| `pnpm topic-selection:v1c-n6-runtime-smoke` | passed | Prisma-backed N6 runtime smoke passed. It verified one prompt-index row for `downstream_feedback_normalization`, prompt-cache replay with stable row count, deterministic feedback/recheck replay, prompt drift blocking with `N6_FEEDBACK_NORMALIZATION_ARTIFACT_PROMPT_DRIFT`, zero run-key writes to upstream v1c authority tables, and one downstream feedback row/recheck sink call. Artifact dir: `.ai/.tmp/topic-selection-v1c-n6-runtime-smoke/v1c-n6-runtime-smoke-2026-06-01T23-50-58-634Z`. |
+| `node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package.json ok')"` | passed | Package JSON remains valid after adding `topic-selection:v1c-n6-runtime-smoke`. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-v1c-n6-feedback-normalization-runtime-service.unit.test.ts` | passed | N6 runtime/admission unit tests remain green: 4/4. |
+| `pnpm --filter @paper-engineering-assistant/shared exec node --test --loader ts-node/esm src/research-lifecycle/title-card-management-contracts.schema.test.ts` | passed | Shared schema aggregation remains green: 41/41. |
+| `pnpm --filter @paper-engineering-assistant/backend exec tsc --noEmit --pretty false` | passed | Backend TypeScript compile passed after N6 harness/smoke wiring. |
+| `pnpm --filter @paper-engineering-assistant/shared exec tsc --noEmit --pretty false` | passed | Shared package TypeScript compile passed. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registries remain structurally valid; no provider/config-key drift was introduced. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after N6 Step 2 documentation sync. |
+| `git diff --check -- .ai/scripts/topic-selection-v1c-harness-acceptance.mjs package.json packages/shared/src/research-lifecycle/topic-selection-v1c-downstream-feedback-recheck-contracts.ts packages/shared/src/research-lifecycle/title-card-management-contracts.schema.test.ts apps/backend/src/services/topic-selection-v1c-n6-feedback-normalization-admission-service.ts apps/backend/src/services/topic-selection-v1c-n6-feedback-normalization-runtime-service.ts apps/backend/src/services/topic-selection-v1c-n6-feedback-normalization-runtime-service.unit.test.ts dev-docs/active/topic-selection-llm-context-cache-runtime/00-overview.md dev-docs/active/topic-selection-llm-context-cache-runtime/01-plan.md dev-docs/active/topic-selection-llm-context-cache-runtime/03-implementation-notes.md dev-docs/active/topic-selection-llm-context-cache-runtime/04-verification.md dev-docs/active/topic-selection-llm-context-cache-runtime/06-node-scope-matrix.md` | passed | No whitespace errors in tracked N6 Step 2 code/test/docs changes. |
+| `perl -ne 'if(/[ \t]+$/){print "$ARGV:$.: trailing whitespace\n"; $bad=1} END{exit($bad ? 1 : 0)}' .ai/scripts/topic-selection-v1c-n6-runtime-smoke.mjs` | passed | No trailing whitespace in the new untracked N6 smoke script. |
+
+## 2026-06-02 - D28-K Step 3 N6 Dual-Track Policy Removal Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-v1c-n6-feedback-normalization-runtime-service.unit.test.ts src/services/topic-selection-v1c-downstream-feedback-recheck-service.unit.test.ts` | passed | 14/14 tests passed. New coverage verifies N6 admission uses the same downstream policy as deterministic recheck and blocks missing affected lineage with `N6_FEEDBACK_NORMALIZATION_AFFECTED_REF_UNRESOLVED` before recheck side effects. |
+| `pnpm --filter @paper-engineering-assistant/backend typecheck` | passed | Backend TypeScript compile passed after consolidating loopback/affected-ref policy and removing unused N6 legacy provenance variants. |
+| `pnpm --filter @paper-engineering-assistant/shared exec node --test --loader ts-node/esm src/research-lifecycle/title-card-management-contracts.schema.test.ts` | passed | Shared schema aggregation remains green: 41/41. |
+| `pnpm --filter @paper-engineering-assistant/shared typecheck` | passed | Shared package TypeScript compile passed. |
+| `pnpm topic-selection:v1c-harness-acceptance` | passed | v1c harness acceptance passed with 17 rows and 29 node-trace entries after N6 policy consolidation. Artifact dir: `.ai/.tmp/topic-selection-v1c-acceptance/v1c-harness-2026-06-02T00-09-23-106Z`. |
+| `pnpm topic-selection:v1c-n6-runtime-smoke` | passed | Prisma-backed N6 runtime smoke passed after policy consolidation. It still verifies one prompt-index row, prompt-cache replay, deterministic feedback/recheck replay, prompt drift blocking, no upstream authority writes, one downstream feedback row, and one recheck sink call. Artifact dir: `.ai/.tmp/topic-selection-v1c-n6-runtime-smoke/v1c-n6-runtime-smoke-2026-06-02T00-09-23-516Z`. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registries remain structurally valid; no provider/config-key drift was introduced. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after N6 Step 3 documentation sync. |
+| `node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package.json ok')"` | passed | Package JSON remains valid. |
+| Static v1c N6 dual-track residue scan | passed | No `LOOPBACK_TARGET_BY_CAUSE`, private affected-ref resolver, legacy provenance, or fixture replay terms remain in N6 admission, deterministic recheck service, or v1c N6 harness/smoke scripts. |
+| Static downstream policy export scan | passed | The canonical downstream policy exports only the resolver/type needed by services; helper maps and affected-ref helpers are internal. |
+| `git diff --check` | passed | No whitespace errors in tracked changes. |
+| Trailing-whitespace scan over new/untracked N6 files and touched T-112 docs | passed | No trailing whitespace in the new N6 smoke script, canonical policy module, runtime/admission files, tests, or touched docs. |
+
+## 2026-06-02 - D28-K Step 4 N6 L4/L5 Provider Canary and Compression Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | Provider canary tests passed: 38 discovered, 26 local tests passed, 12 live-provider tests skipped by explicit env/key gates. New v1c N6 local tests cover OpenAI/DashScope prompt-cache-live-required semantics, over-budget zero-call blocking, production-runtime-slot evidence labels, and malformed minimal provider-output blocking. |
+| `pnpm topic-selection:v1c-provider-canary` | passed | Package script now routes to `TopicSelectionProviderCanaryService` and defaults to local smoke. It passed 38 discovered tests with 26 local pass and 12 live-provider skips; live N2/N6 canaries require explicit `T112_V1C_N2_PROVIDER_CANARY_LIVE=1` or `T112_V1C_N6_PROVIDER_CANARY_LIVE=1`. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-compression-runtime-service.unit.test.ts` | passed | Compression runtime tests passed: 17/17. New N6 cases block dropped downstream feedback lineage/routing facts and adversarial persisted raw provider logs at the shared compression layer. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-model-profile-registry-service.unit.test.ts` | passed | Model profile registry tests passed: 5/5 after removing v1c provider-canary-only profiles and keeping production N2/N6 runtime profiles as the canary target. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-v1c-n6-feedback-normalization-runtime-service.unit.test.ts src/services/topic-selection-v1c-downstream-feedback-recheck-service.unit.test.ts` | passed | N6 runtime/recheck tests remain green: 14/14. |
+| `pnpm --filter @paper-engineering-assistant/backend typecheck` | passed | Backend TypeScript compile passed after adding N6 provider canary methods, compression tests, and provider-canary profile cleanup. |
+| `pnpm --filter @paper-engineering-assistant/shared typecheck` | passed | Shared package TypeScript compile passed. |
+| `pnpm --filter @paper-engineering-assistant/shared exec node --test --loader ts-node/esm src/research-lifecycle/title-card-management-contracts.schema.test.ts` | passed | Shared schema aggregation remains green: 41/41. |
+| `pnpm topic-selection:v1c-harness-acceptance` | passed | v1c harness acceptance passed with 17 rows and 29 node-trace entries after old provider-canary script removal. Artifact dir: `.ai/.tmp/topic-selection-v1c-acceptance/v1c-harness-2026-06-02T00-31-33-269Z`. |
+| `pnpm topic-selection:v1c-n6-runtime-smoke` | passed | Prisma-backed N6 runtime smoke passed. Artifact dir: `.ai/.tmp/topic-selection-v1c-n6-runtime-smoke/v1c-n6-runtime-smoke-2026-06-02T00-31-33-773Z`. |
+| `pnpm topic-selection:v1c-n2-runtime-smoke` | passed | Prisma-backed N2 runtime smoke passed after provider-canary profile cleanup. Artifact dir: `.ai/.tmp/topic-selection-v1c-n2-runtime-smoke/v1c-n2-runtime-smoke-2026-06-02T00-31-33-776Z`. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registries remain structurally valid after removing v1c provider-canary-only model profiles. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after N6 L4/L5 documentation sync. |
+| `node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package.json ok')"` | passed | Package JSON remains valid after rerouting `topic-selection:v1c-provider-canary`. |
+| Static v1c provider-canary residue scan | passed | No code/package/matrix references remain for `TOPIC_SELECTION_V1C_PROVIDER_CANARY_PROFILE_IDS`, `providerCanaryOptions`, `PROVIDER_CANARY_RUN_MODE_ELIGIBILITY`, old provider-canary profile ids, or the deleted `.ai/scripts/topic-selection-v1c-provider-canary.mjs` entrypoint. |
+| `git diff --check` | passed | No whitespace errors after the N6 L4/L5 and provider-canary cleanup changes. |
+| Trailing-whitespace scan over touched N6 L4/L5 files and docs | passed | No trailing whitespace in touched service, test, package, matrix, acceptance, and T-112 verification docs. |
+
+## 2026-06-02 - D28-K Step 5 v1c Runtime Stress Verification
+| Command | Result | Notes |
+|---|---|---|
+| `node --check .ai/scripts/topic-selection-v1c-runtime-stress.mjs` | passed | New v1c runtime stress runner syntax is valid. |
+| `node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package.json ok')"` | passed | Package JSON remains valid after adding `topic-selection:v1c-runtime-stress`. |
+| `git diff --check -- .ai/scripts/topic-selection-v1c-runtime-stress.mjs package.json` | passed | No whitespace errors in the new runner or package script wiring. |
+| `pnpm topic-selection:v1c-runtime-stress` | passed | Default v1c runtime stress passed. Run id: `t112-v1c-runtime-stress-1780363594669`; summary: `.ai/.tmp/topic-selection-v1c-runtime-stress/t112-v1c-runtime-stress-1780363594669/90-summary.json`. It ran 8 child checks: script syntax checks, N2 Prisma runtime smoke, N6 Prisma runtime smoke, v1c harness acceptance, and local provider canary smoke. It asserted N2/N6 prompt-index slots, replay stability, prompt drift blocking, no N3 bypass, no N6 upstream side-effect bypass, harness row pass status, and local provider canary pass status. |
+
+## 2026-06-02 - D28-L N4 Delegated Promotion Decision L1-L3 Verification
+| Command | Result | Notes |
+|---|---|---|
+| `node --check .ai/scripts/topic-selection-v1c-n4-runtime-smoke.mjs` | passed | New N4 Prisma smoke script syntax is valid. |
+| `node --check .ai/scripts/topic-selection-v1c-runtime-stress.mjs` | passed | v1c runtime stress syntax remains valid after adding N4. |
+| `node --check .ai/scripts/topic-selection-v1c-harness-acceptance.mjs` | passed | Harness syntax remains valid after routing N4 replay through runtime/admission. |
+| `pnpm exec tsc --noEmit --project apps/backend/tsconfig.json --pretty false` | passed | Backend TypeScript compile passed after adding N4 runtime/admission services and stress wiring. |
+| `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-v1c-n4-delegated-promotion-decision-runtime-service.unit.test.ts` | passed | N4 runtime/admission unit tests passed: 3/3. Covered no-authority runtime/admission, prompt drift blocking, and out-of-bounds ref blocking before human authority. |
+| `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-context-policy-profile-registry-service.unit.test.ts src/services/topic-selection-model-profile-registry-service.unit.test.ts` | passed | Registry tests passed: 10/10. New N4 context/model profiles resolve and preserve post-runtime gates. |
+| `cd packages/shared && node --test --loader ts-node/esm src/research-lifecycle/title-card-management-contracts.schema.test.ts src/research-lifecycle/topic-selection-llm-runtime-contracts.schema.test.ts` | passed | Shared schema/runtime tests passed: 57/57. New N4 candidate schema and context family are covered. |
+| `pnpm topic-selection:v1c-n4-runtime-smoke` | passed | Prisma-backed N4 runtime smoke passed. Run id: `v1c-n4-runtime-smoke-2026-06-02T03-23-35-555Z`; it verified one N4 prompt-index row, prompt-cache replay artifact reuse, human/N5 replay idempotency, prompt drift blocking, no N4 authority writes from runtime/admission, and no N5 bridge before explicit N5. |
+| `pnpm topic-selection:v1c-harness-acceptance` | passed | v1c harness acceptance passed with 17 rows and 29 node-trace entries after N4 happy/no-bridge/replay paths use runtime/admission. Artifact dir: `.ai/.tmp/topic-selection-v1c-acceptance/v1c-harness-2026-06-02T03-24-09-576Z`. |
+| `pnpm topic-selection:v1c-runtime-stress` | passed | Default v1c runtime stress passed with N2/N4/N6 smokes included. Run id: `t112-v1c-runtime-stress-1780370659879`; summary: `.ai/.tmp/topic-selection-v1c-runtime-stress/t112-v1c-runtime-stress-1780370659879/90-summary.json`; prompt-index slots included `n4_delegated_promotion_decision_candidate`. |
+| `pnpm --filter @paper-engineering-assistant/shared typecheck` | passed | Shared package TypeScript compile passed after the N4 contract/schema additions. |
+| `pnpm --filter @paper-engineering-assistant/backend typecheck` | passed | Backend TypeScript compile passed after Prisma client generation. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registries remain structurally valid after removing v1c provider-canary-only profiles and adding the canonical N4 runtime profile. |
+| `node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package.json ok')"` | passed | Package JSON remains valid after adding `topic-selection:v1c-n4-runtime-smoke`. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after N4 documentation sync. |
+| `git diff --check` | passed | No whitespace errors after the N4 L1-L3 slice. |
+
+## 2026-06-02 - D28-M N4 L4/L5 Provider Canary and Compression Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/backend exec tsc --noEmit --pretty false` | passed | Backend TypeScript compile passed after adding N4 provider canary methods, strict schema binding, and compression L5 coverage. |
+| `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | Provider canary tests passed: 45 discovered, 31 local tests passed, 14 live-provider tests skipped by explicit env/key gates. New v1c N4 local tests cover OpenAI/DashScope prompt-cache-live-required semantics, over-budget zero-call blocking, production-runtime-slot evidence labels, malformed minimal provider-output blocking, and exact delegated-decision boundary fields. |
+| `pnpm topic-selection:v1c-provider-canary` | passed | Package script routes to the unified `TopicSelectionProviderCanaryService` local smoke and passed with the same 45 discovered tests. Live N4 canaries require explicit `T112_V1C_N4_PROVIDER_CANARY_LIVE=1`, `BACKEND_TEST_PRESERVE_REAL_ENV=1`, and provider credentials. |
+| `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-compression-runtime-service.unit.test.ts` | passed | Compression runtime tests passed: 19/19. New N4 cases block dropped delegated-decision lineage/condition/action/boundary facts and adversarial persisted raw provider logs at the shared compression layer. |
+| `node --check .ai/scripts/topic-selection-v1c-runtime-stress.mjs` | passed | v1c runtime stress syntax remains valid after adding N4 local provider canary coverage to the child provider smoke. |
+| `pnpm topic-selection:v1c-runtime-stress` | passed | Default v1c runtime stress passed. Run id: `t112-v1c-runtime-stress-1780374688439`; summary: `.ai/.tmp/topic-selection-v1c-runtime-stress/t112-v1c-runtime-stress-1780374688439/90-summary.json`; child runs: 10; prompt-index slots included `n4_delegated_promotion_decision_candidate`. |
+
+## 2026-06-02 - D28-M N4 L4/L5 Review Hardening Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/backend exec tsc --noEmit --pretty false` | passed | Backend TypeScript compile passed after the N4 canary schema and live assertion hardening. |
+| `pnpm --filter @paper-engineering-assistant/shared exec tsc --noEmit --pretty false` | passed | Shared TypeScript compile remains green after the broader v1c runtime contract changes. |
+| `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | Provider canary tests passed: 45 discovered, 31 local tests passed, 14 live-provider tests skipped by explicit env/key gates. The hardened N4 schema now rejects duplicated `decision_support_refs`, binds fixed array cardinality for functional-ref arrays and conditions, and reuses the same runtime evidence assertions for optional live N4 canaries as local canaries. |
+| `pnpm topic-selection:v1c-provider-canary` | passed | Package-level provider canary smoke passed with the same 45 discovered tests, proving the unified script entry still targets `TopicSelectionProviderCanaryService`. |
+| `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-compression-runtime-service.unit.test.ts` | passed | Compression runtime tests remain green: 19/19. |
+| `pnpm topic-selection:v1c-runtime-stress` | passed | Default v1c runtime stress passed after hardening. Run id: `t112-v1c-runtime-stress-1780376988835`; summary: `.ai/.tmp/topic-selection-v1c-runtime-stress/t112-v1c-runtime-stress-1780376988835/90-summary.json`; child runs: 10; prompt-index slots included N2, N4, and N6. |
+| `node .ai/skills/workflows/llm/llm-engineering/scripts/validate-llm-registry.mjs` | passed | LLM registries remain structurally valid. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after the D28-M review hardening documentation sync. |
+| `git diff --check` | passed | No whitespace errors after the review hardening changes. |
+
 ## Required Before Implementation
 - Contract design reviewed against T-088/T-089 D-18. Done.
 - First slice selected and approved: shared contracts/runtime primitives followed by v1a N6 single-agent and debate slots. Done.

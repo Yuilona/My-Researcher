@@ -150,6 +150,15 @@ export const TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS = {
   synthesizer_final: 'n2_bounded_micro_debate.synthesizer_final',
 } as const;
 
+export const TOPIC_SELECTION_V1C_N4_CONTEXT_RUNTIME_PROFILE_IDS = {
+  delegated_promotion_decision_candidate:
+    'topic-selection.v1c.n4.delegated-promotion-decision.context-runtime@v1',
+} as const;
+
+export const TOPIC_SELECTION_V1C_N4_INVOCATION_SLOT_IDS = {
+  delegated_promotion_decision_candidate: 'n4_delegated_promotion_decision_candidate',
+} as const;
+
 export const TOPIC_SELECTION_V1C_N6_CONTEXT_RUNTIME_PROFILE_IDS = {
   downstream_feedback_normalization:
     'topic-selection.v1c.n6.downstream-feedback-normalization.context-runtime@v1',
@@ -318,6 +327,34 @@ const V1C_N6_DOWNSTREAM_FEEDBACK_POST_RUNTIME_GATES = [
   'feedback_normalization_admission',
   'deterministic_gate',
   'recheck_side_effect_boundary',
+  'authority_boundary',
+] as const;
+
+const V1C_N4_DELEGATED_PROMOTION_DECISION_PRESERVED_FACT_KINDS = [
+  ...COMMON_PRESERVED_FACT_KINDS,
+  'promotion_gate_handoff',
+  'promotion_input_snapshot',
+  'promotion_gate_disposition',
+  'promote_allowed',
+  'promotion_decision_support',
+  'promotion_dossier',
+  'argument_readiness_mini_check',
+  'required_action',
+  'loopback_hint',
+  'accepted_risk',
+  'claim_ceiling',
+  'early_check_obligation',
+  'condition',
+  'allowed_ref_manifest',
+  'human_authority_boundary',
+  'no_bridge_creation_boundary',
+] as const;
+
+const V1C_N4_DELEGATED_PROMOTION_DECISION_POST_RUNTIME_GATES = [
+  'schema_validation',
+  'delegated_promotion_decision_admission',
+  'human_authority_boundary',
+  'bridge_side_effect_boundary',
   'authority_boundary',
 ] as const;
 
@@ -838,6 +875,19 @@ const DEFAULT_TOPIC_SELECTION_CONTEXT_POLICY_PROFILE_REGISTRY:
         preserved_fact_kinds: [...V1C_N2_BOUNDED_DEBATE_PRESERVED_FACT_KINDS],
         post_reuse_gates: [...V1C_N2_BOUNDED_DEBATE_POST_RUNTIME_GATES],
         post_cache_gates: [...V1C_N2_BOUNDED_DEBATE_POST_RUNTIME_GATES],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1C_N4_CONTEXT_RUNTIME_PROFILE_IDS.delegated_promotion_decision_candidate,
+        invocation_slot_id:
+          TOPIC_SELECTION_V1C_N4_INVOCATION_SLOT_IDS.delegated_promotion_decision_candidate,
+        functional_template: 'delegated_payload_candidate',
+        context_family: 'v1c_n4_delegated_promotion_decision',
+        estimated_input_token_target: 20000,
+        estimated_output_token_budget: 2048,
+        preserved_fact_kinds: [...V1C_N4_DELEGATED_PROMOTION_DECISION_PRESERVED_FACT_KINDS],
+        post_reuse_gates: [...V1C_N4_DELEGATED_PROMOTION_DECISION_POST_RUNTIME_GATES],
+        post_cache_gates: [...V1C_N4_DELEGATED_PROMOTION_DECISION_POST_RUNTIME_GATES],
       }),
       contextPolicyProfile({
         context_policy_profile_id:

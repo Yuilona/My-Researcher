@@ -37,17 +37,31 @@ import {
   TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1C_N4_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1C_N4_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_V1C_N6_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
 } from './topic-selection-context-policy-profile-registry-service.js';
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
 import {
   TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID,
+  TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID,
+  TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID,
   TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID,
   TopicSelectionModelProfileRegistryService,
 } from './topic-selection-model-profile-registry-service.js';
+import {
+  TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_CANDIDATE_SCHEMA_VERSION,
+  type TopicSelectionV1cDownstreamFeedbackCandidate,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1c-downstream-feedback-recheck-contracts';
+import {
+  TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_CANDIDATE_SCHEMA_VERSION,
+  type TopicSelectionV1cDelegatedPromotionDecisionCandidate,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1c-human-promotion-decision-contracts';
 import type {
   TopicSelectionV1cN2BoundedDebateRoleOutput,
   TopicSelectionV1cN2BoundedDebateRoleSlotId,
@@ -429,6 +443,128 @@ export class TopicSelectionProviderCanaryService {
     };
   }
 
+  async runV1cN4PromptCacheLiveRequiredCanary(input: {
+    provider_id: TopicSelectionProviderCanaryProviderId;
+  }): Promise<TopicSelectionProviderCanarySlotLiveRequiredEvidence> {
+    const modelOptionId = this.v1cN4ModelOptionId(input.provider_id);
+    const contextPolicyProfileId = this.v1cN4ContextPolicyProfileId();
+    const countingGateway = new CountingTopicSelectionProviderCanaryGateway(this.llmGateway);
+    const orchestrator = this.makeOrchestrator(countingGateway);
+    const invocation = this.v1cN4ProviderInvocation(input.provider_id, {
+      estimated_input_tokens_override: 1000,
+    });
+    const first = await orchestrator.invokeStructuredOutput<TopicSelectionV1cDelegatedPromotionDecisionCandidate>(
+      invocation,
+    );
+    const second = await orchestrator.invokeStructuredOutput<TopicSelectionV1cDelegatedPromotionDecisionCandidate>(
+      invocation,
+    );
+
+    return {
+      ...this.liveRequiredEvidence({
+        providerId: input.provider_id,
+        modelOptionId,
+        first,
+        second,
+        countingGateway,
+      }),
+      invocation_slot_id: TOPIC_SELECTION_V1C_N4_INVOCATION_SLOT_IDS.delegated_promotion_decision_candidate,
+      context_policy_profile_id: contextPolicyProfileId,
+      model_profile_id: TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID,
+      canary_surface: 'production_runtime_slot',
+    };
+  }
+
+  async runV1cN4OverBudgetZeroCallCanary(input: {
+    provider_id: TopicSelectionProviderCanaryProviderId;
+  }): Promise<TopicSelectionProviderCanarySlotOverBudgetEvidence> {
+    const modelOptionId = this.v1cN4ModelOptionId(input.provider_id);
+    const contextPolicyProfileId = this.v1cN4ContextPolicyProfileId();
+    const countingGateway = new CountingTopicSelectionProviderCanaryGateway(this.llmGateway);
+    const orchestrator = this.makeOrchestrator(countingGateway);
+    const result = await orchestrator.invokeStructuredOutput<TopicSelectionV1cDelegatedPromotionDecisionCandidate>(
+      this.v1cN4ProviderInvocation(input.provider_id, {
+        estimated_input_tokens_override: 200_000,
+        compression_already_applied: true,
+      }),
+    );
+
+    return {
+      provider_id: input.provider_id,
+      model_option_id: modelOptionId,
+      invocation_slot_id: TOPIC_SELECTION_V1C_N4_INVOCATION_SLOT_IDS.delegated_promotion_decision_candidate,
+      context_policy_profile_id: contextPolicyProfileId,
+      model_profile_id: TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID,
+      canary_surface: 'production_runtime_slot',
+      provider_call_count: countingGateway.callCount,
+      status: result.status,
+      error_code: result.error_code,
+      token_budget_gate_decision: result.token_budget_gate_result?.decision ?? null,
+      blocker_codes: result.blocker_codes,
+    };
+  }
+
+  async runV1cN6PromptCacheLiveRequiredCanary(input: {
+    provider_id: TopicSelectionProviderCanaryProviderId;
+  }): Promise<TopicSelectionProviderCanarySlotLiveRequiredEvidence> {
+    const modelOptionId = this.v1cN6ModelOptionId(input.provider_id);
+    const contextPolicyProfileId = this.v1cN6ContextPolicyProfileId();
+    const countingGateway = new CountingTopicSelectionProviderCanaryGateway(this.llmGateway);
+    const orchestrator = this.makeOrchestrator(countingGateway);
+    const invocation = this.v1cN6ProviderInvocation(input.provider_id, {
+      estimated_input_tokens_override: 1000,
+    });
+    const first = await orchestrator.invokeStructuredOutput<TopicSelectionV1cDownstreamFeedbackCandidate>(
+      invocation,
+    );
+    const second = await orchestrator.invokeStructuredOutput<TopicSelectionV1cDownstreamFeedbackCandidate>(
+      invocation,
+    );
+
+    return {
+      ...this.liveRequiredEvidence({
+        providerId: input.provider_id,
+        modelOptionId,
+        first,
+        second,
+        countingGateway,
+      }),
+      invocation_slot_id: TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS.downstream_feedback_normalization,
+      context_policy_profile_id: contextPolicyProfileId,
+      model_profile_id: TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID,
+      canary_surface: 'production_runtime_slot',
+    };
+  }
+
+  async runV1cN6OverBudgetZeroCallCanary(input: {
+    provider_id: TopicSelectionProviderCanaryProviderId;
+  }): Promise<TopicSelectionProviderCanarySlotOverBudgetEvidence> {
+    const modelOptionId = this.v1cN6ModelOptionId(input.provider_id);
+    const contextPolicyProfileId = this.v1cN6ContextPolicyProfileId();
+    const countingGateway = new CountingTopicSelectionProviderCanaryGateway(this.llmGateway);
+    const orchestrator = this.makeOrchestrator(countingGateway);
+    const result = await orchestrator.invokeStructuredOutput<TopicSelectionV1cDownstreamFeedbackCandidate>(
+      this.v1cN6ProviderInvocation(input.provider_id, {
+        estimated_input_tokens_override: 200_000,
+        compression_already_applied: true,
+      }),
+    );
+
+    return {
+      provider_id: input.provider_id,
+      model_option_id: modelOptionId,
+      invocation_slot_id: TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS.downstream_feedback_normalization,
+      context_policy_profile_id: contextPolicyProfileId,
+      model_profile_id: TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID,
+      canary_surface: 'production_runtime_slot',
+      provider_call_count: countingGateway.callCount,
+      status: result.status,
+      error_code: result.error_code,
+      token_budget_gate_decision: result.token_budget_gate_result?.decision ?? null,
+      blocker_codes: result.blocker_codes,
+    };
+  }
+
   private makeOrchestrator(
     llmGateway: TopicSelectionAgentOrchestratorLlmGateway,
   ): TopicSelectionAgentOrchestratorService {
@@ -801,6 +937,150 @@ export class TopicSelectionProviderCanaryService {
     };
   }
 
+  private v1cN4ProviderInvocation(
+    providerId: TopicSelectionProviderCanaryProviderId,
+    runtimeOptions: {
+      estimated_input_tokens_override: number;
+      compression_already_applied?: boolean;
+    },
+  ): TopicSelectionAgentInvocationRequest<TopicSelectionV1cDelegatedPromotionDecisionCandidate> {
+    const resolvedContextProfile = this.contextProfileRegistry.resolveProfile({
+      context_policy_profile_id: this.v1cN4ContextPolicyProfileId(),
+      invocation_slot_id: TOPIC_SELECTION_V1C_N4_INVOCATION_SLOT_IDS.delegated_promotion_decision_candidate,
+    });
+    this.assertProviderRequiredLiveProfile(
+      resolvedContextProfile.profile.execution_modifiers,
+    );
+
+    return {
+      workspace_id: 'workspace_provider_canary',
+      title_card_id: 'title_card_provider_canary',
+      node_id: 'topic-selection.v1c.record-human-promotion-decision.v1',
+      workflow_run_id: `provider_canary_v1c_n4_${providerId}_workflow_run_001`,
+      node_attempt_id: `provider_canary_v1c_n4_${providerId}_node_attempt_001`,
+      invocation_attempt_id: `provider_canary_v1c_n4_${providerId}_delegated_promotion_decision`,
+      execution_mode: 'provider_llm',
+      executor_kind: 'single_agent',
+      run_mode: 'acceptance',
+      profile_id: TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID,
+      model_option_id: this.v1cN4ModelOptionId(providerId),
+      output_contract: 'TopicSelectionV1cDelegatedPromotionDecisionCandidate@v1',
+      prompt: {
+        promptTemplateId: 'topic-selection-v1c-delegated-promotion-decision',
+        version: '1',
+      },
+      prompt_variant_key: TOPIC_SELECTION_V1C_N4_INVOCATION_SLOT_IDS.delegated_promotion_decision_candidate,
+      schema_name: 'topic_selection_v1c_n4_decision_canary',
+      schema: this.v1cN4CanarySchema(),
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Return only JSON matching TopicSelectionV1cDelegatedPromotionDecisionCandidate@v1 for a v1c N4 provider live invocation canary.',
+        },
+        {
+          role: 'user',
+          content: [
+            'Return one synthetic delegated promotion decision candidate.',
+            'Use the supplied reference candidate values exactly unless JSON Schema validation requires a small correction.',
+            stableStringify(this.v1cN4CanaryReferenceCandidate()),
+          ].join(' '),
+        },
+      ],
+      context_packet_refs: [
+        {
+          ref_type: 'artifact_ref',
+          ref_id: `provider_canary_v1c_n4_${providerId}_context_packet_001`,
+          title_card_id: 'title_card_provider_canary',
+        },
+      ],
+      runtime_token_budget: {
+        context_policy_profile: resolvedContextProfile.profile,
+        context_policy_profile_hash: resolvedContextProfile.profile_hash,
+        runtime_invocation_context_hash: this.hash({
+          scenario_id: 'v1c_n4_delegated_promotion_decision',
+          scenario_case_id: TOPIC_SELECTION_V1C_N4_INVOCATION_SLOT_IDS.delegated_promotion_decision_candidate,
+          provider_id: providerId,
+        }),
+        estimated_input_tokens_override: runtimeOptions.estimated_input_tokens_override,
+        compression_already_applied: runtimeOptions.compression_already_applied ?? false,
+      },
+      created_by: 'system',
+    };
+  }
+
+  private v1cN6ProviderInvocation(
+    providerId: TopicSelectionProviderCanaryProviderId,
+    runtimeOptions: {
+      estimated_input_tokens_override: number;
+      compression_already_applied?: boolean;
+    },
+  ): TopicSelectionAgentInvocationRequest<TopicSelectionV1cDownstreamFeedbackCandidate> {
+    const resolvedContextProfile = this.contextProfileRegistry.resolveProfile({
+      context_policy_profile_id: this.v1cN6ContextPolicyProfileId(),
+      invocation_slot_id: TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS.downstream_feedback_normalization,
+    });
+    this.assertProviderRequiredLiveProfile(
+      resolvedContextProfile.profile.execution_modifiers,
+    );
+
+    return {
+      workspace_id: 'workspace_provider_canary',
+      title_card_id: 'title_card_provider_canary',
+      node_id: 'topic-selection.v1c.downstream-feedback-recheck.v1',
+      workflow_run_id: `provider_canary_v1c_n6_${providerId}_workflow_run_001`,
+      node_attempt_id: `provider_canary_v1c_n6_${providerId}_node_attempt_001`,
+      invocation_attempt_id: `provider_canary_v1c_n6_${providerId}_downstream_feedback_normalization`,
+      execution_mode: 'provider_llm',
+      executor_kind: 'single_agent',
+      run_mode: 'acceptance',
+      profile_id: TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID,
+      model_option_id: this.v1cN6ModelOptionId(providerId),
+      output_contract: 'TopicSelectionV1cDownstreamFeedbackCandidate@v1',
+      prompt: {
+        promptTemplateId: 'topic-selection-v1c-downstream-feedback-normalization',
+        version: '1',
+      },
+      prompt_variant_key: TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS.downstream_feedback_normalization,
+      schema_name: 'topic_selection_v1c_n6_feedback_canary',
+      schema: this.v1cN6CanarySchema(),
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Return only JSON matching TopicSelectionV1cDownstreamFeedbackCandidate@v1 for a v1c N6 provider live invocation canary.',
+        },
+        {
+          role: 'user',
+          content: [
+            'Return one synthetic downstream feedback normalization candidate.',
+            'Use the supplied reference candidate values exactly unless JSON Schema validation requires a small correction.',
+            stableStringify(this.v1cN6CanaryReferenceCandidate()),
+          ].join(' '),
+        },
+      ],
+      context_packet_refs: [
+        {
+          ref_type: 'artifact_ref',
+          ref_id: `provider_canary_v1c_n6_${providerId}_context_packet_001`,
+          title_card_id: 'title_card_provider_canary',
+        },
+      ],
+      runtime_token_budget: {
+        context_policy_profile: resolvedContextProfile.profile,
+        context_policy_profile_hash: resolvedContextProfile.profile_hash,
+        runtime_invocation_context_hash: this.hash({
+          scenario_id: 'v1c_n6_downstream_feedback_normalization',
+          scenario_case_id: TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS.downstream_feedback_normalization,
+          provider_id: providerId,
+        }),
+        estimated_input_tokens_override: runtimeOptions.estimated_input_tokens_override,
+        compression_already_applied: runtimeOptions.compression_already_applied ?? false,
+      },
+      created_by: 'system',
+    };
+  }
+
   private liveRequiredEvidence(input: {
     providerId: TopicSelectionProviderCanaryProviderId;
     modelOptionId: string;
@@ -870,6 +1150,20 @@ export class TopicSelectionProviderCanaryService {
     return `${TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID}.${suffix}`;
   }
 
+  private v1cN4ModelOptionId(providerId: TopicSelectionProviderCanaryProviderId): string {
+    const suffix = providerId === 'openai'
+      ? 'openai-balanced'
+      : 'dashscope-thinking-budget';
+    return `${TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID}.${suffix}`;
+  }
+
+  private v1cN6ModelOptionId(providerId: TopicSelectionProviderCanaryProviderId): string {
+    const suffix = providerId === 'openai'
+      ? 'openai-balanced'
+      : 'dashscope-thinking-budget';
+    return `${TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID}.${suffix}`;
+  }
+
   private v1cN2ContextPolicyProfileId(slotId: TopicSelectionV1cN2BoundedDebateRoleSlotId): string {
     if (slotId === TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.promotion_supporter_draft) {
       return TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.promotion_supporter_draft;
@@ -881,6 +1175,14 @@ export class TopicSelectionProviderCanaryService {
       return TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.promotion_supporter_repair;
     }
     return TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.synthesizer_final;
+  }
+
+  private v1cN6ContextPolicyProfileId(): string {
+    return TOPIC_SELECTION_V1C_N6_CONTEXT_RUNTIME_PROFILE_IDS.downstream_feedback_normalization;
+  }
+
+  private v1cN4ContextPolicyProfileId(): string {
+    return TOPIC_SELECTION_V1C_N4_CONTEXT_RUNTIME_PROFILE_IDS.delegated_promotion_decision_candidate;
   }
 
   private assertProviderRequiredLiveProfile(executionModifiers: string[]): void {
@@ -1219,13 +1521,134 @@ export class TopicSelectionProviderCanaryService {
     };
   }
 
+  private v1cN6CanaryReferenceCandidate(): TopicSelectionV1cDownstreamFeedbackCandidate {
+    const bridgeRef = this.ref('paper_project_bridge', 'provider_canary_bridge_001');
+    const downstreamSourceRef = this.ref('reviewer_check', 'provider_canary_reviewer_check_001');
+    const reviewCommentRef = this.ref('review_comment', 'provider_canary_review_comment_001');
+    const blockerRef = this.ref('topic_selection_blocker', 'provider_canary_blocker_001');
+    const artifactRef = this.ref('artifact_ref', 'provider_canary_feedback_artifact_001');
+    const affectedRef = this.ref('validated_need', 'provider_canary_validated_need_001');
+    return {
+      schema_version: TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_CANDIDATE_SCHEMA_VERSION,
+      paper_project_bridge_id: 'paper_project_bridge_provider_canary_001',
+      workspace_id: 'workspace_provider_canary',
+      downstream_source_kind: 'reviewer_check',
+      downstream_source_ref: downstreamSourceRef,
+      source_feedback_refs: [reviewCommentRef],
+      observed_blocker_refs: [blockerRef],
+      feedback_signal: 'need_invalidated',
+      severity: 'critical',
+      summary:
+        'Synthetic N6 provider canary feedback invalidates the promoted need for runtime-only validation.',
+      required_action: 'Recheck the validated need before downstream work continues.',
+      artifact_refs: [artifactRef],
+      feedback_payload: {
+        canary: true,
+        non_authority: true,
+        provider_live_required: true,
+      },
+      normalization_hints: {
+        requires_recheck_hint: true,
+        loopback_target_hint: 'validated_need',
+        affected_ref_hint: affectedRef,
+        reason_codes: ['need_invalidated'],
+      },
+      cited_refs: [bridgeRef, downstreamSourceRef, affectedRef],
+      no_upstream_mutation_confirmed: true,
+    };
+  }
+
+  private v1cN4CanaryReferenceCandidate(): TopicSelectionV1cDelegatedPromotionDecisionCandidate {
+    const gateRef = this.ref('promotion_gate_check', 'provider_canary_gate_check_001');
+    const snapshotRef = this.ref('promotion_input_snapshot', 'provider_canary_snapshot_001');
+    const supportRef = this.ref('promotion_decision_support', 'provider_canary_support_001');
+    const topicPackageRef = this.ref('topic_package', 'provider_canary_topic_package_001');
+    const conditionAction = {
+      action_code: 'clarify_contribution_claim',
+      severity: 'warning' as const,
+      loopback_target: 'package' as const,
+      refs: [topicPackageRef],
+      reason: 'Clarify contribution wording before bridge materialization.',
+    };
+    return {
+      schema_version: TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_CANDIDATE_SCHEMA_VERSION,
+      promotion_gate_check_id: 'promotion_gate_check_provider_canary_001',
+      promotion_input_snapshot_id: 'promotion_input_snapshot_provider_canary_001',
+      promotion_input_snapshot_hash: 'a'.repeat(64),
+      workspace_id: 'workspace_provider_canary',
+      title_card_id: 'title_card_provider_canary',
+      decision: 'promote_with_conditions',
+      rationale:
+        'Synthetic N4 provider canary candidate validates provider-live runtime semantics without authority writes.',
+      confirmed_snapshot_hash: 'a'.repeat(64),
+      conditions: [{
+        condition_id: 'promotion_condition_provider_canary_001',
+        condition_code: 'clarify_contribution_claim',
+        owner: {
+          actor_type: 'human',
+          actor_id: 'reviewer_001',
+        },
+        required_action: conditionAction,
+        refs: [topicPackageRef],
+        early_check_obligations: ['Re-check contribution wording before outline lock.'],
+        verification_note: 'Condition is reviewer-visible and non-authority until human acceptance.',
+      }],
+      required_actions: [],
+      loopback_target: null,
+      allowed_refinements: [],
+      stop_conditions: [],
+      reopen_conditions: [],
+      cited_refs: [gateRef, snapshotRef, topicPackageRef],
+      decision_support_refs: [gateRef, snapshotRef, supportRef],
+      no_authority_write_confirmed: true,
+      no_bridge_creation_confirmed: true,
+      human_review_required: true,
+    };
+  }
+
   private v1cN2CanarySchema(slotId: TopicSelectionV1cN2BoundedDebateRoleSlotId): Record<string, unknown> {
     return this.schemaFromTemplate(this.v1cN2CanaryReferenceDraft(slotId), { slotId });
   }
 
+  private v1cN4CanarySchema(): Record<string, unknown> {
+    return this.schemaFromTemplate(this.v1cN4CanaryReferenceCandidate(), {
+      exactBooleanPaths: new Set([
+        'human_review_required',
+        'no_authority_write_confirmed',
+        'no_bridge_creation_confirmed',
+      ]),
+      exactStringPaths: new Set([
+        'conditions.0.owner.actor_type',
+        'conditions.0.required_action.action_code',
+        'conditions.0.required_action.loopback_target',
+        'conditions.0.required_action.severity',
+        'decision',
+      ]),
+    });
+  }
+
+  private v1cN6CanarySchema(): Record<string, unknown> {
+    return this.schemaFromTemplate(this.v1cN6CanaryReferenceCandidate(), {
+      exactBooleanPaths: new Set([
+        'no_upstream_mutation_confirmed',
+        'normalization_hints.requires_recheck_hint',
+      ]),
+      exactStringPaths: new Set([
+        'downstream_source_kind',
+        'feedback_signal',
+        'normalization_hints.loopback_target_hint',
+        'severity',
+      ]),
+    });
+  }
+
   private schemaFromTemplate(
     value: unknown,
-    options: { slotId?: TopicSelectionV1cN2BoundedDebateRoleSlotId } = {},
+    options: {
+      exactBooleanPaths?: Set<string>;
+      exactStringPaths?: Set<string>;
+      slotId?: TopicSelectionV1cN2BoundedDebateRoleSlotId;
+    } = {},
     path: string[] = [],
   ): Record<string, unknown> {
     if (Array.isArray(value)) {
@@ -1240,6 +1663,8 @@ export class TopicSelectionProviderCanaryService {
         return {
           type: 'array',
           minItems: value.length,
+          maxItems: value.length,
+          uniqueItems: true,
           items: value.length === 1
             ? this.exactFunctionalRefSchema(value[0] as ReturnType<typeof this.ref>)
             : {
@@ -1250,6 +1675,7 @@ export class TopicSelectionProviderCanaryService {
       return {
         type: 'array',
         minItems: value.length,
+        maxItems: value.length,
         items: this.schemaFromTemplate(value[0], options, [...path, '0']),
       };
     }
@@ -1257,6 +1683,9 @@ export class TopicSelectionProviderCanaryService {
       return { type: 'null' };
     }
     if (typeof value === 'boolean') {
+      if (options.exactBooleanPaths?.has(path.join('.'))) {
+        return { type: 'boolean', enum: [value] };
+      }
       return { type: 'boolean' };
     }
     if (typeof value === 'number') {
@@ -1268,6 +1697,9 @@ export class TopicSelectionProviderCanaryService {
         return { type: 'string', enum: [options.slotId] };
       }
       if (fieldName === 'schema_version') {
+        return { type: 'string', enum: [value] };
+      }
+      if (options.exactStringPaths?.has(path.join('.'))) {
         return { type: 'string', enum: [value] };
       }
       return { type: 'string', minLength: 1 };

@@ -1207,7 +1207,7 @@
 ## 2026-06-01 - D28 v1c Runtime Landing Alignment Started
 - Accepted D28-A scope:
   - current v1c runtime landing targets N2 bounded micro-debate and N6 downstream feedback normalization;
-  - N3 gate diagnostic adjunct and N4 delegated promotion decision remain provider-canary-only in this phase;
+  - N3 gate diagnostic adjunct and N4 delegated promotion decision were initially held as provider-canary-only in this phase; N4 was later superseded by D28-L/D28-M and now uses the production runtime/admission slot plus slot-level provider canary;
   - resource sampling remains a later explicit runtime-promotion phase and is not part of the v1c closure scope.
 - Accepted D28-B responsibility boundary:
   - shared runtime is the unified context/cache/compression/memory/token/reuse/audit execution layer;
@@ -1465,7 +1465,7 @@
     - `n2_bounded_micro_debate.promotion_supporter_repair`;
     - `n2_bounded_micro_debate.synthesizer_final`.
   - The canary path is `TopicSelectionProviderCanaryService -> TopicSelectionAgentOrchestratorService -> BackendLlmGateway`.
-  - This service-level L4 canary explicitly exercises the production N2 bounded-debate runtime profile and reports `canary_surface=production_runtime_slot`; the registry `provider-canary` profile remains canary-only and is not the canonical runtime profile.
+  - This service-level L4 canary explicitly exercises the production N2 bounded-debate runtime profile and reports `canary_surface=production_runtime_slot`; provider canaries do not own a separate v1c provider-canary-only model profile.
   - It validates provider-required-live behavior on prompt-cache hits, prompt packet hash stability, redacted prompt artifact and prompt quality report reuse, null provider response reuse refs, provider telemetry separation, and over-budget zero-call blocking.
   - The v1c N2 provider-canary schema is derived from the slot reference draft with exact `role_slot`/`schema_version`, required slot-specific fields, closed object shapes, and exact functional-ref identity checks. A malformed minimal `{schema_version, role_slot}` provider output is blocked instead of being accepted as live-provider evidence.
   - Live OpenAI/DashScope coverage is explicitly gated by `T112_V1C_N2_PROVIDER_CANARY_LIVE=1` plus `BACKEND_TEST_PRESERVE_REAL_ENV=1` and provider credentials; default local tests use the fake gateway only.
@@ -1477,3 +1477,135 @@
   - N2 runtime test blocks final-slot generation when compressed context drops required final facts or carries `raw_provider_logs`.
   - Compression runtime tests block dropped N2 long-context facts and adversarial persisted provider payloads directly at the shared compression layer.
 - No DB schema, route contract, prompt template, provider credential/config, DB-backed context packet cache, or harness authority boundary was changed.
+
+## 2026-06-02 - D28-K N6 Feedback Normalization L1 Runtime/Admission Slice Landed
+- Added the missing shared `TopicSelectionV1cDownstreamFeedbackCandidate@v1` contract surface.
+  - `topicSelectionV1cDownstreamFeedbackCandidateSchema` now defines the N6 runtime output as a strict normalized candidate with bridge/source refs, feedback signal, severity, required action, normalization hints, cited refs, feedback payload, and `no_upstream_mutation_confirmed`.
+  - The candidate remains non-authority. It does not include downstream feedback ids, recheck ids, impact summaries, bridge patches, promotion patches, or workflow automation fields.
+- Added `TopicSelectionV1cN6FeedbackNormalizationRuntimeService`.
+  - The service owns the `downstream_feedback_normalization` runtime invocation through `AgentOrchestrator`.
+  - It uses the existing N6 context profile `topic-selection.v1c.n6.downstream-feedback-normalization.context-runtime@v1`, context family `v1c_n6_downstream_feedback_normalization`, model profile `topic-selection.v1c.downstream-feedback-normalization.v1`, and prompt template `topic-selection-v1c-downstream-feedback-normalization@1`.
+  - It records a ref-backed context packet, builds prompt packet identity, runs token-budget preflight, supports compression attempts, and records runtime-verified candidate artifacts with prompt/profile/runtime/source hashes.
+  - Compression required facts bind the bridge, promotion decision, commitment profile, promotion input snapshot, downstream source ref, source feedback refs, raw feedback hash, required-action/signal/severity hints, allowed-ref manifest, and no-upstream-mutation boundary.
+- Added `TopicSelectionV1cN6FeedbackNormalizationAdmissionService`.
+  - Admission receives the original runtime source input as well as the candidate artifact, so LLM output cannot self-author source refs or feedback refs.
+  - It recomputes expected prompt/runtime/source identity through the runtime service and blocks profile drift, prompt drift, runtime context drift, source hash drift, and payload hash mismatch.
+  - It blocks source mismatch, out-of-bounds refs, forbidden authority/automation fields even inside open `feedback_payload`, missing recheck `required_action`, mismatched recheck hints, and missing no-upstream-mutation confirmation.
+  - Successful admission returns deterministic `TopicSelectionDownstreamTopicFeedbackCreateInput` only; the deterministic `TopicSelectionV1cDownstreamFeedbackRecheckService` remains the sole owner of feedback/recheck side effects.
+- The L1 tests intentionally mirror the existing harness boundary:
+  - N6 is record-only downstream ingress;
+  - admitted candidates can be recorded idempotently through deterministic service;
+  - replay creates one feedback/recheck projection;
+  - bridge payload hash, `paper_project_intake_ref`, and `target_paper_project_ref` remain unchanged;
+  - malformed candidate reuse creates no side effects.
+- Completed after the L1 slice:
+  - `.ai/scripts/topic-selection-v1c-harness-acceptance.mjs` now calls through the N6 runtime/admission services before deterministic downstream feedback/recheck persistence;
+  - added `pnpm topic-selection:v1c-n6-runtime-smoke` for Prisma-backed N6 prompt-index/replay/drift/no-side-effect-bypass assertions;
+- Still deferred:
+  - v1c runtime stress combining N2 and N6.
+
+## 2026-06-02 - D28-K Step 2 N6 Harness/Prisma Smoke Landed
+- Wired v1c acceptance harness N6 scenarios through `TopicSelectionV1cN6FeedbackNormalizationRuntimeService` and `TopicSelectionV1cN6FeedbackNormalizationAdmissionService`.
+  - The harness still owns scenario orchestration, row evidence, and no-auto-loop assertions.
+  - Runtime owns context packet, prompt packet identity/cache, token-budget/compression path, runtime audit, and candidate artifact provenance.
+  - Admission owns profile/prompt/runtime/source/payload hash checks and conversion to deterministic `TopicSelectionDownstreamTopicFeedbackCreateInput`.
+  - `TopicSelectionV1cDownstreamFeedbackRecheckService` remains the only service that creates downstream feedback and recheck side effects.
+- Added `.ai/scripts/topic-selection-v1c-n6-runtime-smoke.mjs` and package script `topic-selection:v1c-n6-runtime-smoke`.
+  - The smoke uses Prisma-backed `TopicSelectionControlPlaneService`, `TopicSelectionPromptPacketCacheService`, and `PrismaTopicSelectionV1cDownstreamFeedbackRecheckRepository`.
+  - It verifies prompt packet index metadata-only model shape, one N6 prompt-index row for the first runtime candidate, prompt-cache read-through on replay, deterministic feedback/recheck idempotency, prompt drift blocking at admission, and no run-key writes to upstream v1c authority tables.
+  - The bridge handoff remains an in-memory fixture provider in this smoke so the test isolates N6 downstream effects from N1-N5 authority setup.
+- No DB schema, route contract, provider credential/config, or DB-backed context packet cache change was introduced.
+
+## 2026-06-02 - D28-K Step 3 N6 Dual-Track Policy Removal Landed
+- Added `TopicSelectionV1cDownstreamFeedbackPolicy` as the canonical N6 downstream loopback policy.
+  - `feedback_signal -> loopback_target`, `loopback_target -> affected_ref`, `loopback_target -> affected_stage`, and `requires_recheck` are now resolved in one service-local module.
+  - `TopicSelectionV1cN6FeedbackNormalizationAdmissionService` and `TopicSelectionV1cDownstreamFeedbackRecheckService` both consume this policy instead of owning private copies.
+  - The policy intentionally remains an internal backend service module with one exported resolver; helper maps and ref-resolution helpers are not exported.
+- Removed the old admission-side fallback that synthesized required affected refs when bridge lineage was missing.
+  - Missing `validated_need`, value-assessment, topic-question, research-slice, or evidence/search lineage now blocks admission with `N6_FEEDBACK_NORMALIZATION_AFFECTED_REF_UNRESOLVED`.
+  - The deterministic downstream feedback service still throws the canonical `GATE_CONSTRAINT_FAILED` if called directly with missing required lineage.
+  - This keeps malformed/stale/reused N6 candidates from creating downstream recheck authority.
+- Tightened N6 candidate artifact provenance.
+  - `TopicSelectionV1cN6FeedbackNormalizationCandidateArtifact.runtime_provenance_class` is now only `runtime_verified`.
+  - The unused `legacy_unverified`/fixture provenance variants were removed from this product admission surface.
+- No harness-owned loopback/affected-ref formula remains for v1c N6.
+  - Harness code still constructs scenario fixture outputs and records evidence.
+  - Runtime/admission/deterministic services own prompt/cache/compression/provenance/admission and side-effect semantics.
+  - No DB schema, route contract, provider credential/config, or DB-backed context packet cache change was introduced.
+
+## 2026-06-02 - D28-K Step 4 N6 L4/L5 Provider Canary and Compression Adversarial Landed
+- Added v1c N6 downstream feedback normalization slot canaries to `TopicSelectionProviderCanaryService`.
+  - The service-level L4 canary exercises the production runtime slot: context profile `topic-selection.v1c.n6.downstream-feedback-normalization.context-runtime@v1`, model profile `topic-selection.v1c.downstream-feedback-normalization.v1`, slot `downstream_feedback_normalization`, and prompt `topic-selection-v1c-downstream-feedback-normalization@1`.
+  - Local OpenAI/DashScope fake-gateway tests prove prompt packet refs can be reused while provider calls remain live, provider response reuse refs remain null, provider-side cache telemetry stays telemetry-only, and over-budget fixtures call zero providers.
+  - A malformed minimal N6 provider output is blocked by the strict slot schema and cannot become provider evidence or downstream recheck authority.
+  - Optional live coverage is gated by `T112_V1C_N6_PROVIDER_CANARY_LIVE=1`, `BACKEND_TEST_PRESERVE_REAL_ENV=1`, and provider credentials.
+- Added v1c N6 L5 compression adversarial coverage at the shared compression runtime layer.
+  - Long-context compression that drops promotion lineage, downstream source refs, source feedback refs, feedback signal, required action, affected ref, loopback target, severity, no-upstream-mutation boundary, or allowed-ref manifest blocks.
+  - Compressed N6 context that persists `raw_provider_logs` blocks with `COMPRESSION_FORBIDDEN_PERSISTED_PAYLOAD`.
+- Removed the old v1c provider-canary-only track.
+  - Deleted `.ai/scripts/topic-selection-v1c-provider-canary.mjs`.
+  - Removed v1c provider-canary-only model profiles from `TopicSelectionModelProfileRegistryService`.
+  - `pnpm topic-selection:v1c-provider-canary` now routes to the unified backend `TopicSelectionProviderCanaryService` test entry with N2/N6 live gates.
+  - N3/N4 provider-only adjunct rows are no longer represented as T-112 runtime slots; they can return only if they are promoted through explicit runtime/admission services.
+- No DB schema, route contract, provider credential/config, or DB-backed context packet cache change was introduced.
+
+## 2026-06-02 - D28-K Step 5 v1c Runtime Stress Runner Landed
+- Added `.ai/scripts/topic-selection-v1c-runtime-stress.mjs` and package script `pnpm topic-selection:v1c-runtime-stress`.
+  - The runner is a composition/evidence layer only. It does not construct prompts, perform admission, normalize feedback, or create deterministic authority.
+  - Default execution runs one N2 Prisma runtime smoke, one N6 Prisma runtime smoke, one v1c harness acceptance pass, and one local `TopicSelectionProviderCanaryService` smoke.
+  - `TOPIC_SELECTION_V1C_RUNTIME_STRESS_ITERATIONS` controls repeated N2/N6 smoke iterations.
+  - `TOPIC_SELECTION_V1C_RUNTIME_STRESS_INCLUDE_HARNESS_ACCEPTANCE=0` and `TOPIC_SELECTION_V1C_RUNTIME_STRESS_INCLUDE_PROVIDER_CANARY=0` can narrow the runner for local debugging.
+- The runner reads child manifests and asserts:
+  - N2 prompt-index rows cover all four bounded micro-debate slots;
+  - N2 replay keeps support/gate ids stable, prompt-cache replay reuses prompt artifacts, prompt drift blocks, and no N3 gate is created before explicit N3;
+  - N6 prompt-index rows cover `downstream_feedback_normalization`;
+  - N6 feedback replay is idempotent, prompt-cache replay reuses prompt artifacts, prompt drift blocks, and upstream v1c authority table counts remain unchanged;
+  - v1c harness rows all pass and expose no pending gaps;
+  - provider canary local smoke passes with live-provider gates forced off by the runner.
+- The runner also snapshots the Prisma prompt packet index before/after and asserts expected slot minimums plus no prompt quality blockers.
+- No DB schema, route contract, provider credential/config, DB-backed context packet cache, or harness authority boundary was changed.
+
+## 2026-06-02 - D28-L N4 Delegated Promotion Decision L1-L3 Landed
+- Added the shared `TopicSelectionV1cDelegatedPromotionDecisionCandidate@v1` contract surface.
+  - The candidate is non-authority and can only become input to explicit human acceptance through `TopicSelectionV1cHumanPromotionDecisionService.recordHumanPromotionDecision`.
+  - It carries N3 gate id, promotion input snapshot id/hash, decision, rationale, condition/loopback fields, cited refs, decision support refs, and explicit `no_authority_write_confirmed`, `no_bridge_creation_confirmed`, and `human_review_required` boundaries.
+  - Schema coverage rejects invalid delegated boundary flags and keeps the contract reachable through direct and barrel exports.
+- Added `TopicSelectionV1cN4DelegatedPromotionDecisionRuntimeService`.
+  - The service owns slot `n4_delegated_promotion_decision_candidate`, context family `v1c_n4_delegated_promotion_decision`, model profile `topic-selection.v1c.delegated-promotion-decision.v1`, and prompt `topic-selection-v1c-delegated-promotion-decision@1`.
+  - It records a ref-backed N3 gate context packet, uses `AgentOrchestrator` for prompt packet identity/cache, token-budget preflight, provider telemetry separation, runtime audit, and runtime-verified candidate artifacts.
+  - The standard N4 context target is 20k input tokens so the baseline N3 handoff path remains a no-compression prompt-cache replay path. The deterministic compression rerun path remains in the runtime for later long-context/adversarial N4 coverage.
+- Added `TopicSelectionV1cN4DelegatedPromotionDecisionAdmissionService`.
+  - Admission recomputes expected profile/prompt/runtime/source/payload identity through the runtime service.
+  - It blocks prompt/profile/runtime/source drift, source mismatch, out-of-bounds refs, missing gate/snapshot support refs, forbidden authority/bridge/recheck/automation fields, invalid human boundary flags, invalid external human actor, and decision/condition/loopback mismatches.
+  - Successful admission returns only a safe `RecordHumanPromotionDecisionInput`; it does not call the N4 human writer and cannot create N5 bridge authority.
+- Wired `.ai/scripts/topic-selection-v1c-harness-acceptance.mjs` N4 happy/no-bridge/replay paths through runtime/admission before explicit human writer calls.
+  - The harness remains an orchestration/evidence layer only.
+  - Replay no longer has a direct N4 fixture writer path; runtime/admission no-authority assertions compare write-count deltas, so exact replay with pre-existing authority records remains valid.
+- Added `.ai/scripts/topic-selection-v1c-n4-runtime-smoke.mjs` and package script `pnpm topic-selection:v1c-n4-runtime-smoke`.
+  - The smoke uses Prisma-backed control plane, prompt packet cache index, N3 gate repository, human decision repository, and N5 bridge repository.
+  - It verifies prompt-index metadata-only behavior, one N4 prompt-index row, prompt-cache replay artifact reuse, human decision replay idempotency, explicit N5 bridge replay idempotency, prompt drift blocking, no N4 authority write from runtime/admission, and no N5 bridge before explicit N5.
+- Extended `pnpm topic-selection:v1c-runtime-stress`.
+  - The runner now executes N2, N4, and N6 Prisma runtime smokes per iteration plus harness acceptance and local provider canary.
+  - Prompt-index minimum slot assertions now include `n4_delegated_promotion_decision_candidate`.
+- No DB schema, route contract, provider credential/config, DB-backed context packet cache, or direct provider SDK path was introduced.
+
+## 2026-06-02 - D28-M N4 L4/L5 Provider Canary and Compression Adversarial Landed
+- Added v1c N4 delegated promotion decision slot canaries to `TopicSelectionProviderCanaryService`.
+  - The service-level L4 canary exercises the production runtime slot: context profile `topic-selection.v1c.n4.delegated-promotion-decision.context-runtime@v1`, model profile `topic-selection.v1c.delegated-promotion-decision.v1`, slot `n4_delegated_promotion_decision_candidate`, and prompt `topic-selection-v1c-delegated-promotion-decision@1`.
+  - Local OpenAI/DashScope fake-gateway tests prove prompt packet refs can be reused while provider calls remain live, provider response reuse refs remain null, provider-side cache telemetry stays telemetry-only, and over-budget fixtures call zero providers.
+  - A malformed minimal N4 provider output is blocked by the strict slot schema and cannot become provider evidence, N4 human authority, or N5 bridge authority.
+  - The canary schema now binds key delegated-decision boundary fields exactly: decision, condition action/severity/loopback target, human-review requirement, no-authority-write confirmation, and no-bridge-creation confirmation.
+  - Optional live coverage is gated by `T112_V1C_N4_PROVIDER_CANARY_LIVE=1`, `BACKEND_TEST_PRESERVE_REAL_ENV=1`, and provider credentials.
+- Added v1c N4 L5 compression adversarial coverage at the shared compression runtime layer.
+  - Long-context compression that drops promotion gate handoff, promotion input snapshot, gate disposition, promote-allowed decision, support/dossier/readiness refs, conditions, required actions, loopback hints, accepted risks, claim ceiling, early-check obligations, allowed-ref manifest, human authority boundary, or no-bridge boundary blocks.
+  - Compressed N4 context that persists `raw_provider_logs` blocks with `COMPRESSION_FORBIDDEN_PERSISTED_PAYLOAD`.
+- Extended the default v1c runtime stress runner provider-canary child so local N4 canary coverage runs with live-provider gates forced off.
+- No DB schema, route contract, provider credential/config, DB-backed context packet cache, direct provider SDK path, or provider-canary-only harness path was introduced.
+
+## 2026-06-02 - D28-M N4 L4/L5 Review Hardening Landed
+- Tightened generated provider-canary schemas for exact runtime-slot fixture arrays.
+  - Functional-ref arrays now carry `minItems`, `maxItems`, and `uniqueItems` so duplicate or missing delegated-decision support refs cannot pass the canary schema.
+  - Non-ref arrays now carry `maxItems` alongside `minItems`, keeping fixed fixture arrays such as N4 conditions from accepting extra elements.
+- Strengthened v1c N4 provider-canary tests.
+  - Local tests now validate the happy N4 reference candidate against the generated schema and prove duplicated `decision_support_refs` are rejected.
+  - Optional live OpenAI/DashScope N4 canaries now use the same runtime evidence helper as local canaries, covering provider-required-live, production-runtime-slot labels, prompt hash stability, prompt artifact and quality-report reuse, response cache `not_applicable`, null response reuse refs, and telemetry provider ids.

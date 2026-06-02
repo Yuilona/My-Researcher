@@ -558,6 +558,26 @@ test('topic-selection runtime schemas accept v1c bounded promotion support conte
   assert.equal(await validatesBody(topicSelectionContextPacketCacheKeySchema, key), true);
 });
 
+test('topic-selection runtime schemas accept v1c delegated promotion decision context family', async () => {
+  const profile: TopicSelectionContextPolicyProfile = {
+    ...contextPolicyProfile(),
+    context_policy_profile_id:
+      'topic-selection.v1c.n4.delegated-promotion-decision.context-runtime@v1',
+    invocation_slot_id: 'n4_delegated_promotion_decision_candidate',
+    functional_template: 'delegated_payload_candidate',
+    context_family: 'v1c_n4_delegated_promotion_decision',
+  };
+  assert.equal(await validatesBody(topicSelectionContextPolicyProfileSchema, profile), true);
+
+  const key: TopicSelectionContextPacketCacheKey = {
+    ...cacheKey(),
+    invocation_slot_id: 'n4_delegated_promotion_decision_candidate',
+    context_family: 'v1c_n4_delegated_promotion_decision',
+    output_contract: 'TopicSelectionV1cDelegatedPromotionDecisionCandidate@v1',
+  };
+  assert.equal(await validatesBody(topicSelectionContextPacketCacheKeySchema, key), true);
+});
+
 test('topic-selection context packet cache key rejects missing profile schema policy fields', async () => {
   assert.equal(await validatesBody(topicSelectionContextPacketCacheKeySchema, cacheKey()), true);
 

@@ -37,6 +37,9 @@ import {
   sha256Text,
   stableStringify,
 } from './literature-content-processing-utils.js';
+import {
+  resolveTopicSelectionV1cDownstreamFeedbackPolicy,
+} from './topic-selection-v1c-downstream-feedback-policy.js';
 
 type IdFactory = (prefix: string) => string;
 
@@ -88,24 +91,6 @@ export type TopicSelectionV1cDownstreamFeedbackRecheckServiceOptions = {
   now?: () => string;
 };
 
-const LOOPBACK_TARGET_BY_CAUSE: Record<
-  TopicSelectionDownstreamLoopbackCause,
-  TopicSelectionDownstreamLoopbackTarget
-> = {
-  stale_evidence: 'evidence_or_search',
-  overclaim: 'value_assessment',
-  unanswerable_question: 'topic_question',
-  boundary_drift: 'research_slice',
-  need_invalidated: 'validated_need',
-  package_narrative_gap: 'package',
-  promotion_authorization_gap: 'promotion',
-  bridge_trace_gap: 'paper_project_bridge',
-  commitment_gap: 'paper_project_bridge',
-  merge_candidate_conflict: 'merge_candidate',
-  paper_project_constraint_conflict: 'paper_project_intake',
-  downstream_mutation_attempt: 'paper_project_bridge',
-  no_recheck_needed: 'paper_project_bridge',
-};
 const TOPIC_SELECTION_SEVERITIES: readonly TopicSelectionSeverity[] = [
   'info',
   'warning',
@@ -151,16 +136,13 @@ export class TopicSelectionV1cDownstreamFeedbackRecheckService {
       bridgeHandoff.bridge_payload_hash,
     );
     const bridgeRef = bridgeHandoff.paper_project_bridge_ref;
-    const loopbackTarget = LOOPBACK_TARGET_BY_CAUSE[input.feedback_signal];
-    if (!loopbackTarget) {
-      throw new AppError(
-        400,
-        'INVALID_PAYLOAD',
-        `Unsupported downstream feedback signal: ${input.feedback_signal}.`,
-      );
-    }
-    const requiresRecheck = input.feedback_signal !== 'no_recheck_needed';
-    const affectedRef = this.resolveAffectedRef(loopbackTarget, bridgeHandoff);
+    const loopbackPolicy = resolveTopicSelectionV1cDownstreamFeedbackPolicy({
+      feedback_signal: input.feedback_signal,
+      bridge_handoff: bridgeHandoff,
+    });
+    const loopbackTarget = loopbackPolicy.loopback_target;
+    const requiresRecheck = loopbackPolicy.requires_recheck;
+    const affectedRef = loopbackPolicy.affected_ref;
     const requiredActions = this.resolveRequiredActions(input, requiresRecheck);
     const fingerprint = sha256Text(stableStringify({
       paper_project_bridge_id: bridgeHandoff.paper_project_bridge_id,
@@ -195,7 +177,7 @@ export class TopicSelectionV1cDownstreamFeedbackRecheckService {
       severity: input.severity,
       requires_recheck: requiresRecheck,
       affected_ref: affectedRef,
-      affected_stage: this.stageForLoopbackTarget(loopbackTarget),
+      affected_stage: loopbackPolicy.affected_stage,
       source_refs: sourceRefs,
       rationale: this.classificationRationale(input.feedback_signal, loopbackTarget),
       required_actions: requiredActions,
@@ -457,95 +439,6 @@ export class TopicSelectionV1cDownstreamFeedbackRecheckService {
     return requiredAction ? [requiredAction] : [];
   }
 
-  private resolveAffectedRef(
-    loopbackTarget: TopicSelectionDownstreamLoopbackTarget,
-    bridgeHandoff: TopicSelectionPaperProjectBridgeHandoff,
-  ): TopicSelectionFunctionalRef {
-    switch (loopbackTarget) {
-      case 'package':
-        return this.findSourceRef(bridgeHandoff, ['topic_package'])
-          ?? this.ref('topic_package', bridgeHandoff.topic_package_id, bridgeHandoff.bridge.title_card_id, bridgeHandoff.package_version);
-      case 'value_assessment':
-        return this.requireSourceRef(
-          bridgeHandoff,
-          ['topic_value_assessment', 'value_assessment'],
-          loopbackTarget,
-        );
-      case 'topic_question':
-        return this.requireSourceRef(bridgeHandoff, ['topic_question'], loopbackTarget);
-      case 'research_slice':
-        return this.requireSourceRef(bridgeHandoff, ['research_slice'], loopbackTarget);
-      case 'validated_need':
-        return this.requireSourceRef(bridgeHandoff, ['validated_need'], loopbackTarget);
-      case 'evidence_or_search':
-        return this.requireEvidenceOrSearchRef(bridgeHandoff);
-      case 'promotion':
-        return bridgeHandoff.source_promotion_decision_ref;
-      case 'paper_project_bridge':
-        return bridgeHandoff.paper_project_bridge_ref;
-      case 'merge_candidate':
-        return this.findSourceRef(bridgeHandoff, ['merge_candidate'])
-          ?? this.ref(
-            'merge_candidate',
-            `merge_candidate_${bridgeHandoff.topic_package_id}`,
-            bridgeHandoff.bridge.title_card_id,
-            bridgeHandoff.package_version,
-          );
-      case 'paper_project_intake':
-        return bridgeHandoff.paper_project_intake_ref
-          ?? this.ref(
-            'paper_project_intake',
-            `paper_project_intake_${bridgeHandoff.paper_project_bridge_id}`,
-            bridgeHandoff.bridge.title_card_id,
-            bridgeHandoff.bridge_payload_hash,
-          );
-    }
-  }
-
-  private findSourceRef(
-    bridgeHandoff: TopicSelectionPaperProjectBridgeHandoff,
-    refTypes: string[],
-  ): TopicSelectionFunctionalRef | null {
-    return bridgeHandoff.source_refs.find((sourceRef) => refTypes.includes(sourceRef.ref_type)) ?? null;
-  }
-
-  private requireSourceRef(
-    bridgeHandoff: TopicSelectionPaperProjectBridgeHandoff,
-    refTypes: string[],
-    loopbackTarget: TopicSelectionDownstreamLoopbackTarget,
-  ): TopicSelectionFunctionalRef {
-    const sourceRef = this.findSourceRef(bridgeHandoff, refTypes);
-    if (!sourceRef) {
-      throw new AppError(
-        409,
-        'GATE_CONSTRAINT_FAILED',
-        `PaperProjectBridge ${bridgeHandoff.paper_project_bridge_id} is missing source refs for ${loopbackTarget}.`,
-      );
-    }
-    return sourceRef;
-  }
-
-  private findEvidenceOrSearchRef(
-    bridgeHandoff: TopicSelectionPaperProjectBridgeHandoff,
-  ): TopicSelectionFunctionalRef | null {
-    return bridgeHandoff.source_refs.find((sourceRef) =>
-      sourceRef.ref_type.includes('evidence') || this.isSearchRefType(sourceRef.ref_type)) ?? null;
-  }
-
-  private requireEvidenceOrSearchRef(
-    bridgeHandoff: TopicSelectionPaperProjectBridgeHandoff,
-  ): TopicSelectionFunctionalRef {
-    const sourceRef = this.findEvidenceOrSearchRef(bridgeHandoff);
-    if (!sourceRef) {
-      throw new AppError(
-        409,
-        'GATE_CONSTRAINT_FAILED',
-        `PaperProjectBridge ${bridgeHandoff.paper_project_bridge_id} is missing evidence/search source refs.`,
-      );
-    }
-    return sourceRef;
-  }
-
   private classificationRationale(
     cause: TopicSelectionDownstreamLoopbackCause,
     target: TopicSelectionDownstreamLoopbackTarget,
@@ -569,38 +462,6 @@ export class TopicSelectionV1cDownstreamFeedbackRecheckService {
       return 'stale';
     }
     return 'recheck_required';
-  }
-
-  private stageForLoopbackTarget(target: TopicSelectionDownstreamLoopbackTarget): string {
-    switch (target) {
-      case 'package':
-        return 'topic_package';
-      case 'value_assessment':
-        return 'value_assessment';
-      case 'topic_question':
-        return 'topic_question';
-      case 'research_slice':
-        return 'research_slice';
-      case 'validated_need':
-        return 'validated_need';
-      case 'evidence_or_search':
-        return 'evidence_or_search';
-      case 'promotion':
-        return 'promotion';
-      case 'paper_project_bridge':
-        return 'paper_project_bridge';
-      case 'merge_candidate':
-        return 'merge_candidate';
-      case 'paper_project_intake':
-        return 'paper_project_intake';
-    }
-  }
-
-  private isSearchRefType(refType: string): boolean {
-    return refType === 'search'
-      || refType.startsWith('search_')
-      || refType.endsWith('_search')
-      || refType.includes('_search_');
   }
 
   private assertRef(ref: TopicSelectionFunctionalRef | undefined, label: string): void {

@@ -113,30 +113,13 @@ profiles:
         model_id: gpt-5.5
         weight: 100
 
-  - profile_id: topic-selection.v1c.promotion-support.bounded-micro-debate.provider-canary.v1
-    intent: v1c_provider_canary_bounded_micro_debate
+  - profile_id: topic-selection.v1c.delegated-promotion-decision.v1
+    intent: v1c_delegated_promotion_decision_candidate_runtime
     candidates:
       - provider_id: openai
         model_id: gpt-5.5
         weight: 100
-
-  - profile_id: topic-selection.v1c.gate-diagnostic-adjunct.provider-canary.v1
-    intent: v1c_provider_canary_gate_diagnostic_adjunct
-    candidates:
-      - provider_id: openai
-        model_id: gpt-5.5
-        weight: 100
-
-  - profile_id: topic-selection.v1c.delegated-promotion-decision.provider-canary.v1
-    intent: v1c_provider_canary_delegated_promotion_decision
-    candidates:
-      - provider_id: openai
-        model_id: gpt-5.5
-        weight: 100
-
-  - profile_id: topic-selection.v1c.downstream-feedback-normalization.provider-canary.v1
-    intent: v1c_provider_canary_downstream_feedback_normalization
-    candidates:
+    fallback:
       - provider_id: openai
         model_id: gpt-5.5
         weight: 100
