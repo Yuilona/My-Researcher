@@ -288,11 +288,12 @@
 | OpenAI or DashScope | token over-budget canary | live evidence passed with provider call count zero before gateway execution |
 | OpenAI | v1b N8 provider-required prompt-cache canary | live provider evidence passed: exact prompt cache hit still performs live gateway calls, prompt/cache/audit provenance is recorded, response reuse stays null |
 | DashScope | v1b N8 provider-required prompt-cache canary | live provider evidence passed: exact prompt cache hit still performs live gateway calls, prompt/cache/audit provenance is recorded, response reuse stays null |
-| OpenAI | v1c N2 bounded micro-debate four-call workflow | every role slot executes as live provider calls; cached response cannot replace any role output |
-| DashScope | v1c N2 bounded micro-debate four-call workflow | every role slot executes as live provider calls; provider telemetry and prompt/context hashes are recorded |
-| OpenAI/DashScope | v1c N4 delegated promotion decision production runtime slot | local and gated live canaries target the production runtime slot; prompt-cache hits still perform provider calls, malformed/cached/over-budget provider output cannot create N4 authority or N5 bridge records, and response reuse remains null/not-applicable |
-| OpenAI | v1c N6 downstream feedback normalization production runtime slot | prompt-cache hit still performs live provider calls; malformed, cached, or over-budget provider output cannot create downstream recheck authority |
-| DashScope | v1c N6 downstream feedback normalization production runtime slot | prompt-cache hit still performs live provider calls; malformed, cached, or over-budget provider output cannot create downstream recheck authority |
+| OpenAI | v1c N2 bounded micro-debate four-call workflow | pending final live pass. Latest focused diagnostic reached the provider twice for the supporter-draft slot with token-budget `within_budget` and null response reuse refs, but blocked at provider request/network layer. |
+| DashScope | v1c N2 bounded micro-debate four-call workflow | live evidence passed on 2026-06-02 for all bounded role slots; prompt-cache hits still perform provider calls, response reuse stays null, and telemetry is recorded. |
+| OpenAI | v1c N4 delegated promotion decision production runtime slot | pending final live pass after OpenAI channel stabilization; local canary coverage remains passed and targets the production runtime slot. |
+| DashScope | v1c N4 delegated promotion decision production runtime slot | live evidence passed on 2026-06-02; prompt-cache hits still perform provider calls, malformed/cached/over-budget provider output cannot create N4 authority or N5 bridge records, and response reuse remains null/not-applicable. |
+| OpenAI | v1c N6 downstream feedback normalization production runtime slot | pending final live pass after OpenAI channel stabilization; local canary coverage remains passed and targets the production runtime slot. |
+| DashScope | v1c N6 downstream feedback normalization production runtime slot | live evidence passed on 2026-06-02; prompt-cache hit still performs live provider calls, and malformed, cached, or over-budget provider output cannot create downstream recheck authority. |
 | OpenAI or DashScope | live token over budget fixture | provider call count remains zero |
 
 ## Closure Checks
@@ -300,5 +301,5 @@
 - Backend typecheck and focused unit tests pass.
 - v1a/v1b/v1c filtered harness smokes pass.
 - v1c production-depth passes or records a specific blocked condition with no authority-boundary regression.
-- Provider canaries pass or are recorded as environment-blocked with no code failure.
+- Provider canaries pass or are recorded as provider/environment-blocked with diagnostic evidence and no runtime boundary regression. Final dual-provider live acceptance requires rerunning OpenAI v1c N2/N4/N6 after the provider channel is stable.
 - Governance sync/lint passes.

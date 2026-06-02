@@ -54,6 +54,7 @@ import {
 import {
   TopicSelectionProviderCanaryService,
   type TopicSelectionProviderCanaryCandidateDraftBatch,
+  type TopicSelectionProviderCanaryLiveRequiredEvidence,
   type TopicSelectionProviderCanaryProviderId,
 } from './topic-selection-provider-canary-service.js';
 
@@ -614,6 +615,29 @@ function makeCanaryService(options: {
   });
 }
 
+function liveRequiredDiagnostic(result: TopicSelectionProviderCanaryLiveRequiredEvidence): string {
+  return JSON.stringify({
+    provider_id: result.provider_id,
+    model_option_id: result.model_option_id,
+    provider_call_count: result.provider_call_count,
+    first_status: result.first_status,
+    second_status: result.second_status,
+    first_error_code: result.first_error_code,
+    second_error_code: result.second_error_code,
+    first_blocker_codes: result.first_blocker_codes,
+    second_blocker_codes: result.second_blocker_codes,
+    first_warning_codes: result.first_warning_codes,
+    second_warning_codes: result.second_warning_codes,
+    first_token_budget_gate_decision: result.first_token_budget_gate_decision,
+    second_token_budget_gate_decision: result.second_token_budget_gate_decision,
+  });
+}
+
+function assertLiveRequiredSucceeded(result: TopicSelectionProviderCanaryLiveRequiredEvidence): void {
+  assert.equal(result.first_status, 'succeeded', liveRequiredDiagnostic(result));
+  assert.equal(result.second_status, 'succeeded', liveRequiredDiagnostic(result));
+}
+
 function expectedModelOptionId(providerId: TopicSelectionProviderCanaryProviderId): string {
   const suffix = providerId === 'openai'
     ? 'openai-balanced'
@@ -691,8 +715,7 @@ function assertV1bN8PromptCacheLiveRequiredResult(
   assert.equal(result.provider_id, providerId);
   assert.equal(result.model_option_id, expectedV1bN8ModelOptionId(providerId));
   assert.equal(result.provider_required_live, true);
-  assert.equal(result.first_status, 'succeeded');
-  assert.equal(result.second_status, 'succeeded');
+  assertLiveRequiredSucceeded(result);
   assert.equal(result.provider_call_count, 2);
   assert.equal(result.first_prompt_packet_hash, result.second_prompt_packet_hash);
   assert.equal(result.prompt_artifact_ref_reused, true);
@@ -715,8 +738,7 @@ async function assertPromptCacheLiveRequiredCanary(providerId: TopicSelectionPro
   assert.equal(result.provider_id, providerId);
   assert.equal(result.model_option_id, expectedModelOptionId(providerId));
   assert.equal(result.provider_required_live, true);
-  assert.equal(result.first_status, 'succeeded');
-  assert.equal(result.second_status, 'succeeded');
+  assertLiveRequiredSucceeded(result);
   assert.equal(result.provider_call_count, 2);
   assert.equal(gateway.calls.length, 2);
   assert.equal(gateway.calls[0]!.model.providerId, providerId);
@@ -742,8 +764,7 @@ async function assertV1bN4PromptCacheLiveRequiredCanary(providerId: TopicSelecti
   assert.equal(result.provider_id, providerId);
   assert.equal(result.model_option_id, expectedV1bN4ModelOptionId(providerId));
   assert.equal(result.provider_required_live, true);
-  assert.equal(result.first_status, 'succeeded');
-  assert.equal(result.second_status, 'succeeded');
+  assertLiveRequiredSucceeded(result);
   assert.equal(result.provider_call_count, 2);
   assert.equal(gateway.calls.length, 2);
   assert.equal(gateway.calls[0]!.model.providerId, providerId);
@@ -773,8 +794,7 @@ async function assertV1bN6PromptCacheLiveRequiredCanary(providerId: TopicSelecti
   assert.equal(result.provider_id, providerId);
   assert.equal(result.model_option_id, expectedV1bN6ModelOptionId(providerId));
   assert.equal(result.provider_required_live, true);
-  assert.equal(result.first_status, 'succeeded');
-  assert.equal(result.second_status, 'succeeded');
+  assertLiveRequiredSucceeded(result);
   assert.equal(result.provider_call_count, 2);
   assert.equal(gateway.calls.length, 2);
   assert.equal(gateway.calls[0]!.model.providerId, providerId);
@@ -832,8 +852,7 @@ async function assertV1cN2PromptCacheLiveRequiredCanary(
   assert.equal(result.model_profile_id, TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID);
   assert.equal(result.canary_surface, 'production_runtime_slot');
   assert.equal(result.provider_required_live, true);
-  assert.equal(result.first_status, 'succeeded');
-  assert.equal(result.second_status, 'succeeded');
+  assertLiveRequiredSucceeded(result);
   assert.equal(result.provider_call_count, 2);
   assert.equal(gateway.calls.length, 2);
   assert.equal(gateway.calls[0]!.model.providerId, providerId);
@@ -895,8 +914,7 @@ async function assertV1cN6PromptCacheLiveRequiredCanary(providerId: TopicSelecti
   assert.equal(result.model_profile_id, TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID);
   assert.equal(result.canary_surface, 'production_runtime_slot');
   assert.equal(result.provider_required_live, true);
-  assert.equal(result.first_status, 'succeeded');
-  assert.equal(result.second_status, 'succeeded');
+  assertLiveRequiredSucceeded(result);
   assert.equal(result.provider_call_count, 2);
   assert.equal(gateway.calls.length, 2);
   assert.equal(gateway.calls[0]!.model.providerId, providerId);
@@ -1026,8 +1044,7 @@ function assertV1cN4LiveRequiredEvidence(
   assert.equal(result.model_profile_id, TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID);
   assert.equal(result.canary_surface, 'production_runtime_slot');
   assert.equal(result.provider_required_live, true);
-  assert.equal(result.first_status, 'succeeded');
-  assert.equal(result.second_status, 'succeeded');
+  assertLiveRequiredSucceeded(result);
   assert.equal(result.provider_call_count, 2);
   assert.equal(result.first_prompt_packet_hash, result.second_prompt_packet_hash);
   assert.equal(result.prompt_artifact_ref_reused, true);
@@ -1559,8 +1576,7 @@ test(
       provider_id: 'openai',
     });
 
-    assert.equal(result.first_status, 'succeeded');
-    assert.equal(result.second_status, 'succeeded');
+    assertLiveRequiredSucceeded(result);
     assert.equal(result.provider_call_count, 2);
     assert.equal(result.telemetry[0]?.provider_id, 'openai');
   },
@@ -1588,8 +1604,7 @@ test(
         slot_id: slot,
       });
 
-      assert.equal(result.first_status, 'succeeded');
-      assert.equal(result.second_status, 'succeeded');
+      assertLiveRequiredSucceeded(result);
       assert.equal(result.provider_call_count, 2);
       assert.equal(result.model_option_id, expectedV1cN2ModelOptionId('openai'));
       assert.equal(result.invocation_slot_id, slot);
@@ -1620,8 +1635,7 @@ test(
         slot_id: slot,
       });
 
-      assert.equal(result.first_status, 'succeeded');
-      assert.equal(result.second_status, 'succeeded');
+      assertLiveRequiredSucceeded(result);
       assert.equal(result.provider_call_count, 2);
       assert.equal(result.model_option_id, expectedV1cN2ModelOptionId('dashscope'));
       assert.equal(result.invocation_slot_id, slot);
@@ -1698,8 +1712,7 @@ test(
       provider_id: 'openai',
     });
 
-    assert.equal(result.first_status, 'succeeded');
-    assert.equal(result.second_status, 'succeeded');
+    assertLiveRequiredSucceeded(result);
     assert.equal(result.provider_call_count, 2);
     assert.equal(result.model_option_id, expectedV1cN6ModelOptionId('openai'));
     assert.equal(
@@ -1730,8 +1743,7 @@ test(
       provider_id: 'dashscope',
     });
 
-    assert.equal(result.first_status, 'succeeded');
-    assert.equal(result.second_status, 'succeeded');
+    assertLiveRequiredSucceeded(result);
     assert.equal(result.provider_call_count, 2);
     assert.equal(result.model_option_id, expectedV1cN6ModelOptionId('dashscope'));
     assert.equal(
@@ -1762,8 +1774,7 @@ test(
       provider_id: 'dashscope',
     });
 
-    assert.equal(result.first_status, 'succeeded');
-    assert.equal(result.second_status, 'succeeded');
+    assertLiveRequiredSucceeded(result);
     assert.equal(result.provider_call_count, 2);
     assert.equal(result.telemetry[0]?.provider_id, 'dashscope');
   },
@@ -1789,8 +1800,7 @@ test(
       provider_id: 'openai',
     });
 
-    assert.equal(result.first_status, 'succeeded');
-    assert.equal(result.second_status, 'succeeded');
+    assertLiveRequiredSucceeded(result);
     assert.equal(result.provider_call_count, 2);
     assert.equal(result.model_option_id, expectedV1bN4ModelOptionId('openai'));
     assert.equal(result.telemetry[0]?.provider_id, 'openai');
@@ -1817,8 +1827,7 @@ test(
       provider_id: 'dashscope',
     });
 
-    assert.equal(result.first_status, 'succeeded');
-    assert.equal(result.second_status, 'succeeded');
+    assertLiveRequiredSucceeded(result);
     assert.equal(result.provider_call_count, 2);
     assert.equal(result.model_option_id, expectedV1bN4ModelOptionId('dashscope'));
     assert.equal(result.telemetry[0]?.provider_id, 'dashscope');
@@ -1845,8 +1854,7 @@ test(
       provider_id: 'openai',
     });
 
-    assert.equal(result.first_status, 'succeeded');
-    assert.equal(result.second_status, 'succeeded');
+    assertLiveRequiredSucceeded(result);
     assert.equal(result.provider_call_count, 2);
     assert.equal(result.model_option_id, expectedV1bN6ModelOptionId('openai'));
     assert.equal(result.telemetry[0]?.provider_id, 'openai');
@@ -1873,8 +1881,7 @@ test(
       provider_id: 'dashscope',
     });
 
-    assert.equal(result.first_status, 'succeeded');
-    assert.equal(result.second_status, 'succeeded');
+    assertLiveRequiredSucceeded(result);
     assert.equal(result.provider_call_count, 2);
     assert.equal(result.model_option_id, expectedV1bN6ModelOptionId('dashscope'));
     assert.equal(result.telemetry[0]?.provider_id, 'dashscope');

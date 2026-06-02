@@ -1627,3 +1627,18 @@
 - Hardened the production-depth prompt-index first-writer race cleanup.
   - The temporary race row cleanup now runs in `finally`, so a failed race assertion still attempts to remove the run-scoped temporary prompt-index row.
   - The success path still asserts exactly one inserted row, one shared winning prompt artifact ref, one deleted cleanup row, and zero remaining rows.
+
+## 2026-06-02 - D28-O v1c Provider-Live Acceptance Diagnostics Landed
+- Enhanced `TopicSelectionProviderCanaryLiveRequiredEvidence` so live-provider acceptance does not collapse provider/runtime failures into an undiagnosable `blocked` status.
+  - Live evidence now carries per-attempt `error_code`, blocker codes, warning codes, and token-budget gate decisions for the first and second invocation.
+  - The generic provider canary path now reuses the same live-evidence builder as v1b/v1c slot canaries.
+  - Provider canary tests now assert live-required success through a diagnostic helper so future live failures surface provider id, model option, call count, blocker/error codes, and token-budget decisions in TAP output.
+- Ran v1c N2/N4/N6 DashScope live slot canaries against the production runtime slots.
+  - N2 bounded micro-debate all-slot live canary passed.
+  - N4 delegated promotion decision live canary passed.
+  - N6 downstream feedback normalization live canary passed.
+  - Each passed path still proves provider calls happen despite prompt-cache reuse, response reuse refs stay null, and provider telemetry remains telemetry-only.
+- OpenAI live acceptance did not pass in this local environment.
+  - A focused N2 supporter-draft diagnostic showed two real provider attempts, both token-budget `within_budget`, both response reuse refs null, and provider-call count 2, but both attempts blocked at the provider request layer.
+  - Observed OpenAI blockers were provider-channel/request failures (`InvalidRequestError` in the runtime diagnostic and `TransientError`/`fetch failed` in a direct gateway probe), not token-budget, prompt-cache, response-reuse, or deterministic-authority bypass failures.
+  - Therefore v1c production-depth remains passed locally, DashScope live evidence is recorded, and final OpenAI provider-live acceptance remains a provider/environment follow-up before claiming dual-provider live production acceptance.

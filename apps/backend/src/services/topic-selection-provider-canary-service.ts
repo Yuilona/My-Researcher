@@ -84,6 +84,14 @@ export interface TopicSelectionProviderCanaryLiveRequiredEvidence {
   provider_call_count: number;
   first_status: TopicSelectionAgentInvocationResult<unknown>['status'];
   second_status: TopicSelectionAgentInvocationResult<unknown>['status'];
+  first_error_code: string | null;
+  second_error_code: string | null;
+  first_blocker_codes: string[];
+  second_blocker_codes: string[];
+  first_warning_codes: string[];
+  second_warning_codes: string[];
+  first_token_budget_gate_decision: string | null;
+  second_token_budget_gate_decision: string | null;
   first_prompt_packet_hash: string | null;
   second_prompt_packet_hash: string | null;
   prompt_artifact_ref_reused: boolean;
@@ -182,31 +190,13 @@ export class TopicSelectionProviderCanaryService {
       invocation,
     );
 
-    return {
-      provider_id: input.provider_id,
-      model_option_id: modelOptionId,
-      provider_required_live: true,
-      provider_call_count: countingGateway.callCount,
-      first_status: first.status,
-      second_status: second.status,
-      first_prompt_packet_hash: first.provenance.prompt_packet_hash ?? null,
-      second_prompt_packet_hash: second.provenance.prompt_packet_hash ?? null,
-      prompt_artifact_ref_reused:
-        first.provenance.redacted_prompt_artifact_ref?.ref_id ===
-        second.provenance.redacted_prompt_artifact_ref?.ref_id,
-      prompt_quality_report_ref_reused:
-        first.provenance.prompt_quality_report_ref?.ref_id ===
-        second.provenance.prompt_quality_report_ref?.ref_id,
-      provider_response_cache_statuses: [
-        first.provenance.cache_status ?? null,
-        second.provenance.cache_status ?? null,
-      ],
-      response_reuse_refs: [
-        first.provenance.response_reuse_ref ?? null,
-        second.provenance.response_reuse_ref ?? null,
-      ],
-      telemetry: countingGateway.telemetry,
-    };
+    return this.liveRequiredEvidence({
+      providerId: input.provider_id,
+      modelOptionId,
+      first,
+      second,
+      countingGateway,
+    });
   }
 
   async runOverBudgetZeroCallCanary(
@@ -1095,6 +1085,14 @@ export class TopicSelectionProviderCanaryService {
       provider_call_count: input.countingGateway.callCount,
       first_status: input.first.status,
       second_status: input.second.status,
+      first_error_code: input.first.error_code ?? null,
+      second_error_code: input.second.error_code ?? null,
+      first_blocker_codes: input.first.blocker_codes,
+      second_blocker_codes: input.second.blocker_codes,
+      first_warning_codes: input.first.warning_codes,
+      second_warning_codes: input.second.warning_codes,
+      first_token_budget_gate_decision: input.first.token_budget_gate_result?.decision ?? null,
+      second_token_budget_gate_decision: input.second.token_budget_gate_result?.decision ?? null,
       first_prompt_packet_hash: input.first.provenance.prompt_packet_hash ?? null,
       second_prompt_packet_hash: input.second.provenance.prompt_packet_hash ?? null,
       prompt_artifact_ref_reused:

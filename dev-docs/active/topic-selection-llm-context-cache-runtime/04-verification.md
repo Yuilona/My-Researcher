@@ -965,6 +965,13 @@
 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after production-depth documentation sync. |
 | `git diff --check` | passed | No whitespace errors after the production-depth runner and documentation updates. |
 
+## 2026-06-02 - D28-O v1c Provider-Live Acceptance Verification
+| Command | Result | Notes |
+|---|---|---|
+| `cd apps/backend && node --test --loader ts-node/esm src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | Provider canary local/default suite passed after adding live diagnostic fields: 45 discovered, 31 local tests passed, 14 live-provider tests skipped by explicit env/key gates. |
+| Focused OpenAI v1c N2 supporter-draft diagnostic via `TopicSelectionProviderCanaryService.runV1cN2PromptCacheLiveRequiredCanary` | blocked by provider channel | The diagnostic performed two real OpenAI provider attempts. Both token-budget gate decisions were `within_budget`, provider call count was 2, response reuse refs were `[null, null]`, and telemetry count was 0 because the provider request failed before a successful telemetry envelope. Runtime evidence reported `InvalidRequestError`; a direct gateway probe against the same invocation also observed `TransientError` / `fetch failed`. This is not a runtime budget/cache/reuse failure and is not accepted as OpenAI live pass evidence. |
+| `cd apps/backend && T112_V1C_N2_PROVIDER_CANARY_LIVE=1 T112_V1C_N4_PROVIDER_CANARY_LIVE=1 T112_V1C_N6_PROVIDER_CANARY_LIVE=1 BACKEND_TEST_PRESERVE_REAL_ENV=1 node --env-file=../../.env.local --test --loader ts-node/esm --test-name-pattern "provider canary live v1c N[246] DashScope" src/services/topic-selection-provider-canary-service.unit.test.ts` | passed | DashScope v1c live slot canary group passed: 3 live tests passed, 42 pattern skips, 0 failures, duration `698532.690333ms`. N2 all bounded slots passed in `403772.760125ms`; N4 delegated promotion decision passed in `141788.905667ms`; N6 downstream feedback normalization passed in `151934.576791ms`. |
+
 ## Required Before Implementation
 - Contract design reviewed against T-088/T-089 D-18. Done.
 - First slice selected and approved: shared contracts/runtime primitives followed by v1a N6 single-agent and debate slots. Done.
