@@ -1641,4 +1641,17 @@
 - OpenAI live acceptance did not pass in this local environment.
   - A focused N2 supporter-draft diagnostic showed two real provider attempts, both token-budget `within_budget`, both response reuse refs null, and provider-call count 2, but both attempts blocked at the provider request layer.
   - Observed OpenAI blockers were provider-channel/request failures (`InvalidRequestError` in the runtime diagnostic and `TransientError`/`fetch failed` in a direct gateway probe), not token-budget, prompt-cache, response-reuse, or deterministic-authority bypass failures.
-  - Therefore v1c production-depth remains passed locally, DashScope live evidence is recorded, and final OpenAI provider-live acceptance remains a provider/environment follow-up before claiming dual-provider live production acceptance.
+  - This was later fixed in D28-P.
+
+## 2026-06-02 - D28-P OpenAI v1c Provider-Live Channel Stabilization Landed
+- Fixed the OpenAI Responses structured-output schema compatibility issues exposed by v1c live canaries.
+  - OpenAI request schema normalization now strips `uniqueItems`, which is valid for local Ajv/provider-canary fixture validation but rejected by the OpenAI structured-output schema subset.
+  - OpenAI request schema normalization now fills `items: { type: "string" }` for `maxItems: 0` arrays whose local schema has `items: {}`. The item schema remains unreachable because `maxItems` is zero; local/runtime/admission validation semantics are unchanged.
+- Added a guarded OpenAI transport fallback inside `BackendLlmGateway`.
+  - Normal execution still uses the existing single gateway and `fetch` path.
+  - If an OpenAI `api.openai.com` request fails with a connection-level `fetch failed` / undici timeout/reset, the gateway retries that same request through system `curl`.
+  - The curl fallback passes the Authorization header through an extra file descriptor config stream, not command-line arguments, so provider credentials are not exposed through process args.
+  - No provider SDK, second gateway, new config key, provider profile change, prompt change, route change, DB schema change, or provider response reuse behavior was introduced.
+- Re-ran v1c OpenAI provider-live acceptance.
+  - Focused N2 supporter draft, N2 repair, and N4 probes succeeded after the schema/transport fixes.
+  - The full gated OpenAI v1c N2/N4/N6 live slot canary group passed.

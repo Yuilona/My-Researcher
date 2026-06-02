@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import type { LiteratureContentProcessingSettingsService } from './literature-content-processing-settings-service.js';
 import { BackendLlmGateway, LlmGatewayError } from './llm-gateway.js';
@@ -197,6 +200,7 @@ test('LLM gateway normalizes OpenAI structured output schemas to strict objects'
       properties: {
         items: {
           type: 'array',
+          uniqueItems: true,
           items: {
             type: 'object',
             required: ['ref'],
@@ -212,6 +216,11 @@ test('LLM gateway normalizes OpenAI structured output schemas to strict objects'
             },
           },
         },
+        empty_items: {
+          type: 'array',
+          maxItems: 0,
+          items: {},
+        },
       },
     },
   });
@@ -224,6 +233,7 @@ test('LLM gateway normalizes OpenAI structured output schemas to strict objects'
     required?: string[];
     properties?: {
       items?: {
+        uniqueItems?: boolean;
         items?: {
           additionalProperties?: boolean;
           required?: string[];
@@ -244,11 +254,17 @@ test('LLM gateway normalizes OpenAI structured output schemas to strict objects'
           };
         };
       };
+      empty_items?: {
+        items?: {
+          type?: string;
+        };
+      };
     };
   };
 
   assert.equal(schema.additionalProperties, false);
-  assert.deepEqual(schema.required, ['items']);
+  assert.deepEqual(schema.required, ['items', 'empty_items']);
+  assert.equal(schema.properties?.items?.uniqueItems, undefined);
   assert.equal(schema.properties?.items?.items?.additionalProperties, false);
   assert.deepEqual(schema.properties?.items?.items?.required, ['ref']);
   assert.equal(schema.properties?.items?.items?.properties?.ref?.additionalProperties, false);
@@ -265,6 +281,7 @@ test('LLM gateway normalizes OpenAI structured output schemas to strict objects'
     schema.properties?.items?.items?.properties?.ref?.properties?.legacy?.anyOf?.[0]?.properties,
     {},
   );
+  assert.equal(schema.properties?.empty_items?.items?.type, 'string');
 });
 
 test('LLM gateway normalizes OpenAI response format names without changing the internal schema name', async () => {
@@ -319,6 +336,74 @@ test('LLM gateway normalizes OpenAI response format names without changing the i
     'TopicSelectionNeedAdjudicationRecommendationPacket@v1',
   ]);
   assert.equal(body.text?.format?.schema?.properties?.schema_version?.type, 'string');
+});
+
+test('LLM gateway falls back to curl for OpenAI fetch connection failures without leaking auth in args', async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'pea-openai-curl-fallback-'));
+  const fakeCurlPath = join(tempDir, 'curl');
+  const recordPath = join(tempDir, 'record.json');
+  const originalPath = process.env.PATH;
+  const originalFetch = globalThis.fetch;
+  await writeFile(fakeCurlPath, `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const configPath = args[args.indexOf('--config') + 1];
+const config = configPath ? fs.readFileSync(configPath, 'utf8') : '';
+let body = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { body += chunk; });
+process.stdin.on('end', () => {
+  fs.writeFileSync(process.env.PEA_CURL_FAKE_RECORD, JSON.stringify({
+    args,
+    config_has_auth: config.includes('Authorization: Bearer sk-test'),
+    body_has_model: body.includes('"model":"gpt-test"')
+  }));
+  process.stdout.write(JSON.stringify({ output_text: JSON.stringify({ ok: true }) }));
+  process.stdout.write('\\n__PEA_CURL_STATUS__:200');
+});
+`, { mode: 0o700 });
+
+  try {
+    process.env.PATH = `${tempDir}:${originalPath ?? ''}`;
+    process.env.PEA_CURL_FAKE_RECORD = recordPath;
+    globalThis.fetch = (async () => {
+      const error = new TypeError('fetch failed');
+      error.cause = { code: 'UND_ERR_CONNECT_TIMEOUT' };
+      throw error;
+    }) as typeof fetch;
+
+    const gateway = new BackendLlmGateway({
+      settingsService: createSettingsService(),
+    });
+    const response = await gateway.createStructuredOutput<{ ok: boolean }>({
+      executionContext: { feature: 'test', operation: 'openai-curl-fallback' },
+      model: { providerId: 'openai', modelId: 'gpt-test', profileId: 'test-profile' },
+      prompt: { promptTemplateId: 'test-prompt', version: 'v1' },
+      messages: [{ role: 'user', content: 'return ok' }],
+      schemaName: 'ok_schema',
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['ok'],
+        properties: { ok: { type: 'boolean' } },
+      },
+    });
+
+    const record = JSON.parse(await readFile(recordPath, 'utf8')) as {
+      args: string[];
+      config_has_auth: boolean;
+      body_has_model: boolean;
+    };
+    assert.equal(response.parsed.ok, true);
+    assert.equal(record.config_has_auth, true);
+    assert.equal(record.body_has_model, true);
+    assert.equal(record.args.some((arg) => arg.includes('sk-test')), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.PATH = originalPath;
+    delete process.env.PEA_CURL_FAKE_RECORD;
+    await rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('LLM gateway parses embedding vectors from OpenAI data shape', async () => {

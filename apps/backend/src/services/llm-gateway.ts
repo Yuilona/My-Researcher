@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import type { LiteratureContentProcessingSettingsService } from './literature-content-processing-settings-service.js';
 import type {
   TopicSelectionModelProfileNormalizedParams,
@@ -162,6 +163,13 @@ function normalizeOpenAiStructuredOutputSchema(schema: unknown): unknown {
 
   const normalized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(schema)) {
+    if (key === 'uniqueItems') {
+      continue;
+    }
+    if (key === 'items' && isRecord(value) && Object.keys(value).length === 0 && schema.maxItems === 0) {
+      normalized.items = { type: 'string' };
+      continue;
+    }
     if (key === 'properties' && isRecord(value)) {
       normalized.properties = Object.fromEntries(
         Object.entries(value).map(([propertyKey, propertySchema]) => [
@@ -433,7 +441,139 @@ export class BackendLlmGateway {
     if (this.options.fetchImpl) {
       return this.options.fetchImpl(input, init);
     }
-    return globalThis.fetch(input, init);
+    try {
+      return await globalThis.fetch(input, init);
+    } catch (error) {
+      if (this.shouldUseCurlFallback(input, error)) {
+        return this.fetchProviderWithCurl(input, init);
+      }
+      throw error;
+    }
+  }
+
+  private shouldUseCurlFallback(input: Parameters<typeof fetch>[0], error: unknown): boolean {
+    const url = typeof input === 'string'
+      ? input
+      : input instanceof URL
+        ? input.href
+        : input.url;
+    if (!url.startsWith('https://api.openai.com/')) {
+      return false;
+    }
+    if (!(error instanceof Error)) {
+      return false;
+    }
+    const cause = error.cause as { code?: unknown } | undefined;
+    return error.message === 'fetch failed'
+      || cause?.code === 'UND_ERR_CONNECT_TIMEOUT'
+      || cause?.code === 'ECONNRESET'
+      || cause?.code === 'ETIMEDOUT';
+  }
+
+  private async fetchProviderWithCurl(
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ): Promise<Response> {
+    const url = typeof input === 'string'
+      ? input
+      : input instanceof URL
+        ? input.href
+        : input.url;
+    const method = init?.method ?? 'GET';
+    const body = typeof init?.body === 'string'
+      ? init.body
+      : init?.body === undefined || init.body === null
+        ? ''
+        : String(init.body);
+    const headers = this.normalizeFetchHeaders(init?.headers);
+    const args = [
+      '--silent',
+      '--show-error',
+      '--connect-timeout',
+      '45',
+      '--max-time',
+      '300',
+      '--request',
+      method,
+      '--write-out',
+      '\n__PEA_CURL_STATUS__:%{http_code}',
+      '--output',
+      '-',
+      '--config',
+      '/dev/fd/3',
+      ...(body ? ['--data-binary', '@-'] : []),
+      url,
+    ];
+
+    const config = headers
+      .map(([name, value]) => `header = "${this.escapeCurlConfigValue(`${name}: ${value}`)}"`)
+      .join('\n');
+
+    return await new Promise<Response>((resolve, reject) => {
+      const child = spawn('curl', args, {
+        stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+      });
+      const stdoutChunks: Buffer[] = [];
+      const stderrChunks: Buffer[] = [];
+      const abort = () => {
+        child.kill('SIGTERM');
+        const abortError = new Error('The operation was aborted.');
+        abortError.name = 'AbortError';
+        reject(abortError);
+      };
+      if (init?.signal?.aborted) {
+        abort();
+        return;
+      }
+      init?.signal?.addEventListener('abort', abort, { once: true });
+      child.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
+      child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+      child.on('error', reject);
+      child.on('close', (code) => {
+        init?.signal?.removeEventListener('abort', abort);
+        const stdout = Buffer.concat(stdoutChunks).toString('utf8');
+        const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
+        if (code !== 0) {
+          reject(new Error(stderr || `curl exited with code ${code ?? 'unknown'}`));
+          return;
+        }
+        const marker = '\n__PEA_CURL_STATUS__:';
+        const markerIndex = stdout.lastIndexOf(marker);
+        if (markerIndex < 0) {
+          reject(new Error('curl response did not include an HTTP status marker.'));
+          return;
+        }
+        const responseBody = stdout.slice(0, markerIndex);
+        const status = Number(stdout.slice(markerIndex + marker.length).trim());
+        if (!Number.isInteger(status) || status <= 0) {
+          reject(new Error(`curl returned invalid HTTP status ${stdout.slice(markerIndex + marker.length).trim()}.`));
+          return;
+        }
+        resolve(new Response(responseBody, {
+          status,
+          headers: { 'content-type': 'application/json' },
+        }));
+      });
+      (child.stdio[3] as NodeJS.WritableStream | null)?.end(`${config}\n`);
+      child.stdin.end(body);
+    });
+  }
+
+  private normalizeFetchHeaders(headers: unknown): Array<[string, string]> {
+    if (!headers) {
+      return [];
+    }
+    if (headers instanceof Headers) {
+      return [...headers.entries()];
+    }
+    if (Array.isArray(headers)) {
+      return headers.map(([name, value]) => [name, value]);
+    }
+    return Object.entries(headers);
+  }
+
+  private escapeCurlConfigValue(value: string): string {
+    return value.replace(/[\r\n]/gu, ' ').replace(/\\/gu, '\\\\').replace(/"/gu, '\\"');
   }
 
   private async requestStructuredOutput(
