@@ -114,22 +114,15 @@ export class TopicSelectionV1bEarlySemanticSupportAdmissionService {
       );
     }
 
-    if (artifact.runtime_provenance_class === 'fixture_replay') {
-      if (!input.allow_fixture_replay) {
-        return this.block(
-          'V1B_EARLY_SUPPORT_ARTIFACT_PROVENANCE_CLASS_INVALID',
-          'fixture_replay early semantic support artifacts are allowed only in test or acceptance fixture mode.',
-        );
-      }
-      return {
-        admitted: true,
-        artifact,
-        runtime_provenance_class: 'fixture_replay',
-        warnings: ['fixture_replay_v1b_early_support_admitted'],
-      };
+    const fixtureReplay = artifact.runtime_provenance_class === 'fixture_replay';
+    const runtimeVerified = artifact.runtime_provenance_class === 'runtime_verified';
+    if (fixtureReplay && !input.allow_fixture_replay) {
+      return this.block(
+        'V1B_EARLY_SUPPORT_ARTIFACT_PROVENANCE_CLASS_INVALID',
+        'fixture_replay early semantic support artifacts are allowed only in test or acceptance fixture mode.',
+      );
     }
-
-    if (artifact.runtime_provenance_class !== 'runtime_verified') {
+    if (!fixtureReplay && !runtimeVerified) {
       return this.block(
         'V1B_EARLY_SUPPORT_ARTIFACT_PROVENANCE_CLASS_INVALID',
         'v1b early semantic support artifact runtime provenance class is not recognized.',
@@ -172,29 +165,32 @@ export class TopicSelectionV1bEarlySemanticSupportAdmissionService {
       );
     }
 
-    if (
+    if (runtimeVerified && (
       !artifact.runtime_audit_ref
       || artifact.runtime_audit_ref.ref_type !== 'artifact_ref'
       || !this.refsEqual(artifact.provenance_ref, artifact.runtime_audit_ref)
-    ) {
+    )) {
       return this.block(
         'V1B_EARLY_SUPPORT_ARTIFACT_RUNTIME_CONTEXT_DRIFT',
         'v1b early semantic support artifact provenance must point to the runtime audit artifact.',
       );
     }
 
-    if (
-      artifact.runtime_invocation_context_hash !== input.expected.runtime_invocation_context_hash
-      || !artifact.runtime_audit_ref
-      || !artifact.runtime_audit_hash
-    ) {
+    if (artifact.runtime_invocation_context_hash !== input.expected.runtime_invocation_context_hash) {
       return this.block(
         'V1B_EARLY_SUPPORT_ARTIFACT_RUNTIME_CONTEXT_DRIFT',
-        'v1b early semantic support artifact runtime invocation or audit identity does not match current runtime context.',
+        'v1b early semantic support artifact runtime invocation identity does not match current runtime context.',
       );
     }
 
-    if (!this.sourceHashesMatch(artifact.source_hashes, input.expected.source_hashes)) {
+    if (runtimeVerified && (!artifact.runtime_audit_ref || !artifact.runtime_audit_hash)) {
+      return this.block(
+        'V1B_EARLY_SUPPORT_ARTIFACT_RUNTIME_CONTEXT_DRIFT',
+        'v1b early semantic support artifact runtime audit identity is incomplete.',
+      );
+    }
+
+    if (!artifact.source_hashes || !this.sourceHashesMatch(artifact.source_hashes, input.expected.source_hashes)) {
       return this.block(
         'V1B_EARLY_SUPPORT_ARTIFACT_SOURCE_HASH_DRIFT',
         'v1b early semantic support artifact source hashes do not match current frozen lineage.',
@@ -211,8 +207,8 @@ export class TopicSelectionV1bEarlySemanticSupportAdmissionService {
     return {
       admitted: true,
       artifact,
-      runtime_provenance_class: 'runtime_verified',
-      warnings: [],
+      runtime_provenance_class: artifact.runtime_provenance_class,
+      warnings: fixtureReplay ? ['fixture_replay_v1b_early_support_admitted'] : [],
     };
   }
 

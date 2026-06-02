@@ -1136,11 +1136,10 @@
 ## 2026-06-01 - D26 v1b Runtime Closure Scope Locked
 - D26-A locks v1b runtime closure to the promoted N4/N6/N7/N8 runtime surface.
   - The closure signal is based on the existing promoted slots and their combined stress path, not on converting every v1b LLM-like or delegated semantic surface in the workflow.
-- D26-B defers v1b N2/N3/N5 runtime promotion.
-  - `n2_constraint_profile_semantic_support`, `n3_readiness_classification`, and `n5_slice_selection_review` remain frozen/delegated semantic support for the current v1b closure.
-  - Any promotion of these slots requires a later explicit decision with context family, authority boundary, prompt/cache identity, compression policy, and legacy-exit criteria.
+- D26-B deferred v1b N2/N3/N5 runtime promotion at that point in the closure.
+  - This historical deferral was superseded by D30, which explicitly promoted `n2_constraint_profile_semantic_support`, `n3_readiness_classification`, and `n5_slice_selection_review` with context family, authority boundary, prompt/cache identity, compression policy, and legacy-exit criteria.
 - D26-C defines v1b closure acceptance.
-  - `pnpm topic-selection:v1b-runtime-stress` is the combined local/dev Prisma evidence for promoted N4/N6/N7/N8 slots.
+  - At D26, `pnpm topic-selection:v1b-runtime-stress` was the combined local/dev Prisma evidence for promoted N4/N6/N7/N8 slots. After D30, the same runner includes `early_semantic_runtime_smoke` for promoted N2/N3/N5 semantic support slots.
   - Per-node L3/L4/L5 evidence remains the source of detailed slot confidence.
   - Prompt packet index persistence must stay metadata-only, provider response reuse remains blocked, compression self-check stays in runtime/admission services, and deterministic gates/handoffs/authority writes remain owned by node adapters and workflow services.
 - The following D27 decision locks closure acceptance; execution evidence is recorded in verification.
@@ -1722,3 +1721,17 @@
   - `early_semantic_runtime_smoke`;
   - runtime-stress targeted to `early_semantic_runtime_smoke`.
 - No DB schema, route contract, provider credential/config, DB-backed context packet cache, direct provider SDK path, or provider-harness full-chain path was introduced.
+
+## 2026-06-02 - D31 v1b Early Semantic Promotion Review Fixes
+- Fixed the D30 review findings around promoted N2/N3/N5 semantic support runtime quality.
+- Service-level WorkflowHarness tests no longer handcraft promoted N2/N5 Codex semantic artifacts.
+  - N2 `codex_delegated` tests now generate `runtime_verified` support artifacts through `TopicSelectionV1bEarlySemanticSupportRuntimeService`.
+  - `runReadyN3` also attaches runtime-generated N3 support-only evidence so downstream service-level coverage exercises the promoted N3 admission path without granting it authority.
+  - N5 `codex_delegated` tests now use runtime-generated `n5_slice_selection_review` artifacts.
+- HTTP route integration smoke no longer uses placeholder promoted N2 semantic artifacts.
+  - The HTTP route smoke keeps deterministic `fixture` authority input for N2 because its scope is route/legacy-write compatibility, not Codex delegated runtime evidence.
+  - Runtime evidence for N2/N3/N5 remains covered by the dedicated Prisma `early_semantic_runtime_smoke`.
+- Tightened `TopicSelectionV1bEarlySemanticSupportAdmissionService`.
+  - `fixture_replay` remains blocked in product mode.
+  - In acceptance/test mode, `fixture_replay` must still pass profile, prompt packet, runtime invocation context, source-hash, payload-hash, and compression identity checks; it is no longer a broad bypass.
+- Updated the plan notes so D26/D27 deferred N2/N3/N5 wording is explicitly marked as superseded by D30.

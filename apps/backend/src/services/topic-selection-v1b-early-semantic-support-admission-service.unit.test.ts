@@ -135,6 +135,19 @@ test('v1b early semantic support admission blocks legacy and fixture artifacts o
     throw new Error(`Expected fixture early semantic support to pass in fixture mode: ${fixtureAllowed.blocker.code}`);
   }
   assert.equal(fixtureAllowed.runtime_provenance_class, 'fixture_replay');
+
+  const fixtureSourceDrift = service.admit({
+    artifact: artifact({
+      runtime_provenance_class: 'fixture_replay',
+      source_hashes: { frozen_input_hash: hashC },
+    }),
+    expected: expected(),
+    allow_fixture_replay: true,
+  });
+  if (fixtureSourceDrift.admitted) {
+    throw new Error('Expected fixture early semantic support source drift to block.');
+  }
+  assert.equal(fixtureSourceDrift.blocker.code, 'V1B_EARLY_SUPPORT_ARTIFACT_SOURCE_HASH_DRIFT');
 });
 
 test('v1b early semantic support admission blocks payload, profile, prompt, runtime, source, and compression drift', () => {

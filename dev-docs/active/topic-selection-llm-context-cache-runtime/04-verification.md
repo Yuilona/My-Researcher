@@ -995,6 +995,15 @@
 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed before closure document sync. |
 | `git diff --check` | passed | No whitespace errors before closure document sync. |
 
+## 2026-06-02 - D31 v1b Early Semantic Promotion Review Fix Verification
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm --filter @paper-engineering-assistant/backend exec tsc --noEmit --pretty false` | passed | Backend TypeScript compile passed after migrating promoted N2/N3/N5 test fixtures and tightening early semantic fixture replay admission. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-v1b-early-semantic-support-admission-service.unit.test.ts` | passed | Early semantic admission tests passed, including new coverage that `fixture_replay` in acceptance/test mode still blocks source-hash drift. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --test --loader ts-node/esm src/services/topic-selection-v1b-workflow-harness-service.unit.test.ts` | passed | Service-level WorkflowHarness tests passed: 96/96. N2/N3/N5 promoted semantic support tests now use runtime-generated artifacts instead of hand-built promoted-slot fixtures. |
+| `pnpm --filter @paper-engineering-assistant/backend exec node --env-file=/Volumes/DataDisk/Project/My-Researcher/.env.local --test --loader ts-node/esm src/routes/topic-selection-v1b-routes.integration.test.ts` | passed | HTTP integration tests passed: 6/6, including the Prisma smoke after loading `.env.local`. The same command without env passed the 5 in-memory subtests and failed only the expected Prisma `DATABASE_URL` precondition. |
+| `pnpm topic-selection:v1b-early-semantic-runtime-smoke` | passed | Dedicated Prisma early semantic smoke still passed after the review fixes. Run id: `v1b-harness-e2e-1780398406937-cd1666`; cases covered N2 runtime replay/source drift, N3 support no-authority-bypass, N5 delegated selection replay, and prompt-index metadata-only rows for promoted early slots. |
+
 ## Required Before Implementation
 - Contract design reviewed against T-088/T-089 D-18. Done.
 - First slice selected and approved: shared contracts/runtime primitives followed by v1a N6 single-agent and debate slots. Done.

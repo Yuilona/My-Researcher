@@ -187,47 +187,6 @@ function v1bHarnessN1Request(
   };
 }
 
-function v1bHarnessSemanticArtifact(
-  input: TopicSelectionV1bWorkflowHarnessRunRequest,
-  overrides: Partial<TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef>,
-): TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef {
-  const titleCardId = input.title_card_id ?? 'title_card_v1b_harness_http';
-  return {
-    node_id: input.node_id,
-    run_mode: input.run_mode ?? 'acceptance',
-    slot_id: 'n2_constraint_profile_semantic_support',
-    allowed_effect: 'delegated_payload_candidate',
-    output_contract: 'ResearchConstraintProfileDraftSupport@v1',
-    execution_mode: 'codex_assisted',
-    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.constraint_profile_support,
-    model_option_id: null,
-    input_hash: input.frozen_input.frozen_input_hash!,
-    support_artifact_ref: ref('artifact_ref', `${input.node_attempt_id}_support`, titleCardId),
-    support_artifact_hash: 'a'.repeat(64),
-    normalized_output_ref: ref('artifact_ref', `${input.node_attempt_id}_normalized`, titleCardId),
-    normalized_output_hash: 'b'.repeat(64),
-    prompt_packet_hash: 'c'.repeat(64),
-    structured_output_hash: 'd'.repeat(64),
-    adapter_policy_version: 'topic-selection-v1b-node-policy-v1',
-    slot_spec_hash: 'e'.repeat(64),
-    provenance_ref: ref('artifact_ref', `${input.node_attempt_id}_provenance`, titleCardId),
-    runtime_provenance_class: 'fixture_replay',
-    context_policy_profile_id: null,
-    context_policy_profile_version: null,
-    context_policy_profile_hash: null,
-    prompt_variant_key: null,
-    runtime_invocation_context_hash: null,
-    redaction_policy: null,
-    source_hashes: {},
-    runtime_audit_ref: null,
-    runtime_audit_hash: null,
-    compression_report_ref: null,
-    compression_report_hash: null,
-    compressed_context_hash: null,
-    ...overrides,
-  };
-}
-
 function acceptedConstraintProfilePayload(): TopicSelectionV1bAcceptedConstraintProfilePayload {
   return {
     target_community: 'LLM systems researchers',
@@ -256,8 +215,8 @@ function v1bHarnessN2Request(
   const payload: TopicSelectionV1bN2HarnessFrozenInputPayload = {
     accepted_constraint_profile_payload: acceptedPayload,
     accepted_constraint_profile_payload_hash: acceptedHash,
-    authority_input_provider: 'codex_delegated',
-    delegation_artifact_hash: acceptedHash,
+    authority_input_provider: 'fixture',
+    delegation_artifact_hash: null,
     intake_snapshot_hash: n1Result.hashes.authority_hash,
     intake_snapshot_ref: n1Result.authority_ref,
     previous_profile_hash: null,
@@ -271,29 +230,18 @@ function v1bHarnessN2Request(
     source_refs: [n1Result.authority_ref],
     payload: payload as unknown as Record<string, unknown>,
   };
-  const request: TopicSelectionV1bWorkflowHarnessRunRequest = {
+  return {
     schema_version: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_RUN_REQUEST_SCHEMA_VERSION,
     title_card_id: bundle.title_card_id,
     workflow_run_id: `workflow_run_v1b_harness_http_${suffix}`,
     node_attempt_id: `node_attempt_v1b_harness_http_n2_${suffix}`,
     node_id: 'topic-selection.v1b.record-research-constraint-profile.v1',
     policy_version: 'topic-selection-v1b-node-policy-v1',
-    run_mode: 'acceptance',
-    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.constraint_profile_support,
     frozen_input: {
       ...frozenInput,
       frozen_input_hash: frozenInputHash(frozenInput),
     },
     created_by: 'system',
-  };
-  return {
-    ...request,
-    semantic_artifacts: [
-      v1bHarnessSemanticArtifact(request, {
-        normalized_output_hash: acceptedHash,
-        structured_output_hash: acceptedHash,
-      }),
-    ],
   };
 }
 

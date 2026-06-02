@@ -18,6 +18,8 @@
 - Do not let v1a N7 validate recommendations drop `METHOD_FAMILY_COVERAGE_GAP` reported by the support packet; the recommendation must carry the gap code or an explicit method-family/coverage-gap required action.
 - Do not classify v1a N1/N2/N3/N4/N9 as LLM compression/cache nodes. They are deterministic context producers and publish boundaries, so their stress coverage must focus on ref/hash lineage, source-health handoff, replay, and authority-write blocking.
 - Do not interpret the v1a runtime stress runner as a live-provider canary. It is Prisma-backed and production-shaped, but defaults to deterministic mocked LLM execution so repeated local runs do not spend provider budget.
+- Do not handcraft placeholder semantic artifacts for promoted runtime slots in service-level or HTTP tests. Use the owning runtime service for Codex delegated/support evidence, or keep the test on deterministic `fixture` authority input when the test scope is route compatibility.
+- Do not let `fixture_replay` become a promoted-slot identity bypass. Even outside product mode, fixture replay must still bind profile, prompt, runtime invocation context, source hashes, payload hash, and compression identity.
 
 ## Pending
-- Resource sampling, v1b, and v1c still need their own implementation-ready matrix promotion before runtime wiring.
+- Resource sampling and any unpromoted direct/provider surfaces still need their own implementation-ready matrix promotion before runtime wiring.

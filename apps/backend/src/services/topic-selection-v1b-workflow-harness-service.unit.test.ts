@@ -80,6 +80,14 @@ import { AppError } from '../errors/app-error.js';
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
 import { TopicSelectionV1bWorkflowHarnessService } from './topic-selection-v1b-workflow-harness-service.js';
 import {
+  TopicSelectionV1bEarlySemanticSupportRuntimeService,
+  type TopicSelectionV1bEarlySemanticSupportPayload,
+  type TopicSelectionV1bIntakeReadinessClassificationSupportPayload,
+} from './topic-selection-v1b-early-semantic-support-runtime-service.js';
+import type {
+  TopicSelectionV1bEarlySemanticSupportSlotId,
+} from './topic-selection-v1b-early-semantic-support-admission-service.js';
+import {
   TopicSelectionV1bN6DraftRuntimeService,
   type TopicSelectionV1bN6DraftGenerationMode,
 } from './topic-selection-v1b-n6-draft-runtime-service.js';
@@ -426,21 +434,6 @@ function n2Request(
   });
 }
 
-function n2CodexArtifact(
-  input: TopicSelectionV1bWorkflowHarnessRunRequest,
-  acceptedPayloadHash: string,
-): TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef {
-  return semanticArtifact(input, {
-    slot_id: 'n2_constraint_profile_semantic_support',
-    allowed_effect: 'delegated_payload_candidate',
-    output_contract: 'ResearchConstraintProfileDraftSupport@v1',
-    execution_mode: 'codex_assisted',
-    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.constraint_profile_support,
-    normalized_output_hash: acceptedPayloadHash,
-    structured_output_hash: acceptedPayloadHash,
-  });
-}
-
 function n3Request(
   n1Result: { authority_ref: TopicSelectionFunctionalRef | null; hashes: { authority_hash: string | null } },
   n2Result: { authority_ref: TopicSelectionFunctionalRef | null; hashes: { authority_hash: string | null; handoff_hash: string | null } },
@@ -469,6 +462,21 @@ function n3Request(
     },
     ...overrides,
   });
+}
+
+function n3ReadinessClassificationSupport(
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+): TopicSelectionV1bIntakeReadinessClassificationSupportPayload {
+  return {
+    schema_version: 'IntakeReadinessClassificationSupport@v1',
+    readiness_recommendation: 'ready',
+    blocker_codes: [],
+    warning_codes: [],
+    loopback_target_code: null,
+    cited_refs: input.frozen_input.source_refs,
+    rationale: 'Unit-test runtime support mirrors deterministic readiness without writing authority.',
+    no_authority_write_confirmed: true,
+  };
 }
 
 function n4Request(
@@ -625,6 +633,49 @@ async function recordN4DraftArtifact(
   });
 }
 
+async function generateEarlySemanticSupportArtifact(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  slotId: TopicSelectionV1bEarlySemanticSupportSlotId,
+  payload: TopicSelectionV1bEarlySemanticSupportPayload,
+): Promise<TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef> {
+  const runtime = new TopicSelectionV1bEarlySemanticSupportRuntimeService(ctx.controlPlane);
+  const generated = await runtime.generateSupportArtifact({
+    request: input,
+    slot_id: slotId,
+    execution_mode: 'codex_assisted',
+    run_mode: input.run_mode ?? 'acceptance',
+    codex_response: {
+      output: payload,
+      operator_label: 'unit-test-early-runtime',
+    },
+    created_by: 'system',
+  });
+  assert.equal(generated.status, 'succeeded');
+  if (generated.status !== 'succeeded') {
+    throw new Error(`Expected early semantic runtime support generation to succeed for ${slotId}.`);
+  }
+  return generated.semantic_artifact;
+}
+
+async function invokeN2WithRuntimeSupport(
+  ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
+  input: TopicSelectionV1bWorkflowHarnessRunRequest,
+  payload: TopicSelectionV1bAcceptedConstraintProfilePayload,
+): Promise<TopicSelectionV1bWorkflowHarnessRunResult> {
+  return ctx.service.invokeNode({
+    ...input,
+    semantic_artifacts: [
+      await generateEarlySemanticSupportArtifact(
+        ctx,
+        input,
+        'n2_constraint_profile_semantic_support',
+        payload,
+      ),
+    ],
+  });
+}
+
 async function n4RuntimePlanningInput(
   ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>,
   input: TopicSelectionV1bWorkflowHarnessRunRequest,
@@ -711,11 +762,19 @@ async function runReadyN3(ctx: Awaited<ReturnType<typeof seedHarnessV1aBundle>>)
   const n1 = await ctx.service.invokeNode(n1Request(ctx.bundle));
   const acceptedPayload = acceptedConstraintProfilePayload();
   const n2Input = n2Request(ctx.bundle, n1, acceptedPayload);
-  const n2 = await ctx.service.invokeNode({
-    ...n2Input,
-    semantic_artifacts: [n2CodexArtifact(n2Input, sha256Text(stableStringify(acceptedPayload)))],
+  const n2 = await invokeN2WithRuntimeSupport(ctx, n2Input, acceptedPayload);
+  const n3Input = n3Request(n1, n2);
+  const n3 = await ctx.service.invokeNode({
+    ...n3Input,
+    semantic_artifacts: [
+      await generateEarlySemanticSupportArtifact(
+        ctx,
+        n3Input,
+        'n3_readiness_classification',
+        n3ReadinessClassificationSupport(n3Input),
+      ),
+    ],
   });
-  const n3 = await ctx.service.invokeNode(n3Request(n1, n2));
   return { n1, n2, n3 };
 }
 
@@ -830,21 +889,6 @@ function n5Request(
       payload: payload as unknown as Record<string, unknown>,
     },
     ...overrides,
-  });
-}
-
-function n5CodexArtifact(
-  input: TopicSelectionV1bWorkflowHarnessRunRequest,
-  acceptedPayloadHash: string,
-): TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef {
-  return semanticArtifact(input, {
-    slot_id: 'n5_slice_selection_review',
-    allowed_effect: 'delegated_payload_candidate',
-    output_contract: 'ResearchSliceSelectionReviewSupport@v1',
-    execution_mode: 'codex_assisted',
-    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.slice_selection_support,
-    normalized_output_hash: acceptedPayloadHash,
-    structured_output_hash: acceptedPayloadHash,
   });
 }
 
@@ -2522,11 +2566,7 @@ test('v1b workflow harness N2 creates constraint profile from Codex delegated ac
   const n1 = await ctx.service.invokeNode(n1Request(ctx.bundle));
   const acceptedPayload = acceptedConstraintProfilePayload();
   const n2Input = n2Request(ctx.bundle, n1, acceptedPayload);
-  const acceptedHash = sha256Text(stableStringify(acceptedPayload));
-  const result = await ctx.service.invokeNode({
-    ...n2Input,
-    semantic_artifacts: [n2CodexArtifact(n2Input, acceptedHash)],
-  });
+  const result = await invokeN2WithRuntimeSupport(ctx, n2Input, acceptedPayload);
 
   assert.equal(result.gate_status, 'admitted');
   assert.equal(result.route_decision, 'invoke_next');
@@ -2546,6 +2586,8 @@ test('v1b workflow harness N2 blocks Codex support without accepted payload auth
   delete brokenPayload.accepted_constraint_profile_payload;
   const brokenInput: TopicSelectionV1bWorkflowHarnessRunRequest = {
     ...n2Input,
+    run_mode: null,
+    profile_id: null,
     frozen_input: {
       ...n2Input.frozen_input,
       payload: brokenPayload,
@@ -2556,10 +2598,7 @@ test('v1b workflow harness N2 blocks Codex support without accepted payload auth
       }),
     },
   };
-  const result = await ctx.service.invokeNode({
-    ...brokenInput,
-    semantic_artifacts: [n2CodexArtifact(brokenInput, sha256Text(stableStringify(acceptedPayload)))],
-  });
+  const result = await ctx.service.invokeNode(brokenInput);
 
   assert.equal(result.gate_status, 'blocked');
   assert.equal(result.error_code, 'N2_ACCEPTED_PROFILE_PAYLOAD_INVALID');
@@ -2572,10 +2611,7 @@ test('v1b workflow harness N3 ready profile emits readiness authority and N3 han
   const n1 = await ctx.service.invokeNode(n1Request(ctx.bundle));
   const acceptedPayload = acceptedConstraintProfilePayload();
   const n2Input = n2Request(ctx.bundle, n1, acceptedPayload);
-  const n2 = await ctx.service.invokeNode({
-    ...n2Input,
-    semantic_artifacts: [n2CodexArtifact(n2Input, sha256Text(stableStringify(acceptedPayload)))],
-  });
+  const n2 = await invokeN2WithRuntimeSupport(ctx, n2Input, acceptedPayload);
   const result = await ctx.service.invokeNode(n3Request(n1, n2));
 
   assert.equal(result.gate_status, 'admitted');
@@ -2598,10 +2634,7 @@ test('v1b workflow harness N3 blocks missing constraints without N4 handoff', as
     claim_ceiling: '',
   });
   const n2Input = n2Request(ctx.bundle, n1, acceptedPayload);
-  const n2 = await ctx.service.invokeNode({
-    ...n2Input,
-    semantic_artifacts: [n2CodexArtifact(n2Input, sha256Text(stableStringify(acceptedPayload)))],
-  });
+  const n2 = await invokeN2WithRuntimeSupport(ctx, n2Input, acceptedPayload);
   const result = await ctx.service.invokeNode(n3Request(n1, n2));
 
   assert.equal(result.gate_status, 'blocked');
@@ -2622,10 +2655,7 @@ test('v1b workflow harness N3 blocks drifted frozen authority hash before N4 han
   const n1 = await ctx.service.invokeNode(n1Request(ctx.bundle));
   const acceptedPayload = acceptedConstraintProfilePayload();
   const n2Input = n2Request(ctx.bundle, n1, acceptedPayload);
-  const n2 = await ctx.service.invokeNode({
-    ...n2Input,
-    semantic_artifacts: [n2CodexArtifact(n2Input, sha256Text(stableStringify(acceptedPayload)))],
-  });
+  const n2 = await invokeN2WithRuntimeSupport(ctx, n2Input, acceptedPayload);
   const input = n3Request(n1, n2);
   const result = await ctx.service.invokeNode({
     ...input,
@@ -2650,10 +2680,7 @@ test('v1b workflow harness N3 carries accepted risk warning into result and hand
   const n1 = await ctx.service.invokeNode(n1Request(ctx.bundle));
   const acceptedPayload = acceptedConstraintProfilePayload();
   const n2Input = n2Request(ctx.bundle, n1, acceptedPayload);
-  const n2 = await ctx.service.invokeNode({
-    ...n2Input,
-    semantic_artifacts: [n2CodexArtifact(n2Input, sha256Text(stableStringify(acceptedPayload)))],
-  });
+  const n2 = await invokeN2WithRuntimeSupport(ctx, n2Input, acceptedPayload);
   const result = await ctx.service.invokeNode(n3Request(n1, n2));
 
   assert.equal(result.gate_status, 'admitted_with_warnings');
@@ -3219,10 +3246,16 @@ test('v1b workflow harness N5 accepts Codex delegated selection only with matchi
     run_mode: 'acceptance',
     profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.slice_selection_support,
   });
-  const acceptedHash = sha256Text(stableStringify(accepted));
   const result = await ctx.service.invokeNode({
     ...input,
-    semantic_artifacts: [n5CodexArtifact(input, acceptedHash)],
+    semantic_artifacts: [
+      await generateEarlySemanticSupportArtifact(
+        ctx,
+        input,
+        'n5_slice_selection_review',
+        accepted,
+      ),
+    ],
   });
 
   assert.equal(result.gate_status, 'admitted');
