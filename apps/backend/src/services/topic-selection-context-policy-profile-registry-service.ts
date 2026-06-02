@@ -87,6 +87,21 @@ export const TOPIC_SELECTION_V1B_N4_INVOCATION_SLOT_IDS = {
   research_slice_option_draft: 'n4_research_slice_option_draft',
 } as const;
 
+export const TOPIC_SELECTION_V1B_EARLY_SEMANTIC_CONTEXT_RUNTIME_PROFILE_IDS = {
+  constraint_profile_support:
+    'topic-selection.v1b.n2.constraint-profile-support.context-runtime@v1',
+  intake_readiness_support:
+    'topic-selection.v1b.n3.intake-readiness-support.context-runtime@v1',
+  slice_selection_support:
+    'topic-selection.v1b.n5.slice-selection-support.context-runtime@v1',
+} as const;
+
+export const TOPIC_SELECTION_V1B_EARLY_SEMANTIC_INVOCATION_SLOT_IDS = {
+  constraint_profile_support: 'n2_constraint_profile_semantic_support',
+  intake_readiness_support: 'n3_readiness_classification',
+  slice_selection_support: 'n5_slice_selection_review',
+} as const;
+
 export const TOPIC_SELECTION_V1B_N6_CONTEXT_RUNTIME_PROFILE_IDS = {
   question_candidate_draft:
     'topic-selection.v1b.n6.question-candidate-draft.context-runtime@v1',
@@ -564,6 +579,111 @@ const DEFAULT_TOPIC_SELECTION_CONTEXT_POLICY_PROFILE_REGISTRY:
           'draft_admission',
           'compression_structure_manifest',
           'deterministic_gate',
+          'authority_boundary',
+        ],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1B_EARLY_SEMANTIC_CONTEXT_RUNTIME_PROFILE_IDS.constraint_profile_support,
+        invocation_slot_id: TOPIC_SELECTION_V1B_EARLY_SEMANTIC_INVOCATION_SLOT_IDS.constraint_profile_support,
+        functional_template: 'delegated_payload_candidate',
+        context_family: 'v1b_constraint_profile_context',
+        estimated_input_token_target: 14000,
+        estimated_output_token_budget: 1600,
+        preserved_fact_kinds: [
+          ...COMMON_PRESERVED_FACT_KINDS,
+          'intake_snapshot_identity',
+          'v1a_bundle_identity',
+          'accepted_constraint_profile_payload',
+          'previous_constraint_profile',
+          'target_community',
+          'method_constraint',
+          'resource_constraint',
+          'available_asset',
+          'feasibility_budget',
+          'non_goal',
+          'claim_ceiling',
+        ],
+        post_reuse_gates: [
+          'schema_validation',
+          'support_artifact_admission',
+          'deterministic_gate',
+          'delegated_authority_boundary',
+          'authority_boundary',
+        ],
+        post_cache_gates: [
+          'schema_validation',
+          'support_artifact_admission',
+          'deterministic_gate',
+          'delegated_authority_boundary',
+          'authority_boundary',
+        ],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1B_EARLY_SEMANTIC_CONTEXT_RUNTIME_PROFILE_IDS.intake_readiness_support,
+        invocation_slot_id: TOPIC_SELECTION_V1B_EARLY_SEMANTIC_INVOCATION_SLOT_IDS.intake_readiness_support,
+        functional_template: 'support_only_semantic',
+        context_family: 'v1b_intake_readiness_context',
+        estimated_input_token_target: 12000,
+        estimated_output_token_budget: 1200,
+        preserved_fact_kinds: [
+          ...COMMON_PRESERVED_FACT_KINDS,
+          'intake_snapshot_identity',
+          'constraint_profile',
+          'n2_handoff',
+          'readiness_blocker',
+          'readiness_warning',
+          'profile_repair_hint',
+          'snapshot_refresh_hint',
+        ],
+        post_reuse_gates: [
+          'schema_validation',
+          'support_artifact_admission',
+          'deterministic_gate',
+          'readiness_boundary',
+          'authority_boundary',
+        ],
+        post_cache_gates: [
+          'schema_validation',
+          'support_artifact_admission',
+          'deterministic_gate',
+          'readiness_boundary',
+          'authority_boundary',
+        ],
+      }),
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_V1B_EARLY_SEMANTIC_CONTEXT_RUNTIME_PROFILE_IDS.slice_selection_support,
+        invocation_slot_id: TOPIC_SELECTION_V1B_EARLY_SEMANTIC_INVOCATION_SLOT_IDS.slice_selection_support,
+        functional_template: 'delegated_payload_candidate',
+        context_family: 'v1b_slice_selection_context',
+        estimated_input_token_target: 16000,
+        estimated_output_token_budget: 1600,
+        preserved_fact_kinds: [
+          ...COMMON_PRESERVED_FACT_KINDS,
+          'research_slice_option_set',
+          'n4_handoff',
+          'accepted_selection_payload',
+          'selected_option_identity',
+          'rejected_option_reason',
+          'loopback_target',
+          'selection_rationale',
+          'accepted_risk',
+          'human_review_reason',
+        ],
+        post_reuse_gates: [
+          'schema_validation',
+          'support_artifact_admission',
+          'deterministic_gate',
+          'delegated_authority_boundary',
+          'authority_boundary',
+        ],
+        post_cache_gates: [
+          'schema_validation',
+          'support_artifact_admission',
+          'deterministic_gate',
+          'delegated_authority_boundary',
           'authority_boundary',
         ],
       }),

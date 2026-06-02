@@ -132,6 +132,7 @@ import {
   type TopicSelectionV1bN10HarnessFrozenInputPayload,
   type TopicSelectionV1bN10ToN11HandoffPayload,
   type TopicSelectionV1bN11HarnessFrozenInputPayload,
+  type TopicSelectionV1bAcceptedConstraintProfilePayload,
   type TopicSelectionV1bAcceptedSliceSelectionPayload,
   type TopicSelectionV1bResearchSliceOptionSetDraftPayload,
   type TopicSelectionV1bTopicValueAssessmentDraftPayload,
@@ -182,6 +183,15 @@ import {
   type TopicSelectionV1bN4ResearchSliceAdmissionExpectedIdentity,
 } from './topic-selection-v1b-n4-research-slice-admission-service.js';
 import { TopicSelectionV1bN4ResearchSliceRuntimeService } from './topic-selection-v1b-n4-research-slice-runtime-service.js';
+import {
+  TopicSelectionV1bEarlySemanticSupportAdmissionService,
+  type TopicSelectionV1bEarlySemanticSupportSlotId,
+} from './topic-selection-v1b-early-semantic-support-admission-service.js';
+import {
+  TopicSelectionV1bEarlySemanticSupportRuntimeService,
+  type TopicSelectionV1bEarlySemanticSupportPayload,
+  type TopicSelectionV1bIntakeReadinessClassificationSupportPayload,
+} from './topic-selection-v1b-early-semantic-support-runtime-service.js';
 import { TopicSelectionV1bN6LoopbackTriageAdmissionService } from './topic-selection-v1b-n6-loopback-triage-admission-service.js';
 import { TopicSelectionV1bN6LoopbackTriageRuntimeService } from './topic-selection-v1b-n6-loopback-triage-runtime-service.js';
 import {
@@ -498,6 +508,8 @@ export class TopicSelectionV1bWorkflowHarnessService {
   private readonly modelProfileRegistry: TopicSelectionModelProfileRegistryService;
   private readonly n4ResearchSliceAdmission = new TopicSelectionV1bN4ResearchSliceAdmissionService();
   private readonly n4ResearchSliceRuntime: TopicSelectionV1bN4ResearchSliceRuntimeService;
+  private readonly earlySemanticSupportAdmission = new TopicSelectionV1bEarlySemanticSupportAdmissionService();
+  private readonly earlySemanticSupportRuntime: TopicSelectionV1bEarlySemanticSupportRuntimeService;
   private readonly n6DraftAdmission = new TopicSelectionV1bN6DraftAdmissionService();
   private readonly n6DraftRuntime: TopicSelectionV1bN6DraftRuntimeService;
   private readonly n6LoopbackTriageAdmission = new TopicSelectionV1bN6LoopbackTriageAdmissionService();
@@ -521,6 +533,9 @@ export class TopicSelectionV1bWorkflowHarnessService {
     this.now = options.now ?? (() => new Date().toISOString());
     this.modelProfileRegistry = options.modelProfileRegistry ?? new TopicSelectionModelProfileRegistryService();
     this.n4ResearchSliceRuntime = new TopicSelectionV1bN4ResearchSliceRuntimeService(controlPlane, {
+      modelProfileRegistry: this.modelProfileRegistry,
+    });
+    this.earlySemanticSupportRuntime = new TopicSelectionV1bEarlySemanticSupportRuntimeService(controlPlane, {
       modelProfileRegistry: this.modelProfileRegistry,
     });
     this.n6DraftRuntime = new TopicSelectionV1bN6DraftRuntimeService(controlPlane, {
@@ -2053,6 +2068,18 @@ export class TopicSelectionV1bWorkflowHarnessService {
         message: codexBlocker.message,
       });
     }
+    const semanticSupport = await this.resolveEarlySemanticSupportPayload<TopicSelectionV1bAcceptedConstraintProfilePayload>(
+      input,
+      'n2_constraint_profile_semantic_support',
+      (value): value is TopicSelectionV1bAcceptedConstraintProfilePayload =>
+        this.isRecord(value) && this.acceptedConstraintProfilePayloadIsValid(value),
+    );
+    if (!semanticSupport.ok) {
+      return this.persistBlockedResult(input, hashContext, {
+        blockerCode: semanticSupport.code,
+        message: semanticSupport.message,
+      });
+    }
 
     const v1bRepository = this.runnerDependencies.v1bIntakeRepository!;
     const snapshot = await v1bRepository.findIntakeSnapshotById(payload.value.intake_snapshot_ref.ref_id);
@@ -2216,6 +2243,17 @@ export class TopicSelectionV1bWorkflowHarnessService {
       return this.persistBlockedResult(input, hashContext, {
         blockerCode: payload.code,
         message: payload.message,
+      });
+    }
+    const semanticSupport = await this.resolveEarlySemanticSupportPayload<TopicSelectionV1bIntakeReadinessClassificationSupportPayload>(
+      input,
+      'n3_readiness_classification',
+      this.isN3ReadinessClassificationSupportPayload.bind(this),
+    );
+    if (!semanticSupport.ok) {
+      return this.persistBlockedResult(input, hashContext, {
+        blockerCode: semanticSupport.code,
+        message: semanticSupport.message,
       });
     }
 
@@ -2657,6 +2695,18 @@ export class TopicSelectionV1bWorkflowHarnessService {
       return this.persistBlockedResult(input, hashContext, {
         blockerCode: codexBlocker.code,
         message: codexBlocker.message,
+      });
+    }
+    const semanticSupport = await this.resolveEarlySemanticSupportPayload<TopicSelectionV1bAcceptedSliceSelectionPayload>(
+      input,
+      'n5_slice_selection_review',
+      (value): value is TopicSelectionV1bAcceptedSliceSelectionPayload =>
+        this.isRecord(value) && this.acceptedSliceSelectionPayloadIsValid(value),
+    );
+    if (!semanticSupport.ok) {
+      return this.persistBlockedResult(input, hashContext, {
+        blockerCode: semanticSupport.code,
+        message: semanticSupport.message,
       });
     }
 
@@ -4245,6 +4295,161 @@ export class TopicSelectionV1bWorkflowHarnessService {
       && this.isHash(value.n8_gate_result_hash)
       && this.isNullableFunctionalRefValue(value.value_assessment_ref)
       && this.isNullableHash(value.value_assessment_hash);
+  }
+
+  private async resolveEarlySemanticSupportPayload<T extends TopicSelectionV1bEarlySemanticSupportPayload>(
+    input: TopicSelectionV1bWorkflowHarnessRunRequest,
+    slotId: TopicSelectionV1bEarlySemanticSupportSlotId,
+    guard: (value: unknown) => value is T,
+  ): Promise<{
+    ok: true;
+    value: { artifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef; payload: T; payloadHash: string } | null;
+  } | { ok: false; code: string; message: string }> {
+    const artifact = (input.semantic_artifacts ?? []).find((item) => item.slot_id === slotId);
+    if (!artifact) {
+      return { ok: true, value: null };
+    }
+    if (artifact.execution_mode !== 'codex_assisted' && artifact.execution_mode !== 'mocked_llm') {
+      return {
+        ok: false,
+        code: 'V1B_EARLY_SUPPORT_ARTIFACT_PROVENANCE_CLASS_INVALID',
+        message: 'Promoted v1b N2/N3/N5 semantic support artifacts must be generated by runtime codex_assisted or mocked_llm paths.',
+      };
+    }
+    if (!artifact.normalized_output_ref) {
+      return {
+        ok: false,
+        code: 'V1B_EARLY_SUPPORT_ARTIFACT_NOT_FOUND',
+        message: 'v1b N2/N3/N5 semantic support artifact must provide a frozen normalized_output_ref.',
+      };
+    }
+    const normalized = await this.controlPlane.getArtifactRef(artifact.normalized_output_ref.ref_id);
+    if (!normalized || !guard(normalized.payload)) {
+      return {
+        ok: false,
+        code: 'V1B_EARLY_SUPPORT_ARTIFACT_INVALID',
+        message: 'v1b N2/N3/N5 semantic support artifact normalized payload does not match its output contract.',
+      };
+    }
+    const payloadHash = this.hash(normalized.payload);
+    if (
+      payloadHash !== artifact.normalized_output_hash
+      || payloadHash !== artifact.structured_output_hash
+      || payloadHash !== artifact.support_artifact_hash
+    ) {
+      return {
+        ok: false,
+        code: 'V1B_EARLY_SUPPORT_ARTIFACT_PAYLOAD_HASH_MISMATCH',
+        message: 'v1b N2/N3/N5 semantic support artifact payload hash does not match frozen provenance.',
+      };
+    }
+    if (artifact.runtime_provenance_class === 'runtime_verified') {
+      const auditVerification = await this.verifyEarlyRuntimeVerifiedSupportAuditArtifact(input, artifact);
+      if (!auditVerification.ok) {
+        return auditVerification;
+      }
+    }
+    let expectedIdentity;
+    try {
+      expectedIdentity = this.earlySemanticSupportRuntime.buildAdmissionExpectedIdentity({
+        request: input,
+        slotId,
+        normalizedPayloadHash: payloadHash,
+        executionMode: artifact.execution_mode,
+        runMode: artifact.run_mode,
+        profileId: artifact.profile_id,
+        modelOptionId: artifact.model_option_id,
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return {
+          ok: false,
+          code: 'V1B_EARLY_SUPPORT_ARTIFACT_RUNTIME_CONTEXT_DRIFT',
+          message: error.message,
+        };
+      }
+      throw error;
+    }
+    const admission = this.earlySemanticSupportAdmission.admit({
+      artifact,
+      expected: expectedIdentity,
+      allow_fixture_replay: input.run_mode !== 'product',
+    });
+    if (!admission.admitted) {
+      return {
+        ok: false,
+        code: admission.blocker.code,
+        message: admission.blocker.message,
+      };
+    }
+    return {
+      ok: true,
+      value: {
+        artifact,
+        payload: normalized.payload as unknown as T,
+        payloadHash,
+      },
+    };
+  }
+
+  private async verifyEarlyRuntimeVerifiedSupportAuditArtifact(
+    input: TopicSelectionV1bWorkflowHarnessRunRequest,
+    artifact: TopicSelectionV1bWorkflowHarnessSemanticSupportArtifactRef,
+  ): Promise<{ ok: true } | { ok: false; code: string; message: string }> {
+    if (
+      !artifact.runtime_audit_ref
+      || artifact.runtime_audit_ref.ref_type !== 'artifact_ref'
+      || !this.refsEqual(artifact.provenance_ref, artifact.runtime_audit_ref)
+    ) {
+      return this.earlyRuntimeAuditDrift('v1b N2/N3/N5 runtime support provenance must point to its audit artifact_ref.');
+    }
+    const auditArtifact = await this.controlPlane.getArtifactRef(artifact.runtime_audit_ref.ref_id);
+    if (
+      !auditArtifact
+      || auditArtifact.artifact_kind !== 'diagnostic'
+      || auditArtifact.checksum !== artifact.runtime_audit_hash
+      || auditArtifact.workflow_run_id !== input.workflow_run_id
+    ) {
+      return this.earlyRuntimeAuditDrift('v1b N2/N3/N5 runtime support audit artifact is missing or checksum-drifted.');
+    }
+    const auditPayload = auditArtifact.payload;
+    if (!this.isRecord(auditPayload) || !this.isRecord(auditPayload.provenance)) {
+      return this.earlyRuntimeAuditDrift('v1b N2/N3/N5 runtime support audit payload is not a valid invocation audit snapshot.');
+    }
+    const provenance = auditPayload.provenance;
+    const expectedSourceKind = artifact.execution_mode === 'mocked_llm' ? 'mock_fixture' : 'codex_response';
+    if (
+      auditPayload.node_id !== input.node_id
+      || auditPayload.workflow_run_id !== input.workflow_run_id
+      || auditPayload.node_attempt_id !== input.node_attempt_id
+      || auditPayload.status !== 'succeeded'
+      || provenance.workflow_run_id !== input.workflow_run_id
+      || provenance.node_id !== input.node_id
+      || provenance.node_attempt_id !== input.node_attempt_id
+      || provenance.execution_mode !== artifact.execution_mode
+      || provenance.source_kind !== expectedSourceKind
+      || provenance.non_provider !== true
+      || provenance.run_mode !== artifact.run_mode
+      || provenance.profile_id !== artifact.profile_id
+      || provenance.model_option_id !== artifact.model_option_id
+      || provenance.output_contract !== artifact.output_contract
+      || provenance.prompt_packet_hash !== artifact.prompt_packet_hash
+      || provenance.structured_output_hash !== artifact.structured_output_hash
+      || provenance.cache_status !== 'not_applicable'
+      || provenance.response_reuse_ref !== null
+      || provenance.telemetry !== null
+    ) {
+      return this.earlyRuntimeAuditDrift('v1b N2/N3/N5 runtime support audit provenance does not match the support artifact identity.');
+    }
+    return { ok: true };
+  }
+
+  private earlyRuntimeAuditDrift(message: string): { ok: false; code: string; message: string } {
+    return {
+      ok: false,
+      code: 'V1B_EARLY_SUPPORT_ARTIFACT_RUNTIME_CONTEXT_DRIFT',
+      message,
+    };
   }
 
   private async resolveN7SupportContext(
@@ -8412,6 +8617,35 @@ export class TopicSelectionV1bWorkflowHarnessService {
         && value.loopback_reason_code.trim().length > 0;
     }
     return true;
+  }
+
+  private isN3ReadinessClassificationSupportPayload(
+    value: unknown,
+  ): value is TopicSelectionV1bIntakeReadinessClassificationSupportPayload {
+    return this.isRecord(value)
+      && this.hasOnlyKeys(value, [
+        'blocker_codes',
+        'cited_refs',
+        'loopback_target_code',
+        'no_authority_write_confirmed',
+        'rationale',
+        'readiness_recommendation',
+        'schema_version',
+        'warning_codes',
+      ])
+      && value.schema_version === 'IntakeReadinessClassificationSupport@v1'
+      && ['ready', 'needs_refinement', 'blocked'].includes(value.readiness_recommendation as string)
+      && this.isStringArray(value.blocker_codes)
+      && this.isStringArray(value.warning_codes)
+      && (
+        value.loopback_target_code === null
+        || value.loopback_target_code === 'n3_snapshot_refresh'
+        || value.loopback_target_code === 'n3_profile_repair'
+      )
+      && this.isFunctionalRefArray(value.cited_refs)
+      && typeof value.rationale === 'string'
+      && value.rationale.trim().length > 0
+      && value.no_authority_write_confirmed === true;
   }
 
   private n1MetadataBlocker(

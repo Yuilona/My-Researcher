@@ -10,6 +10,11 @@ import { PrismaClient } from '@prisma/client';
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 const SLOT_IDS_BY_SCENARIO = {
+  early_semantic_runtime_smoke: [
+    'n2_constraint_profile_semantic_support',
+    'n3_readiness_classification',
+    'n5_slice_selection_review',
+  ],
   n4_runtime_smoke: ['n4_research_slice_option_draft'],
   n6_runtime_smoke: ['n6_question_candidate_draft'],
   n6_loopback_runtime_smoke: ['n6_question_candidate_draft', 'n6_loopback_triage'],
@@ -25,7 +30,7 @@ const RUN_ID = normalizeOptionalString(process.env.TOPIC_SELECTION_V1B_RUNTIME_S
 const ITERATIONS = positiveInt(process.env.TOPIC_SELECTION_V1B_RUNTIME_STRESS_ITERATIONS, 1);
 const SCENARIOS = parseScenarios(
   process.env.TOPIC_SELECTION_V1B_RUNTIME_STRESS_SCENARIOS
-    ?? 'n4_runtime_smoke,n6_runtime_smoke,n6_loopback_runtime_smoke,n7_runtime_smoke,n8_runtime_smoke',
+    ?? 'early_semantic_runtime_smoke,n4_runtime_smoke,n6_runtime_smoke,n6_loopback_runtime_smoke,n7_runtime_smoke,n8_runtime_smoke',
 );
 const CHILD_TIMEOUT_MS = positiveInt(process.env.TOPIC_SELECTION_V1B_RUNTIME_STRESS_CHILD_TIMEOUT_MS, 900000);
 const ARTIFACT_DIR = path.join(REPO_ROOT, '.ai/.tmp/topic-selection-v1b-runtime-stress', RUN_ID);
@@ -48,7 +53,7 @@ function parseScenarios(raw) {
     .filter(Boolean);
   const normalized = scenarios.length > 0
     ? scenarios
-    : ['n4_runtime_smoke', 'n6_runtime_smoke', 'n6_loopback_runtime_smoke', 'n7_runtime_smoke', 'n8_runtime_smoke'];
+    : ['early_semantic_runtime_smoke', 'n4_runtime_smoke', 'n6_runtime_smoke', 'n6_loopback_runtime_smoke', 'n7_runtime_smoke', 'n8_runtime_smoke'];
   for (const scenario of normalized) {
     if (!Object.hasOwn(SLOT_IDS_BY_SCENARIO, scenario)) {
       throw new Error(`Unsupported v1b runtime stress scenario: ${scenario}`);
@@ -196,6 +201,20 @@ function assertScenarioCases(input, summary) {
   const run = summary.runs[0];
   assertChildPromptIndex(input, run);
   const caseIds = new Set((run.cases ?? []).map((item) => item.case_id));
+  if (input.scenario === 'early_semantic_runtime_smoke') {
+    assert.ok(
+      caseIds.has('n2_runtime_replay_and_source_drift'),
+      'Early semantic stress missing N2 replay/source-drift case.',
+    );
+    assert.ok(
+      caseIds.has('n3_support_no_n3_authority_bypass'),
+      'Early semantic stress missing N3 no-authority-bypass case.',
+    );
+    assert.ok(
+      caseIds.has('n5_runtime_delegated_selection_replay'),
+      'Early semantic stress missing N5 delegated-selection replay case.',
+    );
+  }
   if (input.scenario === 'n4_runtime_smoke') {
     assert.ok(caseIds.has('n4_runtime_initial_to_n5_handoff'), 'N4 stress missing initial handoff case.');
     assert.ok(caseIds.has('n4_runtime_source_drift_blocks'), 'N4 stress missing source-drift block case.');

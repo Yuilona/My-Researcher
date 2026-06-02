@@ -32,6 +32,7 @@ import { TopicSelectionAgentOrchestratorService } from '../../apps/backend/src/s
 import { TopicSelectionControlPlaneService } from '../../apps/backend/src/services/topic-selection-control-plane-service.ts';
 import { TopicSelectionPromptPacketCacheService } from '../../apps/backend/src/services/topic-selection-prompt-packet-cache-service.ts';
 import { TopicSelectionV1bN4ResearchSliceRuntimeService } from '../../apps/backend/src/services/topic-selection-v1b-n4-research-slice-runtime-service.ts';
+import { TopicSelectionV1bEarlySemanticSupportRuntimeService } from '../../apps/backend/src/services/topic-selection-v1b-early-semantic-support-runtime-service.ts';
 import { TopicSelectionV1bN6DraftRuntimeService } from '../../apps/backend/src/services/topic-selection-v1b-n6-draft-runtime-service.ts';
 import { TopicSelectionV1bN6LoopbackTriageRuntimeService } from '../../apps/backend/src/services/topic-selection-v1b-n6-loopback-triage-runtime-service.ts';
 import { TopicSelectionV1bN7SupportRuntimeService } from '../../apps/backend/src/services/topic-selection-v1b-n7-support-runtime-service.ts';
@@ -106,6 +107,11 @@ const N7_RUNTIME_SUPPORT_SLOT_IDS = new Set([
   'n7_failed_trial_synthesis',
   'n7_n8_debate_admission_review',
 ]);
+const EARLY_RUNTIME_SUPPORT_SLOT_IDS = new Set([
+  'n2_constraint_profile_semantic_support',
+  'n3_readiness_classification',
+  'n5_slice_selection_review',
+]);
 const N4_RUNTIME_DRAFT_SLOT_ID = 'n4_research_slice_option_draft';
 const N6_RUNTIME_DRAFT_SLOT_ID = 'n6_question_candidate_draft';
 const N6_LOOPBACK_TRIAGE_SLOT_ID = 'n6_loopback_triage';
@@ -135,6 +141,7 @@ function scenarioMode(raw) {
   const value = String(raw ?? 'positive').trim();
   if (
     value === 'positive'
+    || value === 'early_semantic_runtime_smoke'
     || value === 'n4_runtime_smoke'
     || value === 'n6_runtime_smoke'
     || value === 'n7_runtime_smoke'
@@ -238,6 +245,7 @@ async function promptPacketIndexSnapshot(prisma, since = null) {
     },
     orderBy: { createdAt: 'asc' },
   });
+  const earlyRows = rows.filter((row) => EARLY_RUNTIME_SUPPORT_SLOT_IDS.has(row.invocationSlotId));
   const n7Rows = rows.filter((row) => N7_RUNTIME_SUPPORT_SLOT_IDS.has(row.invocationSlotId));
   const n4Rows = rows.filter((row) => row.invocationSlotId === N4_RUNTIME_DRAFT_SLOT_ID);
   const n6Rows = rows.filter((row) => row.invocationSlotId === N6_RUNTIME_DRAFT_SLOT_ID);
@@ -245,6 +253,7 @@ async function promptPacketIndexSnapshot(prisma, since = null) {
   const n8Rows = rows.filter((row) => row.invocationSlotId === N8_RUNTIME_DRAFT_SLOT_ID);
   return {
     total_count: rows.length,
+    early_count: earlyRows.length,
     n4_count: n4Rows.length,
     n6_count: n6Rows.length,
     n6_loopback_triage_count: n6LoopbackTriageRows.length,
@@ -253,6 +262,22 @@ async function promptPacketIndexSnapshot(prisma, since = null) {
     by_invocation_slot_id: groupBy(rows, 'invocationSlotId'),
     by_quality_decision: groupBy(rows, 'qualityDecision'),
     by_freshness_status: groupBy(rows, 'freshnessStatus'),
+    early_rows: earlyRows.map((row) => ({
+      prompt_packet_hash: row.promptPacketHash,
+      invocation_slot_id: row.invocationSlotId,
+      prompt_template_id: row.promptTemplateId,
+      prompt_template_version: row.promptTemplateVersion,
+      prompt_variant_key: row.promptVariantKey,
+      context_policy_profile_id: row.contextPolicyProfileId,
+      output_contract: row.outputContract,
+      model_option_id: row.modelOptionId,
+      quality_decision: row.qualityDecision,
+      freshness_status: row.freshnessStatus,
+      has_provenance_ref: Boolean(row.provenanceRef),
+      has_redacted_prompt_artifact_ref: Boolean(row.redactedPromptArtifactRef),
+      has_prompt_quality_report_ref: Boolean(row.promptQualityReportRef),
+      created_at: row.createdAt.toISOString(),
+    })),
     n4_rows: n4Rows.map((row) => ({
       prompt_packet_hash: row.promptPacketHash,
       invocation_slot_id: row.invocationSlotId,
@@ -580,6 +605,19 @@ function v1bHarnessN3Request(n1Result, n2Result, suffix) {
   );
 }
 
+function v1bHarnessN3ReadinessClassificationSupport(input) {
+  return {
+    schema_version: 'IntakeReadinessClassificationSupport@v1',
+    readiness_recommendation: 'ready',
+    blocker_codes: [],
+    warning_codes: [],
+    loopback_target_code: null,
+    cited_refs: input.frozen_input.source_refs,
+    rationale: 'Frozen N1/N2 lineage is sufficient for deterministic readiness assessment in the harness smoke.',
+    no_authority_write_confirmed: true,
+  };
+}
+
 function v1bHarnessN4Request(n1Result, n2Result, n3Result, suffix) {
   assert.ok(n1Result.authority_ref && n1Result.hashes.authority_hash);
   assert.ok(n2Result.authority_ref && n2Result.hashes.authority_hash && n2Result.hashes.handoff_hash);
@@ -802,17 +840,22 @@ function acceptedV1bHarnessSliceSelectionPayload(option) {
   };
 }
 
-function v1bHarnessN5Request(n4Result, acceptedPayload, suffix) {
+function v1bHarnessN5Request(n4Result, acceptedPayload, suffix, options = {}) {
   assert.ok(n4Result.authority_ref && n4Result.hashes.authority_hash && n4Result.hashes.handoff_hash);
   const acceptedHash = sha256Text(stableStringify(acceptedPayload));
+  const authorityInputProvider = options.authorityInputProvider ?? 'fixture';
+  assert.ok(
+    ['fixture', 'codex_delegated', 'human_delegated'].includes(authorityInputProvider),
+    `Unsupported N5 authority_input_provider: ${authorityInputProvider}`,
+  );
   const payload = {
     research_slice_option_set_ref: n4Result.authority_ref,
     research_slice_option_set_hash: n4Result.hashes.authority_hash,
     n4_handoff_hash: n4Result.hashes.handoff_hash,
-    authority_input_provider: 'fixture',
+    authority_input_provider: authorityInputProvider,
     accepted_selection_payload: acceptedPayload,
     accepted_selection_payload_hash: acceptedHash,
-    delegation_artifact_hash: null,
+    delegation_artifact_hash: authorityInputProvider === 'codex_delegated' ? acceptedHash : null,
   };
   const frozenInput = {
     input_contract: 'N4ToN5Handoff@v1',
@@ -1371,6 +1414,33 @@ function n4DraftSlot() {
   };
 }
 
+function n2ConstraintProfileSupportSlot() {
+  return {
+    slot_id: 'n2_constraint_profile_semantic_support',
+    allowed_effect: 'delegated_payload_candidate',
+    output_contract: 'ResearchConstraintProfileDraftSupport@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.constraint_profile_support,
+  };
+}
+
+function n3ReadinessClassificationSlot() {
+  return {
+    slot_id: 'n3_readiness_classification',
+    allowed_effect: 'support_only',
+    output_contract: 'IntakeReadinessClassificationSupport@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.intake_readiness_support,
+  };
+}
+
+function n5SliceSelectionSupportSlot() {
+  return {
+    slot_id: 'n5_slice_selection_review',
+    allowed_effect: 'delegated_payload_candidate',
+    output_contract: 'ResearchSliceSelectionReviewSupport@v1',
+    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.slice_selection_support,
+  };
+}
+
 function n6DraftSlot() {
   return {
     slot_id: 'n6_question_candidate_draft',
@@ -1619,6 +1689,28 @@ function createN4RuntimeResearchSliceRuntime(prisma) {
     promptPacketCache,
   });
   return new TopicSelectionV1bN4ResearchSliceRuntimeService(controlPlane, {
+    agentOrchestrator,
+    modelProfileRegistry,
+  });
+}
+
+function createEarlySemanticSupportRuntime(prisma) {
+  assertPrismaBackedHarness('v1b N2/N3/N5 runtime semantic support');
+  const controlPlane = new TopicSelectionControlPlaneService(
+    new PrismaTopicSelectionControlPlaneRepository(prisma),
+  );
+  const modelProfileRegistry = new TopicSelectionModelProfileRegistryService();
+  const promptPacketCache = new TopicSelectionPromptPacketCacheService({
+    store: new PrismaTopicSelectionPromptPacketCacheStore(prisma, {
+      allowMissingTableFallback: true,
+    }),
+  });
+  const agentOrchestrator = new TopicSelectionAgentOrchestratorService({
+    controlPlane,
+    modelProfileRegistry,
+    promptPacketCache,
+  });
+  return new TopicSelectionV1bEarlySemanticSupportRuntimeService(controlPlane, {
     agentOrchestrator,
     modelProfileRegistry,
   });
@@ -2002,6 +2094,89 @@ async function generateN8RuntimeValueDraftArtifact(app, runtime, input, payload,
   };
 }
 
+async function assertRuntimeVerifiedEarlySemanticSupportArtifact(app, semanticArtifact, slot) {
+  assert.equal(semanticArtifact.runtime_provenance_class, 'runtime_verified');
+  assert.equal(semanticArtifact.execution_mode, 'codex_assisted');
+  assert.equal(semanticArtifact.allowed_effect, slot.allowed_effect);
+  assert.equal(semanticArtifact.output_contract, slot.output_contract);
+  assert.equal(semanticArtifact.model_option_id, null);
+  assert.match(semanticArtifact.prompt_packet_hash, /^[a-f0-9]{64}$/);
+  assert.match(semanticArtifact.runtime_invocation_context_hash, /^[a-f0-9]{64}$/);
+  assert.ok(semanticArtifact.runtime_audit_ref, 'runtime early semantic support requires audit ref.');
+  assert.match(semanticArtifact.runtime_audit_hash, /^[a-f0-9]{64}$/);
+  assert.ok(semanticArtifact.source_hashes?.frozen_input_hash, 'runtime early semantic support requires source hashes.');
+
+  const auditArtifact = await getWorkflowHarnessArtifact(app, semanticArtifact.runtime_audit_ref);
+  assert.equal(auditArtifact.checksum, semanticArtifact.runtime_audit_hash);
+  const provenance = auditArtifact.payload?.provenance;
+  assert.equal(provenance?.source_kind, 'codex_response');
+  assert.equal(provenance?.non_provider, true);
+  assert.equal(provenance?.execution_mode, 'codex_assisted');
+  assert.equal(provenance?.model_option_id, null);
+  assert.equal(provenance?.prompt_packet_hash, semanticArtifact.prompt_packet_hash);
+  assert.equal(provenance?.cache_status, 'not_applicable');
+  assert.equal(provenance?.response_reuse_ref, null);
+  assert.equal(provenance?.telemetry, null);
+  return auditArtifact.payload;
+}
+
+async function generateEarlySemanticSupportArtifact(app, runtime, input, slot, payload, options = {}) {
+  const runMode = options.runMode ?? input.run_mode ?? 'acceptance';
+  const generated = await runtime.generateSupportArtifact({
+    request: {
+      ...input,
+      run_mode: runMode,
+    },
+    slot_id: slot.slot_id,
+    execution_mode: 'codex_assisted',
+    run_mode: runMode,
+    codex_response: {
+      output: payload,
+      operator_label: options.operatorLabel ?? 'v1b-harness-e2e-early-runtime',
+    },
+    created_by: 'system',
+  });
+  assert.equal(generated.status, 'succeeded');
+  if (generated.status !== 'succeeded') {
+    assert.fail(`Early semantic runtime support generation blocked: ${JSON.stringify(generated.invocation_result)}`);
+  }
+  const auditSnapshot = await assertRuntimeVerifiedEarlySemanticSupportArtifact(
+    app,
+    generated.semantic_artifact,
+    slot,
+  );
+  return {
+    semanticArtifact: generated.semantic_artifact,
+    structuredOutput: generated.structured_output,
+    summary: {
+      node_id: input.node_id,
+      slot_id: slot.slot_id,
+      execution_mode: 'codex_assisted',
+      runtime_provenance_class: generated.semantic_artifact.runtime_provenance_class,
+      context_policy_profile_id: generated.semantic_artifact.context_policy_profile_id,
+      prompt_packet_hash: generated.semantic_artifact.prompt_packet_hash,
+      prompt_variant_key: generated.semantic_artifact.prompt_variant_key,
+      runtime_invocation_context_hash: generated.semantic_artifact.runtime_invocation_context_hash,
+      runtime_audit_hash: generated.semantic_artifact.runtime_audit_hash,
+      context_packet_hash: generated.context_packet_hash,
+      output_hash: generated.semantic_artifact.structured_output_hash,
+      audit_source_kind: auditSnapshot.provenance?.source_kind ?? null,
+      audit_cache_status: auditSnapshot.provenance?.cache_status ?? null,
+      provider_telemetry_present: Boolean(auditSnapshot.provenance?.telemetry),
+    },
+  };
+}
+
+async function generateEarlySemanticSupportArtifactWithFreshRuntime(app, input, slot, payload, options = {}) {
+  const prisma = new PrismaClient();
+  try {
+    const runtime = createEarlySemanticSupportRuntime(prisma);
+    return await generateEarlySemanticSupportArtifact(app, runtime, input, slot, payload, options);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 async function assertRuntimeVerifiedN7SupportArtifact(app, semanticArtifact) {
   assert.equal(semanticArtifact.runtime_provenance_class, 'runtime_verified');
   assert.equal(semanticArtifact.execution_mode, 'codex_assisted');
@@ -2218,18 +2393,30 @@ async function runV1bHarnessHttpN1ToN11(app, suffix, existingBundle = null) {
   const n1 = await invokeV1bHarnessNode(app, n1Input);
 
   const n2Input = v1bHarnessN2Request(bundle, n1, suffix, acceptedProfile);
-  const n2SemanticArtifact = await recordWorkflowHarnessSemanticArtifact(app, n2Input, {
-    slot_id: 'n2_constraint_profile_semantic_support',
-    allowed_effect: 'delegated_payload_candidate',
-    output_contract: 'ResearchConstraintProfileDraftSupport@v1',
-    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.constraint_profile_support,
-  }, acceptedProfile);
+  const n2Semantic = await generateEarlySemanticSupportArtifactWithFreshRuntime(
+    app,
+    n2Input,
+    n2ConstraintProfileSupportSlot(),
+    acceptedProfile,
+  );
+  semanticSummaries.push(n2Semantic.summary);
   const n2 = await invokeV1bHarnessNode(app, {
     ...n2Input,
-    semantic_artifacts: [n2SemanticArtifact],
+    semantic_artifacts: [n2Semantic.semanticArtifact],
   });
 
-  const n3 = await invokeV1bHarnessNode(app, v1bHarnessN3Request(n1, n2, suffix));
+  const n3Input = v1bHarnessN3Request(n1, n2, suffix);
+  const n3Semantic = await generateEarlySemanticSupportArtifactWithFreshRuntime(
+    app,
+    n3Input,
+    n3ReadinessClassificationSlot(),
+    v1bHarnessN3ReadinessClassificationSupport(n3Input),
+  );
+  semanticSummaries.push(n3Semantic.summary);
+  const n3 = await invokeV1bHarnessNode(app, {
+    ...n3Input,
+    semantic_artifacts: [n3Semantic.semanticArtifact],
+  });
   const n4Input = v1bHarnessN4Request(n1, n2, n3, suffix);
   const n4Slot = {
     slot_id: 'n4_research_slice_option_draft',
@@ -2246,10 +2433,21 @@ async function runV1bHarnessHttpN1ToN11(app, suffix, existingBundle = null) {
   assert.ok(n4.authority_ref, JSON.stringify(n4));
 
   const selectedOption = await selectedV1bHarnessOption(app, n4);
-  const n5 = await invokeV1bHarnessNode(
+  const n5Payload = acceptedV1bHarnessSliceSelectionPayload(selectedOption);
+  const n5Input = v1bHarnessN5Request(n4, n5Payload, suffix, {
+    authorityInputProvider: 'codex_delegated',
+  });
+  const n5Semantic = await generateEarlySemanticSupportArtifactWithFreshRuntime(
     app,
-    v1bHarnessN5Request(n4, acceptedV1bHarnessSliceSelectionPayload(selectedOption), suffix),
+    n5Input,
+    n5SliceSelectionSupportSlot(),
+    n5Payload,
   );
+  semanticSummaries.push(n5Semantic.summary);
+  const n5 = await invokeV1bHarnessNode(app, {
+    ...n5Input,
+    semantic_artifacts: [n5Semantic.semanticArtifact],
+  });
 
   const n6Input = await v1bHarnessN6Request(app, n5, suffix);
   const n6Slot = {
@@ -2315,18 +2513,30 @@ async function runV1bHarnessHttpSetupToN5(app, suffix, existingBundle = null) {
   const n1 = await invokeV1bHarnessNode(app, n1Input);
 
   const n2Input = v1bHarnessN2Request(bundle, n1, suffix, acceptedProfile);
-  const n2SemanticArtifact = await recordWorkflowHarnessSemanticArtifact(app, n2Input, {
-    slot_id: 'n2_constraint_profile_semantic_support',
-    allowed_effect: 'delegated_payload_candidate',
-    output_contract: 'ResearchConstraintProfileDraftSupport@v1',
-    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.constraint_profile_support,
-  }, acceptedProfile);
+  const n2Semantic = await generateEarlySemanticSupportArtifactWithFreshRuntime(
+    app,
+    n2Input,
+    n2ConstraintProfileSupportSlot(),
+    acceptedProfile,
+  );
+  semanticSummaries.push(n2Semantic.summary);
   const n2 = await invokeV1bHarnessNode(app, {
     ...n2Input,
-    semantic_artifacts: [n2SemanticArtifact],
+    semantic_artifacts: [n2Semantic.semanticArtifact],
   });
 
-  const n3 = await invokeV1bHarnessNode(app, v1bHarnessN3Request(n1, n2, suffix));
+  const n3Input = v1bHarnessN3Request(n1, n2, suffix);
+  const n3Semantic = await generateEarlySemanticSupportArtifactWithFreshRuntime(
+    app,
+    n3Input,
+    n3ReadinessClassificationSlot(),
+    v1bHarnessN3ReadinessClassificationSupport(n3Input),
+  );
+  semanticSummaries.push(n3Semantic.summary);
+  const n3 = await invokeV1bHarnessNode(app, {
+    ...n3Input,
+    semantic_artifacts: [n3Semantic.semanticArtifact],
+  });
   const n4Input = v1bHarnessN4Request(n1, n2, n3, suffix);
   const n4Semantic = await recordCodexAssistedSemanticDraft(
     app,
@@ -2342,10 +2552,21 @@ async function runV1bHarnessHttpSetupToN5(app, suffix, existingBundle = null) {
   assert.ok(n4.authority_ref, JSON.stringify(n4));
 
   const selectedOption = await selectedV1bHarnessOption(app, n4);
-  const n5 = await invokeV1bHarnessNode(
+  const n5Payload = acceptedV1bHarnessSliceSelectionPayload(selectedOption);
+  const n5Input = v1bHarnessN5Request(n4, n5Payload, suffix, {
+    authorityInputProvider: 'codex_delegated',
+  });
+  const n5Semantic = await generateEarlySemanticSupportArtifactWithFreshRuntime(
     app,
-    v1bHarnessN5Request(n4, acceptedV1bHarnessSliceSelectionPayload(selectedOption), suffix),
+    n5Input,
+    n5SliceSelectionSupportSlot(),
+    n5Payload,
   );
+  semanticSummaries.push(n5Semantic.summary);
+  const n5 = await invokeV1bHarnessNode(app, {
+    ...n5Input,
+    semantic_artifacts: [n5Semantic.semanticArtifact],
+  });
 
   return {
     bundle,
@@ -2367,27 +2588,30 @@ async function runV1bHarnessHttpSetupToN3(app, suffix, existingBundle = null) {
   const n1 = await invokeV1bHarnessNode(app, n1Input);
 
   const n2Input = v1bHarnessN2Request(bundle, n1, suffix, acceptedProfile);
-  const n2SemanticArtifact = await recordWorkflowHarnessSemanticArtifact(app, n2Input, {
-    slot_id: 'n2_constraint_profile_semantic_support',
-    allowed_effect: 'delegated_payload_candidate',
-    output_contract: 'ResearchConstraintProfileDraftSupport@v1',
-    profile_id: TOPIC_SELECTION_V1B_WORKFLOW_HARNESS_PROFILE_IDS.constraint_profile_support,
-  }, acceptedProfile);
-  semanticSummaries.push({
-    node_id: n2Input.node_id,
-    slot_id: 'n2_constraint_profile_semantic_support',
-    execution_mode: 'codex_assisted',
-    provider_id: null,
-    model_id: null,
-    model_option_id: null,
-    output_hash: sha256Text(stableStringify(acceptedProfile)),
-  });
+  const n2Semantic = await generateEarlySemanticSupportArtifactWithFreshRuntime(
+    app,
+    n2Input,
+    n2ConstraintProfileSupportSlot(),
+    acceptedProfile,
+  );
+  semanticSummaries.push(n2Semantic.summary);
   const n2 = await invokeV1bHarnessNode(app, {
     ...n2Input,
-    semantic_artifacts: [n2SemanticArtifact],
+    semantic_artifacts: [n2Semantic.semanticArtifact],
   });
 
-  const n3 = await invokeV1bHarnessNode(app, v1bHarnessN3Request(n1, n2, suffix));
+  const n3Input = v1bHarnessN3Request(n1, n2, suffix);
+  const n3Semantic = await generateEarlySemanticSupportArtifactWithFreshRuntime(
+    app,
+    n3Input,
+    n3ReadinessClassificationSlot(),
+    v1bHarnessN3ReadinessClassificationSupport(n3Input),
+  );
+  semanticSummaries.push(n3Semantic.summary);
+  const n3 = await invokeV1bHarnessNode(app, {
+    ...n3Input,
+    semantic_artifacts: [n3Semantic.semanticArtifact],
+  });
 
   return {
     bundle,
@@ -2447,6 +2671,60 @@ async function assertN4RuntimePromptIndex(prisma, startedAt, expectedPromptPacke
       'topic-selection.v1b.n4.research-slice-options.context-runtime@v1',
     );
     assert.equal(row.output_contract, 'ResearchSliceOptionSetDraft@v1');
+    assert.ok(row.has_provenance_ref, 'Prompt index row must store provenance ref metadata.');
+    assert.ok(row.has_redacted_prompt_artifact_ref, 'Prompt index row must store redacted prompt ref metadata.');
+    assert.ok(row.has_prompt_quality_report_ref, 'Prompt index row must store prompt quality report ref metadata.');
+    assert.equal(Object.hasOwn(row, 'messages'), false);
+    assert.equal(Object.hasOwn(row, 'provider_response'), false);
+  }
+  return snapshot;
+}
+
+async function assertEarlySemanticRuntimePromptIndex(prisma, startedAt, expectedPromptPacketHashes = []) {
+  assertPromptPacketIndexModelMetadataOnly(prisma);
+  const snapshot = await promptPacketIndexSnapshot(prisma, startedAt);
+  const expectedHashes = [...new Set(expectedPromptPacketHashes)];
+  const expectedBySlot = new Map([
+    ['n2_constraint_profile_semantic_support', {
+      context_policy_profile_id: 'topic-selection.v1b.n2.constraint-profile-support.context-runtime@v1',
+      output_contract: 'ResearchConstraintProfileDraftSupport@v1',
+    }],
+    ['n3_readiness_classification', {
+      context_policy_profile_id: 'topic-selection.v1b.n3.intake-readiness-support.context-runtime@v1',
+      output_contract: 'IntakeReadinessClassificationSupport@v1',
+    }],
+    ['n5_slice_selection_review', {
+      context_policy_profile_id: 'topic-selection.v1b.n5.slice-selection-support.context-runtime@v1',
+      output_contract: 'ResearchSliceSelectionReviewSupport@v1',
+    }],
+  ]);
+  for (const slotId of EARLY_RUNTIME_SUPPORT_SLOT_IDS) {
+    assert.ok(
+      snapshot.early_rows.some((row) => row.invocation_slot_id === slotId),
+      `Expected Prisma prompt packet index row for ${slotId}.`,
+    );
+  }
+  if (expectedHashes.length > 0) {
+    assert.equal(
+      snapshot.early_rows.length,
+      expectedHashes.length,
+      'Expected exactly one early semantic prompt packet index row for each generated prompt hash.',
+    );
+    for (const promptPacketHash of expectedHashes) {
+      assert.ok(
+        snapshot.early_rows.some((row) => row.prompt_packet_hash === promptPacketHash),
+        `Expected early semantic prompt packet index row for ${promptPacketHash}.`,
+      );
+    }
+  }
+  for (const row of snapshot.early_rows) {
+    const expected = expectedBySlot.get(row.invocation_slot_id);
+    assert.ok(expected, `Unexpected early semantic invocation slot ${row.invocation_slot_id}.`);
+    assert.match(row.prompt_packet_hash, /^[a-f0-9]{64}$/);
+    assert.equal(row.prompt_variant_key, row.invocation_slot_id);
+    assert.equal(row.model_option_id, null);
+    assert.equal(row.context_policy_profile_id, expected.context_policy_profile_id);
+    assert.equal(row.output_contract, expected.output_contract);
     assert.ok(row.has_provenance_ref, 'Prompt index row must store provenance ref metadata.');
     assert.ok(row.has_redacted_prompt_artifact_ref, 'Prompt index row must store redacted prompt ref metadata.');
     assert.ok(row.has_prompt_quality_report_ref, 'Prompt index row must store prompt quality report ref metadata.');
@@ -2623,6 +2901,229 @@ async function runtimeContextProjection(app, result, expectedProjectionKind, exp
     artifact: projectionArtifact,
     payload: projectionArtifact.payload,
   };
+}
+
+async function runEarlySemanticRuntimeSmoke(app, suffix, existingBundle = null) {
+  const startedAt = new Date();
+  const prisma = new PrismaClient();
+  const earlyRuntime = createEarlySemanticSupportRuntime(prisma);
+  try {
+    const promptIndexBefore = await promptPacketIndexSnapshot(prisma);
+    const bundleResult = existingBundle
+      ? existingV1bInputBundleResult(existingBundle)
+      : await createV1bInputBundle(app, suffix);
+    const bundle = bundleResult.v1bInputBundle;
+    const acceptedProfile = acceptedConstraintProfilePayload();
+    const semanticSummaries = [];
+
+    const n1Input = v1bHarnessN1Request(bundle, suffix);
+    const n1 = await invokeV1bHarnessNode(app, n1Input);
+
+    const n2Input = {
+      ...v1bHarnessN2Request(bundle, n1, `${suffix}_n2_runtime`, acceptedProfile),
+      run_mode: 'product',
+    };
+    const n2Support = await generateEarlySemanticSupportArtifact(
+      app,
+      earlyRuntime,
+      n2Input,
+      n2ConstraintProfileSupportSlot(),
+      acceptedProfile,
+      { runMode: 'product', operatorLabel: 'v1b-early-runtime-smoke-n2' },
+    );
+    semanticSummaries.push(n2Support.summary);
+    const n2 = await invokeV1bHarnessNode(app, {
+      ...n2Input,
+      semantic_artifacts: [n2Support.semanticArtifact],
+    });
+    assert.equal(n2.gate_status, 'admitted');
+    const n2Replay = await invokeV1bHarnessNode(app, {
+      ...n2Input,
+      semantic_artifacts: [n2Support.semanticArtifact],
+    });
+    assert.equal(n2Replay.replay_provenance?.replayed, true);
+    assert.equal(n2Replay.authority_ref?.ref_id, n2.authority_ref?.ref_id);
+
+    const n2DriftInput = {
+      ...v1bHarnessN2Request(bundle, n1, `${suffix}_n2_source_drift`, acceptedProfile),
+      run_mode: 'product',
+    };
+    const n2DriftSupport = await generateEarlySemanticSupportArtifact(
+      app,
+      earlyRuntime,
+      n2DriftInput,
+      n2ConstraintProfileSupportSlot(),
+      acceptedProfile,
+      { runMode: 'product', operatorLabel: 'v1b-early-runtime-smoke-n2-source-drift' },
+    );
+    semanticSummaries.push(n2DriftSupport.summary);
+    const n2SourceDrift = await invokeV1bHarnessNode(app, {
+      ...n2DriftInput,
+      semantic_artifacts: [{
+        ...n2DriftSupport.semanticArtifact,
+        source_hashes: {
+          ...n2DriftSupport.semanticArtifact.source_hashes,
+          v1a_bundle_hash: 'f'.repeat(64),
+        },
+      }],
+    });
+    assert.equal(n2SourceDrift.gate_status, 'blocked');
+    assert.equal(n2SourceDrift.error_code, 'V1B_EARLY_SUPPORT_ARTIFACT_SOURCE_HASH_DRIFT');
+    assert.equal(n2SourceDrift.authority_ref, null);
+    assert.equal(n2SourceDrift.handoff_ref, null);
+
+    const n3Input = {
+      ...v1bHarnessN3Request(n1, n2, `${suffix}_n3_runtime`),
+      run_mode: 'product',
+    };
+    const n3Support = await generateEarlySemanticSupportArtifact(
+      app,
+      earlyRuntime,
+      n3Input,
+      n3ReadinessClassificationSlot(),
+      v1bHarnessN3ReadinessClassificationSupport(n3Input),
+      { runMode: 'product', operatorLabel: 'v1b-early-runtime-smoke-n3' },
+    );
+    semanticSummaries.push(n3Support.summary);
+
+    const fakeReadinessRef = ref(
+      'v1b_intake_readiness_assessment',
+      n3Support.semanticArtifact.normalized_output_ref.ref_id,
+      n1.authority_ref.title_card_id,
+    );
+    const n4BypassInput = v1bHarnessN4Request(
+      n1,
+      n2,
+      {
+        authority_ref: fakeReadinessRef,
+        hashes: {
+          authority_hash: n3Support.semanticArtifact.normalized_output_hash,
+          handoff_hash: 'b'.repeat(64),
+        },
+      },
+      `${suffix}_n4_no_n3_bypass`,
+    );
+    const n4BypassSemantic = await recordCodexAssistedSemanticDraft(
+      app,
+      n4BypassInput,
+      n4DraftSlot(),
+      v1bHarnessN4Draft(bundle),
+    );
+    const n4Bypass = await invokeV1bHarnessNode(app, {
+      ...n4BypassSemantic.invocationInput,
+      semantic_artifacts: [n4BypassSemantic.semanticArtifact],
+    });
+    assert.equal(n4Bypass.gate_status, 'blocked');
+    assert.equal(n4Bypass.error_code, 'N4_FROZEN_AUTHORITY_NOT_FOUND');
+    assert.equal(n4Bypass.authority_ref, null);
+    assert.equal(n4Bypass.handoff_ref, null);
+
+    const n3 = await invokeV1bHarnessNode(app, {
+      ...n3Input,
+      semantic_artifacts: [n3Support.semanticArtifact],
+    });
+    assert.ok(n3.authority_ref, JSON.stringify(n3));
+
+    const n4Input = v1bHarnessN4Request(n1, n2, n3, `${suffix}_n4_bridge`);
+    const n4Semantic = await recordCodexAssistedSemanticDraft(
+      app,
+      n4Input,
+      n4DraftSlot(),
+      v1bHarnessN4Draft(bundle),
+    );
+    const n4 = await invokeV1bHarnessNode(app, {
+      ...n4Semantic.invocationInput,
+      semantic_artifacts: [n4Semantic.semanticArtifact],
+    });
+    assert.ok(n4.authority_ref, JSON.stringify(n4));
+
+    const selectedOption = await selectedV1bHarnessOption(app, n4);
+    const n5Payload = acceptedV1bHarnessSliceSelectionPayload(selectedOption);
+    const n5Input = {
+      ...v1bHarnessN5Request(n4, n5Payload, `${suffix}_n5_runtime`, {
+        authorityInputProvider: 'codex_delegated',
+      }),
+      run_mode: 'product',
+    };
+    const n5Support = await generateEarlySemanticSupportArtifact(
+      app,
+      earlyRuntime,
+      n5Input,
+      n5SliceSelectionSupportSlot(),
+      n5Payload,
+      { runMode: 'product', operatorLabel: 'v1b-early-runtime-smoke-n5' },
+    );
+    semanticSummaries.push(n5Support.summary);
+    const n5 = await invokeV1bHarnessNode(app, {
+      ...n5Input,
+      semantic_artifacts: [n5Support.semanticArtifact],
+    });
+    assert.equal(n5.gate_status, 'admitted');
+    const n5Replay = await invokeV1bHarnessNode(app, {
+      ...n5Input,
+      semantic_artifacts: [n5Support.semanticArtifact],
+    });
+    assert.equal(n5Replay.replay_provenance?.replayed, true);
+    assert.equal(n5Replay.authority_ref?.ref_id, n5.authority_ref?.ref_id);
+
+    const expectedPromptPacketHashes = [
+      n2Support.summary.prompt_packet_hash,
+      n2DriftSupport.summary.prompt_packet_hash,
+      n3Support.summary.prompt_packet_hash,
+      n5Support.summary.prompt_packet_hash,
+    ];
+    const expectedPromptPacketHashCount = new Set(expectedPromptPacketHashes).size;
+    const promptIndexAfter = await promptPacketIndexSnapshot(prisma);
+    assert.equal(
+      promptIndexAfter.early_count - promptIndexBefore.early_count,
+      expectedPromptPacketHashCount,
+      'Expected early semantic prompt packet index delta to match generated runtime prompt hashes.',
+    );
+    const promptIndexCreated = await assertEarlySemanticRuntimePromptIndex(
+      prisma,
+      startedAt,
+      expectedPromptPacketHashes,
+    );
+
+    return {
+      bundle,
+      selectedOption,
+      semanticSummaries,
+      prompt_index_before: promptIndexBefore,
+      prompt_index_after: promptIndexAfter,
+      prompt_index_created: promptIndexCreated,
+      cases: [
+        {
+          case_id: 'n2_runtime_replay_and_source_drift',
+          semantic_artifacts: [n2Support.summary, n2DriftSupport.summary],
+          nodes: {
+            n2: summarizeNode(n2),
+            n2_replay: summarizeNode(n2Replay),
+            n2_source_drift: summarizeNode(n2SourceDrift),
+          },
+        },
+        {
+          case_id: 'n3_support_no_n3_authority_bypass',
+          semantic_artifacts: [n3Support.summary],
+          nodes: {
+            n4_no_n3_bypass: summarizeNode(n4Bypass),
+            n3: summarizeNode(n3),
+          },
+        },
+        {
+          case_id: 'n5_runtime_delegated_selection_replay',
+          semantic_artifacts: [n5Support.summary],
+          nodes: {
+            n4: summarizeNode(n4),
+            n5: summarizeNode(n5),
+            n5_replay: summarizeNode(n5Replay),
+          },
+        },
+      ],
+    };
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
 async function runN4RuntimeSmoke(app, suffix, existingBundle = null) {
@@ -4727,6 +5228,24 @@ async function main() {
             Object.entries(result.setupNodes).map(([node, nodeResult]) => [node, summarizeNode(nodeResult)]),
           ),
           samples: result.samples,
+        });
+        continue;
+      }
+
+      if (SCENARIO === 'early_semantic_runtime_smoke') {
+        const result = await runEarlySemanticRuntimeSmoke(app, suffix, existingBundle);
+        runs.push({
+          run_index: index + 1,
+          scenario: SCENARIO,
+          v1b_input_bundle_source: existingBundle ? 'existing' : 'created_in_run',
+          title_card_id: result.bundle.title_card_id,
+          v1b_input_bundle_id: result.bundle.v1b_input_bundle_id,
+          selected_option_id: result.selectedOption.research_slice_option_id,
+          semantic_artifacts: result.semanticSummaries,
+          prompt_index_before: result.prompt_index_before,
+          prompt_index_after: result.prompt_index_after,
+          prompt_index_created: result.prompt_index_created,
+          cases: result.cases,
         });
         continue;
       }

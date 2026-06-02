@@ -1671,3 +1671,54 @@
   - resource-sampling runtime promotion and any direct-provider surface that has not been promoted into the matrix implementation rows;
   - v1b frozen/delegated N2/N3/N5 semantic support runtime promotion.
 - Acceptance criteria were normalized from older global wording to the promoted-surface closure semantics so the docs do not imply unimplemented global provider coverage.
+
+## 2026-06-02 - D30 v1b N2/N3/N5 Runtime Promotion Scope Locked
+- Promoted the first non-blocking follow-up slice after D29 closure audit: v1b N2/N3/N5 frozen/delegated semantic support runtime promotion.
+- Minimum implementation surface:
+  - N2 `n2_constraint_profile_semantic_support`;
+  - N3 `n3_readiness_classification`;
+  - N5 `n5_slice_selection_review`.
+- Runtime service scope:
+  - generate `runtime_verified` semantic support artifacts through `TopicSelectionAgentOrchestratorService`;
+  - use registered model profiles and `ContextPolicyProfile` rows;
+  - record ref-backed context packet artifacts, prompt packet identity/cache, token-budget preflight, runtime audit/provenance, and prompt-cache metadata;
+  - stay provider-agnostic and avoid direct provider SDK/gateway calls outside `AgentOrchestrator`.
+- Admission service scope:
+  - validate provenance class, profile identity, prompt packet hash, runtime invocation context hash, source hashes, payload hash, output contract, slot/effect, and audit ref/hash;
+  - block `fixture_replay` in product admission unless explicitly in acceptance/test mode;
+  - block `legacy_unverified` for promoted slots.
+- Authority boundary:
+  - N2/N5 delegated candidates remain non-authority until the existing WorkflowHarness deterministic/delegated gate accepts the frozen payload;
+  - N3 readiness classification remains support-only and cannot override deterministic readiness assessment;
+  - cache/replay/runtime artifacts cannot create N2/N3/N5 authority, N4 option sets, N6 handoffs, or downstream side effects.
+- Deferred outside this slice:
+  - DB-backed context packet cache index;
+  - provider-live canary expansion for N2/N3/N5;
+  - resource-sampling runtime promotion.
+
+## 2026-06-02 - D30 v1b N2/N3/N5 Runtime Promotion Landed
+- Added `TopicSelectionV1bEarlySemanticSupportRuntimeService` for the promoted early semantic slots:
+  - N2 `n2_constraint_profile_semantic_support`;
+  - N3 `n3_readiness_classification`;
+  - N5 `n5_slice_selection_review`.
+- Runtime now generates `runtime_verified` semantic support artifacts through `TopicSelectionAgentOrchestratorService`, with registered context profiles, prompt packet identity/cache metadata, token-budget preflight, runtime audit provenance, ref-backed context packets, and no direct provider SDK path.
+- Added `TopicSelectionV1bEarlySemanticSupportAdmissionService` and wired WorkflowHarness N2/N3/N5 consumption through it.
+  - Admission recomputes expected profile, prompt packet hash, runtime invocation context hash, run mode, source hashes, payload hash, slot/effect, and audit identity.
+  - `legacy_unverified` is blocked.
+  - `fixture_replay` is blocked in product mode and remains acceptance/test-only.
+  - Optional source hashes are omitted rather than represented by placeholder hashes.
+- Harness responsibility remains orchestration/evidence only.
+  - N2/N5 Codex delegated payloads still pass through existing deterministic/delegated gates before authority writes.
+  - N3 support remains non-authority and cannot substitute for persisted N3 readiness authority.
+  - Human delegated N2/N5 authority input remains a frozen business input path, not an LLM semantic artifact runtime path.
+- Extended `.ai/scripts/topic-selection-v1b-harness-e2e.mjs` with `early_semantic_runtime_smoke` and package script `pnpm topic-selection:v1b-early-semantic-runtime-smoke`.
+  - It verifies N2 runtime replay, N2 source-hash drift blocking, N3 support no-N3-authority-bypass, N5 delegated selection replay, and Prisma prompt-index metadata-only rows for all three promoted slots.
+- Extended `.ai/scripts/topic-selection-v1b-runtime-stress.mjs` so default v1b runtime stress includes the early semantic runtime smoke.
+- Verification passed:
+  - backend TypeScript compile;
+  - early semantic admission unit tests;
+  - context policy registry and shared runtime schema tests;
+  - harness script syntax checks;
+  - `early_semantic_runtime_smoke`;
+  - runtime-stress targeted to `early_semantic_runtime_smoke`.
+- No DB schema, route contract, provider credential/config, DB-backed context packet cache, direct provider SDK path, or provider-harness full-chain path was introduced.
