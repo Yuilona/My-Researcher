@@ -125,7 +125,7 @@ Project: `main`
 | T-108 topic-selection-v1c-workflow-hardening | done | dev-docs/active/topic-selection-v1c-workflow-hardening |
 | T-109 paper-implementation-v1-runnable-closure | done | dev-docs/active/paper-implementation-v1-runnable-closure |
 | T-110 experiment-foundation-research-workbench | archived | dev-docs/archive/experiment-foundation-research-workbench |
-| T-112 topic-selection-llm-context-cache-runtime | in-progress | dev-docs/active/topic-selection-llm-context-cache-runtime |
+| T-112 topic-selection-llm-context-cache-runtime | done | dev-docs/active/topic-selection-llm-context-cache-runtime |
 | T-113 paper-implementation-legacy-authority-cleanup | done | dev-docs/active/paper-implementation-legacy-authority-cleanup |
 
 ### F-002 Desktop Frontend Foundation

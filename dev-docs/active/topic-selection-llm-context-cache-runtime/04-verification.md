@@ -1035,6 +1035,17 @@
 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after the D32 cleanup documentation sync. |
 | `git diff --check` | passed | No whitespace errors after the D32 cleanup changes. |
 
+## 2026-06-02 - D33 Final Closure Pass Verification
+| Command | Result | Notes |
+|---|---|---|
+| `node .ai/scripts/ctl-project-governance.mjs sync --apply --project main` | passed | Project governance sync regenerated registry, dashboard, feature map, and task index after T-112 was marked `done`. |
+| `pnpm --filter @paper-engineering-assistant/backend exec tsc --noEmit --pretty false` | passed | Backend TypeScript compile remains green after final closure documentation/governance changes. |
+| `pnpm --filter @paper-engineering-assistant/shared exec tsc --noEmit --pretty false` | passed | Shared TypeScript compile remains green after final closure documentation/governance changes. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Governance lint passed after final closure sync. |
+| `git diff --check` | passed | No whitespace errors after final closure sync. |
+| Final closure stale-scope scan | passed | No stale T-112 status, final-closure pending, promotion-needed, or superseded deferred-surface wording remained in the overview, architecture, acceptance matrix, task metadata, or project hub T-112 rows. |
+| T-112 project hub spot check | passed | `.ai/project/main/registry.yaml`, dashboard, feature map, and task index all show T-112 status `done` with dev-docs path `dev-docs/active/topic-selection-llm-context-cache-runtime`. |
+
 ## Required Before Implementation
 - Contract design reviewed against T-088/T-089 D-18. Done.
 - First slice selected and approved: shared contracts/runtime primitives followed by v1a N6 single-agent and debate slots. Done.
@@ -1048,9 +1059,10 @@
 - Minimal OpenAI/DashScope provider-canary harness exists over `AgentOrchestrator -> BackendLlmGateway`; local fake-gateway tests prove prompt cache does not become provider response reuse and over-budget fixtures call zero providers. Live OpenAI/DashScope evidence has also passed for the promoted v1a N6 first slice.
 - v1a N5/N6/N7/N8, promoted v1b/v1c runtime slots, and resource-sampling batch classification are now runtime-bound. Any remaining direct/provider/Codex paths stay deferred until their rows are promoted to implementation-ready status.
 
-## Required Before Closure
-- Shared schema tests.
-- Backend unit tests for cache hit/miss/drift.
-- Harness tests for v1a/v1b/v1c cache and token-budget behavior.
-- Provider canaries for OpenAI and DashScope telemetry/provenance.
-- Governance sync/lint.
+## Closure Requirements Status
+- [x] Shared schema tests.
+- [x] Backend unit tests for cache hit/miss/drift.
+- [x] Harness tests for v1a/v1b/v1c cache and token-budget behavior.
+- [x] Provider canaries for OpenAI and DashScope telemetry/provenance.
+- [x] Resource-sampling L4 provider canary and L5 compression adversarial coverage.
+- [x] Governance sync/lint.

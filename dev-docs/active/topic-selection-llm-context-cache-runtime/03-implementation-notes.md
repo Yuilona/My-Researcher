@@ -1765,3 +1765,16 @@
 - L5 compression adversarial coverage now includes resource sampling.
   - Compression quality gates block dropped `literature_ref`, candidate abstract/digest, role classification, rationale, method family, and guardrail signal facts.
   - Compression quality gates also block forbidden raw provider logs in resource-sampling compressed context payloads.
+
+## 2026-06-02 - D33 Final Closure Pass
+- Marked T-112 `done` for the promoted runtime scope.
+- Normalized final closure scope across overview, architecture, and acceptance docs:
+  - v1a N5/N6/N7/N8 plus deterministic N1-N4/N9 replay/publish boundaries;
+  - v1b N2/N3/N4/N5/N6/N7/N8 semantic/runtime surfaces;
+  - v1c N2/N4/N6 runtime/admission surfaces;
+  - resource-sampling `resource_classification.batch`.
+- Reclassified stale D29/D26 wording as historical/superseded where D30/D32 later promoted the named surfaces.
+- Non-blocking future decisions remain outside T-112 closure:
+  - DB-backed context packet cache index;
+  - any future direct/provider/Codex surface not yet registered in the runtime profile/matrix.
+- No code, route contract, DB schema, provider credential/config, provider SDK path, or authority boundary changed in D33.

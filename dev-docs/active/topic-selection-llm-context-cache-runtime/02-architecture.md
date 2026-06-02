@@ -46,7 +46,7 @@ For v1a specifically, `WorkflowHarness` should remain a flow controller and veri
 ## Runtime Integration Pattern
 All LLM-like paths use the same runtime kernel through an adapter:
 - `AgentOrchestrator` paths call the runtime for profile resolution, key building, token preflight, cache/reuse policy, compression validation, and provenance before invoking provider/Codex/mock behavior.
-- Direct `BackendLlmGateway` callers must move behind a runtime provider wrapper before provider execution. The v1c promotion support `llm_draft` path has been migrated; resource sampling and remaining v1c provider/canary slots still need promotion to runtime-backed adapters.
+- Direct `BackendLlmGateway` callers must move behind a runtime provider wrapper before provider execution. The promoted v1a/v1b/v1c/resource-sampling surfaces now route through `AgentOrchestrator` or their registered runtime/admission services; any future direct-provider surface must first be promoted in the matrix.
 - External artifact admission paths, including v1b semantic artifacts and v1c Codex acceptance outputs, call runtime admission validation for schema, hashes, provenance, reuse policy, and post-reuse gates without triggering provider execution.
 - Provider canaries call the runtime with `provider_required_live`, which forces live provider execution and treats cached responses as miss/block only.
 
@@ -65,7 +65,7 @@ First-slice readiness is limited to v1a N6 and requires:
 - Codex-assisted reuse contract tests proving approval is required and `non_provider=true` is recorded;
 - v1a N6 harness tests proving cache/reuse/compression cannot bypass schema validation, candidate admission, deterministic gates, or authority-write boundaries.
 
-Resource sampling, v1b, and v1c runtime integration is blocked until their rows have the same implementation-ready detail. Direct `BackendLlmGateway` paths outside the first slice may remain as existing behavior, but they MUST NOT claim T-112 cache/reuse/token-budget semantics until routed through the shared runtime wrapper.
+Historical first-slice scope blocked resource sampling, v1b, and v1c runtime integration until their rows had the same implementation-ready detail. D20-D32 promoted the agreed v1b, v1c, and resource-sampling rows. Any future direct `BackendLlmGateway` path MUST NOT claim T-112 cache/reuse/token-budget semantics until routed through the shared runtime wrapper.
 
 ## Adapter Pattern
 T-112 MUST avoid a generic semantic compressor. Each LLM-capable node supplies a node policy adapter that declares:

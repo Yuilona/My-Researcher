@@ -23,6 +23,8 @@
 - Do not reintroduce direct `BackendLlmGateway` calls for promoted resource-sampling classification batches. The service must route provider execution through `AgentOrchestrator` so prompt packet cache, token-budget preflight, runtime audit, and provider response non-reuse stay unified.
 - Do not allow resource-sampling request `model.profile_id` or `model.model_id` to diverge from the registered runtime model profile/options; audit model refs must describe the actual runtime-selected provider option.
 - Do not let resource-sampling compression drop candidate identity or guardrail-critical classification facts. `literature_ref`, candidate abstract/digest, role classification, rationale, method family, source count, and guardrail signal must remain preserved facts, and raw provider logs must never appear in compressed context payloads.
+- Do not leave closure status or scope docs frozen at an earlier audit pass after later promoted surfaces land. Final closure must reconcile overview, architecture, acceptance matrix, verification, and project-governance status.
 
-## Pending
-- Any unpromoted direct/provider surfaces still need their own implementation-ready matrix promotion before runtime wiring.
+## Non-Blocking Future Decisions
+- DB-backed context packet cache index remains deferred to a later retention/cost-governance decision.
+- Any future direct/provider/Codex surface still needs its own implementation-ready matrix promotion before runtime wiring.

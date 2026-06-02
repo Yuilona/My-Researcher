@@ -199,7 +199,7 @@
 | v1b N8 P2.2 L5 long-context adversarial | long N7 value context is compressed before value draft generation or admission | dropped N7 handoff/projection/question/contract/active-candidate/plan/ledger/value/risk/recheck facts and forbidden raw provider logs block before the N8 deterministic value gate sees a draft |
 | v1b P2.4 combined runtime stress | `pnpm topic-selection:v1b-runtime-stress` runs against the Prisma-backed local/dev stack | N4/N6 initial/N6 loopback/N7/N8 runtime smoke scenarios pass as child runs, prompt packet index remains metadata-only, expected prompt rows appear for all promoted v1b runtime slots, and no prompt quality blockers are recorded |
 | v1b P2.4 closure boundary | combined stress observes runtime/cache/compression/replay evidence | stress runner does not own node semantics, does not create authority, and does not replace adapter admission, deterministic gates, or handoff validation |
-| v1b D26 closure scope | v1b closure is evaluated after promoted N4/N6/N7/N8 runtime stress passes | N2/N3/N5 remain deferred frozen/delegated semantic support and do not block closure unless a later decision explicitly promotes them |
+| v1b D26 historical closure scope | v1b closure was originally evaluated after promoted N4/N6/N7/N8 runtime stress passed | superseded by D30: N2/N3/N5 frozen/delegated semantic support were later explicitly promoted and verified |
 | v1b D26 closure acceptance | promoted N4/N6/N7/N8 runtime evidence is complete | prompt index remains metadata-only, provider response reuse remains blocked, compression self-check remains runtime/admission-owned, and deterministic gates/handoffs/authority writes remain workflow-owned |
 | v1b D27 closure command | `pnpm topic-selection:v1b-runtime-stress` runs in local/dev Prisma mode | promoted N4/N6/N7/N8 runtime slots pass through child smokes, child prompt-index deltas, global prompt-index slot minimums, and no prompt quality blockers |
 | v1b near-production deep test | `pnpm topic-selection:v1b-near-prod-deep-test` composes existing harness/runtime/provider entries | Prisma full-chain fixture behavior, promoted runtime stress, compression/admission unit coverage, and provider-required-live slot canaries pass without reintroducing a second runtime or legacy write-route path |
@@ -296,7 +296,7 @@
 | DashScope | v1c N6 downstream feedback normalization production runtime slot | live evidence passed on 2026-06-02; prompt-cache hit still performs live provider calls, and malformed, cached, or over-budget provider output cannot create downstream recheck authority. |
 | OpenAI or DashScope | live token over budget fixture | provider call count remains zero |
 
-## D29 Closure Audit Classification
+## D33 Final Closure Classification
 | Decision Area | Disposition | Evidence |
 |---|---|---|
 | Closure scope | satisfied for promoted runtime surface | Promoted surface is v1a N5/N6/N7/N8 plus deterministic N1-N4/N9 boundaries, v1b N2/N3/N4/N5/N6/N7/N8 semantic/runtime surfaces, v1c N2/N4/N6, and resource-sampling `resource_classification.batch`. |
@@ -317,4 +317,4 @@
 - v1c production-depth passes or records a specific blocked condition with no authority-boundary regression.
 - Provider canaries pass or are recorded as provider/environment-blocked with diagnostic evidence and no runtime boundary regression. Current v1c OpenAI and DashScope N2/N4/N6 live slot canaries have passing evidence.
 - Governance sync/lint passes.
-- D29 closure audit evidence passed on 2026-06-02 for the promoted runtime surface, with explicit non-blocking deferrals recorded above.
+- D33 final closure evidence passed on 2026-06-02 for the promoted runtime surface, with explicit non-blocking future decisions recorded above.

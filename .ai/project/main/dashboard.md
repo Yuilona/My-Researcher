@@ -8,19 +8,19 @@ Project: `main`
 <!-- AUTO-GENERATED:START dashboard -->
 ## Summary
 
-- Tasks: 113 (planned: 2, in-progress: 4, blocked: 0, done: 37, archived: 70)
+- Tasks: 113 (planned: 2, in-progress: 3, blocked: 0, done: 38, archived: 70)
 
 ## Recent tasks
 
 | Task | Status | Feature | Dev Docs |
 | --- | --- | --- | --- |
+| T-112 topic-selection-llm-context-cache-runtime | done | F-001 | dev-docs/active/topic-selection-llm-context-cache-runtime |
 | T-023 research-argument-control-plane-v1 | archived | F-001 | dev-docs/archive/research-argument-control-plane-v1 |
 | T-086 research-argument-writing-entry-bridge-acceptance | archived | F-001 | dev-docs/archive/research-argument-writing-entry-bridge-acceptance |
 | T-113 paper-implementation-legacy-authority-cleanup | done | F-001 | dev-docs/active/paper-implementation-legacy-authority-cleanup |
 | T-108 topic-selection-v1c-workflow-hardening | done | F-001 | dev-docs/active/topic-selection-v1c-workflow-hardening |
 | T-110 experiment-foundation-research-workbench | archived | F-001 | dev-docs/archive/experiment-foundation-research-workbench |
 | T-111 topic-selection-v1a-production-orchestration | done | F-000 | dev-docs/active/topic-selection-v1a-production-orchestration |
-| T-112 topic-selection-llm-context-cache-runtime | in-progress | F-001 | dev-docs/active/topic-selection-llm-context-cache-runtime |
 | T-107 topic-selection-v1b-workflow-hardening | done | F-001 | dev-docs/active/topic-selection-v1b-workflow-hardening |
 | T-109 paper-implementation-v1-runnable-closure | done | F-001 | dev-docs/active/paper-implementation-v1-runnable-closure |
 | T-106 experiment-foundation-real-interaction-hardening | in-progress | F-001 | dev-docs/active/experiment-foundation-real-interaction-hardening |
