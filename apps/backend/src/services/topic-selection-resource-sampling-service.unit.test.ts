@@ -23,10 +23,18 @@ import {
   type LlmCallTelemetry,
   type LlmStructuredOutputRequest,
 } from './llm-gateway.js';
+import { AppError } from '../errors/app-error.js';
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
 import {
+  TopicSelectionAgentOrchestratorService,
+  type TopicSelectionAgentOrchestratorLlmGateway,
+} from './topic-selection-agent-orchestrator-service.js';
+import {
+  TOPIC_SELECTION_RESOURCE_SAMPLING_NODE_ID,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_ID,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_VERSION,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_WORKFLOW_PROFILE_KEY,
   TopicSelectionResourceSamplingService,
-  type TopicSelectionResourceSamplingLlmGateway,
 } from './topic-selection-resource-sampling-service.js';
 
 const NOW = '2026-05-17T08:00:00.000Z';
@@ -46,9 +54,9 @@ function makeTelemetry(): LlmCallTelemetry {
   return {
     provider_id: 'openai',
     model_id: 'gpt-5.5',
-    profile_id: 'topic-selection-resource-sampling-classification',
-    prompt_template_id: 'topic-selection-resource-sampling-classification',
-    prompt_template_version: '1',
+    profile_id: TOPIC_SELECTION_RESOURCE_SAMPLING_WORKFLOW_PROFILE_KEY,
+    prompt_template_id: TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_ID,
+    prompt_template_version: TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_VERSION,
     elapsed_ms: 10,
     request_count: 1,
     retry_count: 0,
@@ -65,7 +73,7 @@ function makeTelemetry(): LlmCallTelemetry {
   };
 }
 
-class StubLlmGateway implements TopicSelectionResourceSamplingLlmGateway {
+class StubLlmGateway implements TopicSelectionAgentOrchestratorLlmGateway {
   calls: LlmStructuredOutputRequest[] = [];
 
   constructor(private readonly output: TopicSelectionResourceSamplingLlmOutput | Error) {}
@@ -83,7 +91,7 @@ class StubLlmGateway implements TopicSelectionResourceSamplingLlmGateway {
   }
 }
 
-class BatchAwareLlmGateway implements TopicSelectionResourceSamplingLlmGateway {
+class BatchAwareLlmGateway implements TopicSelectionAgentOrchestratorLlmGateway {
   calls: LlmStructuredOutputRequest[] = [];
 
   async createStructuredOutput<T>(request: LlmStructuredOutputRequest) {
@@ -331,6 +339,16 @@ function makeLlmOutput(): TopicSelectionResourceSamplingLlmOutput {
   };
 }
 
+function makeAgentOrchestrator(
+  controlPlane: TopicSelectionControlPlaneService,
+  llmGateway: TopicSelectionAgentOrchestratorLlmGateway,
+): TopicSelectionAgentOrchestratorService {
+  return new TopicSelectionAgentOrchestratorService({
+    controlPlane,
+    llmGateway,
+  });
+}
+
 function makeService(
   output: TopicSelectionResourceSamplingLlmOutput | Error,
   records: LiteratureRecord[] = [
@@ -342,14 +360,16 @@ function makeService(
     literature('lit_lora_review', 'LoRA fine-tuning for RAG', 'LoRA fine-tuning adapter evidence for RAG workflows.', ['fine-tuning']),
   ],
 ) {
+  const controlPlane = new TopicSelectionControlPlaneService(
+    new InMemoryTopicSelectionControlPlaneRepository(),
+    { idFactory: makeIdFactory(), now: () => NOW },
+  );
+  const llmGateway = new StubLlmGateway(output);
   return new TopicSelectionResourceSamplingService({
     repository: new InMemoryTopicSelectionResourceSamplingRepository(),
     literatureRepository: makeLiteratureRepository(records),
-    controlPlaneService: new TopicSelectionControlPlaneService(
-      new InMemoryTopicSelectionControlPlaneRepository(),
-      { idFactory: makeIdFactory(), now: () => NOW },
-    ),
-    llmGateway: new StubLlmGateway(output),
+    controlPlaneService: controlPlane,
+    agentOrchestrator: makeAgentOrchestrator(controlPlane, llmGateway),
     idFactory: makeIdFactory(),
     now: () => NOW,
   });
@@ -390,6 +410,104 @@ test('resource sampling classifies roles, applies guardrails, and emits coverage
   assert.ok(result.sample_set.warnings.includes('FINE_TUNING_UNDERCOVERED'));
   assert.equal(result.audit.eligible_count, 6);
   assert.equal(result.audit.selected_count, 4);
+});
+
+test('resource sampling routes provider batches through runtime audit and token budget gate', async () => {
+  const controlPlaneRepository = new InMemoryTopicSelectionControlPlaneRepository();
+  const controlPlane = new TopicSelectionControlPlaneService(
+    controlPlaneRepository,
+    { idFactory: makeIdFactory(), now: () => NOW },
+  );
+  const llmGateway = new StubLlmGateway(makeLlmOutput());
+  const service = new TopicSelectionResourceSamplingService({
+    repository: new InMemoryTopicSelectionResourceSamplingRepository(),
+    literatureRepository: makeLiteratureRepository([
+      literature('lit_rag_positive', 'RAG improves answer grounding', 'Retrieval augmented generation improves factual grounding.', ['rag']),
+      literature('lit_poisoning_risk', 'Poisoning attacks against RAG', 'Adversarial poisoning and source verification failures in RAG.', ['security']),
+      literature('lit_benchmark', 'RAG benchmark comparison', 'Benchmark evaluation and comparison dataset for retrieval methods.', ['benchmark']),
+      literature('lit_foundation', 'Foundation overview for RAG', 'Foundation context and background for retrieval augmented systems.', ['context']),
+    ]),
+    controlPlaneService: controlPlane,
+    agentOrchestrator: makeAgentOrchestrator(controlPlane, llmGateway),
+    idFactory: makeIdFactory(),
+    now: () => NOW,
+  });
+
+  const result = await service.createResourceSampleSet({
+    topic_id: TOPIC_ID,
+    title_card_id: TITLE_CARD_ID,
+    sample_size: 4,
+  });
+
+  assert.equal(llmGateway.calls.length, 1);
+  assert.equal(llmGateway.calls[0]!.model.providerId, 'openai');
+  assert.equal(llmGateway.calls[0]!.model.modelId, 'gpt-5.5');
+  assert.equal(llmGateway.calls[0]!.model.profileId, TOPIC_SELECTION_RESOURCE_SAMPLING_WORKFLOW_PROFILE_KEY);
+  assert.equal(
+    llmGateway.calls[0]!.executionContext.metadata?.model_option_id,
+    `${TOPIC_SELECTION_RESOURCE_SAMPLING_WORKFLOW_PROFILE_KEY}.openai-balanced`,
+  );
+  assert.equal(result.sample_set.workflow_run_id?.startsWith('workflow_run_'), true);
+  const artifacts = await controlPlane.listArtifactRefsByWorkflowRunId(result.sample_set.workflow_run_id!);
+  const runtimeAudit = artifacts.find((artifact) => {
+    const payload = artifact.payload as Record<string, unknown> | null;
+    return payload?.schema_version === 'topic-selection-agent-invocation-audit-v1';
+  });
+  assert.ok(runtimeAudit);
+  const auditPayload = runtimeAudit.payload as {
+    node_id: string;
+    provenance: {
+      prompt_packet_hash: string;
+      prompt_quality_report_ref?: TopicSelectionFunctionalRef | null;
+      redacted_prompt_artifact_ref?: TopicSelectionFunctionalRef | null;
+      source_kind: string;
+      non_provider: boolean;
+      cache_status: string;
+    };
+    token_budget_gate_result: { decision: string } | null;
+  };
+  assert.equal(auditPayload.node_id, TOPIC_SELECTION_RESOURCE_SAMPLING_NODE_ID);
+  assert.equal(auditPayload.provenance.source_kind, 'provider_response');
+  assert.equal(auditPayload.provenance.non_provider, false);
+  assert.equal(auditPayload.provenance.cache_status, 'not_applicable');
+  assert.equal(auditPayload.provenance.prompt_packet_hash.length, 64);
+  assert.equal(auditPayload.provenance.prompt_quality_report_ref?.ref_type, 'artifact_ref');
+  assert.equal(auditPayload.provenance.redacted_prompt_artifact_ref?.ref_type, 'artifact_ref');
+  assert.equal(auditPayload.token_budget_gate_result?.decision, 'within_budget');
+  assert.equal(
+    artifacts.some((artifact) =>
+      (artifact.payload as Record<string, unknown> | null)?.payload_schema
+        === 'TopicSelectionPromptQualityReport@v1'),
+    true,
+  );
+  assert.equal(
+    artifacts.some((artifact) =>
+      (artifact.payload as Record<string, unknown> | null)?.payload_schema
+        === 'TopicSelectionRedactedPromptPacketArtifact@v1'),
+    true,
+  );
+});
+
+test('resource sampling rejects providers outside registered runtime options', async () => {
+  const service = makeService(makeLlmOutput());
+
+  await assert.rejects(
+    () => service.createResourceSampleSet({
+      topic_id: TOPIC_ID,
+      title_card_id: TITLE_CARD_ID,
+      sample_size: 4,
+      model: {
+        provider_id: 'deepseek',
+        model_id: 'deepseek-v4-pro',
+        profile_id: TOPIC_SELECTION_RESOURCE_SAMPLING_WORKFLOW_PROFILE_KEY,
+      } as never,
+    }),
+    (error: unknown) =>
+      error instanceof AppError
+      && error.statusCode === 400
+      && error.errorCode === 'INVALID_PAYLOAD'
+      && error.message.includes('registered runtime model option'),
+  );
 });
 
 test('resource sampling keeps low-relevance target-role candidates out of the selected sample', async () => {
@@ -796,14 +914,15 @@ test('resource sampling does not force mitigation or emotional-memory papers int
 
 test('resource sampling chunks large candidate pools before LLM classification', async () => {
   const llmGateway = new BatchAwareLlmGateway();
+  const controlPlane = new TopicSelectionControlPlaneService(
+    new InMemoryTopicSelectionControlPlaneRepository(),
+    { idFactory: makeIdFactory(), now: () => NOW },
+  );
   const service = new TopicSelectionResourceSamplingService({
     repository: new InMemoryTopicSelectionResourceSamplingRepository(),
     literatureRepository: makeLiteratureRepository(batchLiteratureRecords(60)),
-    controlPlaneService: new TopicSelectionControlPlaneService(
-      new InMemoryTopicSelectionControlPlaneRepository(),
-      { idFactory: makeIdFactory(), now: () => NOW },
-    ),
-    llmGateway,
+    controlPlaneService: controlPlane,
+    agentOrchestrator: makeAgentOrchestrator(controlPlane, llmGateway),
     idFactory: makeIdFactory(),
     now: () => NOW,
   });

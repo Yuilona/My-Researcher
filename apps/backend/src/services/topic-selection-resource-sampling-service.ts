@@ -33,32 +33,52 @@ import type {
 import type { TopicSelectionResourceSamplingRepository } from '../repositories/topic-selection-resource-sampling.repository.js';
 import { sha256Text, stableStringify } from './literature-content-processing-utils.js';
 import {
-  BackendLlmGateway,
-  DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
+  TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-llm-runtime-contracts';
+import {
   LlmGatewayError,
   type LlmCallTelemetry,
   type LlmModelRef,
 } from './llm-gateway.js';
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
+import {
+  TOPIC_SELECTION_RESOURCE_SAMPLING_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS,
+  TopicSelectionContextPolicyProfileRegistryService,
+  type TopicSelectionResolvedContextPolicyProfile,
+} from './topic-selection-context-policy-profile-registry-service.js';
+import {
+  TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID,
+} from './topic-selection-model-profile-registry-service.js';
+import {
+  TopicSelectionAgentOrchestratorService,
+  type TopicSelectionAgentInvocationResult,
+  type TopicSelectionAgentRuntimeTokenBudgetInput,
+} from './topic-selection-agent-orchestrator-service.js';
 
-const WORKFLOW_PROFILE_KEY = 'topic-selection-resource-sampling-classification';
-const PROMPT_TEMPLATE_ID = 'topic-selection-resource-sampling-classification';
-const PROMPT_TEMPLATE_VERSION = '1';
+export const TOPIC_SELECTION_RESOURCE_SAMPLING_WORKFLOW_PROFILE_KEY =
+  TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID;
+export const TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_ID =
+  'topic-selection-resource-sampling-classification' as const;
+export const TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_VERSION = '1' as const;
+export const TOPIC_SELECTION_RESOURCE_SAMPLING_NODE_ID =
+  'topic-selection.resource-sampling.create-sample-set.v1' as const;
+const RESOURCE_SAMPLING_INVOCATION_SLOT_ID =
+  TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS.literature_classification_batch;
+export const TOPIC_SELECTION_RESOURCE_SAMPLING_OUTPUT_CONTRACT =
+  'TopicSelectionResourceSamplingLlmOutput@v1' as const;
 const DEFAULT_POLICY_VERSION = 'topic-resource-sampling-v1';
 const DEFAULT_SAMPLE_SIZE = 16;
+const DEFAULT_OPENAI_MODEL_ID = 'gpt-5.5' as const;
+const DEFAULT_DASHSCOPE_MODEL_ID = 'qwen3.6-plus' as const;
 const DEFAULT_MODEL: LlmModelRef = {
   providerId: 'openai',
-  modelId: 'gpt-5.5',
-  profileId: WORKFLOW_PROFILE_KEY,
+  modelId: DEFAULT_OPENAI_MODEL_ID,
+  profileId: TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID,
 };
 const TARGET_ROLES = [...TOPIC_SELECTION_RESOURCE_SAMPLE_TARGET_ROLES];
 
 type IdFactory = (prefix: string) => string;
-
-export type TopicSelectionResourceSamplingLlmGateway = Pick<
-  BackendLlmGateway,
-  'createStructuredOutput'
->;
 
 export type CreateTopicSelectionResourceSampleInput =
   Omit<CreateTopicSelectionResourceSampleRequest, 'model'> & {
@@ -69,7 +89,8 @@ type ServiceOptions = {
   repository: TopicSelectionResourceSamplingRepository;
   literatureRepository: LiteratureRepository;
   controlPlaneService: TopicSelectionControlPlaneService;
-  llmGateway?: TopicSelectionResourceSamplingLlmGateway;
+  agentOrchestrator: TopicSelectionAgentOrchestratorService;
+  contextPolicyProfileRegistry?: TopicSelectionContextPolicyProfileRegistryService;
   idFactory?: IdFactory;
   now?: () => string;
 };
@@ -130,6 +151,33 @@ type ClassificationOutcome = {
   error: unknown | null;
 };
 
+type ResourceSamplingBatchRuntimeContext = {
+  schema_version: 'TopicSelectionResourceSamplingBatchContext@v1';
+  node_id: typeof TOPIC_SELECTION_RESOURCE_SAMPLING_NODE_ID;
+  invocation_slot_id: typeof RESOURCE_SAMPLING_INVOCATION_SLOT_ID;
+  context_family: 'resource_sampling_literature_classification_batch';
+  topic_id: string;
+  sample_size: number;
+  role_targets: TopicSelectionResourceRoleTargets;
+  policy_version: string;
+  batch: {
+    index: number;
+    count: number;
+    candidate_count: number;
+  };
+  eligible_candidates: Array<{
+    literature_ref: TopicSelectionFunctionalRef;
+    title: string;
+    abstract: string | null;
+    key_content_digest: string | null;
+    tags: string[];
+    year: number | null;
+    activation_score: number | null;
+    activation_reason: string | null;
+    source_count: number;
+  }>;
+};
+
 type SampleAssembly = {
   status: TopicSelectionResourceSampleSetStatus;
   items: TopicSelectionResourceSampleItemRecord[];
@@ -184,18 +232,19 @@ const CONTEXT_ORIENTATION_PATTERN =
 const BROAD_FOUNDATION_TAGS = new Set(['foundational-ai', 'background-literature', 'auto-screened-context']);
 const TARGET_ROLE_RELEVANCE_FLOOR = 0.7;
 const LLM_CLASSIFICATION_BATCH_SIZE = 24;
-const LLM_CLASSIFICATION_BATCH_TIMEOUT_MS = 60_000;
-const LLM_CLASSIFICATION_BATCH_MAX_RETRIES = 2;
 
 export class TopicSelectionResourceSamplingService {
   private readonly idFactory: IdFactory;
   private readonly now: () => string;
-  private readonly llmGateway: TopicSelectionResourceSamplingLlmGateway;
+  private readonly agentOrchestrator: TopicSelectionAgentOrchestratorService;
+  private readonly contextPolicyProfileRegistry: TopicSelectionContextPolicyProfileRegistryService;
 
   constructor(private readonly options: ServiceOptions) {
     this.idFactory = options.idFactory ?? ((prefix) => `${prefix}_${crypto.randomUUID()}`);
     this.now = options.now ?? (() => new Date().toISOString());
-    this.llmGateway = options.llmGateway ?? new BackendLlmGateway();
+    this.contextPolicyProfileRegistry = options.contextPolicyProfileRegistry
+      ?? new TopicSelectionContextPolicyProfileRegistryService();
+    this.agentOrchestrator = options.agentOrchestrator;
   }
 
   async createResourceSampleSet(
@@ -231,15 +280,36 @@ export class TopicSelectionResourceSamplingService {
     });
 
     const eligibleCandidates = candidates.filter((candidate) => candidate.eligibility_status === 'eligible');
+    const workflow = await this.options.controlPlaneService.recordWorkflowRun({
+      workspace_id: input.workspace_id ?? null,
+      title_card_id: input.title_card_id ?? null,
+      workflow_key: 'topic-selection.resource-sampling-classification',
+      workflow_profile_key: TOPIC_SELECTION_RESOURCE_SAMPLING_WORKFLOW_PROFILE_KEY,
+      input_snapshot_id: inputSnapshot.input_snapshot_id,
+      status: 'running',
+      provider_id: model.providerId,
+      model_id: model.modelId,
+      prompt_template_id: TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_ID,
+      prompt_template_version: TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_VERSION,
+      telemetry: {},
+      output_summary: {
+        status: 'running',
+        candidate_count: candidates.length,
+        eligible_count: eligibleCandidates.length,
+      },
+      created_by: createdBy,
+    });
     const classification = await this.classifyCandidates({
       input,
       candidates,
       eligibleCandidates,
       sampleSetId,
+      workflowRunId: workflow.workflow_run.workflow_run_id,
       model,
       policyVersion,
       roleTargets,
       sampleSize,
+      createdBy,
     });
     const assembly = this.assembleSample({
       candidates,
@@ -255,39 +325,39 @@ export class TopicSelectionResourceSamplingService {
       modelRef,
     });
 
-    const workflow = await this.options.controlPlaneService.recordWorkflowRun({
+    await this.options.controlPlaneService.recordArtifactRef({
       workspace_id: input.workspace_id ?? null,
       title_card_id: input.title_card_id ?? null,
-      workflow_key: 'topic-selection.resource-sampling-classification',
-      workflow_profile_key: WORKFLOW_PROFILE_KEY,
+      artifact_kind: 'structured_output',
+      workflow_run_id: workflow.workflow_run.workflow_run_id,
       input_snapshot_id: inputSnapshot.input_snapshot_id,
-      status: classification.error ? 'failed' : 'succeeded',
-      provider_id: model.providerId,
-      model_id: model.modelId,
-      prompt_template_id: PROMPT_TEMPLATE_ID,
-      prompt_template_version: PROMPT_TEMPLATE_VERSION,
-      telemetry: classification.telemetry ? { ...classification.telemetry } : {},
-      output_summary: {
-        status: assembly.status,
-        candidate_count: candidates.length,
-        eligible_count: eligibleCandidates.length,
-        selected_count: assembly.selectedItems.length,
-        warning_codes: assembly.warnings,
+      payload: {
+        llm_structured_output: classification.llmOutput,
+        guardrail_summary: assembly.guardrailSummary,
       },
-      error_code: classification.error ? 'LLM_CLASSIFICATION_FAILED' : null,
-      error_message: classification.error ? this.errorMessage(classification.error) : null,
       created_by: createdBy,
-      artifacts: [
-        {
-          artifact_kind: 'structured_output',
-          payload: {
-            llm_structured_output: classification.llmOutput,
-            guardrail_summary: assembly.guardrailSummary,
-          },
-        },
-      ],
     });
-    const artifactRefs = workflow.artifact_refs.map((artifact) =>
+    const updatedWorkflow = await this.options.controlPlaneService.updateWorkflowRun(
+      workflow.workflow_run.workflow_run_id,
+      {
+        status: classification.error ? 'failed' : 'succeeded',
+        finished_at: this.now(),
+        telemetry: classification.telemetry ? { ...classification.telemetry } : {},
+        output_summary: {
+          status: assembly.status,
+          candidate_count: candidates.length,
+          eligible_count: eligibleCandidates.length,
+          selected_count: assembly.selectedItems.length,
+          warning_codes: assembly.warnings,
+        },
+        error_code: classification.error ? 'LLM_CLASSIFICATION_FAILED' : null,
+        error_message: classification.error ? this.errorMessage(classification.error) : null,
+      },
+    );
+    const workflowArtifactRefs = await this.options.controlPlaneService.listArtifactRefsByWorkflowRunId(
+      workflow.workflow_run.workflow_run_id,
+    );
+    const artifactRefs = workflowArtifactRefs.map((artifact) =>
       this.ref('artifact_ref', artifact.artifact_ref_id, artifact.title_card_id ?? input.title_card_id ?? null),
     );
 
@@ -300,7 +370,7 @@ export class TopicSelectionResourceSamplingService {
       gate_key: 'topic-selection.resource-sample-ready',
       target_ref: sampleSetRef,
       input_snapshot_id: inputSnapshot.input_snapshot_id,
-      workflow_run_id: workflow.workflow_run.workflow_run_id,
+      workflow_run_id: updatedWorkflow.workflow_run_id,
       policy_version_id: policyVersion,
       blockers,
       warnings: assembly.warnings.map((warning) =>
@@ -323,7 +393,7 @@ export class TopicSelectionResourceSamplingService {
       sample_hash: assembly.sampleHash,
       model: modelRef,
       input_snapshot_id: inputSnapshot.input_snapshot_id,
-      workflow_run_id: workflow.workflow_run.workflow_run_id,
+      workflow_run_id: updatedWorkflow.workflow_run_id,
       gate_result_id: gate.readiness_gate_result_id,
       audit_ref: auditRef,
       created_by: createdBy,
@@ -336,8 +406,8 @@ export class TopicSelectionResourceSamplingService {
       title_card_id: input.title_card_id ?? null,
       topic_id: input.topic_id,
       policy_version: policyVersion,
-      prompt_template_id: PROMPT_TEMPLATE_ID,
-      prompt_template_version: PROMPT_TEMPLATE_VERSION,
+      prompt_template_id: TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_ID,
+      prompt_template_version: TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_VERSION,
       model: modelRef,
       candidate_count: candidates.length,
       eligible_count: eligibleCandidates.length,
@@ -433,10 +503,12 @@ export class TopicSelectionResourceSamplingService {
     candidates: ResourceCandidate[];
     eligibleCandidates: ResourceCandidate[];
     sampleSetId: string;
+    workflowRunId: string;
     model: LlmModelRef;
     policyVersion: string;
     roleTargets: TopicSelectionResourceRoleTargets;
     sampleSize: number;
+    createdBy: 'human' | 'llm' | 'system' | 'hybrid';
   }): Promise<ClassificationOutcome> {
     if (input.eligibleCandidates.length === 0) {
       return {
@@ -452,16 +524,68 @@ export class TopicSelectionResourceSamplingService {
 
     try {
       for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
-        const response = await this.llmGateway.createStructuredOutput<TopicSelectionResourceSamplingLlmOutput>(
-          this.classificationRequest({
-            ...input,
-            batchCandidates: batches[batchIndex]!,
-            batchIndex,
-            batchCount: batches.length,
+        const batchCandidates = batches[batchIndex]!;
+        const request = this.classificationRequest({
+          input: input.input,
+          policyVersion: input.policyVersion,
+          roleTargets: input.roleTargets,
+          sampleSize: input.sampleSize,
+          batchCandidates,
+          batchIndex,
+          batchCount: batches.length,
+        });
+        const runtimeContext = this.resourceSamplingBatchRuntimeContext({
+          ...input,
+          batchCandidates,
+          batchIndex,
+          batchCount: batches.length,
+        });
+        const runtimeProfile = this.resolveResourceSamplingRuntimeProfile();
+        const runtimeInvocationContextHash = this.resourceSamplingRuntimeInvocationContextHash({
+          topicId: input.input.topic_id,
+          policyVersion: input.policyVersion,
+          roleTargets: input.roleTargets,
+          sampleSize: input.sampleSize,
+          batchContext: runtimeContext,
+          batchIndex,
+          batchCount: batches.length,
+        });
+        const contextPacketHash = this.hash(runtimeContext);
+        const invocation = await this.agentOrchestrator.invokeStructuredOutput<TopicSelectionResourceSamplingLlmOutput>({
+          workspace_id: input.input.workspace_id ?? null,
+          title_card_id: input.input.title_card_id ?? null,
+          node_id: TOPIC_SELECTION_RESOURCE_SAMPLING_NODE_ID,
+          workflow_run_id: input.workflowRunId,
+          node_attempt_id: `${input.sampleSetId}.batch_${batchIndex + 1}`,
+          invocation_attempt_id: `${input.sampleSetId}.${RESOURCE_SAMPLING_INVOCATION_SLOT_ID}.batch_${batchIndex + 1}`,
+          execution_mode: 'provider_llm',
+          executor_kind: 'single_agent',
+          run_mode: 'product',
+          profile_id: TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID,
+          output_contract: TOPIC_SELECTION_RESOURCE_SAMPLING_OUTPUT_CONTRACT,
+          model_option_id: this.modelOptionIdForModel(input.model),
+          prompt: request.prompt,
+          prompt_variant_key: RESOURCE_SAMPLING_INVOCATION_SLOT_ID,
+          schema_name: request.schemaName,
+          schema: request.schema,
+          messages: request.messages,
+          input_refs: this.resourceSamplingInputRefs(batchCandidates),
+          context_packet_hashes: [contextPacketHash],
+          runtime_token_budget: this.resourceSamplingRuntimeTokenBudget({
+            runtimeProfile,
+            runtimeInvocationContextHash,
+            batchContext: runtimeContext,
           }),
-        );
-        classifications.push(...response.parsed.classifications);
-        telemetry.push(response.telemetry);
+          created_by: input.createdBy,
+        });
+        const invocationTelemetry = this.gatewayTelemetryFromInvocation(invocation);
+        if (invocationTelemetry) {
+          telemetry.push(invocationTelemetry);
+        }
+        if (invocation.status !== 'succeeded' || !invocation.structured_output) {
+          throw this.invocationError(invocation);
+        }
+        classifications.push(...invocation.structured_output.classifications);
       }
       const llmOutput: TopicSelectionResourceSamplingLlmOutput = { classifications };
       const classificationsByLiteratureId = new Map(
@@ -493,8 +617,6 @@ export class TopicSelectionResourceSamplingService {
 
   private classificationRequest(input: {
     input: CreateTopicSelectionResourceSampleInput;
-    sampleSetId: string;
-    model: LlmModelRef;
     policyVersion: string;
     roleTargets: TopicSelectionResourceRoleTargets;
     sampleSize: number;
@@ -503,23 +625,9 @@ export class TopicSelectionResourceSamplingService {
     batchCount: number;
   }) {
     return {
-      executionContext: {
-        feature: 'topic_selection',
-        operation: 'resource_sampling_classification',
-        traceId: input.sampleSetId,
-        metadata: {
-          topic_id: input.input.topic_id,
-          sample_size: input.sampleSize,
-          policy_version: input.policyVersion,
-          batch_index: input.batchIndex + 1,
-          batch_count: input.batchCount,
-          batch_candidate_count: input.batchCandidates.length,
-        },
-      },
-      model: input.model,
       prompt: {
-        promptTemplateId: PROMPT_TEMPLATE_ID,
-        version: PROMPT_TEMPLATE_VERSION,
+        promptTemplateId: TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_ID,
+        version: TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_VERSION,
       },
       messages: [
         {
@@ -559,11 +667,188 @@ export class TopicSelectionResourceSamplingService {
       ],
       schemaName: 'topic_selection_resource_sampling_classification',
       schema: topicSelectionResourceSamplingLlmOutputSchema as unknown as Record<string, unknown>,
-      normalizedParams: DEFAULT_HIGH_REASONING_JSON_SCHEMA_PARAMS,
-      policy: {
-        timeoutMs: LLM_CLASSIFICATION_BATCH_TIMEOUT_MS,
-        maxRetries: LLM_CLASSIFICATION_BATCH_MAX_RETRIES,
+    };
+  }
+
+  private resourceSamplingBatchRuntimeContext(input: {
+    input: CreateTopicSelectionResourceSampleInput;
+    policyVersion: string;
+    roleTargets: TopicSelectionResourceRoleTargets;
+    sampleSize: number;
+    batchCandidates: ResourceCandidate[];
+    batchIndex: number;
+    batchCount: number;
+  }): ResourceSamplingBatchRuntimeContext {
+    return {
+      schema_version: 'TopicSelectionResourceSamplingBatchContext@v1',
+      node_id: TOPIC_SELECTION_RESOURCE_SAMPLING_NODE_ID,
+      invocation_slot_id: RESOURCE_SAMPLING_INVOCATION_SLOT_ID,
+      context_family: 'resource_sampling_literature_classification_batch',
+      topic_id: input.input.topic_id,
+      sample_size: input.sampleSize,
+      role_targets: input.roleTargets,
+      policy_version: input.policyVersion,
+      batch: {
+        index: input.batchIndex + 1,
+        count: input.batchCount,
+        candidate_count: input.batchCandidates.length,
       },
+      eligible_candidates: input.batchCandidates.map((candidate) => ({
+        literature_ref: candidate.literature_ref,
+        title: candidate.literature.title,
+        abstract: candidate.literature.abstractText ?? null,
+        key_content_digest: candidate.literature.keyContentDigest ?? null,
+        tags: [...candidate.literature.tags],
+        year: candidate.literature.year ?? null,
+        activation_score: candidate.scope.activationScore ?? null,
+        activation_reason: candidate.scope.activationReason ?? null,
+        source_count: candidate.source_count,
+      })),
+    };
+  }
+
+  private resolveResourceSamplingRuntimeProfile(): TopicSelectionResolvedContextPolicyProfile {
+    return this.contextPolicyProfileRegistry.resolveProfile({
+      context_policy_profile_id:
+        TOPIC_SELECTION_RESOURCE_SAMPLING_CONTEXT_RUNTIME_PROFILE_IDS.literature_classification_batch,
+      invocation_slot_id: RESOURCE_SAMPLING_INVOCATION_SLOT_ID,
+    });
+  }
+
+  private resourceSamplingRuntimeInvocationContextHash(input: {
+    topicId: string;
+    policyVersion: string;
+    roleTargets: TopicSelectionResourceRoleTargets;
+    sampleSize: number;
+    batchContext: ResourceSamplingBatchRuntimeContext;
+    batchIndex: number;
+    batchCount: number;
+  }): string {
+    return this.hash({
+      schema_version: TOPIC_SELECTION_RUNTIME_INVOCATION_CONTEXT_SCHEMA_VERSION,
+      invocation_slot_id: RESOURCE_SAMPLING_INVOCATION_SLOT_ID,
+      scenario_context: {
+        identity_policy: 'semantic_identity',
+        scenario_id: input.topicId,
+        scenario_case_id: null,
+        semantic_scenario_key: this.hash({
+          topic_id: input.topicId,
+          policy_version: input.policyVersion,
+          sample_size: input.sampleSize,
+          role_targets: input.roleTargets,
+          batch_index: input.batchIndex + 1,
+          batch_count: input.batchCount,
+          batch_context_hash: this.hash(input.batchContext),
+        }),
+      },
+      loop_context: {
+        loop_kind: 'not_applicable',
+        loop_stage: null,
+        current_round_index: null,
+        remaining_round_budget: null,
+        loopback_source_node_id: null,
+        repair_origin_ref: null,
+        repair_origin_hash: null,
+      },
+      debate_context: {
+        debate_loop_id: null,
+        debate_policy_id: null,
+        round_index: null,
+        role: null,
+        stage: null,
+        agent_instance_id: null,
+        parent_invocation_attempt_ids_hash: null,
+        dynamic_material_refs_hash: null,
+      },
+    });
+  }
+
+  private resourceSamplingRuntimeTokenBudget(input: {
+    runtimeProfile: TopicSelectionResolvedContextPolicyProfile;
+    runtimeInvocationContextHash: string;
+    batchContext: ResourceSamplingBatchRuntimeContext;
+  }): TopicSelectionAgentRuntimeTokenBudgetInput {
+    return {
+      context_policy_profile: input.runtimeProfile.profile,
+      context_policy_profile_hash: input.runtimeProfile.profile_hash,
+      runtime_invocation_context_hash: input.runtimeInvocationContextHash,
+      context_payloads: [input.batchContext],
+      extra_payloads: [
+        {
+          output_contract: TOPIC_SELECTION_RESOURCE_SAMPLING_OUTPUT_CONTRACT,
+          batch_candidate_count: input.batchContext.batch.candidate_count,
+        },
+      ],
+    };
+  }
+
+  private resourceSamplingInputRefs(candidates: ResourceCandidate[]): TopicSelectionFunctionalRef[] {
+    const refs = candidates.flatMap((candidate) => [
+      candidate.literature_ref,
+      ...candidate.source_refs,
+    ]);
+    return this.uniqueRefs(refs);
+  }
+
+  private modelOptionIdForModel(model: LlmModelRef): string {
+    if (model.providerId === 'openai') {
+      return `${TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID}.openai-balanced`;
+    }
+    if (model.providerId === 'dashscope') {
+      return `${TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID}.dashscope-thinking-budget`;
+    }
+    throw new AppError(
+      400,
+      'INVALID_PAYLOAD',
+      'resource sampling model.provider_id must match a registered runtime model option.',
+    );
+  }
+
+  private invocationError(
+    invocation: TopicSelectionAgentInvocationResult<TopicSelectionResourceSamplingLlmOutput>,
+  ): AppError {
+    return new AppError(
+      400,
+      'INVALID_PAYLOAD',
+      `Resource sampling runtime invocation failed: ${
+        invocation.blocker_codes[0] ?? invocation.error_code ?? invocation.status
+      }.`,
+    );
+  }
+
+  private gatewayTelemetryFromInvocation(
+    invocation: TopicSelectionAgentInvocationResult<TopicSelectionResourceSamplingLlmOutput>,
+  ): LlmCallTelemetry | null {
+    const telemetry = invocation.provenance.telemetry;
+    if (!telemetry) {
+      return null;
+    }
+    if (
+      telemetry.provider_id !== 'openai'
+      && telemetry.provider_id !== 'dashscope'
+      && telemetry.provider_id !== 'deepseek'
+    ) {
+      return null;
+    }
+    return {
+      provider_id: telemetry.provider_id,
+      model_id: telemetry.model_id,
+      profile_id: telemetry.profile_id,
+      prompt_template_id: telemetry.prompt_template_id,
+      prompt_template_version: telemetry.prompt_template_version,
+      elapsed_ms: telemetry.elapsed_ms,
+      request_count: telemetry.request_count,
+      retry_count: telemetry.retry_count,
+      timeout_count: telemetry.timeout_count,
+      rate_limit_count: telemetry.rate_limit_count,
+      input_tokens: telemetry.input_tokens,
+      output_tokens: telemetry.output_tokens,
+      embedding_input_tokens: telemetry.embedding_input_tokens,
+      total_tokens: telemetry.total_tokens,
+      cost_usd: telemetry.cost_usd,
+      provider_side_cache_hit: telemetry.provider_side_cache_hit,
+      provider_side_cache_read_tokens: telemetry.provider_side_cache_read_tokens,
+      provider_side_cache_write_tokens: telemetry.provider_side_cache_write_tokens,
     };
   }
 
@@ -583,8 +868,8 @@ export class TopicSelectionResourceSamplingService {
       provider_id: model.providerId,
       model_id: model.modelId,
       profile_id: model.profileId ?? null,
-      prompt_template_id: PROMPT_TEMPLATE_ID,
-      prompt_template_version: PROMPT_TEMPLATE_VERSION,
+      prompt_template_id: TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_ID,
+      prompt_template_version: TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_VERSION,
       elapsed_ms: telemetry.reduce((sum, item) => sum + item.elapsed_ms, 0),
       request_count: telemetry.reduce((sum, item) => sum + item.request_count, 0),
       retry_count: telemetry.reduce((sum, item) => sum + item.retry_count, 0),
@@ -1235,10 +1520,45 @@ export class TopicSelectionResourceSamplingService {
     const providerId = record.providerId ?? record.provider_id;
     const modelId = record.modelId ?? record.model_id;
     const profileId = record.profileId ?? record.profile_id;
+    if (
+      typeof profileId === 'string'
+      && profileId
+      && profileId !== TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID
+    ) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'resource sampling model.profile_id must match the registered runtime profile.',
+      );
+    }
+    const normalizedProviderInput = typeof providerId === 'string' ? providerId.trim() : null;
+    if (
+      providerId !== undefined
+      && providerId !== null
+      && normalizedProviderInput !== 'openai'
+      && normalizedProviderInput !== 'dashscope'
+    ) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'resource sampling model.provider_id must match a registered runtime model option.',
+      );
+    }
+    const normalizedProviderId = normalizedProviderInput === 'dashscope' ? 'dashscope' : 'openai';
+    const registeredModelId = normalizedProviderId === 'dashscope'
+      ? DEFAULT_DASHSCOPE_MODEL_ID
+      : DEFAULT_OPENAI_MODEL_ID;
+    if (typeof modelId === 'string' && modelId && modelId !== registeredModelId) {
+      throw new AppError(
+        400,
+        'INVALID_PAYLOAD',
+        'resource sampling model.model_id must match a registered runtime model option.',
+      );
+    }
     return {
-      providerId: providerId === 'dashscope' ? 'dashscope' : 'openai',
-      modelId: typeof modelId === 'string' && modelId ? modelId : DEFAULT_MODEL.modelId,
-      profileId: typeof profileId === 'string' && profileId ? profileId : WORKFLOW_PROFILE_KEY,
+      providerId: normalizedProviderId,
+      modelId: registeredModelId,
+      profileId: TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID,
     };
   }
 
@@ -1332,6 +1652,24 @@ export class TopicSelectionResourceSamplingService {
       title_card_id: titleCardId ?? null,
       version_id: versionId ?? null,
     };
+  }
+
+  private uniqueRefs(refs: TopicSelectionFunctionalRef[]): TopicSelectionFunctionalRef[] {
+    const seen = new Set<string>();
+    const output: TopicSelectionFunctionalRef[] = [];
+    for (const refValue of refs) {
+      const key = this.hash(refValue);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      output.push(refValue);
+    }
+    return output;
+  }
+
+  private hash(value: unknown): string {
+    return sha256Text(stableStringify(value));
   }
 
   private gateIssue(code: string, message: string, severity: TopicSelectionGateIssue['severity']): TopicSelectionGateIssue {

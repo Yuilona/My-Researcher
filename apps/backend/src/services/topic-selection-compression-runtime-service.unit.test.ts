@@ -18,6 +18,8 @@ import {
   TOPIC_SELECTION_V1B_N7_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1B_N8_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1C_N4_CONTEXT_RUNTIME_PROFILE_IDS,
@@ -220,6 +222,30 @@ function v1cN6RequiredFacts() {
     severity: ['critical'],
     no_upstream_mutation_boundary: ['record_only_no_n1_to_n5_auto_loop'],
     allowed_ref_manifest: ['allowed_refs_hash_001'],
+  };
+}
+
+function resourceSamplingRequiredFacts() {
+  return {
+    blocker: ['blocker_low_source_coverage'],
+    residual_risk: ['risk_provider_classification_drift'],
+    accepted_risk: ['accepted_risk_role_balance_underfill'],
+    source_health_warning: ['source_health_partial_resource_sampling'],
+    method_family_gap: ['gap_method_family_resource_sampling'],
+    unresolved_challenge: ['challenge_resource_role_ambiguity'],
+    recheck_hint: ['recheck_after_sample_selection'],
+    topic_id: ['topic_provider_canary_resource_sampling'],
+    sample_role_targets: ['support_1_challenge_1_baseline_1_context_1'],
+    literature_ref: ['literature_ref_hash_001'],
+    candidate_title: ['candidate_title_hash_001'],
+    candidate_abstract: ['candidate_abstract_hash_001'],
+    key_content_digest: ['key_content_digest_hash_001'],
+    activation_score: ['activation_score_091'],
+    source_count: ['source_count_1'],
+    role_classification: ['primary_role_support'],
+    classification_rationale: ['classification_rationale_hash_001'],
+    method_family: ['runtime_evaluation'],
+    guardrail_signal: ['guardrail_signal_canonicalized_support'],
   };
 }
 
@@ -1222,6 +1248,101 @@ test('compression quality gate blocks v1b N8 adversarial persisted payloads', ()
     required_preserved_facts: v1bN8RequiredFacts(),
     compressed_preserved_facts: v1bN8RequiredFacts(),
     estimated_input_tokens_before_override: 24_000,
+    estimated_input_tokens_after_override: 7_000,
+  });
+
+  assert.equal(result.quality_gate_result, 'blocked');
+  assert.ok(result.blocker_codes.includes('COMPRESSION_FORBIDDEN_PERSISTED_PAYLOAD'));
+  assert.match(result.warning_codes.join(' '), /compressed_payload\.raw_provider_logs/);
+});
+
+test('compression quality gate blocks when resource-sampling classification facts are dropped', () => {
+  const resourceSamplingProfile = resolvedContextProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_RESOURCE_SAMPLING_CONTEXT_RUNTIME_PROFILE_IDS.literature_classification_batch,
+    invocation_slot_id:
+      TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS.literature_classification_batch,
+  });
+  const runtime = new TopicSelectionCompressionRuntimeService();
+  const result = runtime.createReport({
+    context_policy_profile: resourceSamplingProfile.profile,
+    context_policy_profile_hash: resourceSamplingProfile.profile_hash,
+    compression_report_ref: ref('artifact_ref', 'compression_report_resource_sampling_long_context'),
+    source_refs: [ref('artifact_ref', 'resource_sampling_context_packet')],
+    input_context: {
+      batch_context: {
+        topic_id: 'topic_provider_canary_resource_sampling',
+        sample_role_targets: 'support_1_challenge_1_baseline_1_context_1',
+        candidates: Array.from({ length: 32 }, (_, index) => ({
+          candidate_id: `candidate_${index + 1}`,
+          literature_ref_hash: 'literature_ref_hash_001',
+          title_hash: 'candidate_title_hash_001',
+          abstract_hash: 'candidate_abstract_hash_001',
+          key_content_digest_hash: 'key_content_digest_hash_001',
+          activation_score: 'activation_score_091',
+          source_count: 'source_count_1',
+          guardrail_signal: 'guardrail_signal_canonicalized_support',
+        })),
+      },
+    },
+    compressed_context: {
+      topic_id: 'topic_provider_canary_resource_sampling',
+      summary:
+        'Dropped candidate identity, abstract/digest, classification rationale, method family, and guardrail signal.',
+    },
+    summary: 'Incomplete resource-sampling classification compression.',
+    compression_executor_kind: 'codex_assisted',
+    required_preserved_facts: resourceSamplingRequiredFacts(),
+    compressed_preserved_facts: {
+      topic_id: ['topic_provider_canary_resource_sampling'],
+      sample_role_targets: ['support_1_challenge_1_baseline_1_context_1'],
+      source_count: ['source_count_1'],
+    },
+    estimated_input_tokens_before_override: 42_000,
+    estimated_input_tokens_after_override: 10_000,
+  });
+
+  assert.equal(result.quality_gate_result, 'blocked');
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_LITERATURE_REF_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_CANDIDATE_ABSTRACT_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_KEY_CONTENT_DIGEST_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_ROLE_CLASSIFICATION_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_CLASSIFICATION_RATIONALE_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_METHOD_FAMILY_DROPPED'));
+  assert.ok(result.blocker_codes.includes('COMPRESSION_REQUIRED_GUARDRAIL_SIGNAL_DROPPED'));
+});
+
+test('compression quality gate blocks resource-sampling adversarial persisted payloads', () => {
+  const resourceSamplingProfile = resolvedContextProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_RESOURCE_SAMPLING_CONTEXT_RUNTIME_PROFILE_IDS.literature_classification_batch,
+    invocation_slot_id:
+      TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS.literature_classification_batch,
+  });
+  const runtime = new TopicSelectionCompressionRuntimeService();
+  const result = runtime.createReport({
+    context_policy_profile: resourceSamplingProfile.profile,
+    context_policy_profile_hash: resourceSamplingProfile.profile_hash,
+    compression_report_ref: ref('artifact_ref', 'compression_report_resource_sampling_adversarial_payload'),
+    source_refs: [ref('artifact_ref', 'resource_sampling_context_packet')],
+    input_context: {
+      literature_ref_hash: 'literature_ref_hash_001',
+      classification_rationale_hash: 'classification_rationale_hash_001',
+      guardrail_signal: 'guardrail_signal_canonicalized_support',
+    },
+    compressed_context: {
+      preserved_hashes: [
+        'literature_ref_hash_001',
+        'classification_rationale_hash_001',
+        'guardrail_signal_canonicalized_support',
+      ],
+      raw_provider_logs: ['provider request body must never persist in resource-sampling compressed context'],
+    },
+    summary: 'Compressed resource-sampling context with an adversarial raw provider log field.',
+    compression_executor_kind: 'deterministic_structural',
+    required_preserved_facts: resourceSamplingRequiredFacts(),
+    compressed_preserved_facts: resourceSamplingRequiredFacts(),
+    estimated_input_tokens_before_override: 22_000,
     estimated_input_tokens_after_override: 7_000,
   });
 

@@ -198,7 +198,6 @@ import { DurableOutboxGovernanceEventDeliveryAdapter } from './services/event-de
 type RepositoryStrategy = 'memory' | 'prisma';
 
 export type BuildAppOptions = {
-  topicSelectionResourceSamplingLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
   topicSelectionV1aLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
   topicSelectionV1bLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
   topicSelectionV1cPromotionGateLlmGateway?: Pick<BackendLlmGateway, 'createStructuredOutput'>;
@@ -449,12 +448,16 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     topicSelectionOfflineEvaluationReplayService,
     topicSelectionWorkflowHarnessService,
   );
-  const topicSelectionResourceSamplingLlmGateway = options.topicSelectionResourceSamplingLlmGateway ?? llmGateway;
+  const topicSelectionResourceSamplingAgentOrchestratorService = new TopicSelectionAgentOrchestratorService({
+    controlPlane: topicSelectionControlPlaneService,
+    llmGateway,
+    promptPacketCache: topicSelectionPromptPacketCacheService,
+  });
   const topicSelectionResourceSamplingService = new TopicSelectionResourceSamplingService({
     repository: topicSelectionResourceSamplingRepository,
     literatureRepository,
     controlPlaneService: topicSelectionControlPlaneService,
-    llmGateway: topicSelectionResourceSamplingLlmGateway,
+    agentOrchestrator: topicSelectionResourceSamplingAgentOrchestratorService,
   });
   const topicSelectionResourceSamplingController = new TopicSelectionResourceSamplingController(
     topicSelectionResourceSamplingService,

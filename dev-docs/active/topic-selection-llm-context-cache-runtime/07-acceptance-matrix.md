@@ -95,7 +95,7 @@
 | Audit projection | human trust summary generated | includes source refs, risks/gaps/recheck hints, live/non-provider label, gate status, and envelope ref/hash without low-level internals |
 | Memory policy | stale or source-drifted memory | misses, blocks, or downgrades to warning according to profile policy |
 | Runtime integration | direct gateway caller uses provider without runtime preflight | test blocks or detects provider call count violation |
-| Runtime integration | resource sampling/v1b/v1c direct provider path claims T-112 runtime semantics before promotion | test fails |
+| Runtime integration | any direct provider path claims T-112 runtime semantics before profile/matrix promotion | test fails |
 | Runtime integration | external artifact admission bypasses runtime provenance/reuse validation | admission rejected |
 | v1a runtime/harness boundary | `WorkflowHarness` calls promoted v1a node adapters/shared runtime collaborators and asserts outcomes | accepted; harness remains flow controller and verification surface |
 | v1a runtime/harness boundary | `WorkflowHarness` owns a production prompt/cache/compression/admission formula for a promoted v1a node | rejected or flagged by boundary review/test |
@@ -299,16 +299,16 @@
 ## D29 Closure Audit Classification
 | Decision Area | Disposition | Evidence |
 |---|---|---|
-| Closure scope | satisfied for promoted runtime surface | Promoted surface is v1a N5/N6/N7/N8 plus deterministic N1-N4/N9 boundaries, v1b N4/N6/N7/N8, and v1c N2/N4/N6. |
+| Closure scope | satisfied for promoted runtime surface | Promoted surface is v1a N5/N6/N7/N8 plus deterministic N1-N4/N9 boundaries, v1b N2/N3/N4/N5/N6/N7/N8 semantic/runtime surfaces, v1c N2/N4/N6, and resource-sampling `resource_classification.batch`. |
 | Node-scope matrix | satisfied | `06-node-scope-matrix.md` identifies LLM-capable nodes/slots at invocation-slot granularity and records context/cache/compression/token-budget policy. |
-| Runtime/harness boundary | satisfied | v1b/v1c production-depth and near-prod runners compose service-owned runtime/admission checks; harnesses do not own prompt keys, compression preserved facts, provider calls, response reuse, or authority admission formulas. |
-| Provider-required live-call semantics | satisfied | v1c OpenAI/DashScope N2/N4/N6 live canaries passed during D29; prompt-cache hits reused prompt artifacts only and still performed provider calls. |
-| Token-budget preflight | satisfied for promoted provider-backed slots | Local provider canaries and live slot canaries cover over-budget zero-call behavior; production-depth and near-prod stress cover promoted v1b/v1c slots. |
+| Runtime/harness boundary | satisfied | v1b/v1c production-depth, near-prod runners, and resource-sampling service coverage compose service-owned runtime/admission checks; harnesses do not own prompt keys, compression preserved facts, provider calls, response reuse, or authority admission formulas. |
+| Provider-required live-call semantics | satisfied for promoted local/provider-canary surfaces | v1c OpenAI/DashScope N2/N4/N6 live canaries passed during D29; resource-sampling L4 local provider canaries prove prompt-cache hits reuse prompt artifacts only and still perform provider calls. Resource-sampling live provider canaries are optional env-gated acceptance checks through `T112_RESOURCE_SAMPLING_PROVIDER_CANARY_LIVE=1`. |
+| Token-budget preflight | satisfied for promoted provider-backed slots | Local provider canaries and live slot canaries cover over-budget zero-call behavior; production-depth and near-prod stress cover promoted v1b/v1c slots; resource-sampling L4 covers over-budget zero-call behavior for `resource_classification.batch`. |
 | Prompt packet cache persistence | satisfied | Prisma prompt packet index remains metadata/ref/hash/provenance-only; production-depth first-writer race inserted one row, shared one winning prompt artifact ref, and cleaned up to zero rows. |
 | Context packet cache | satisfied for promoted process-local exact-key surfaces; DB-backed index deferred | v1a context-cache exact hit/stale/drift tests and runtime stress cover exact key semantics. A DB-backed context packet cache index remains a non-blocking future decision. |
-| Compression | satisfied for promoted over-budget surfaces | v1a/v1b/v1c compression/adversarial suites preserve required facts and block dropped facts or forbidden raw provider payloads before deterministic gates. |
-| Authority boundaries | satisfied | v1a/v1b/v1c replay/stress/smoke evidence shows cache/replay/prompt-cache hits do not create duplicate authority writes and do not skip deterministic gates. |
-| Explicit deferrals | non-blocking | DB-backed context packet cache index, resource-sampling runtime promotion, unpromoted direct-provider surfaces, and v1b frozen/delegated N2/N3/N5 runtime promotion require later explicit decisions. |
+| Compression | satisfied for promoted over-budget surfaces | v1a/v1b/v1c/resource-sampling compression/adversarial suites preserve required facts and block dropped facts or forbidden raw provider payloads before deterministic gates. |
+| Authority boundaries | satisfied | v1a/v1b/v1c replay/stress/smoke evidence and resource-sampling service tests show cache/replay/prompt-cache hits do not create duplicate authority writes and do not skip deterministic gates. |
+| Explicit deferrals | non-blocking | DB-backed context packet cache index and any still-unpromoted direct-provider surfaces require later explicit decisions. Resource-sampling batch classification and v1b N2/N3/N5 semantic support were promoted by later explicit decisions. |
 
 ## Closure Checks
 - Shared typecheck and schema tests pass.

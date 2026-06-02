@@ -30,6 +30,15 @@ export const TOPIC_SELECTION_NEED_DISCOVERY_CONTEXT_COMPILER_VERSION =
 export const TOPIC_SELECTION_CONTEXT_RUNTIME_REDACTION_POLICY =
   'topic-selection-redacted-ref-backed-v1' as const;
 
+export const TOPIC_SELECTION_RESOURCE_SAMPLING_CONTEXT_RUNTIME_PROFILE_IDS = {
+  literature_classification_batch:
+    'topic-selection.resource-sampling.literature-classification-batch.context-runtime@v1',
+} as const;
+
+export const TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS = {
+  literature_classification_batch: 'resource_classification.batch',
+} as const;
+
 export const TOPIC_SELECTION_V1A_N5_CONTEXT_RUNTIME_PROFILE_IDS = {
   evidence_extraction:
     'topic-selection.v1a.n5.evidence-extraction.context-runtime@v1',
@@ -461,6 +470,43 @@ const DEFAULT_TOPIC_SELECTION_CONTEXT_POLICY_PROFILE_REGISTRY:
   TopicSelectionContextPolicyProfileRegistry = {
     schema_version: TOPIC_SELECTION_CONTEXT_POLICY_PROFILE_REGISTRY_SCHEMA_VERSION,
     profiles: [
+      contextPolicyProfile({
+        context_policy_profile_id:
+          TOPIC_SELECTION_RESOURCE_SAMPLING_CONTEXT_RUNTIME_PROFILE_IDS.literature_classification_batch,
+        invocation_slot_id:
+          TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS.literature_classification_batch,
+        functional_template: 'candidate_for_deterministic_gate',
+        context_family: 'resource_sampling_literature_classification_batch',
+        estimated_input_token_target: 24000,
+        estimated_output_token_budget: 2048,
+        preserved_fact_kinds: [
+          ...COMMON_PRESERVED_FACT_KINDS,
+          'topic_id',
+          'sample_role_targets',
+          'literature_ref',
+          'candidate_title',
+          'candidate_abstract',
+          'key_content_digest',
+          'activation_score',
+          'source_count',
+          'role_classification',
+          'classification_rationale',
+          'method_family',
+          'guardrail_signal',
+        ],
+        post_reuse_gates: [
+          'schema_validation',
+          'resource_sampling_guardrails',
+          'deterministic_gate',
+          'authority_boundary',
+        ],
+        post_cache_gates: [
+          'schema_validation',
+          'resource_sampling_guardrails',
+          'deterministic_gate',
+          'authority_boundary',
+        ],
+      }),
       contextPolicyProfile({
         context_policy_profile_id:
           TOPIC_SELECTION_V1A_N5_CONTEXT_RUNTIME_PROFILE_IDS.evidence_extraction,

@@ -10,6 +10,7 @@ import {
   TOPIC_SELECTION_NEED_DISCOVERY_ARBITER_FINAL_PROFILE_ID,
   TOPIC_SELECTION_NEED_DISCOVERY_DEEP_CRITIC_PROFILE_ID,
   TOPIC_SELECTION_NEED_DISCOVERY_EXPLORER_PROFILE_ID,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID,
   TOPIC_SELECTION_V1B_CONSTRAINT_PROFILE_SUPPORT_PROFILE_ID,
   TOPIC_SELECTION_V1B_N7_CANDIDATE_GROUPING_SUPPORT_PROFILE_ID,
   TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID,
@@ -284,6 +285,34 @@ test('model profile registry validates default DMP v1 profiles and resolves prov
   assert.equal(v1cFeedbackNormalization.profile.stage_family, 'v1c_downstream_feedback_recheck');
   assert.equal(v1cFeedbackNormalization.selected_model_option?.provider_id, 'openai');
   assert.equal(v1cFeedbackNormalization.selected_model_option?.normalized_params.creativity, 'low');
+});
+
+test('model profile registry resolves resource sampling provider-only profile', () => {
+  const service = new TopicSelectionModelProfileRegistryService();
+
+  const resourceSampling = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+  });
+  assert.equal(resourceSampling.profile.profile_function, 'resource_sampling_literature_classification');
+  assert.equal(resourceSampling.profile.stage_family, 'resource_sampling');
+  assert.equal(resourceSampling.profile.allowed_execution_modes.includes('provider_llm'), true);
+  assert.equal(resourceSampling.profile.allowed_execution_modes.includes('mocked_llm'), false);
+  assert.equal(resourceSampling.profile.output_contract, 'TopicSelectionResourceSamplingLlmOutput@v1');
+  assert.equal(resourceSampling.selected_model_option?.provider_id, 'openai');
+  assert.equal(resourceSampling.selected_model_option?.model_id, 'gpt-5.5');
+  assert.equal(resourceSampling.selected_model_option?.normalized_params.creativity, 'low');
+  assert.equal(resourceSampling.selected_model_option?.normalized_params.output_budget, 'medium');
+
+  const dashscope = service.resolveProfile({
+    profile_id: TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID,
+    execution_mode: 'provider_llm',
+    run_mode: 'product',
+    model_option_id: `${TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID}.dashscope-thinking-budget`,
+  });
+  assert.equal(dashscope.selected_model_option?.provider_id, 'dashscope');
+  assert.equal(dashscope.selected_model_option?.model_id, 'qwen3.6-plus');
 });
 
 test('model profile registry enforces run-mode and role profile execution eligibility', () => {

@@ -15,6 +15,10 @@ import {
   topicSelectionV1bTopicValueAssessmentDraftPayloadSchema,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-workflow-harness-contracts';
 import {
+  type TopicSelectionResourceSamplingLlmOutput,
+  topicSelectionResourceSamplingLlmOutputSchema,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-resource-sampling-contracts';
+import {
   TOPIC_SELECTION_VALUE_DIMENSIONS,
   TOPIC_SELECTION_VALUE_GATE_KEYS,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-value-assessment-contracts';
@@ -23,6 +27,7 @@ import { InMemoryTopicSelectionControlPlaneRepository } from '../repositories/in
 import { TopicSelectionControlPlaneService } from './topic-selection-control-plane-service.js';
 import {
   TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID,
   TOPIC_SELECTION_V1C_BOUNDED_MICRO_DEBATE_PROFILE_ID,
   TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID,
   TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID,
@@ -31,6 +36,8 @@ import {
   TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID,
 } from './topic-selection-model-profile-registry-service.js';
 import {
+  TOPIC_SELECTION_RESOURCE_SAMPLING_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1C_N4_CONTEXT_RUNTIME_PROFILE_IDS,
@@ -57,6 +64,10 @@ import {
   type TopicSelectionProviderCanaryLiveRequiredEvidence,
   type TopicSelectionProviderCanaryProviderId,
 } from './topic-selection-provider-canary-service.js';
+import {
+  TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_ID,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_VERSION,
+} from './topic-selection-resource-sampling-service.js';
 
 class StubProviderCanaryGateway {
   readonly calls: LlmStructuredOutputRequest[] = [];
@@ -137,6 +148,29 @@ class MinimalN4ProviderCanaryGateway extends StubProviderCanaryGateway {
   }
 }
 
+class MinimalResourceSamplingProviderCanaryGateway extends StubProviderCanaryGateway {
+  override async createStructuredOutput<T>(
+    request: LlmStructuredOutputRequest,
+  ): Promise<LlmStructuredOutputResponse<T>> {
+    if (request.schemaName !== 'topic_selection_resource_sampling_canary') {
+      return super.createStructuredOutput<T>(request);
+    }
+    this.calls.push(request);
+    const output = {
+      classifications: [
+        {
+          literature_ref: functionalRef('literature', 'provider_canary_literature_001'),
+        },
+      ],
+    };
+    return {
+      parsed: output as T,
+      raw: { output },
+      telemetry: telemetry(request),
+    };
+  }
+}
+
 function providerCanaryOutput(request: LlmStructuredOutputRequest) {
   if (request.schemaName === 'topic_selection_v1c_n2_provider_canary_role') {
     return v1cN2CanaryOutput(request);
@@ -156,6 +190,9 @@ function providerCanaryOutput(request: LlmStructuredOutputRequest) {
   if (request.schemaName === 'topic_selection_v1b_n8_provider_canary_draft') {
     return v1bN8CanaryOutput();
   }
+  if (request.schemaName === 'topic_selection_resource_sampling_canary') {
+    return resourceSamplingCanaryOutput();
+  }
   return v1aCanaryOutput(request);
 }
 
@@ -166,6 +203,33 @@ function v1aCanaryOutput(request: LlmStructuredOutputRequest): TopicSelectionPro
       {
         draft_id: 'draft_canary_001',
         candidate_need: 'provider live invocation canary',
+      },
+    ],
+  };
+}
+
+function resourceSamplingCanaryOutput(): TopicSelectionResourceSamplingLlmOutput {
+  return {
+    classifications: [
+      {
+        literature_ref: functionalRef('literature', 'provider_canary_literature_001'),
+        primary_role: 'support',
+        topic_relevance: 0.91,
+        evidence_polarity: 'positive_method',
+        role_scores: {
+          support: 0.91,
+          challenge: 0.05,
+          baseline: 0.15,
+          context: 0.35,
+          review: 0.05,
+          excluded: 0,
+        },
+        confidence: 0.86,
+        classification_rationale:
+          'Synthetic resource-sampling provider canary classification preserves provider-live runtime semantics.',
+        exclusion_reason: null,
+        review_reason: null,
+        method_families: ['runtime_evaluation'],
       },
     ],
   };
@@ -687,6 +751,13 @@ function expectedV1cN4ModelOptionId(providerId: TopicSelectionProviderCanaryProv
   return `${TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID}.${suffix}`;
 }
 
+function expectedResourceSamplingModelOptionId(providerId: TopicSelectionProviderCanaryProviderId): string {
+  const suffix = providerId === 'openai'
+    ? 'openai-balanced'
+    : 'dashscope-thinking-budget';
+  return `${TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID}.${suffix}`;
+}
+
 function expectedV1cN2ContextPolicyProfileId(slot: TopicSelectionV1cN2BoundedDebateRoleSlotId): string {
   if (slot === TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.promotion_supporter_draft) {
     return TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.promotion_supporter_draft;
@@ -706,6 +777,10 @@ function expectedV1cN6ContextPolicyProfileId(): string {
 
 function expectedV1cN4ContextPolicyProfileId(): string {
   return TOPIC_SELECTION_V1C_N4_CONTEXT_RUNTIME_PROFILE_IDS.delegated_promotion_decision_candidate;
+}
+
+function expectedResourceSamplingContextPolicyProfileId(): string {
+  return TOPIC_SELECTION_RESOURCE_SAMPLING_CONTEXT_RUNTIME_PROFILE_IDS.literature_classification_batch;
 }
 
 function assertV1bN8PromptCacheLiveRequiredResult(
@@ -865,7 +940,7 @@ async function assertV1cN2PromptCacheLiveRequiredCanary(
     enum: [slot],
   });
   assert.equal(gateway.calls[0]!.schema.additionalProperties, false);
-  const required = gateway.calls[0]!.schema.required as string[];
+  const required = gateway.calls[0]!.schema.required as readonly string[];
   assert.ok(required.includes('schema_version'));
   assert.ok(required.includes('role_slot'));
   if (slot === TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.promotion_supporter_draft) {
@@ -923,7 +998,7 @@ async function assertV1cN6PromptCacheLiveRequiredCanary(providerId: TopicSelecti
   assert.equal(gateway.calls[0]!.schemaName, 'topic_selection_v1c_n6_feedback_canary');
   assert.ok(gateway.calls[0]!.schemaName.length <= 64);
   assert.equal(gateway.calls[0]!.schema.additionalProperties, false);
-  const required = gateway.calls[0]!.schema.required as string[];
+  const required = gateway.calls[0]!.schema.required as readonly string[];
   assert.ok(required.includes('schema_version'));
   assert.ok(required.includes('paper_project_bridge_id'));
   assert.ok(required.includes('downstream_source_ref'));
@@ -1042,6 +1117,57 @@ function assertV1cN4LiveRequiredEvidence(
   );
   assert.equal(result.context_policy_profile_id, expectedV1cN4ContextPolicyProfileId());
   assert.equal(result.model_profile_id, TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID);
+  assert.equal(result.canary_surface, 'production_runtime_slot');
+  assert.equal(result.provider_required_live, true);
+  assertLiveRequiredSucceeded(result);
+  assert.equal(result.provider_call_count, 2);
+  assert.equal(result.first_prompt_packet_hash, result.second_prompt_packet_hash);
+  assert.equal(result.prompt_artifact_ref_reused, true);
+  assert.equal(result.prompt_quality_report_ref_reused, true);
+  assert.deepEqual(result.provider_response_cache_statuses, ['not_applicable', 'not_applicable']);
+  assert.deepEqual(result.response_reuse_refs, [null, null]);
+  assert.equal(result.telemetry.length, 2);
+  assert.equal(result.telemetry[0]?.provider_id, providerId);
+  assert.equal(result.telemetry[1]?.provider_id, providerId);
+}
+
+async function assertResourceSamplingPromptCacheLiveRequiredCanary(
+  providerId: TopicSelectionProviderCanaryProviderId,
+) {
+  const gateway = new StubProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runResourceSamplingPromptCacheLiveRequiredCanary({
+    provider_id: providerId,
+  });
+
+  assertResourceSamplingLiveRequiredEvidence(result, providerId);
+  assert.equal(gateway.calls.length, 2);
+  assert.equal(gateway.calls[0]!.model.providerId, providerId);
+  assert.equal(gateway.calls[0]!.model.profileId, TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID);
+  assert.equal(gateway.calls[0]!.prompt.promptTemplateId, TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_ID);
+  assert.equal(gateway.calls[0]!.prompt.version, TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_VERSION);
+  assert.equal(gateway.calls[0]!.schemaName, 'topic_selection_resource_sampling_canary');
+  assert.ok(gateway.calls[0]!.schemaName.length <= 64);
+  assert.deepEqual(gateway.calls[0]!.schema, topicSelectionResourceSamplingLlmOutputSchema);
+  assert.equal(gateway.calls[0]!.schema.additionalProperties, false);
+  const required = gateway.calls[0]!.schema.required as readonly string[];
+  assert.deepEqual(required, ['classifications']);
+  assert.equal(gateway.calls[1]!.model.providerId, providerId);
+}
+
+function assertResourceSamplingLiveRequiredEvidence(
+  result: Awaited<ReturnType<TopicSelectionProviderCanaryService['runResourceSamplingPromptCacheLiveRequiredCanary']>>,
+  providerId: TopicSelectionProviderCanaryProviderId,
+) {
+  assert.equal(result.provider_id, providerId);
+  assert.equal(result.model_option_id, expectedResourceSamplingModelOptionId(providerId));
+  assert.equal(
+    result.invocation_slot_id,
+    TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS.literature_classification_batch,
+  );
+  assert.equal(result.context_policy_profile_id, expectedResourceSamplingContextPolicyProfileId());
+  assert.equal(result.model_profile_id, TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID);
   assert.equal(result.canary_surface, 'production_runtime_slot');
   assert.equal(result.provider_required_live, true);
   assertLiveRequiredSucceeded(result);
@@ -1472,6 +1598,79 @@ test('provider canary blocks malformed minimal v1c N6 provider outputs against t
   assert.deepEqual(result.response_reuse_refs, [null, null]);
 });
 
+test('provider canary proves resource-sampling OpenAI prompt cache hits still require live provider calls', async () => {
+  await assertResourceSamplingPromptCacheLiveRequiredCanary('openai');
+});
+
+test('provider canary proves resource-sampling DashScope prompt cache hits still require live provider calls', async () => {
+  await assertResourceSamplingPromptCacheLiveRequiredCanary('dashscope');
+});
+
+test('provider canary blocks over-budget resource-sampling OpenAI fixtures before gateway calls', async () => {
+  const gateway = new StubProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runResourceSamplingOverBudgetZeroCallCanary({
+    provider_id: 'openai',
+  });
+
+  assert.equal(result.provider_id, 'openai');
+  assert.equal(result.model_option_id, expectedResourceSamplingModelOptionId('openai'));
+  assert.equal(
+    result.invocation_slot_id,
+    TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS.literature_classification_batch,
+  );
+  assert.equal(result.context_policy_profile_id, expectedResourceSamplingContextPolicyProfileId());
+  assert.equal(result.model_profile_id, TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID);
+  assert.equal(result.canary_surface, 'production_runtime_slot');
+  assert.equal(result.provider_call_count, 0);
+  assert.equal(gateway.calls.length, 0);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION');
+  assert.equal(result.token_budget_gate_decision, 'blocked_over_budget');
+  assert.deepEqual(result.blocker_codes, ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION']);
+});
+
+test('provider canary blocks over-budget resource-sampling DashScope fixtures before gateway calls', async () => {
+  const gateway = new StubProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runResourceSamplingOverBudgetZeroCallCanary({
+    provider_id: 'dashscope',
+  });
+
+  assert.equal(result.provider_id, 'dashscope');
+  assert.equal(result.model_option_id, expectedResourceSamplingModelOptionId('dashscope'));
+  assert.equal(
+    result.invocation_slot_id,
+    TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS.literature_classification_batch,
+  );
+  assert.equal(result.context_policy_profile_id, expectedResourceSamplingContextPolicyProfileId());
+  assert.equal(result.model_profile_id, TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID);
+  assert.equal(result.canary_surface, 'production_runtime_slot');
+  assert.equal(result.provider_call_count, 0);
+  assert.equal(gateway.calls.length, 0);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error_code, 'TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION');
+  assert.equal(result.token_budget_gate_decision, 'blocked_over_budget');
+  assert.deepEqual(result.blocker_codes, ['TOKEN_BUDGET_OVER_LIMIT_AFTER_COMPRESSION']);
+});
+
+test('provider canary blocks malformed minimal resource-sampling provider outputs against the slot schema', async () => {
+  const gateway = new MinimalResourceSamplingProviderCanaryGateway();
+  const service = makeCanaryService({ llmGateway: gateway });
+
+  const result = await service.runResourceSamplingPromptCacheLiveRequiredCanary({
+    provider_id: 'openai',
+  });
+
+  assert.equal(result.first_status, 'blocked');
+  assert.equal(result.second_status, 'blocked');
+  assert.equal(result.provider_call_count, 2);
+  assert.equal(gateway.calls.length, 2);
+  assert.deepEqual(result.response_reuse_refs, [null, null]);
+});
+
 function shouldRunLiveCanary(providerId: TopicSelectionProviderCanaryProviderId): boolean {
   if (
     process.env.T112_PROVIDER_CANARY_LIVE !== '1'
@@ -1547,6 +1746,18 @@ function shouldRunLiveV1cN4Canary(providerId: TopicSelectionProviderCanaryProvid
 function shouldRunLiveV1cN6Canary(providerId: TopicSelectionProviderCanaryProviderId): boolean {
   if (
     process.env.T112_V1C_N6_PROVIDER_CANARY_LIVE !== '1'
+    || process.env.BACKEND_TEST_PRESERVE_REAL_ENV !== '1'
+  ) {
+    return false;
+  }
+  return providerId === 'openai'
+    ? Boolean(process.env.OPENAI_API_KEY?.trim())
+    : Boolean(process.env.DASHSCOPE_API_KEY?.trim());
+}
+
+function shouldRunLiveResourceSamplingCanary(providerId: TopicSelectionProviderCanaryProviderId): boolean {
+  if (
+    process.env.T112_RESOURCE_SAMPLING_PROVIDER_CANARY_LIVE !== '1'
     || process.env.BACKEND_TEST_PRESERVE_REAL_ENV !== '1'
   ) {
     return false;
@@ -1751,6 +1962,54 @@ test(
       TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS.downstream_feedback_normalization,
     );
     assert.equal(result.telemetry[0]?.provider_id, 'dashscope');
+  },
+);
+
+test(
+  'provider canary live resource-sampling OpenAI invocation uses the configured provider gateway',
+  {
+    skip: shouldRunLiveResourceSamplingCanary('openai')
+      ? false
+      : 'set T112_RESOURCE_SAMPLING_PROVIDER_CANARY_LIVE=1, BACKEND_TEST_PRESERVE_REAL_ENV=1, and OPENAI_API_KEY to run',
+    timeout: 300_000,
+  },
+  async () => {
+    const service = makeCanaryService({
+      llmGateway: new BackendLlmGateway({
+        defaultTimeoutMs: 300_000,
+        defaultMaxRetries: 0,
+      }),
+    });
+
+    const result = await service.runResourceSamplingPromptCacheLiveRequiredCanary({
+      provider_id: 'openai',
+    });
+
+    assertResourceSamplingLiveRequiredEvidence(result, 'openai');
+  },
+);
+
+test(
+  'provider canary live resource-sampling DashScope invocation uses the configured provider gateway',
+  {
+    skip: shouldRunLiveResourceSamplingCanary('dashscope')
+      ? false
+      : 'set T112_RESOURCE_SAMPLING_PROVIDER_CANARY_LIVE=1, BACKEND_TEST_PRESERVE_REAL_ENV=1, and DASHSCOPE_API_KEY to run',
+    timeout: 300_000,
+  },
+  async () => {
+    const service = makeCanaryService({
+      llmGateway: new BackendLlmGateway({
+        defaultTimeoutMs: 300_000,
+        defaultMaxRetries: 0,
+      }),
+    });
+
+    const result = await service.runResourceSamplingPromptCacheLiveRequiredCanary({
+      provider_id: 'dashscope',
+    });
+
+    assertResourceSamplingLiveRequiredEvidence(result, 'dashscope');
   },
 );
 

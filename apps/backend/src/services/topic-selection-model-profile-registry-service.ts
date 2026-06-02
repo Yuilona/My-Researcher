@@ -98,6 +98,8 @@ const PROVIDER_REQUIRED_CAPABILITIES = [
 
 export const TOPIC_SELECTION_GENERATE_NEED_CANDIDATE_SINGLE_AGENT_PROFILE_ID =
   'topic-selection.generate-need-candidate.single-agent.v1' as const;
+export const TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID =
+  'topic-selection-resource-sampling-classification' as const;
 export const TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID =
   'topic-selection.evidence-map-extraction.single-agent.v1' as const;
 export const TOPIC_SELECTION_NEED_ADJUDICATION_SINGLE_AGENT_PROFILE_ID =
@@ -348,6 +350,30 @@ function profileBase(input: {
 const DEFAULT_TOPIC_SELECTION_MODEL_PROFILE_REGISTRY: TopicSelectionModelProfileRegistry = {
   schema_version: TOPIC_SELECTION_MODEL_PROFILE_REGISTRY_SCHEMA_VERSION,
   profiles: [
+    profileBase({
+      profile_id: TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID,
+      profile_function: 'resource_sampling_literature_classification',
+      role_family: 'single_agent',
+      stage_family: 'resource_sampling',
+      quality_objectives: [
+        'classify_topic_scoped_literature_for_role_balanced_sampling',
+        'preserve_literature_refs_and_batch_identity',
+        'prepare_deterministic_resource_sampling_guardrails',
+      ],
+      allowed_execution_modes: ['provider_llm'],
+      run_mode_eligibility: PROVIDER_ONLY_RUN_MODE_ELIGIBILITY,
+      output_contract: 'TopicSelectionResourceSamplingLlmOutput@v1',
+      model_options: providerOptions(TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID).map(
+        (option) => ({
+          ...option,
+          normalized_params: normalizedParams({
+            creativity: 'low',
+            reasoning_depth: 'high',
+            output_budget: 'medium',
+          }),
+        }),
+      ),
+    }),
     profileBase({
       profile_id: TOPIC_SELECTION_EVIDENCE_MAP_EXTRACTION_SINGLE_AGENT_PROFILE_ID,
       profile_function: 'evidence_map_extraction_single_agent',

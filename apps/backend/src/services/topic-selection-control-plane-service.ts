@@ -233,6 +233,7 @@ export class TopicSelectionControlPlaneService {
 
   async recordWorkflowRun(input: RecordWorkflowRunInput): Promise<RecordWorkflowRunResult> {
     const now = this.now();
+    const status = input.status ?? 'succeeded';
     const workflowRun: TopicSelectionLlmWorkflowRunRecord = {
       workflow_run_id: this.idFactory('workflow_run'),
       workspace_id: input.workspace_id ?? null,
@@ -241,13 +242,13 @@ export class TopicSelectionControlPlaneService {
       workflow_profile_key: input.workflow_profile_key,
       workflow_profile_version: input.workflow_profile_version ?? null,
       input_snapshot_id: input.input_snapshot_id ?? null,
-      status: input.status ?? 'succeeded',
+      status,
       provider_id: input.provider_id ?? null,
       model_id: input.model_id ?? null,
       prompt_template_id: input.prompt_template_id ?? null,
       prompt_template_version: input.prompt_template_version ?? null,
       started_at: input.started_at ?? now,
-      finished_at: input.finished_at ?? now,
+      finished_at: input.finished_at ?? (status === 'queued' || status === 'running' ? null : now),
       telemetry: input.telemetry ?? {},
       output_summary: input.output_summary ?? {},
       error_code: input.error_code ?? null,
@@ -264,6 +265,13 @@ export class TopicSelectionControlPlaneService {
     }));
 
     return this.repository.createWorkflowRunWithArtifactRefs(workflowRun, artifactRefs);
+  }
+
+  async updateWorkflowRun(
+    workflowRunId: string,
+    patch: Partial<Omit<TopicSelectionLlmWorkflowRunRecord, 'workflow_run_id' | 'started_at' | 'created_by'>>,
+  ): Promise<TopicSelectionLlmWorkflowRunRecord> {
+    return this.repository.updateWorkflowRun(workflowRunId, patch);
   }
 
   async runDeterministicGate(input: DeterministicGateInput): Promise<TopicSelectionReadinessGateResultRecord> {

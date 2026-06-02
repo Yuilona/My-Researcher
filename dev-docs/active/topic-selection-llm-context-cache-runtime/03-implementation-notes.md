@@ -60,14 +60,14 @@
 - Locked D15: LLM roles may generate dynamic prompt material such as issue frames, focus questions, challenge lists, risk checklists, and repair agendas, but they cannot generate or override executable prompts. Dynamic material must be schema-validated, ref-backed, hash-included, provenance-recorded, and rendered by fixed prompt compilers.
 - Locked D16: prompt quality monitoring combines static prompt-template lint, runtime `PromptQualityReport`, and effectiveness telemetry. Prompt quality gates may warn/block unsafe prompt packets before execution, while outcome telemetry is a review signal and cannot mutate business authority retroactively.
 - Locked D17: every LLM-like invocation emits or references an append-only `runtime_audit_envelope` for machine verification. Human-facing audit is produced through projections: `operator_audit_summary` for developer/operator debugging and `human_trust_summary` for product/human-confirmation trust cues. Projections must carry source envelope ref/hash, may simplify fields, must not rewrite conclusions, and cannot become business authority.
-- Locked D18: implementation readiness is limited to a narrow first slice. The full matrix remains inventory until rows are promoted. First implementation starts with shared contracts/schema tests, profile registry skeleton, runtime key/token/cache/audit primitives, and then v1a N6 single-agent/debate wiring. Resource sampling, v1b, and v1c direct provider paths are deferred until their rows become implementation-ready.
+- Locked D18 historical first-slice stance: implementation readiness was limited to a narrow first slice. The full matrix remained inventory until rows were promoted. First implementation started with shared contracts/schema tests, profile registry skeleton, runtime key/token/cache/audit primitives, and then v1a N6 single-agent/debate wiring. Later D20-D32 sections record the promoted v1b, v1c, and resource-sampling rows.
 
 ## 2026-05-29 - Implementation Readiness Review Findings
 - Finding resolved: matrix inventory was not implementation-ready. Added a dedicated first-slice implementation-ready matrix for v1a N6 slots with profile ids, prompt variants, token budgets, compression policy, cache/reuse policy, audit projections, and focused tests.
 - Finding resolved: stale implementation gate. `04-verification.md` now names the first slice and lists required contracts/runtime prerequisites before implementation.
 - Finding tracked for first code PR: shared contracts currently do not match D12-D17 and must be implemented before runtime/node wiring.
 - Finding tracked for runtime wiring: existing v1a N6 context compiler has local key/artifact behavior and must be routed through shared key/cache primitives rather than extended with another local cache formula.
-- Finding tracked for rollout: resource sampling, v1b, and v1c direct `BackendLlmGateway` paths are explicitly deferred until their matrix rows are promoted.
+- Historical rollout finding, later superseded by promoted rows: resource sampling, v1b, and v1c direct `BackendLlmGateway` paths were deferred until their matrix rows were promoted.
 - Finding tracked for contract enforcement: Codex exact reuse must require approval or explicit local approved-reuse setting with `non_provider=true` before schema/deterministic gate admission.
 
 ## 2026-05-29 - First Implementation Prep
@@ -266,7 +266,7 @@
 - Updated the N6 single-agent adapter and debate loop so prompt identity uses actual exploration/arbiter context payload hashes. Debate roles now bind role-appropriate context refs/hashes instead of every role carrying both exploration and arbiter context refs.
 - Relaxed adapter artifact-ref expectations for context cache hits from "same workflow run" to "same semantic context contract." A context cache hit may legitimately return an artifact ref from the source workflow run; consumers still validate title card, context family, policy/schema/profile, execution mode, and payload hash.
 - Kept compression quality rules in the shared compression runtime and runtime profile contracts. No node-local compression quality fork was introduced in this repair.
-- This repair does not promote resource sampling, v1b, or v1c rows to implementation-ready status, and it does not add provider SDK paths, provider secrets, semantic response cache, or desktop UI.
+- Historical repair scope: this repair did not promote resource sampling, v1b, or v1c rows to implementation-ready status, and it did not add provider SDK paths, provider secrets, semantic response cache, or desktop UI. Later D20-D32 sections record the rows promoted after this repair.
 
 ## 2026-05-31 - Production-Shaped v1a Provider Verification Fix
 - A real OpenAI v1a provider harness run exposed that provider-generated N5 EvidenceMap extraction can materialize as `ready_with_warning` while still creating authority refs and a valid Node 6 handoff.
@@ -1207,7 +1207,7 @@
 - Accepted D28-A scope:
   - current v1c runtime landing targets N2 bounded micro-debate and N6 downstream feedback normalization;
   - N3 gate diagnostic adjunct and N4 delegated promotion decision were initially held as provider-canary-only in this phase; N4 was later superseded by D28-L/D28-M and now uses the production runtime/admission slot plus slot-level provider canary;
-  - resource sampling remains a later explicit runtime-promotion phase and is not part of the v1c closure scope.
+  - historical D28 scope note, superseded by D32: resource sampling remained a later explicit runtime-promotion phase and was not part of the v1c closure scope at that time.
 - Accepted D28-B responsibility boundary:
   - shared runtime is the unified context/cache/compression/memory/token/reuse/audit execution layer;
   - runtime owns `ContextPolicyProfile` resolution, memory policy enforcement, memory manifest/hash construction, context packet cache lookup semantics, prompt packet cache, token-budget preflight, compression orchestration/reporting/quality gates, response-reuse guards, provider telemetry separation, and runtime audit/provenance;
@@ -1667,8 +1667,8 @@
   - harness owns orchestration, fixtures, replay/stress/drift cases, evidence summaries, and boundary assertions only.
 - Closure audit treats these as explicit non-blocking deferrals, not hidden gaps:
   - DB-backed context packet cache index;
-  - resource-sampling runtime promotion and any direct-provider surface that has not been promoted into the matrix implementation rows;
-  - v1b frozen/delegated N2/N3/N5 semantic support runtime promotion.
+  - historical D29 note, superseded by D30/D32 for the named promoted surfaces: resource-sampling runtime promotion and any direct-provider surface that had not been promoted into the matrix implementation rows;
+  - historical D29 note, superseded by D30: v1b frozen/delegated N2/N3/N5 semantic support runtime promotion.
 - Acceptance criteria were normalized from older global wording to the promoted-surface closure semantics so the docs do not imply unimplemented global provider coverage.
 
 ## 2026-06-02 - D30 v1b N2/N3/N5 Runtime Promotion Scope Locked
@@ -1693,7 +1693,7 @@
 - Deferred outside this slice:
   - DB-backed context packet cache index;
   - provider-live canary expansion for N2/N3/N5;
-  - resource-sampling runtime promotion.
+  - historical D30 note, superseded by D32 for resource-sampling batch classification: resource-sampling runtime promotion.
 
 ## 2026-06-02 - D30 v1b N2/N3/N5 Runtime Promotion Landed
 - Added `TopicSelectionV1bEarlySemanticSupportRuntimeService` for the promoted early semantic slots:
@@ -1735,3 +1735,33 @@
   - `fixture_replay` remains blocked in product mode.
   - In acceptance/test mode, `fixture_replay` must still pass profile, prompt packet, runtime invocation context, source-hash, payload-hash, and compression identity checks; it is no longer a broad bypass.
 - Updated the plan notes so D26/D27 deferred N2/N3/N5 wording is explicitly marked as superseded by D30.
+
+## 2026-06-02 - D32 Resource-Sampling Runtime Promotion
+- Promoted `resource_classification.batch` as the minimum resource-sampling runtime slice.
+- Added registered resource-sampling context/model profiles:
+  - context profile `topic-selection.resource-sampling.literature-classification-batch.context-runtime@v1`;
+  - invocation slot `resource_classification.batch`;
+  - context family `resource_sampling_literature_classification_batch`;
+  - model profile `topic-selection-resource-sampling-classification`;
+  - output contract `TopicSelectionResourceSamplingLlmOutput@v1`.
+- Replaced the direct batch-level `BackendLlmGateway` call in `TopicSelectionResourceSamplingService` with `TopicSelectionAgentOrchestratorService`.
+  - The service now creates a real control-plane workflow run before classifying eligible batches.
+  - Each provider batch records prompt packet identity/cache metadata, token-budget gate result, and runtime audit artifacts through `AgentOrchestrator`.
+  - Structured output and guardrail summary artifacts are recorded on the same workflow run before the workflow is updated to succeeded/failed.
+- App wiring now passes a resource-sampling `AgentOrchestrator` with the shared prompt packet cache service, so Prisma-backed prompt-index persistence is used in production-shaped app wiring.
+- Resource-sampling model normalization is now registry-bound.
+  - `model.profile_id` must match the registered resource-sampling profile.
+  - `model.model_id` must match the selected registered OpenAI/DashScope runtime option.
+  - This prevents audit model refs from describing a different model than the provider option actually used by runtime.
+- Authority boundary remains unchanged.
+  - Runtime classification output is still only a semantic draft.
+  - Deterministic guardrails, sample assembly, and `topic-selection.resource-sample-ready` remain the only path to persisted resource sample authority.
+  - Provider response reuse remains blocked, provider-side cache telemetry remains telemetry only, and no DB-backed context packet cache was introduced.
+- L4 provider canary coverage now includes resource sampling.
+  - `TopicSelectionProviderCanaryService` exposes `runResourceSamplingPromptCacheLiveRequiredCanary` and `runResourceSamplingOverBudgetZeroCallCanary` for slot `resource_classification.batch`.
+  - The canary invocation uses the registered resource-sampling context/model profiles, prompt `topic-selection-resource-sampling-classification`, output contract `TopicSelectionResourceSamplingLlmOutput@v1`, semantic context packet hashes, and provider-required-live runtime token-budget preflight.
+  - Local fake-gateway tests prove prompt packet reuse does not become provider response reuse, over-budget preflight makes zero provider calls, and malformed minimal provider outputs are schema-blocked while response reuse refs remain null.
+  - Optional live gates are available through `T112_RESOURCE_SAMPLING_PROVIDER_CANARY_LIVE=1` plus `BACKEND_TEST_PRESERVE_REAL_ENV=1` and the provider key.
+- L5 compression adversarial coverage now includes resource sampling.
+  - Compression quality gates block dropped `literature_ref`, candidate abstract/digest, role classification, rationale, method family, and guardrail signal facts.
+  - Compression quality gates also block forbidden raw provider logs in resource-sampling compressed context payloads.

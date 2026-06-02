@@ -20,6 +20,9 @@
 - Do not interpret the v1a runtime stress runner as a live-provider canary. It is Prisma-backed and production-shaped, but defaults to deterministic mocked LLM execution so repeated local runs do not spend provider budget.
 - Do not handcraft placeholder semantic artifacts for promoted runtime slots in service-level or HTTP tests. Use the owning runtime service for Codex delegated/support evidence, or keep the test on deterministic `fixture` authority input when the test scope is route compatibility.
 - Do not let `fixture_replay` become a promoted-slot identity bypass. Even outside product mode, fixture replay must still bind profile, prompt, runtime invocation context, source hashes, payload hash, and compression identity.
+- Do not reintroduce direct `BackendLlmGateway` calls for promoted resource-sampling classification batches. The service must route provider execution through `AgentOrchestrator` so prompt packet cache, token-budget preflight, runtime audit, and provider response non-reuse stay unified.
+- Do not allow resource-sampling request `model.profile_id` or `model.model_id` to diverge from the registered runtime model profile/options; audit model refs must describe the actual runtime-selected provider option.
+- Do not let resource-sampling compression drop candidate identity or guardrail-critical classification facts. `literature_ref`, candidate abstract/digest, role classification, rationale, method family, source count, and guardrail signal must remain preserved facts, and raw provider logs must never appear in compressed context payloads.
 
 ## Pending
-- Resource sampling and any unpromoted direct/provider surfaces still need their own implementation-ready matrix promotion before runtime wiring.
+- Any unpromoted direct/provider surfaces still need their own implementation-ready matrix promotion before runtime wiring.

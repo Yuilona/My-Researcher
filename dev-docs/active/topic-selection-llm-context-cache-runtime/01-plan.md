@@ -66,7 +66,7 @@
   - audit envelope/projection expectations;
   - focused contract, unit, and harness tests.
 - Begin implementation with shared contracts/schema tests and runtime primitives before any node wiring.
-- Keep resource sampling, v1b, and v1c runtime wiring deferred until their rows are promoted to implementation-ready status.
+- Historical first-slice stance: resource sampling, v1b, and v1c runtime wiring were deferred until their rows were promoted to implementation-ready status; later D20-D32 sections record the promoted rows.
 
 ## Phase 1B - Contract-First Slice
 - Status: done for shared contracts and schema tests.
@@ -249,7 +249,7 @@
 - Validate Codex-assisted compression for long exploration context only when the profile allows it, with quality gate enforcement before provider/Codex/mock invocation.
 - Validate deterministic structural compression for the first v1a N6 single-agent path: done with adapter and WorkflowHarness provider-shaped tests.
 - Validate cache/reuse hits still run schema validation, candidate admission, persistence gates, and authority write boundaries.
-- Defer resource sampling, v1b, and v1c direct-provider paths until their implementation-ready rows are expanded.
+- Historical Phase 6 scope deferred resource sampling, v1b, and v1c direct-provider paths until their implementation-ready rows were expanded; D20-D32 now record the promoted rows.
 
 ## Phase 7 - Verification And Cleanup
 - Add contract, unit, HTTP, harness, and provider canary tests.
@@ -263,7 +263,7 @@
   - promote v1c N2 bounded micro-debate role slots into the T-112 runtime surface;
   - promote v1c N6 downstream feedback normalization into the T-112 runtime surface;
   - keep v1c N3 gate diagnostic adjunct and N4 delegated-promotion provider surfaces as provider-canary-only for this phase;
-  - keep resource sampling out of this v1c closure phase and handle it in a later explicit runtime-promotion phase.
+  - historical D28 scope kept resource sampling out of the v1c closure phase; D32 later promoted `resource_classification.batch` through a separate runtime-promotion phase.
 - D28-B runtime / node-adapter / harness responsibility boundary:
   - shared runtime owns context/cache/compression/memory/token/reuse/audit execution semantics;
   - v1c node adapters/admission services own node semantic context compilation, required fact inventories, output admission, deterministic gate handoff, and authority boundaries;
@@ -700,6 +700,17 @@
   - L1-L3 local closure is implemented: shared contract/schema tests, runtime/admission unit tests, harness acceptance wiring, and Prisma smoke for prompt-index metadata, prompt-cache replay, prompt drift blocking, N4 authority no-bypass before human acceptance, and no N5 bridge creation from runtime/admission alone;
   - N4 is included in `pnpm topic-selection:v1c-runtime-stress`;
   - provider canary and long-context/adversarial compression follow after the current L1-L3 slice.
+- P4.1 resource-sampling runtime promotion:
+  - D32 promotes `resource_classification.batch` as the minimum resource-sampling runtime slice;
+  - provider classification batches now route through `TopicSelectionAgentOrchestratorService` with registered context/model profiles instead of direct `BackendLlmGateway` calls from the service;
+  - context family is `resource_sampling_literature_classification_batch`, prompt variant is `resource_classification.batch`, output contract is `TopicSelectionResourceSamplingLlmOutput@v1`, and runtime invocation identity is semantic over topic id, policy version, role targets, batch index/count, and candidate batch context hash;
+  - app wiring shares the existing Prisma-backed prompt packet cache service, so resource-sampling prompt packet rows remain metadata-only and provider responses are never reused;
+  - `TopicSelectionResourceSamplingService` creates a real control-plane workflow run before runtime invocation, records prompt/runtime audit/structured-output artifacts on the same workflow run, then updates the workflow status/telemetry/output summary;
+  - request-level model/profile input is now constrained to the registered OpenAI/DashScope runtime model options so audit model refs cannot drift from actual provider execution;
+  - deterministic guardrail assembly and `topic-selection.resource-sample-ready` remain the authority boundary; runtime output alone cannot select or persist resource sample authority;
+  - L4 provider canary coverage is implemented through `TopicSelectionProviderCanaryService`: prompt packet cache hits still require two provider calls, over-budget preflight makes zero provider calls, malformed minimal outputs are schema-blocked, and optional OpenAI/DashScope live gates use `T112_RESOURCE_SAMPLING_PROVIDER_CANARY_LIVE=1`;
+  - L5 compression adversarial fixtures are implemented for dropped resource-sampling classification facts and forbidden raw provider log payloads;
+  - DB-backed context packet cache remains deferred pending broader retention/cost-governance evidence.
 
 ### Shared Rules
 - Every promoted v1b LLM-like slot MUST pass through the shared runtime boundary for token-budget preflight, prompt packet identity/cache, compression report validation, runtime audit, provider telemetry separation, and response-reuse provenance.

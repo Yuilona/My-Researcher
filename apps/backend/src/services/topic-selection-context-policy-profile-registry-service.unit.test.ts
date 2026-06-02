@@ -4,6 +4,8 @@ import { AppError } from '../errors/app-error.js';
 import {
   createDefaultTopicSelectionContextPolicyProfileRegistry,
   TOPIC_SELECTION_CONTEXT_RUNTIME_REDACTION_POLICY,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1A_N5_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1A_N5_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1A_N6_CONTEXT_RUNTIME_PROFILE_IDS,
@@ -28,6 +30,30 @@ import {
   TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS,
   TopicSelectionContextPolicyProfileRegistryService,
 } from './topic-selection-context-policy-profile-registry-service.js';
+
+test('context policy profile registry resolves resource sampling runtime profile', () => {
+  const service = new TopicSelectionContextPolicyProfileRegistryService();
+
+  const resourceSampling = service.resolveProfile({
+    context_policy_profile_id:
+      TOPIC_SELECTION_RESOURCE_SAMPLING_CONTEXT_RUNTIME_PROFILE_IDS.literature_classification_batch,
+    context_policy_profile_version: 'v1',
+    invocation_slot_id:
+      TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS.literature_classification_batch,
+  });
+
+  assert.equal(resourceSampling.profile.context_family, 'resource_sampling_literature_classification_batch');
+  assert.equal(resourceSampling.profile.functional_template, 'candidate_for_deterministic_gate');
+  assert.equal(resourceSampling.profile.reuse_policy.provider_llm_response_reuse, 'blocked');
+  assert.equal(resourceSampling.profile.reuse_policy.provider_required_live_behavior, 'live_call_required');
+  assert.equal(resourceSampling.profile.token_budget_policy.estimated_output_token_budget, 2048);
+  assert.equal(resourceSampling.profile.post_reuse_gates.includes('resource_sampling_guardrails'), true);
+  assert.equal(
+    resourceSampling.profile.compression_policy.preserved_fact_kinds.includes('literature_ref'),
+    true,
+  );
+  assert.match(resourceSampling.profile_hash, /^[a-f0-9]{64}$/);
+});
 
 test('context policy profile registry validates and resolves v1a runtime profiles', () => {
   const service = new TopicSelectionContextPolicyProfileRegistryService();

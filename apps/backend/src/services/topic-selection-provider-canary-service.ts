@@ -17,6 +17,10 @@ import {
   topicSelectionV1bTopicValueAssessmentDraftPayloadSchema,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-workflow-harness-contracts';
 import {
+  type TopicSelectionResourceSamplingLlmOutput,
+  topicSelectionResourceSamplingLlmOutputSchema,
+} from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-resource-sampling-contracts';
+import {
   TOPIC_SELECTION_VALUE_DIMENSIONS,
   TOPIC_SELECTION_VALUE_GATE_KEYS,
 } from '@paper-engineering-assistant/shared/research-lifecycle/topic-selection-v1b-value-assessment-contracts';
@@ -35,6 +39,8 @@ import {
   TOPIC_SELECTION_V1B_N6_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1B_N8_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1B_N8_INVOCATION_SLOT_IDS,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_CONTEXT_RUNTIME_PROFILE_IDS,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS,
   TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS,
   TOPIC_SELECTION_V1C_N4_CONTEXT_RUNTIME_PROFILE_IDS,
@@ -50,6 +56,7 @@ import {
   TOPIC_SELECTION_V1C_DELEGATED_PROMOTION_DECISION_PROFILE_ID,
   TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID,
   TOPIC_SELECTION_V1B_RESEARCH_SLICE_OPTIONS_SINGLE_AGENT_PROFILE_ID,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_QUESTION_CANDIDATES_SINGLE_AGENT_PROFILE_ID,
   TOPIC_SELECTION_V1B_TOPIC_VALUE_ASSESSMENT_SINGLE_AGENT_PROFILE_ID,
   TopicSelectionModelProfileRegistryService,
@@ -66,6 +73,12 @@ import type {
   TopicSelectionV1cN2BoundedDebateRoleOutput,
   TopicSelectionV1cN2BoundedDebateRoleSlotId,
 } from './topic-selection-v1c-n2-bounded-debate-admission-service.js';
+import {
+  TOPIC_SELECTION_RESOURCE_SAMPLING_NODE_ID,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_OUTPUT_CONTRACT,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_ID,
+  TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_VERSION,
+} from './topic-selection-resource-sampling-service.js';
 
 export type TopicSelectionProviderCanaryProviderId = 'openai' | 'dashscope';
 
@@ -546,6 +559,69 @@ export class TopicSelectionProviderCanaryService {
       invocation_slot_id: TOPIC_SELECTION_V1C_N6_INVOCATION_SLOT_IDS.downstream_feedback_normalization,
       context_policy_profile_id: contextPolicyProfileId,
       model_profile_id: TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID,
+      canary_surface: 'production_runtime_slot',
+      provider_call_count: countingGateway.callCount,
+      status: result.status,
+      error_code: result.error_code,
+      token_budget_gate_decision: result.token_budget_gate_result?.decision ?? null,
+      blocker_codes: result.blocker_codes,
+    };
+  }
+
+  async runResourceSamplingPromptCacheLiveRequiredCanary(input: {
+    provider_id: TopicSelectionProviderCanaryProviderId;
+  }): Promise<TopicSelectionProviderCanarySlotLiveRequiredEvidence> {
+    const modelOptionId = this.resourceSamplingModelOptionId(input.provider_id);
+    const contextPolicyProfileId = this.resourceSamplingContextPolicyProfileId();
+    const countingGateway = new CountingTopicSelectionProviderCanaryGateway(this.llmGateway);
+    const orchestrator = this.makeOrchestrator(countingGateway);
+    const invocation = this.resourceSamplingProviderInvocation(input.provider_id, {
+      estimated_input_tokens_override: 1000,
+    });
+    const first = await orchestrator.invokeStructuredOutput<TopicSelectionResourceSamplingLlmOutput>(
+      invocation,
+    );
+    const second = await orchestrator.invokeStructuredOutput<TopicSelectionResourceSamplingLlmOutput>(
+      invocation,
+    );
+
+    return {
+      ...this.liveRequiredEvidence({
+        providerId: input.provider_id,
+        modelOptionId,
+        first,
+        second,
+        countingGateway,
+      }),
+      invocation_slot_id:
+        TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS.literature_classification_batch,
+      context_policy_profile_id: contextPolicyProfileId,
+      model_profile_id: TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID,
+      canary_surface: 'production_runtime_slot',
+    };
+  }
+
+  async runResourceSamplingOverBudgetZeroCallCanary(input: {
+    provider_id: TopicSelectionProviderCanaryProviderId;
+  }): Promise<TopicSelectionProviderCanarySlotOverBudgetEvidence> {
+    const modelOptionId = this.resourceSamplingModelOptionId(input.provider_id);
+    const contextPolicyProfileId = this.resourceSamplingContextPolicyProfileId();
+    const countingGateway = new CountingTopicSelectionProviderCanaryGateway(this.llmGateway);
+    const orchestrator = this.makeOrchestrator(countingGateway);
+    const result = await orchestrator.invokeStructuredOutput<TopicSelectionResourceSamplingLlmOutput>(
+      this.resourceSamplingProviderInvocation(input.provider_id, {
+        estimated_input_tokens_override: 200_000,
+        compression_already_applied: true,
+      }),
+    );
+
+    return {
+      provider_id: input.provider_id,
+      model_option_id: modelOptionId,
+      invocation_slot_id:
+        TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS.literature_classification_batch,
+      context_policy_profile_id: contextPolicyProfileId,
+      model_profile_id: TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID,
       canary_surface: 'production_runtime_slot',
       provider_call_count: countingGateway.callCount,
       status: result.status,
@@ -1071,6 +1147,89 @@ export class TopicSelectionProviderCanaryService {
     };
   }
 
+  private resourceSamplingProviderInvocation(
+    providerId: TopicSelectionProviderCanaryProviderId,
+    runtimeOptions: {
+      estimated_input_tokens_override: number;
+      compression_already_applied?: boolean;
+    },
+  ): TopicSelectionAgentInvocationRequest<TopicSelectionResourceSamplingLlmOutput> {
+    const resolvedContextProfile = this.contextProfileRegistry.resolveProfile({
+      context_policy_profile_id: this.resourceSamplingContextPolicyProfileId(),
+      invocation_slot_id:
+        TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS.literature_classification_batch,
+    });
+    this.assertProviderRequiredLiveProfile(
+      resolvedContextProfile.profile.execution_modifiers,
+    );
+    const contextPayload = this.resourceSamplingCanaryContextPayload(providerId);
+
+    return {
+      workspace_id: 'workspace_provider_canary',
+      title_card_id: 'title_card_provider_canary',
+      node_id: TOPIC_SELECTION_RESOURCE_SAMPLING_NODE_ID,
+      workflow_run_id: `provider_canary_resource_sampling_${providerId}_workflow_run_001`,
+      node_attempt_id: `provider_canary_resource_sampling_${providerId}_node_attempt_001`,
+      invocation_attempt_id:
+        `provider_canary_resource_sampling_${providerId}_literature_classification_batch`,
+      execution_mode: 'provider_llm',
+      executor_kind: 'single_agent',
+      run_mode: 'acceptance',
+      profile_id: TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID,
+      model_option_id: this.resourceSamplingModelOptionId(providerId),
+      output_contract: TOPIC_SELECTION_RESOURCE_SAMPLING_OUTPUT_CONTRACT,
+      prompt: {
+        promptTemplateId: TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_ID,
+        version: TOPIC_SELECTION_RESOURCE_SAMPLING_PROMPT_TEMPLATE_VERSION,
+      },
+      prompt_variant_key:
+        TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS.literature_classification_batch,
+      schema_name: 'topic_selection_resource_sampling_canary',
+      schema: topicSelectionResourceSamplingLlmOutputSchema as unknown as Record<string, unknown>,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Return only JSON matching TopicSelectionResourceSamplingLlmOutput@v1 for a resource-sampling provider live invocation canary.',
+        },
+        {
+          role: 'user',
+          content: [
+            'Return exactly one synthetic literature classification and copy the supplied literature_ref exactly.',
+            'Use primary_role "support", evidence_polarity "positive_method", and brief classification_rationale only.',
+            stableStringify(contextPayload),
+          ].join(' '),
+        },
+      ],
+      input_refs: [
+        this.ref('literature', 'provider_canary_literature_001'),
+        this.ref('source', 'provider_canary_source_001'),
+      ],
+      context_packet_hashes: [this.hash(contextPayload)],
+      runtime_token_budget: {
+        context_policy_profile: resolvedContextProfile.profile,
+        context_policy_profile_hash: resolvedContextProfile.profile_hash,
+        runtime_invocation_context_hash: this.hash({
+          scenario_id: 'resource_sampling_literature_classification_batch',
+          scenario_case_id:
+            TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS.literature_classification_batch,
+          provider_id: providerId,
+          context_payload_hash: this.hash(contextPayload),
+        }),
+        context_payloads: [contextPayload],
+        extra_payloads: [
+          {
+            output_contract: TOPIC_SELECTION_RESOURCE_SAMPLING_OUTPUT_CONTRACT,
+            batch_candidate_count: 1,
+          },
+        ],
+        estimated_input_tokens_override: runtimeOptions.estimated_input_tokens_override,
+        compression_already_applied: runtimeOptions.compression_already_applied ?? false,
+      },
+      created_by: 'system',
+    };
+  }
+
   private liveRequiredEvidence(input: {
     providerId: TopicSelectionProviderCanaryProviderId;
     modelOptionId: string;
@@ -1162,6 +1321,13 @@ export class TopicSelectionProviderCanaryService {
     return `${TOPIC_SELECTION_V1C_DOWNSTREAM_FEEDBACK_NORMALIZATION_PROFILE_ID}.${suffix}`;
   }
 
+  private resourceSamplingModelOptionId(providerId: TopicSelectionProviderCanaryProviderId): string {
+    const suffix = providerId === 'openai'
+      ? 'openai-balanced'
+      : 'dashscope-thinking-budget';
+    return `${TOPIC_SELECTION_RESOURCE_SAMPLING_CLASSIFICATION_PROFILE_ID}.${suffix}`;
+  }
+
   private v1cN2ContextPolicyProfileId(slotId: TopicSelectionV1cN2BoundedDebateRoleSlotId): string {
     if (slotId === TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_INVOCATION_SLOT_IDS.promotion_supporter_draft) {
       return TOPIC_SELECTION_V1C_N2_BOUNDED_DEBATE_CONTEXT_RUNTIME_PROFILE_IDS.promotion_supporter_draft;
@@ -1181,6 +1347,50 @@ export class TopicSelectionProviderCanaryService {
 
   private v1cN4ContextPolicyProfileId(): string {
     return TOPIC_SELECTION_V1C_N4_CONTEXT_RUNTIME_PROFILE_IDS.delegated_promotion_decision_candidate;
+  }
+
+  private resourceSamplingContextPolicyProfileId(): string {
+    return TOPIC_SELECTION_RESOURCE_SAMPLING_CONTEXT_RUNTIME_PROFILE_IDS.literature_classification_batch;
+  }
+
+  private resourceSamplingCanaryContextPayload(providerId: TopicSelectionProviderCanaryProviderId) {
+    return {
+      schema_version: 'TopicSelectionResourceSamplingBatchContext@v1',
+      node_id: TOPIC_SELECTION_RESOURCE_SAMPLING_NODE_ID,
+      invocation_slot_id:
+        TOPIC_SELECTION_RESOURCE_SAMPLING_INVOCATION_SLOT_IDS.literature_classification_batch,
+      context_family: 'resource_sampling_literature_classification_batch',
+      topic_id: 'topic_provider_canary_resource_sampling',
+      sample_size: 1,
+      role_targets: {
+        support: 1,
+        challenge: 0,
+        baseline: 0,
+        context: 0,
+      },
+      policy_version: 'topic-resource-sampling-v1',
+      provider_id: providerId,
+      batch: {
+        index: 1,
+        count: 1,
+        candidate_count: 1,
+      },
+      eligible_candidates: [
+        {
+          literature_ref: this.ref('literature', 'provider_canary_literature_001'),
+          title: 'Provider-live runtime canary for resource sampling',
+          abstract:
+            'Synthetic candidate used only to verify resource-sampling prompt cache and provider non-reuse semantics.',
+          key_content_digest:
+            'Preserve literature identity, source count, role classification, rationale, and guardrail signal.',
+          tags: ['runtime', 'resource-sampling', 'provider-canary'],
+          year: 2026,
+          activation_score: 0.91,
+          activation_reason: 'Synthetic support evidence for runtime validation.',
+          source_count: 1,
+        },
+      ],
+    };
   }
 
   private assertProviderRequiredLiveProfile(executionModifiers: string[]): void {
