@@ -1655,3 +1655,19 @@
 - Re-ran v1c OpenAI provider-live acceptance.
   - Focused N2 supporter draft, N2 repair, and N4 probes succeeded after the schema/transport fixes.
   - The full gated OpenAI v1c N2/N4/N6 live slot canary group passed.
+
+## 2026-06-02 - D29 T-112 Closure Audit
+- Entered closure audit for the promoted T-112 runtime surface after v1c production-depth and both live provider groups had passing evidence.
+- Closure scope is explicitly bounded to:
+  - v1a N5/N6/N7/N8 runtime-bound LLM slots plus deterministic N1-N4/N9 replay/publish boundaries;
+  - v1b promoted N4/N6/N7/N8 runtime slots;
+  - v1c promoted N2 bounded micro-debate, N4 delegated promotion decision, and N6 downstream feedback normalization slots.
+- No new code findings were identified during the audit. The runtime/harness responsibility split remains aligned with the locked T-112 principles:
+  - runtime owns context policy resolution, context-memory policy, context/prompt cache semantics, token-budget preflight, compression orchestration/reporting/quality gates, response-reuse guards, provider telemetry separation, and runtime audit/provenance;
+  - node adapters/admission services own semantic context construction, source-ref and hash binding, preserved-fact inventories, output admission, and authority-boundary handoff;
+  - harness owns orchestration, fixtures, replay/stress/drift cases, evidence summaries, and boundary assertions only.
+- Closure audit treats these as explicit non-blocking deferrals, not hidden gaps:
+  - DB-backed context packet cache index;
+  - resource-sampling runtime promotion and any direct-provider surface that has not been promoted into the matrix implementation rows;
+  - v1b frozen/delegated N2/N3/N5 semantic support runtime promotion.
+- Acceptance criteria were normalized from older global wording to the promoted-surface closure semantics so the docs do not imply unimplemented global provider coverage.

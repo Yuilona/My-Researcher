@@ -296,6 +296,20 @@
 | DashScope | v1c N6 downstream feedback normalization production runtime slot | live evidence passed on 2026-06-02; prompt-cache hit still performs live provider calls, and malformed, cached, or over-budget provider output cannot create downstream recheck authority. |
 | OpenAI or DashScope | live token over budget fixture | provider call count remains zero |
 
+## D29 Closure Audit Classification
+| Decision Area | Disposition | Evidence |
+|---|---|---|
+| Closure scope | satisfied for promoted runtime surface | Promoted surface is v1a N5/N6/N7/N8 plus deterministic N1-N4/N9 boundaries, v1b N4/N6/N7/N8, and v1c N2/N4/N6. |
+| Node-scope matrix | satisfied | `06-node-scope-matrix.md` identifies LLM-capable nodes/slots at invocation-slot granularity and records context/cache/compression/token-budget policy. |
+| Runtime/harness boundary | satisfied | v1b/v1c production-depth and near-prod runners compose service-owned runtime/admission checks; harnesses do not own prompt keys, compression preserved facts, provider calls, response reuse, or authority admission formulas. |
+| Provider-required live-call semantics | satisfied | v1c OpenAI/DashScope N2/N4/N6 live canaries passed during D29; prompt-cache hits reused prompt artifacts only and still performed provider calls. |
+| Token-budget preflight | satisfied for promoted provider-backed slots | Local provider canaries and live slot canaries cover over-budget zero-call behavior; production-depth and near-prod stress cover promoted v1b/v1c slots. |
+| Prompt packet cache persistence | satisfied | Prisma prompt packet index remains metadata/ref/hash/provenance-only; production-depth first-writer race inserted one row, shared one winning prompt artifact ref, and cleaned up to zero rows. |
+| Context packet cache | satisfied for promoted process-local exact-key surfaces; DB-backed index deferred | v1a context-cache exact hit/stale/drift tests and runtime stress cover exact key semantics. A DB-backed context packet cache index remains a non-blocking future decision. |
+| Compression | satisfied for promoted over-budget surfaces | v1a/v1b/v1c compression/adversarial suites preserve required facts and block dropped facts or forbidden raw provider payloads before deterministic gates. |
+| Authority boundaries | satisfied | v1a/v1b/v1c replay/stress/smoke evidence shows cache/replay/prompt-cache hits do not create duplicate authority writes and do not skip deterministic gates. |
+| Explicit deferrals | non-blocking | DB-backed context packet cache index, resource-sampling runtime promotion, unpromoted direct-provider surfaces, and v1b frozen/delegated N2/N3/N5 runtime promotion require later explicit decisions. |
+
 ## Closure Checks
 - Shared typecheck and schema tests pass.
 - Backend typecheck and focused unit tests pass.
@@ -303,3 +317,4 @@
 - v1c production-depth passes or records a specific blocked condition with no authority-boundary regression.
 - Provider canaries pass or are recorded as provider/environment-blocked with diagnostic evidence and no runtime boundary regression. Current v1c OpenAI and DashScope N2/N4/N6 live slot canaries have passing evidence.
 - Governance sync/lint passes.
+- D29 closure audit evidence passed on 2026-06-02 for the promoted runtime surface, with explicit non-blocking deferrals recorded above.
