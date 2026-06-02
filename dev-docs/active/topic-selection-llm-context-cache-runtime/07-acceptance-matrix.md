@@ -277,6 +277,7 @@
 | v1c N4 no-N5 bypass | runtime/admission candidate recommends bridge authorization | N4 runtime/admission still creates no N5 bridge; existing N4 human authority writer may later emit a bridge handoff, and N5 bridge creation remains separate |
 | v1c N4 L4 provider canary | OpenAI/DashScope local and gated live canaries run for `TopicSelectionV1cDelegatedPromotionDecisionCandidate@v1` | provider-required prompt-cache hits still make provider calls, provider response reuse remains null/not-applicable, provider telemetry stays telemetry-only, over-budget canaries call zero providers, malformed minimal output blocks, and canary output cannot create N4 authority or N5 bridge records |
 | v1c N4 L5 compression adversarial | long N3 gate handoff and delegated-decision context is compressed before candidate generation/admission | dropped gate handoff, snapshot, disposition, promote-allowed status, support/dossier/readiness refs, condition/action/loopback facts, accepted risks, claim ceiling, early-check obligations, allowed refs, human authority boundary, no-bridge boundary, or forbidden raw provider logs block before human acceptance or N5 bridge creation |
+| v1c production-depth | `pnpm topic-selection:v1c-production-depth` runs after runtime closure | higher-iteration serial stress, concurrent runtime stress, prompt-index first-writer race, provider profile drift guards, retention/cleanup observation, focused runtime/compression/admission units, and local provider slot canary all pass without restoring full-chain provider harness semantics |
 | v1c feedback normalization | malformed reused packet cannot create downstream recheck |
 
 ## Provider Canaries
@@ -298,5 +299,6 @@
 - Shared typecheck and schema tests pass.
 - Backend typecheck and focused unit tests pass.
 - v1a/v1b/v1c filtered harness smokes pass.
+- v1c production-depth passes or records a specific blocked condition with no authority-boundary regression.
 - Provider canaries pass or are recorded as environment-blocked with no code failure.
 - Governance sync/lint passes.

@@ -318,7 +318,8 @@
   - add N6 L2/L3 harness/Prisma smoke after L1 passes, proving v1c harness calls through runtime/admission, prompt-index metadata-only behavior, feedback/recheck replay, prompt drift blocking, and no upstream side-effect bypass; done 2026-06-02 via `pnpm topic-selection:v1c-harness-acceptance` and `pnpm topic-selection:v1c-n6-runtime-smoke`;
   - remove N6 admission/recheck dual-track loopback and affected-ref policy before L4/L5 expansion; done 2026-06-02 with one canonical downstream feedback policy and missing-lineage admission blocking;
   - add N6 L4/L5 provider slot canary and long-context/adversarial compression blockers after L3 stabilizes; done 2026-06-02 through `TopicSelectionProviderCanaryService` production runtime slot coverage and shared compression-runtime adversarial tests;
-  - close with `pnpm topic-selection:v1c-runtime-stress` combining N2/N6 runtime smokes, prompt-index assertions, provider canary local smoke, harness acceptance, and no side-effect bypass checks; done 2026-06-02.
+  - close the runtime layer with `pnpm topic-selection:v1c-runtime-stress` combining N2/N4/N6 runtime smokes, prompt-index assertions, provider canary local smoke, harness acceptance, and no side-effect bypass checks; done 2026-06-02;
+  - run production-depth after runtime closure with `pnpm topic-selection:v1c-production-depth`; done 2026-06-02. This adds higher iteration count, concurrent runtime stress, prompt-index first-writer race, provider profile drift guards, retention/cleanup observation, focused runtime/compression/admission unit tests, and local provider slot canary coverage. It remains a pressure/governance layer and does not restore full-chain provider harness semantics.
 - D28-J minimum landable first slice:
   - first implementation slice is registry/contracts foundation only;
   - include `v1c_n2_bounded_promotion_support` in shared runtime context families;

@@ -1609,3 +1609,21 @@
 - Strengthened v1c N4 provider-canary tests.
   - Local tests now validate the happy N4 reference candidate against the generated schema and prove duplicated `decision_support_refs` are rejected.
   - Optional live OpenAI/DashScope N4 canaries now use the same runtime evidence helper as local canaries, covering provider-required-live, production-runtime-slot labels, prompt hash stability, prompt artifact and quality-report reuse, response cache `not_applicable`, null response reuse refs, and telemetry provider ids.
+
+## 2026-06-02 - D28-N v1c Production-Depth Runner Landed
+- Added `.ai/scripts/topic-selection-v1c-production-depth.mjs` and package script `pnpm topic-selection:v1c-production-depth`.
+  - The runner is a pressure/governance composition layer only; it does not construct prompts, own admission formulas, normalize feedback, write authority, or restore full-chain provider harness execution.
+  - Default execution runs one higher-iteration serial `pnpm topic-selection:v1c-runtime-stress`, two concurrent runtime-stress children, focused runtime/compression/admission unit tests, and the unified local provider slot canary.
+  - Runtime-stress children run live-provider gates off; live provider validation remains explicit via N2/N4/N6 slot canary env gates.
+- Added production-depth built-in checks:
+  - Prisma prompt packet index metadata-only schema guard;
+  - real DB `PrismaTopicSelectionPromptPacketCacheStore.putIfAbsent` first-writer race with eight concurrent writers, exactly one inserted row, all participants observing one winning prompt artifact ref, and cleanup verification leaving zero temporary race rows;
+  - v1c N2/N4/N6 provider profile drift guards for OpenAI and DashScope model options, including cross-profile model-option mismatch blocking;
+  - retention observation for prompt-index rows created during the production-depth window plus non-destructive old-row counting.
+- Default production-depth passed with six effective runtime-stress iterations and prompt-index coverage for all promoted v1c slots.
+- No DB schema, route contract, provider credential/config, DB-backed context packet cache, direct provider SDK path, or provider-canary-only harness path was introduced.
+
+## 2026-06-02 - D28-N Production-Depth Review Hardening Landed
+- Hardened the production-depth prompt-index first-writer race cleanup.
+  - The temporary race row cleanup now runs in `finally`, so a failed race assertion still attempts to remove the run-scoped temporary prompt-index row.
+  - The success path still asserts exactly one inserted row, one shared winning prompt artifact ref, one deleted cleanup row, and zero remaining rows.

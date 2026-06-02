@@ -953,6 +953,18 @@
 | `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after the D28-M review hardening documentation sync. |
 | `git diff --check` | passed | No whitespace errors after the review hardening changes. |
 
+## 2026-06-02 - D28-N v1c Production-Depth Verification
+| Command | Result | Notes |
+|---|---|---|
+| `node --check .ai/scripts/topic-selection-v1c-production-depth.mjs` | passed | New production-depth runner syntax is valid. |
+| `node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package.json ok')"` | passed | Package JSON remains valid after adding `topic-selection:v1c-production-depth`. |
+| `pnpm topic-selection:v1c-production-depth` | failed, then fixed | Initial run exposed `TS_NODE_PROJECT=apps/backend/tsconfig.json` leaking from the parent package script into `pnpm --filter @paper-engineering-assistant/backend exec` child tests, where the cwd is already `apps/backend`. The focused unit and provider canary child layers now override `TS_NODE_PROJECT=tsconfig.json`. Failed run id: `t112-v1c-production-depth-1780380215325`; runtime stress layers had already passed. |
+| `pnpm topic-selection:v1c-production-depth` | passed | Default production-depth passed. Run id: `t112-v1c-production-depth-1780380312836`; summary: `.ai/.tmp/topic-selection-v1c-production-depth/t112-v1c-production-depth-1780380312836/90-summary.json`; layers: 10; effective stress iterations: 6; prompt-index rows created: 78. Slot counts: N2 supporter draft 12, N2 critic/repair/synthesizer 18 each, N4 delegated decision 6, N6 downstream feedback 6. First-writer race used 8 writers, inserted exactly 1 row, returned one winning prompt artifact ref to all writers, deleted 1 temporary row, and left row count 0. Provider profile drift guards resolved 6 OpenAI/DashScope profile options and blocked cross-profile option drift. |
+| `pnpm topic-selection:v1c-production-depth` | passed | Review-hardening rerun passed after moving first-writer race cleanup into `finally`. Run id: `t112-v1c-production-depth-1780384855213`; summary: `.ai/.tmp/topic-selection-v1c-production-depth/t112-v1c-production-depth-1780384855213/90-summary.json`; layers: 10; effective stress iterations: 6; prompt-index rows created: 78; first-writer race used 8 writers, inserted exactly 1 row, deleted 1 temporary row, and left row count 0. |
+| `pnpm --filter @paper-engineering-assistant/backend exec tsc --noEmit --pretty false` | passed | Backend TypeScript compile remains green after adding the production-depth script/package entry. |
+| `node .ai/scripts/ctl-project-governance.mjs lint --check --project main` | passed | Project governance lint passed after production-depth documentation sync. |
+| `git diff --check` | passed | No whitespace errors after the production-depth runner and documentation updates. |
+
 ## Required Before Implementation
 - Contract design reviewed against T-088/T-089 D-18. Done.
 - First slice selected and approved: shared contracts/runtime primitives followed by v1a N6 single-agent and debate slots. Done.
